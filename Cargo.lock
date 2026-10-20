@@ -2354,6 +2354,7 @@ dependencies = [
  "bytes",
  "chrono",
  "dirs 6.0.0",
+ "encoding_rs",
  "futures",
  "gtk",
  "hatoba-ai",
@@ -2367,6 +2368,7 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
+ "serde_yaml_ng",
  "specta",
  "specta-typescript",
  "tauri",
@@ -2391,6 +2393,7 @@ dependencies = [
  "wiremock",
  "zbus 5.19.0",
  "zeroize",
+ "zip",
 ]
 
 [[package]]

@@ -55,6 +55,11 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls-no-p
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 # The AI assistant's system prompt names today's local date (spec §13.1).
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+# Host import from other SSH clients (SSH-15): their ANSI and UTF-16 files, Tabby's YAML config,
+# and Xshell's `.xts` exports, which are zip files. Versions match hatoba-ai's own.
+encoding_rs = "0.8"
+serde_yaml_ng = "0.10"
+zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [dev-dependencies]
 # `KdfParams::for_tests()`, so tests can create a vault without the production Argon2 cost.
@@ -71,6 +76,7 @@ window-vibrancy = "0.8"
 winreg = "0.56"
 windows = { version = "0.62", features = [
   "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_Globalization",
   "Win32_System_Power",
   "Win32_System_SystemInformation",
   "Win32_UI_WindowsAndMessaging",

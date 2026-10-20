@@ -508,21 +508,49 @@ export function createMockApi(): HatobaApi {
         return { id: hid, online, latency_ms: online ? 20 + ((hid.length * 7) % 60) : null };
       });
     },
-    ssh_config_preview: async () => [
-      { alias: "github-runner", address: "10.0.4.20", port: 22, username: "runner", identity_file: "~/.ssh/id_ed25519", identity_file_found: true, proxy_jump: null, proxy_command: null, exists: false },
-      { alias: "bastion-tokyo", address: "bastion.tky.example.net", port: 2222, username: "ops", identity_file: "~/.ssh/id_ed25519", identity_file_found: true, proxy_jump: null, proxy_command: null, exists: true },
-      { alias: "minecraft", address: "mc.example.org", port: 22, username: "mc", identity_file: "~/.ssh/mc_rsa", identity_file_found: false, proxy_jump: "bastion-tokyo", proxy_command: null, exists: false },
-      { alias: "build-arm", address: "10.0.4.31", port: 22, username: "ci", identity_file: "~/.ssh/build_ed25519", identity_file_found: true, proxy_jump: null, proxy_command: null, exists: false },
-      { alias: "lab-gpu", address: "gpu.lab.internal", port: 22, username: "kc", identity_file: null, identity_file_found: false, proxy_jump: null, proxy_command: "nc -X 5 -x 127.0.0.1:7890 %h %p", exists: false },
-    ],
-    ssh_config_import: async (aliases, keyFiles) => {
+    hosts_import_preview: async (source, path) => {
+      await delay(200);
+      const candidates = D.importCandidates(source).map((c) => ({
+        ...c,
+        exists: hosts.some((h) => h.name.toLowerCase() === c.name.toLowerCase()),
+      }));
+      return { location: path ?? D.importLocation(source, platform), encrypted: false, candidates };
+    },
+    hosts_import: async (source, _path, ids, keyFiles) => {
       await delay(300);
-      aliases.forEach((a) =>
-        hosts.push({ ...D.HOSTS[0], id: id("h"), name: a, favorite: false, tags: [], group_id: null, last_connected_at: null, os: null, key_id: null, auth_kind: "ask", proxy_mode: "device_default", proxy_id: null }),
-      );
+      const chosen = D.importCandidates(source).filter((c) => ids.includes(c.id));
+      for (const c of chosen) {
+        // A folder becomes a group named after its path.
+        let groupId: string | null = null;
+        if (c.folder) {
+          const found = groups.find((g) => !g.parent_id && g.name.toLowerCase() === c.folder?.toLowerCase());
+          const g: GroupView = found ?? { id: id("g"), name: c.folder, parent_id: null, sort: groups.length, dashboard: true };
+          if (!found) groups.push(g);
+          groupId = g.id;
+        }
+        hosts.push({
+          ...D.HOSTS[0],
+          id: id("h"),
+          name: c.name,
+          address: c.address,
+          port: c.port,
+          username: c.username,
+          favorite: false,
+          tags: [],
+          group_id: groupId,
+          last_connected_at: null,
+          os: null,
+          key_id: null,
+          auth_kind: "ask",
+          proxy_mode: "device_default",
+          proxy_id: null,
+        });
+      }
       touch();
-      const warnings = aliases.includes("lab-gpu") ? ["lab-gpu: ProxyCommand nc -X 5 -x 127.0.0.1:7890 %h %p was not imported; set a proxy or jump host for it"] : [];
-      return { hosts_created: aliases.length, keys_imported: keyFiles.length, warnings };
+      const warnings = chosen.flatMap((c) =>
+        c.skipped_proxy ? [`${c.name}: ${c.skipped_proxy} was not imported; set a proxy or jump host for it`] : [],
+      );
+      return { hosts_created: chosen.length, keys_imported: keyFiles.length, warnings };
     },
 
     proxies_list: async () => {

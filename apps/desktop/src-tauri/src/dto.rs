@@ -153,20 +153,55 @@ pub struct TagCount {
     pub count: u32,
 }
 
+/// Where a host import reads from (SSH-11, SSH-12, SSH-15).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ImportSource {
+    SshConfig,
+    Xshell,
+    Finalshell,
+    Mobaxterm,
+    Putty,
+    Tabby,
+}
+
 #[derive(Debug, Clone, Serialize, Type)]
-pub struct SshConfigCandidate {
-    pub alias: String,
+pub struct ImportPreview {
+    /// The file, folder or registry key the hosts were read from; `None` when nothing was found
+    /// where the client keeps its sessions.
+    pub location: Option<String>,
+    /// The client encrypted the file, so nothing could be read from it.
+    pub encrypted: bool,
+    pub candidates: Vec<ImportCandidate>,
+}
+
+/// A host an import can create.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct ImportCandidate {
+    /// Identifies it within the source, for `hosts_import`.
+    pub id: String,
+    pub name: String,
     pub address: String,
     pub port: u16,
     pub username: String,
-    /// The `IdentityFile` an import with keys reads: the first one that exists, otherwise the
+    /// The folder it is in, its names joined by ` / `.
+    pub folder: Option<String>,
+    /// The private key file an import with keys reads: the first one that exists, otherwise the
     /// first one listed.
     pub identity_file: Option<String>,
     /// Whether `identity_file` exists, so that importing keys would read it.
     pub identity_file_found: bool,
-    pub proxy_jump: Option<String>,
-    /// `ProxyCommand`, which is not imported: the host connects without it (SSH-11).
-    pub proxy_command: Option<String>,
+    /// The client keeps the private key itself, so it is not imported; the key's name there, or
+    /// empty when the session does not name it.
+    pub kept_key: Option<String>,
+    /// The jump host: a `ProxyJump` value, another session's name, or gateways.
+    pub jump: Option<String>,
+    /// The proxy it imports, such as `SOCKS5 127.0.0.1:1080`.
+    pub proxy: Option<String>,
+    /// A proxy setting that is not imported, such as `ProxyCommand …`: the host connects
+    /// without it.
+    pub skipped_proxy: Option<String>,
+    /// A host with the same name exists.
     pub exists: bool,
 }
 

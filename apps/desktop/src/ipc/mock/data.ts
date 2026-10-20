@@ -7,6 +7,8 @@ import type {
   ForwardView,
   GroupView,
   HostView,
+  ImportCandidate,
+  ImportSource,
   KeyView,
   LocalPrefs,
   ProxyView,
@@ -491,4 +493,81 @@ export function mockStats(profile: Partial<StatsProfile> = {}): (first: boolean)
       mounts: mounts.map((m) => ({ ...m })),
     };
   };
+}
+
+type Candidate = Omit<ImportCandidate, "exists">;
+
+const candidate = (c: Partial<Candidate> & Pick<Candidate, "id" | "address">): Candidate => ({
+  name: c.id,
+  port: 22,
+  username: "root",
+  folder: null,
+  identity_file: null,
+  identity_file_found: false,
+  kept_key: null,
+  jump: null,
+  proxy: null,
+  skipped_proxy: null,
+  ...c,
+});
+
+/** What each import source holds in the demo. */
+export function importCandidates(source: ImportSource): Candidate[] {
+  const prod = zh ? "生产" : "Production";
+  switch (source) {
+    case "ssh_config":
+      return [
+        candidate({ id: "github-runner", address: "10.0.4.20", username: "runner", identity_file: "~/.ssh/id_ed25519", identity_file_found: true }),
+        candidate({ id: "bastion-tokyo", address: "bastion.tky.example.net", port: 2222, username: "ops", identity_file: "~/.ssh/id_ed25519", identity_file_found: true }),
+        candidate({ id: "minecraft", address: "mc.example.org", username: "mc", identity_file: "~/.ssh/mc_rsa", jump: "bastion-tokyo" }),
+        candidate({ id: "build-arm", address: "10.0.4.31", username: "ci", identity_file: "~/.ssh/build_ed25519", identity_file_found: true }),
+        candidate({ id: "lab-gpu", address: "gpu.lab.internal", username: "kc", skipped_proxy: "ProxyCommand nc -X 5 -x 127.0.0.1:7890 %h %p" }),
+      ];
+    case "xshell":
+    case "finalshell":
+      return [
+        candidate({ id: "web-01", address: "10.10.1.11", folder: `${prod} / Web` }),
+        candidate({ id: "web-02", address: "10.10.1.12", folder: `${prod} / Web` }),
+        candidate({ id: "mysql-master", address: "10.10.2.5", port: 2222, username: "dba", folder: `${prod} / DB`, kept_key: source === "xshell" ? "id_rsa_2048" : "" }),
+        candidate({ id: "staging", address: "staging.example.cn", username: "deploy", folder: zh ? "测试" : "Staging" }),
+        candidate({ id: "bastion-tokyo", address: "bastion.tky.example.net", port: 2222, username: "ops", skipped_proxy: source === "xshell" ? "Xshell proxy office" : null }),
+      ];
+    case "mobaxterm":
+      return [
+        candidate({ id: "Lab\\gpu-01", name: "gpu-01", address: "gpu01.lab.internal", username: "kc", folder: "Lab", identity_file: "C:\\Users\\demo\\.ssh\\id_ed25519", identity_file_found: true, jump: "jump@bastion.lab.internal:22" }),
+        candidate({ id: "Lab\\gpu-02", name: "gpu-02", address: "gpu02.lab.internal", username: "kc", folder: "Lab", identity_file: "C:\\Users\\demo\\.ssh\\id_ed25519", identity_file_found: true, jump: "jump@bastion.lab.internal:22" }),
+        candidate({ id: "nas", address: "192.168.1.20", username: "admin", proxy: "SOCKS5 127.0.0.1:1080" }),
+      ];
+    case "putty":
+      return [
+        candidate({ id: "router", address: "192.168.1.1", username: "admin" }),
+        candidate({ id: "vps-la", address: "203.0.113.40", identity_file: "C:\\Users\\demo\\keys\\vps.ppk", identity_file_found: true }),
+        candidate({ id: "old-box", address: "10.0.9.9", skipped_proxy: "SOCKS4 proxy 10.0.0.1:1080" }),
+      ];
+    case "tabby":
+      return [
+        candidate({ id: "ssh:custom:bastion:1", name: "bastion", address: "bastion.example.org", username: "jump" }),
+        candidate({ id: "ssh:custom:api:1", name: "api", address: "10.20.0.8", username: "deploy", folder: "Work / API", jump: "bastion" }),
+        candidate({ id: "ssh:custom:home:1", name: "home-server", address: "home.example.net", port: 2200, username: "kc", identity_file: "~/.ssh/id_ed25519", identity_file_found: true }),
+      ];
+  }
+}
+
+/** Where each import source is read from in the demo. */
+export function importLocation(source: ImportSource, platform: string): string | null {
+  const windows = platform === "windows";
+  switch (source) {
+    case "ssh_config":
+      return windows ? "C:\\Users\\demo\\.ssh\\config" : "/home/demo/.ssh/config";
+    case "xshell":
+      return windows ? "C:\\Users\\demo\\Documents\\NetSarang Computer\\8\\Xshell\\Sessions" : null;
+    case "finalshell":
+      return windows ? "C:\\Users\\demo\\AppData\\Local\\finalshell\\conn" : "/home/demo/.finalshell/conn";
+    case "mobaxterm":
+      return windows ? "C:\\Users\\demo\\AppData\\Roaming\\MobaXterm\\MobaXterm.ini" : null;
+    case "putty":
+      return windows ? "HKEY_CURRENT_USER\\Software\\SimonTatham\\PuTTY\\Sessions" : null;
+    case "tabby":
+      return windows ? "C:\\Users\\demo\\AppData\\Roaming\\tabby\\config.yaml" : "/home/demo/.config/tabby/config.yaml";
+  }
 }

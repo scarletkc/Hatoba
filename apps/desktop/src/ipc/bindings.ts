@@ -127,14 +127,15 @@ export const commands = {
 	dashboardUnwatch: (watchId: number) => __TAURI_INVOKE<void>("dashboard_unwatch", { watchId }),
 	/**  **Retry**: signs in to a held host again, and tries an offline or failed one now. */
 	dashboardRetry: (hostId: string) => __TAURI_INVOKE<void>("dashboard_retry", { hostId }),
-	sshConfigPreview: () => __TAURI_INVOKE<SshConfigCandidate[]>("ssh_config_preview"),
+	hostsImportPreview: (source: ImportSource, path: string | null) => __TAURI_INVOKE<ImportPreview>("hosts_import_preview", { source, path }),
 	/**
-	 *  SSH-11: creates hosts for the chosen aliases. It imports as keys only the unencrypted
-	 *  identity files in `key_files`, the ones the preview listed and the user confirmed. A host
-	 *  whose identity file is not among them (the config or the files changed after the preview)
-	 *  asks how to sign in, with a warning. With no `key_files`, no private key file is read.
+	 *  Creates hosts for the chosen entries of `source`, read again from `path`. It imports as keys
+	 *  only the unencrypted key files in `key_files`, the ones the preview listed and the user
+	 *  confirmed. A host whose key file is not among them (the sessions or the files changed after
+	 *  the preview) asks how to sign in, with a warning. With no `key_files`, no private key file is
+	 *  read.
 	 */
-	sshConfigImport: (aliases: string[], keyFiles: string[]) => __TAURI_INVOKE<ImportResult>("ssh_config_import", { aliases, keyFiles }),
+	hostsImport: (source: ImportSource, path: string | null, ids: string[], keyFiles: string[]) => __TAURI_INVOKE<ImportResult>("hosts_import", { source, path, ids, keyFiles }),
 	proxiesList: () => __TAURI_INVOKE<ProxyView[]>("proxies_list"),
 	proxySave: (input: ProxyInput) => __TAURI_INVOKE<ProxyView>("proxy_save", { input }),
 	proxyDelete: (id: string) => __TAURI_INVOKE<null>("proxy_delete", { id }),
@@ -1682,11 +1683,60 @@ export type HostView = {
 	env: HostEnvVar[],
 };
 
+/**  A host an import can create. */
+export type ImportCandidate = {
+	/**  Identifies it within the source, for `hosts_import`. */
+	id: string,
+	name: string,
+	address: string,
+	port: number,
+	username: string,
+	/**  The folder it is in, its names joined by ` / `. */
+	folder: string | null,
+	/**
+	 *  The private key file an import with keys reads: the first one that exists, otherwise the
+	 *  first one listed.
+	 */
+	identity_file: string | null,
+	/**  Whether `identity_file` exists, so that importing keys would read it. */
+	identity_file_found: boolean,
+	/**
+	 *  The client keeps the private key itself, so it is not imported; the key's name there, or
+	 *  empty when the session does not name it.
+	 */
+	kept_key: string | null,
+	/**  The jump host: a `ProxyJump` value, another session's name, or gateways. */
+	jump: string | null,
+	/**  The proxy it imports, such as `SOCKS5 127.0.0.1:1080`. */
+	proxy: string | null,
+	/**
+	 *  A proxy setting that is not imported, such as `ProxyCommand …`: the host connects
+	 *  without it.
+	 */
+	skipped_proxy: string | null,
+	/**  A host with the same name exists. */
+	exists: boolean,
+};
+
+export type ImportPreview = {
+	/**
+	 *  The file, folder or registry key the hosts were read from; `None` when nothing was found
+	 *  where the client keeps its sessions.
+	 */
+	location: string | null,
+	/**  The client encrypted the file, so nothing could be read from it. */
+	encrypted: boolean,
+	candidates: ImportCandidate[],
+};
+
 export type ImportResult = {
 	hosts_created: number,
 	keys_imported: number,
 	warnings: string[],
 };
+
+/**  Where a host import reads from (SSH-11, SSH-12, SSH-15). */
+export type ImportSource = "ssh_config" | "xshell" | "finalshell" | "mobaxterm" | "putty" | "tabby";
 
 export type ItemType = "host" | "group" | "key" | "known_host" | "forward" | "snippet" | "proxy" | "ai_provider" | "search_provider" | "ai_conversation" | "ai_message" | "skill" | "skill_file" | "mcp_server" | "ai_memory" | "settings";
 
@@ -2174,24 +2224,6 @@ export type SkillView = {
 	/**  Paths of the files besides `SKILL.md`, sorted. */
 	files: string[],
 	updated_at: number,
-};
-
-export type SshConfigCandidate = {
-	alias: string,
-	address: string,
-	port: number,
-	username: string,
-	/**
-	 *  The `IdentityFile` an import with keys reads: the first one that exists, otherwise the
-	 *  first one listed.
-	 */
-	identity_file: string | null,
-	/**  Whether `identity_file` exists, so that importing keys would read it. */
-	identity_file_found: boolean,
-	proxy_jump: string | null,
-	/**  `ProxyCommand`, which is not imported: the host connects without it (SSH-11). */
-	proxy_command: string | null,
-	exists: boolean,
 };
 
 export type SshErrorKind = "dns" | "refused" | "timeout" | "unreachable" | "auth_failed" | "host_key_rejected" | "key_parse" | "disconnected" | "protocol" | "io" | "channel" | "sftp" | "cancelled" | 

@@ -29,7 +29,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 
 | File | Read it when the question is about |
 |---|---|
-| `references/hosts-and-connecting.md` | The host list and editor, quick connect from the search box, authentication methods, jump hosts, proxies, environment variables, importing an SSH config, host key prompts, connecting and reconnecting |
+| `references/hosts-and-connecting.md` | The host list and editor, quick connect from the search box, authentication methods, jump hosts, proxies, environment variables, importing hosts from an SSH config or another SSH client (Xshell, FinalShell, MobaXterm, PuTTY, Tabby), host key prompts, connecting and reconnecting |
 | `references/dashboard.md` | The Dashboard: every host's status and resource usage, cards and table, sorting, thresholds, how hosts are read, hosts that need a password or failed to sign in, leaving hosts out |
 | `references/keys-vault-and-lock.md` | The master password, recovery code, locking and auto-lock, Windows Hello, the PIN, the encrypted backup, and the Keys page (import, generate, deploy) |
 | `references/terminal.md` | The terminal tab: local terminal tabs and their shells, status bar, copy and paste, search, links, context menus, and the Terminal settings (font, cursor, scrollback, local terminal shell) |
@@ -99,4 +99,4 @@ The `main` branch can be ahead of the latest release and of the user's version, 
 
 ## Not in Hatoba (current version)
 
-Split panes in a terminal, session logs, snippets, remote (-R) and SOCKS (-D) port forwarding, editing remote files, uploading or downloading whole folders over SFTP, importing PuTTY sessions, `ProxyCommand`, SOCKS4 and HTTPS proxies, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, Touch ID, team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH (Telnet, serial, RDP, VNC).
+Split panes in a terminal, session logs, snippets, remote (-R) and SOCKS (-D) port forwarding, editing remote files, uploading or downloading whole folders over SFTP, `ProxyCommand`, SOCKS4 and HTTPS proxies, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, Touch ID, team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH (Telnet, serial, RDP, VNC).

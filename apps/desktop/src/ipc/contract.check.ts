@@ -19,7 +19,7 @@ export type ResponsesMatch = [
   Check<Assignable<Rust.HostView, Ui.HostView>>,
   Check<Assignable<Rust.GroupView, Ui.GroupView>>,
   Check<Assignable<Rust.TagCount, Ui.TagCount>>,
-  Check<Assignable<Rust.SshConfigCandidate, Ui.SshConfigCandidate>>,
+  Check<Assignable<Rust.ImportPreview, Ui.ImportPreview>>,
   Check<Assignable<Rust.ImportResult, Ui.ImportResult>>,
   Check<Assignable<Rust.ProbeResult, Ui.ProbeResult>>,
   Check<Assignable<Rust.KeyView, Ui.KeyView>>,
@@ -110,6 +110,7 @@ export type ResponsesMatch = [
 export type InputsMatch = [
   Check<Assignable<Ui.HostInput, Rust.HostInput>>,
   Check<Assignable<Ui.GroupInput, Rust.GroupInput>>,
+  Check<Assignable<Ui.ImportSource, Rust.ImportSource>>,
   Check<Assignable<Ui.KeyImportInput, Rust.KeyImportInput>>,
   Check<Assignable<Ui.KeyGenerateInput, Rust.KeyGenerateInput>>,
   Check<Assignable<Ui.ConnectOptions, Rust.ConnectOptions>>,

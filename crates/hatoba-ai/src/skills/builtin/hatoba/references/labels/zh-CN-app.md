@@ -103,15 +103,20 @@ The labels that these files name in English, as the interface shows them in Simp
 | Save as Host… | 保存为主机… |
 | Username | 用户名 |
 
-### Import from ~/.ssh/config
+### Import hosts
 
 | en | zh-CN |
 |---|---|
-| Import SSH Config | 从 SSH 配置导入 |
+| Import | 导入 |
+| SSH Config | SSH 配置 |
 | Select All | 全选 |
 | Select None | 全不选 |
 | Already exists | 已存在 |
 | ProxyCommand not imported | 不导入 ProxyCommand |
+| Proxy not imported | 不导入代理 |
+| Key stays in {app} | 密钥留在 {app} 中 |
+| Choose File… | 选择文件… |
+| Choose Folder… | 选择文件夹… |
 
 ### The host editor
 

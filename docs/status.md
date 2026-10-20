@@ -29,9 +29,10 @@ This page tracks implementation progress, items awaiting verification, and follo
 | SSH-09 | ssh-agent | 🟡 | The Windows named pipe needs verification on a real machine. Pageant (P2) ⬜ |
 | SSH-10 | ProxyJump | ✅ | |
 | SSH-11 | Import ssh config | ✅ | |
-| SSH-12 | Import PuTTY sessions | ⬜ | P2 |
+| SSH-12 | Import PuTTY sessions | 🟡 | Unit tests parse a `.reg` export and the session files of macOS and Linux; reading the registry not yet tried in the app on Windows |
 | SSH-13 | SOCKS5 and HTTP proxies | 🟡 | Tests run against in-process proxies; needs a try in the app with a real proxy |
 | SSH-14 | Per-host environment variables | 🟡 | Integration tests send them to OpenSSH on Linux; needs a try in the app against a real server |
+| SSH-15 | Import from Xshell, FinalShell, MobaXterm, and Tabby | 🟡 | Unit tests parse sample files written to each client's format; not yet tried with sessions saved by the real clients |
 | TERM-01…06 | Tabs, colors, wide characters, PTY, paste, scrollback, appearance | ✅ / 🟡 | The candidate window position for Microsoft Pinyin tried on Windows 11; for the Japanese IME it needs verification on a real Windows machine. Dragging a tab to move it (TERM-01) tried in the browser with the mock backend; needs a try in the app on Windows, Linux, and macOS |
 | TERM-07, 08 | Terminal search, links | ✅ | |
 | TERM-09…11 | Split panes, session logs, Snippets | ⬜ | P2 |
