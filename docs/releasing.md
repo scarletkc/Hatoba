@@ -109,7 +109,7 @@ Do this once. Until then, the winget and AUR jobs fail after the release is publ
 1. In the repository's **Settings → Environments**, create an environment named `packages`. Leave **Required reviewers** off. Under **Deployment branches and tags**, choose **Selected branches and tags** and add `main`.
 2. For winget:
    1. Fork [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) to your account.
-   2. Create a classic personal access token with the `public_repo` and `workflow` scopes, and add it to the `packages` environment as the secret `WINGET_TOKEN`. WinGet Releaser does not support fine-grained tokens, and it needs `workflow` to sync the fork. The token can write to every public repository of its account: to keep it away from yours, fork and create the token on a separate account, and set `fork-user` of the winget job to that account.
+   2. Create a classic personal access token with the `public_repo` and `workflow` scopes, and add it to the `packages` environment as the secret `WINGET_TOKEN`. WinGet Releaser does not support fine-grained tokens, and it needs `workflow` to sync the fork. The token can write to every public repository of its account: to keep it away from yours, fork and create the token on a separate account, and add `fork-user: <that account>` under `with` of the winget job in `release.yml`.
    3. Submit the first version by hand, because WinGet Releaser only updates a package that winget-pkgs already has. Install [Komac](https://github.com/russellbanks/Komac), save the token with `komac token add`, and run:
 
       ```sh
