@@ -224,7 +224,8 @@ function Popover({
     const el = ref.current;
     if (!el) return;
     const place = () => {
-      const r = el.getBoundingClientRect();
+      // Its layout size: the bounding box would take in the opening animation's scale.
+      const r = { width: el.offsetWidth, height: el.offsetHeight };
       const b = windowSurface();
       const left = Math.max(b.left + 8, Math.min(anchor.left, b.right - r.width - 8));
       let top = anchor.top - r.height - 6;

@@ -26,6 +26,8 @@ export const useOverlaysLocked = () => useLockStore((st) => st.locked);
 
 // ───────────────────────── Exit animation ─────────────────────────
 
+const LAYER_ROLES = new Set(["dialog", "alertdialog", "menu", "listbox", "status"]);
+
 /**
  * Lets an overlay animate out after React has removed it. Overlays unmount the moment their owner
  * stops rendering them, so a copy of their last frame takes their place, inert, while the styles for
@@ -52,9 +54,12 @@ export function useExitAnimation(ref: RefObject<HTMLElement | null>, shown = tru
         ghost.style.pointerEvents = "none";
         ghost.style.opacity = opacity;
         for (const el of [ghost, ...ghost.querySelectorAll("[id]")]) el.removeAttribute("id");
+        // No longer a layer: code that counts the open dialogs and menus by role passes over it.
+        for (const el of [ghost, ...ghost.querySelectorAll("[role]")]) if (LAYER_ROLES.has(el.getAttribute("role") ?? "")) el.removeAttribute("role");
         ghost.setAttribute("data-closing", "");
         parent.insertBefore(ghost, next?.parentNode === parent ? next : null);
-        const animations = ghost.getAnimations({ subtree: true });
+        // Not the ones that loop, such as a spinner inside it: they never finish.
+        const animations = ghost.getAnimations({ subtree: true }).filter((a) => Number.isFinite(a.effect?.getComputedTiming().endTime));
         if (!animations.length) ghost.remove();
         else void Promise.allSettled(animations.map((a) => a.finished)).then(() => ghost.remove());
       });
@@ -157,7 +162,8 @@ export function Menu({
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const r = el.getBoundingClientRect();
+    // Its layout size: the bounding box would take in the opening animation's scale.
+    const r = { width: el.offsetWidth, height: el.offsetHeight };
     let left = anchor.alignRight ? anchor.x - r.width : anchor.x;
     let top = anchor.y;
     const b = windowSurface();

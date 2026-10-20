@@ -134,8 +134,20 @@ describe("Menu", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  /** The menu's layout size, which placement reads (jsdom lays nothing out). */
+  const menuSize = (width: number, height: number) => {
+    const w = vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(width);
+    const h = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(height);
+    return {
+      mockRestore: () => {
+        w.mockRestore();
+        h.mockRestore();
+      },
+    };
+  };
+
   it("opens above its button, not over it, when it doesn't fit below", () => {
-    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 200, height: 120 } as DOMRect);
+    const rect = menuSize(200, 120);
     try {
       render(<Menu anchor={{ x: 0, y: window.innerHeight - 20, above: 600 }} onClose={() => {}} entries={[{ label: "Item", onSelect: () => {} }]} />);
       expect((document.querySelector("[role=menu]") as HTMLElement).style.top).toBe("480px");
@@ -145,7 +157,7 @@ describe("Menu", () => {
   });
 
   it("stays inside the painted window surface, not its transparent margin, while floating", () => {
-    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 200, height: 120 } as DOMRect);
+    const rect = menuSize(200, 120);
     const root = document.documentElement;
     const anchor = { x: window.innerWidth - 10, y: window.innerHeight - 140 };
     const pos = () => {

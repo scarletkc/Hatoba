@@ -26,7 +26,8 @@ export function useStatusPopover(
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const r = el.getBoundingClientRect();
+    // Its layout size: the bounding box would take in the opening animation's scale.
+    const r = { width: el.offsetWidth, height: el.offsetHeight };
     let left = anchor.alignRight ? anchor.x - r.width : anchor.x;
     let top = anchor.y;
     const b = windowSurface();
