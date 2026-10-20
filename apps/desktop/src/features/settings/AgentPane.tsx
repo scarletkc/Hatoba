@@ -7,6 +7,7 @@ import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { SshAgentKind, SshAgentView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { isImeEvent } from "@/lib/ime";
 import { useFreshReads } from "./freshReads";
 import { Pane, SettingRow, usePrefs } from "./shared";
 import s from "./AgentPane.module.css";
@@ -115,7 +116,7 @@ export function AgentPane() {
               onChange={(e) => setDraft(e.target.value)}
               onBlur={savePath}
               onKeyDown={(e) => {
-                if (e.key === "Enter") savePath();
+                if (e.key === "Enter" && !isImeEvent(e)) savePath();
               }}
             />
           </SettingRow>

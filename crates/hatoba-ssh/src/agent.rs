@@ -53,6 +53,8 @@ fn is_launchd_placeholder(path: &Path) -> bool {
     [
         "/var/run/com.apple.launchd.",
         "/private/tmp/com.apple.launchd.",
+        // `/tmp` is the symlink to `/private/tmp`, and a window can be handed either name.
+        "/tmp/com.apple.launchd.",
     ]
     .iter()
     .any(|prefix| path.starts_with(prefix) && path.ends_with("/Listeners"))
@@ -561,11 +563,11 @@ mod tests {
         // macOS points SSH_AUTH_SOCK of a window opened from Finder at a listener of launchd's: not
         // an agent until something connects, and then the user's own — where `ssh-add` in Terminal
         // puts keys. It is tried last, so the agent beside HOME wins, and a Mac without a
-        // third-party
-        // agent still has its own to fall back on.
+        // third-party agent still has its own to fall back on.
         for placeholder in [
             "/var/run/com.apple.launchd.jy4KjswD0t/Listeners",
             "/private/tmp/com.apple.launchd.abc123/Listeners",
+            "/tmp/com.apple.launchd.abc123/Listeners",
         ] {
             assert!(
                 is_launchd_placeholder(Path::new(placeholder)),
