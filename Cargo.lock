@@ -2320,6 +2320,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "hatoba-cli"
+version = "0.4.2"
+dependencies = [
+ "dirs 6.0.0",
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
 name = "hatoba-core"
 version = "0.4.2"
 dependencies = [
@@ -2360,6 +2370,7 @@ dependencies = [
  "futures",
  "gtk",
  "hatoba-ai",
+ "hatoba-cli",
  "hatoba-core",
  "hatoba-local",
  "hatoba-ssh",

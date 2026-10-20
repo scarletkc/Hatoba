@@ -50,6 +50,14 @@ export const commands = {
 	cliCommandGet: () => __TAURI_INVOKE<CliCommandView>("cli_command_get"),
 	/**  Adds or removes the command. On macOS this may wait for an administrator's password. */
 	cliCommandSet: (enabled: boolean) => __TAURI_INVOKE<CliCommandView>("cli_command_set", { enabled }),
+	/**
+	 *  HOST-15: lets other programs use the saved hosts through the command, or stops them. Turning it
+	 *  on puts the launcher in place again, so one from before HOST-15 runs the command's own
+	 *  commands; on macOS that may wait for an administrator's password.
+	 */
+	cliAccessSet: (enabled: boolean) => __TAURI_INVOKE<CliCommandView>("cli_access_set", { enabled }),
+	/**  What other programs did through the command since the unlock, newest first (HOST-15). */
+	cliActivityList: () => __TAURI_INVOKE<CliActivity[]>("cli_activity_list"),
 	vaultStatus: () => __TAURI_INVOKE<VaultStatus>("vault_status"),
 	/**  VAULT-01/02: creates the vault and returns the recovery code (shown exactly once). */
 	vaultCreate: (password: string) => __TAURI_INVOKE<string>("vault_create", { password }),
@@ -561,6 +569,7 @@ export const events = {
 	aiMcpStatus: makeEvent<McpServerStatus>("ai://mcp-status"),
 	appLaunch: makeEvent<LaunchEvent>("app://launch"),
 	appNotificationClick: makeEvent<NotificationTarget>("app://notification-click"),
+	cliActivity: makeEvent<CliActivityEvent>("cli://activity"),
 	sshAuthPrompt: makeEvent<AuthPrompt>("ssh://auth-prompt"),
 	sshForward: makeEvent<ForwardStatusEvent>("ssh://forward"),
 	sshHostkeyPrompt: makeEvent<HostKeyPrompt>("ssh://hostkey-prompt"),
@@ -1320,6 +1329,33 @@ export type BuiltinSkillView = {
 	files: SkillFileView[],
 };
 
+/**
+ *  What a program did through the `hatoba` command (HOST-15), newest first in Settings → General.
+ *  Kept in memory until the vault locks.
+ */
+export type CliActivity = {
+	id: string,
+	kind: CliActivityKind,
+	host_id: string,
+	host_name: string,
+	/**  The command, or the file's source and target. */
+	detail: string,
+	started_at: number,
+	state: CliActivityState,
+	/**  The exit status of a command that ended. */
+	status: number | null,
+	error: string | null,
+};
+
+/**  The list in Settings → General changed (HOST-15). */
+export type CliActivityEvent = {
+	entries: CliActivity[],
+};
+
+export type CliActivityKind = "exec" | "upload" | "download";
+
+export type CliActivityState = "running" | "done" | "failed";
+
 /**  The `hatoba` command on this device (HOST-13). */
 export type CliCommandView = {
 	/**  Settings → General has it on. */
@@ -1334,6 +1370,11 @@ export type CliCommandView = {
 	 *  `~/.local/bin` joins the `PATH` at the next sign-in.
 	 */
 	on_path: boolean,
+	/**
+	 *  HOST-15: other programs may use the saved hosts through the command. Only counts while the
+	 *  command is on.
+	 */
+	access: boolean,
 };
 
 /**

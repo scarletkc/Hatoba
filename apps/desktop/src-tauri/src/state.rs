@@ -8,6 +8,7 @@ use hatoba_core::vault::Vault;
 use tauri::{AppHandle, Manager};
 
 use crate::ai::AiManager;
+use crate::cli_access::CliAccess;
 use crate::dashboard::Dashboard;
 use crate::deploy::Deployments;
 use crate::dropped::DroppedPaths;
@@ -39,6 +40,8 @@ pub struct AppState {
     pub mcp: McpManager,
     /// The paths of the window's last file drop, which the AI panel may read (AI-35).
     pub dropped: DroppedPaths,
+    /// What other programs run through the `hatoba` command (HOST-15).
+    pub cli: CliAccess,
     /// The update the last check found (spec §11).
     pub updates: Updates,
     pub mica: bool,
@@ -63,6 +66,7 @@ impl AppState {
             ai: AiManager::with_mcp(mcp.clone()),
             mcp,
             dropped: DroppedPaths::default(),
+            cli: CliAccess::default(),
             updates: Updates::default(),
             mica,
             lock_policy: LockPolicy::default(),

@@ -1,6 +1,7 @@
 import { mockLocale } from "./visitor";
 import type {
   AvailableUpdate,
+  CliActivity,
   ConflictView,
   DeviceView,
   FileEntry,
@@ -320,6 +321,31 @@ export const AVAILABLE_UPDATE: AvailableUpdate = {
   published_at: ago(3 * DAY),
   release_url: "https://github.com/scarletkc/Hatoba/releases/tag/v0.2.0",
 };
+
+/** HOST-15: what a coding agent did through the `hatoba` command (`?cli=access`). */
+export function cliActivity(): CliActivity[] {
+  const entry = (id: string, kind: CliActivity["kind"], host: string, detail: string, at: number, rest: Partial<CliActivity>): CliActivity => ({
+    id,
+    kind,
+    host_id: HOSTS.find((h) => h.name === host)?.id ?? host,
+    host_name: host,
+    detail,
+    started_at: ago(at),
+    state: "done",
+    status: null,
+    error: null,
+    ...rest,
+  });
+  return [
+    entry("4", "exec", "prod-api-tokyo", "journalctl -u api.service -n 200 --no-pager", 0, { state: "running" }),
+    entry("3", "upload", "prod-api-tokyo", "/home/demo/src/api/dist/api.tar.gz → /tmp/", 3 * MIN, {}),
+    entry("2", "exec", "prod-api-tokyo", "systemctl status api.service --no-pager", 4 * MIN, { status: 3 }),
+    entry("1", "exec", "db-osaka-01", "psql -c 'select count(*) from orders'", 6 * MIN, {
+      state: "failed",
+      error: "db-osaka-01 has no saved password. Run the command without --no-prompt to enter it in Hatoba.",
+    }),
+  ];
+}
 
 export function syncStatus(): SyncStatus {
   return {

@@ -1,13 +1,18 @@
 //! The `hatoba` command (HOST-13): a launcher on the user's `PATH` that opens Hatoba with what
-//! follows it on the command line. Settings → General adds and removes it.
+//! follows it on the command line, or runs one of the command's own commands, such as
+//! `hatoba exec` (HOST-15), in the terminal. Settings → General adds and removes it.
 //!
-//! - Windows: `hatoba.cmd`, and `hatoba` for Git Bash and WSL, in a `bin` folder beside the
-//!   executable. The folder goes on the user's `PATH` in `HKCU\Environment`, which is read and
-//!   written whole, so a long `PATH` is never cut short. The uninstaller runs Hatoba with
-//!   `--uninstall-command` to take it off again.
+//! - Windows: `hatoba.exe`, a copy of the console program installed beside the executable
+//!   (`src/bin/hatoba-cli.rs`), and `hatoba` for Git Bash and WSL, which runs it, in a `bin`
+//!   folder beside the executable. The folder goes on the user's `PATH` in `HKCU\Environment`,
+//!   which is read and written whole, so a long `PATH` is never cut short. The uninstaller runs
+//!   Hatoba with `--uninstall-command` to take it off again.
 //! - Linux: `~/.local/bin/hatoba`, which starts the executable, or the AppImage.
 //! - macOS: `/usr/local/bin/hatoba`, which opens the app bundle. Writing there usually takes an
 //!   administrator, so macOS asks for one.
+//!
+//! On Linux and macOS the command's own commands run the executable in the foreground, which runs
+//! them before the app would start (`main.rs`).
 
 use std::path::Path;
 
@@ -80,12 +85,24 @@ fn sh_quote(s: &str) -> String {
 }
 
 /// A launcher that starts `exe` in the background with its arguments, so the terminal neither
-/// waits for Hatoba nor takes it down when it closes.
+/// waits for Hatoba nor takes it down when it closes, unless they are one of the command's own
+/// commands (HOST-15).
 #[cfg_attr(windows, allow(dead_code))]
 fn detached_launcher(exe: &Path) -> String {
+    let exe = sh_quote(&exe.to_string_lossy());
     format!(
-        "#!/bin/sh\n# {COMMENT}\nnohup {} \"$@\" >/dev/null 2>&1 &\n",
-        sh_quote(&exe.to_string_lossy())
+        "#!/bin/sh\n# {COMMENT}\n{}nohup {exe} \"$@\" >/dev/null 2>&1 &\n",
+        own_commands(&exe)
+    )
+}
+
+/// The lines of a launcher that run `exe`, quoted for sh, in the foreground for the command's own
+/// commands (HOST-15), which print what they get back.
+#[cfg_attr(windows, allow(dead_code))]
+fn own_commands(exe: &str) -> String {
+    format!(
+        "case \"$1\" in\n  {}) exec {exe} \"$@\" ;;\nesac\n",
+        hatoba_cli::COMMANDS.join("|")
     )
 }
 
@@ -99,6 +116,10 @@ mod imp {
     use super::{COMMENT, path_with, path_without, write_if_changed};
     use crate::error::{AppError, AppResult};
 
+    /// The console program installed beside the executable, and its copy in `bin`.
+    const CONSOLE: &str = "hatoba-cli.exe";
+    const COMMAND: &str = "hatoba.exe";
+
     /// The folder that goes on the `PATH`. Only the launchers are in it: the executable's own
     /// folder also holds `uninstall.exe`, which must not become a command.
     pub fn location() -> AppResult<PathBuf> {
@@ -109,19 +130,24 @@ mod imp {
         Ok(dir.join("bin"))
     }
 
+    /// `hatoba.exe` opens Hatoba without waiting for it, as the `hatoba.cmd` of earlier versions
+    /// did, which it replaces: cmd.exe and PowerShell would run `hatoba.exe` first anyway.
     pub fn install() -> AppResult<()> {
         let bin = location()?;
-        let exe = exe_name()?;
+        let console = std::env::current_exe()?.with_file_name(CONSOLE);
+        if !console.is_file() {
+            return Err(AppError::internal(format!(
+                "{} is missing",
+                console.display()
+            )));
+        }
         std::fs::create_dir_all(&bin)?;
-        // `start` returns at once; the batch file would otherwise wait for Hatoba to quit.
-        write_if_changed(
-            &bin.join("hatoba.cmd"),
-            &format!("@echo off\r\nrem {COMMENT}\r\nstart \"\" \"%~dp0..\\{exe}\" %*\r\n"),
-        )?;
+        replace_if_changed(&console, &bin.join(COMMAND))?;
         write_if_changed(
             &bin.join("hatoba"),
-            &format!("#!/bin/sh\n# {COMMENT}\n\"$(dirname \"$0\")/../{exe}\" \"$@\" &\n"),
+            &format!("#!/bin/sh\n# {COMMENT}\nexec \"$(dirname \"$0\")/{COMMAND}\" \"$@\"\n"),
         )?;
+        remove(&bin.join("hatoba.cmd"))?;
         edit_path(|path| path_with(path, &bin.to_string_lossy()))
     }
 
@@ -129,25 +155,44 @@ mod imp {
         let bin = location()?;
         edit_path(|path| path_without(path, &bin.to_string_lossy()))?;
         for name in ["hatoba.cmd", "hatoba"] {
-            match std::fs::remove_file(bin.join(name)) {
-                Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
-                _ => {}
-            }
+            remove(&bin.join(name))?;
+        }
+        // A copy that runs now cannot be removed; off the `PATH`, it is never found again.
+        let exe = bin.join(COMMAND);
+        if remove(&exe).is_err() {
+            let _ = std::fs::rename(&exe, exe.with_extension("exe.old"));
         }
         // Only when empty: anything else in it is not Hatoba's.
         let _ = std::fs::remove_dir(&bin);
         Ok(())
     }
 
-    pub fn on_path(_location: &Path) -> bool {
-        true
+    fn remove(path: &Path) -> AppResult<()> {
+        match std::fs::remove_file(path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.into()),
+            _ => Ok(()),
+        }
     }
 
-    fn exe_name() -> AppResult<String> {
-        let exe = std::env::current_exe()?;
-        exe.file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .ok_or_else(|| AppError::internal("the executable has no name"))
+    /// Copies `from` over `to` unless they are the same. A `to` that runs now, as `hatoba exec`
+    /// may while Hatoba updates, cannot be written but can be renamed out of the way.
+    fn replace_if_changed(from: &Path, to: &Path) -> std::io::Result<()> {
+        let new = std::fs::read(from)?;
+        if std::fs::read(to).is_ok_and(|old| old == new) {
+            return Ok(());
+        }
+        let old = to.with_extension("exe.old");
+        let _ = std::fs::remove_file(&old);
+        if to.exists() {
+            std::fs::rename(to, &old)?;
+        }
+        std::fs::write(to, &new)?;
+        let _ = std::fs::remove_file(&old);
+        Ok(())
+    }
+
+    pub fn on_path(_location: &Path) -> bool {
+        true
     }
 
     /// Applies `edit` to the user's `PATH` and tells running programs when it changed.
@@ -233,8 +278,28 @@ mod imp {
         use winreg::RegKey;
         use winreg::enums::{HKEY_CURRENT_USER, REG_EXPAND_SZ, REG_SZ};
 
-        use super::{decode, edit_value};
+        use super::{decode, edit_value, replace_if_changed};
         use crate::platform::cli::{path_with, path_without};
+
+        /// HOST-15: the `hatoba.exe` in `bin` follows the console program an update installed.
+        #[test]
+        fn the_command_is_copied_again_only_when_it_changed() {
+            let dir = std::env::temp_dir().join(format!("hatoba-cli-copy-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let (from, to) = (dir.join("hatoba-cli.exe"), dir.join("hatoba.exe"));
+            std::fs::write(&from, b"v1").unwrap();
+            replace_if_changed(&from, &to).unwrap();
+            assert_eq!(std::fs::read(&to).unwrap(), b"v1");
+            let copied = std::fs::metadata(&to).unwrap().modified().unwrap();
+            replace_if_changed(&from, &to).unwrap();
+            assert_eq!(std::fs::metadata(&to).unwrap().modified().unwrap(), copied);
+
+            std::fs::write(&from, b"v2").unwrap();
+            replace_if_changed(&from, &to).unwrap();
+            assert_eq!(std::fs::read(&to).unwrap(), b"v2");
+            assert!(!to.with_extension("exe.old").exists());
+            std::fs::remove_dir_all(&dir).unwrap();
+        }
 
         #[test]
         fn decodes_registry_strings_up_to_the_nul() {
@@ -358,7 +423,7 @@ mod imp {
     use std::process::Command;
 
     use super::unix::{ensure_free, is_ours, write_executable};
-    use super::{COMMENT, detached_launcher, sh_quote};
+    use super::{COMMENT, detached_launcher, own_commands, sh_quote};
     use crate::error::{AppError, AppResult, ErrorCode};
 
     const LAUNCHER: &str = "/usr/local/bin/hatoba";
@@ -406,7 +471,8 @@ mod imp {
     }
 
     /// Opens the app bundle with the arguments. `open -n` starts another copy, which hands them
-    /// to the one already running. A development build has no bundle and runs its executable.
+    /// to the one already running. The command's own commands run the bundle's executable
+    /// instead (HOST-15). A development build has no bundle and runs its executable.
     fn launcher() -> AppResult<String> {
         let exe = std::env::current_exe()?;
         // …/Hatoba.app/Contents/MacOS/Hatoba
@@ -416,7 +482,8 @@ mod imp {
             .filter(|p| p.extension().is_some_and(|e| e == "app"));
         Ok(match bundle {
             Some(app) => format!(
-                "#!/bin/sh\n# {COMMENT}\nexec open -n -a {} --args \"$@\"\n",
+                "#!/bin/sh\n# {COMMENT}\n{}exec open -n -a {} --args \"$@\"\n",
+                own_commands(&sh_quote(&exe.to_string_lossy())),
                 sh_quote(&app.to_string_lossy())
             ),
             None => detached_launcher(&exe),
@@ -505,5 +572,10 @@ mod tests {
         let launcher = detached_launcher(Path::new("/home/me/Apps/Hatoba.AppImage"));
         assert!(launcher.starts_with("#!/bin/sh\n# Hatoba command line launcher."));
         assert!(launcher.contains("nohup '/home/me/Apps/Hatoba.AppImage' \"$@\""));
+        // HOST-15: `hatoba exec` and the rest run in the foreground.
+        assert!(launcher.contains(
+            "case \"$1\" in\n  hosts|exec|cp|help|-h|--help|--version) \
+             exec '/home/me/Apps/Hatoba.AppImage' \"$@\" ;;\nesac\n"
+        ));
     }
 }

@@ -8,7 +8,7 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 
 use common::*;
-use hatoba_ssh::remote_command::{self, Stopped};
+use hatoba_ssh::remote_command::{self, Output, Stopped};
 use tokio_util::sync::CancellationToken;
 
 macro_rules! server {
@@ -229,4 +229,78 @@ async fn a_host_that_cannot_run_the_script_runs_the_command_as_it_is() {
         .await
         .unwrap_err();
     assert!(refused.message.contains("workdir"), "{}", refused.message);
+}
+
+/// What `run_streaming` sent, split into stdout and stderr.
+async fn received(mut rx: tokio::sync::mpsc::Receiver<Output>) -> (Vec<u8>, Vec<u8>) {
+    let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+    while let Some(piece) = rx.recv().await {
+        match piece {
+            Output::Stdout(b) => stdout.extend_from_slice(&b),
+            Output::Stderr(b) => stderr.extend_from_slice(&b),
+        }
+    }
+    (stdout, stderr)
+}
+
+/// HOST-15: `hatoba exec` gets the output while the command still runs, and keeps none of it.
+#[tokio::test]
+async fn streamed_output_arrives_while_the_command_runs() {
+    let server = server!();
+    let session = server.connect_key("ed25519", None).await;
+    let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+    let command = "echo first; sleep 2; echo second; echo err >&2; exit 4";
+    let run = remote_command::run_streaming(&session, command, None, std::future::pending(), tx);
+    tokio::pin!(run);
+    let began = Instant::now();
+    let first = tokio::select! {
+        piece = rx.recv() => piece.unwrap(),
+        _ = &mut run => panic!("the command ended before its first line arrived"),
+    };
+    assert!(began.elapsed() < Duration::from_secs(2));
+    assert_eq!(first, Output::Stdout(bytes::Bytes::from_static(b"first\n")));
+    let (run, (stdout, stderr)) = tokio::join!(run, received(rx));
+    let run = run.unwrap();
+    assert_eq!(run.stopped, None);
+    assert_eq!(run.output.exit_status, Some(4));
+    assert!(run.output.stdout.is_empty() && run.output.stderr.is_empty());
+    assert_eq!(stdout, b"second\n");
+    assert_eq!(stderr, b"err\n");
+}
+
+/// The script's report on a stop is not passed on as output.
+#[tokio::test]
+async fn a_stopped_streamed_command_passes_on_only_its_own_output() {
+    let server = server!();
+    let session = server.connect_key("ed25519", None).await;
+    let (tx, rx) = tokio::sync::mpsc::channel(8);
+    let stop = async {
+        started("sleep 306").await;
+    };
+    let (run, (stdout, _)) = tokio::join!(
+        remote_command::run_streaming(&session, "echo started; sleep 306", None, stop, tx),
+        received(rx)
+    );
+    let run = run.unwrap();
+    assert_eq!(run.stopped, Some(Stopped::Ended));
+    assert_eq!(stdout, b"started\n");
+    assert!(processes("sleep 306").is_empty());
+}
+
+/// HOST-15: a program that stops reading the output, as a pager does, does not hold up a stop.
+#[tokio::test]
+async fn a_stop_ends_a_streamed_command_whose_output_nobody_reads() {
+    let server = server!();
+    let session = server.connect_key("ed25519", None).await;
+    let (tx, _unread) = tokio::sync::mpsc::channel(1);
+    let command = "while :; do echo line; sleep 0.01; done";
+    let stop = tokio::time::sleep(Duration::from_secs(1));
+    let run = tokio::time::timeout(
+        Duration::from_secs(20),
+        remote_command::run_streaming(&session, command, None, stop, tx),
+    )
+    .await
+    .expect("the stop waited for the output to be read")
+    .unwrap();
+    assert_eq!(run.stopped, Some(Stopped::Ended));
 }

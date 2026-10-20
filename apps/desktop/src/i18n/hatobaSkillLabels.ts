@@ -107,6 +107,10 @@ export const AREAS: Area[] = [
           "dashboard.showLeftOut", "dashboard.leftOutBadge",
         ],
       },
+      "references/command-line.md": {
+        "Opening hosts": ["settings.cli"],
+        "Other programs": ["settings.cliAccess", "settings.cliAccess.activity", "settings.cliAccess.activity.details"],
+      },
       "references/shortcuts.md": {
         "App shortcuts": [
           "tabs.newTab", "tabs.close", "tray.lock", "sidebar.settings", "ai.show", "ai.hide", "hosts.search",
@@ -248,8 +252,8 @@ export const AREAS: Area[] = [
         "General": [
           "settings.rightClick", "settings.rightClick.copyPaste", "settings.rightClick.menu", "settings.confirmPaste",
           "settings.probe", "settings.closeAction", "settings.closeAction.ask", "settings.closeAction.tray",
-          "settings.closeAction.quit", "settings.aiNotifications", "dashboard.settings.interval", "settings.backup",
-          "settings.backup.button",
+          "settings.closeAction.quit", "settings.aiNotifications", "settings.cli", "settings.cliAccess",
+          "settings.cliAccess.activity", "settings.cliAccess.activity.details", "dashboard.settings.interval", "settings.backup", "settings.backup.button",
         ],
         "Appearance": [
           "settings.appearance.light", "settings.appearance.dark", "settings.appearance.auto", "settings.termColors",

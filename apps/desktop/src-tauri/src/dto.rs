@@ -1246,6 +1246,49 @@ pub struct CliCommandView {
     /// Whether that folder is on the `PATH` Hatoba started with. Only Linux reports false: a new
     /// `~/.local/bin` joins the `PATH` at the next sign-in.
     pub on_path: bool,
+    /// HOST-15: other programs may use the saved hosts through the command. Only counts while the
+    /// command is on.
+    pub access: bool,
+}
+
+/// What a program did through the `hatoba` command (HOST-15), newest first in Settings → General.
+/// Kept in memory until the vault locks.
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct CliActivity {
+    pub id: String,
+    pub kind: CliActivityKind,
+    pub host_id: String,
+    pub host_name: String,
+    /// The command, or the file's source and target.
+    pub detail: String,
+    pub started_at: i64,
+    pub state: CliActivityState,
+    /// The exit status of a command that ended.
+    pub status: Option<i32>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CliActivityKind {
+    Exec,
+    Upload,
+    Download,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CliActivityState {
+    Running,
+    Done,
+    Failed,
+}
+
+/// The list in Settings → General changed (HOST-15).
+#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "cli://activity")]
+pub struct CliActivityEvent {
+    pub entries: Vec<CliActivity>,
 }
 
 /// What the update check found (spec §11).

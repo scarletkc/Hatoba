@@ -159,12 +159,14 @@ export function createMockApi(): HatobaApi {
   };
   let seq = 0;
   const launches = q.get("launch")?.trim() ? [q.get("launch")!.trim().split(/\s+/)] : VISITOR ? [[VISITOR_HOST]] : [];
-  let cliCommand = false;
+  let cliCommand = q.get("cli") === "access";
+  let cliAccess = cliCommand;
   const cliView = () => ({
     enabled: cliCommand,
     location:
       platform === "windows" ? "C:\\Users\\demo\\AppData\\Local\\Hatoba\\bin" : platform === "macos" ? "/usr/local/bin/hatoba" : "/home/demo/.local/bin/hatoba",
     on_path: q.get("cli") !== "offpath",
+    access: cliAccess,
   });
 
   function makeSync(): SyncStatus {
@@ -282,6 +284,15 @@ export function createMockApi(): HatobaApi {
       await delay(300);
       cliCommand = enabled;
       return cliView();
+    },
+    cli_access_set: async (enabled) => {
+      await delay(300);
+      cliAccess = enabled;
+      return cliView();
+    },
+    cli_activity_list: async () => {
+      needUnlocked();
+      return cliAccess ? D.cliActivity() : [];
     },
     update_check: async () => {
       await delay(800);

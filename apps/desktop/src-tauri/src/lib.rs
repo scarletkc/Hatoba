@@ -2,6 +2,7 @@
 //! crypto, sync) and `hatoba-ssh` (sessions, SFTP). The WebView never receives secrets (spec §3.2).
 
 mod ai;
+mod cli_access;
 mod commands;
 mod convert;
 mod dashboard;
@@ -32,6 +33,14 @@ use commands::{
 use tauri::Manager;
 use tauri_specta::{collect_commands, collect_events};
 
+/// This app, for the `hatoba` command's own commands (HOST-15): the build's Tauri configuration,
+/// which `build.rs` reads, names the endpoint and the executable.
+pub const CLI_APP: hatoba_cli::App = hatoba_cli::App {
+    identifier: env!("HATOBA_IDENTIFIER"),
+    main_binary: env!("HATOBA_MAIN_BINARY"),
+    version: env!("CARGO_PKG_VERSION"),
+};
+
 /// The command/event registry; also used to export TypeScript bindings.
 pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new()
@@ -53,6 +62,8 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             cli::launch_take,
             cli::cli_command_get,
             cli::cli_command_set,
+            cli::cli_access_set,
+            cli::cli_activity_list,
             vault::vault_status,
             vault::vault_create,
             vault::vault_unlock,
@@ -249,6 +260,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             dto::McpServerStatus,
             dto::WindowChromeEvent,
             dto::LaunchEvent,
+            dto::CliActivityEvent,
             dto::ClosePromptEvent,
             dto::NotificationTarget,
             dto::TrayUpdateEvent,
@@ -304,6 +316,7 @@ pub fn run() {
 
             launch::queue_startup(&data_dir);
             cli::restore(&app.state::<state::AppState>());
+            cli_access::sync(&handle);
 
             notification::init(&handle);
             lock::spawn_watchers(handle.clone());

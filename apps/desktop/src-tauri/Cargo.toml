@@ -7,6 +7,8 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 publish = false
+# `src/bin/hatoba-cli.rs` is the second binary; the app is this one.
+default-run = "hatoba-desktop"
 
 [lib]
 name = "hatoba_desktop_lib"
@@ -14,9 +16,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2.7", features = [] }
+# Reads the app's identifier and executable name for the `hatoba` command (HOST-15).
+serde_json.workspace = true
 
 [dependencies]
 hatoba-ai.workspace = true
+hatoba-cli.workspace = true
 hatoba-core.workspace = true
 hatoba-local.workspace = true
 hatoba-ssh.workspace = true

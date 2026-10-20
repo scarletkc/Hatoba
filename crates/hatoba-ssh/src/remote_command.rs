@@ -1,5 +1,6 @@
 //! Running a command on the host so that stopping it ends it (spec AI-12, AI-18): the AI
-//! assistant's `run_command`.
+//! assistant's `run_command`, and `hatoba exec` (HOST-15), which [`run_streaming`] passes the
+//! output to as it comes.
 //!
 //! Closing an exec channel does not end its command: without a PTY, sshd only closes the
 //! command's pipes, so a quiet command runs on, and a chatty one dies of SIGPIPE at whatever
@@ -17,6 +18,7 @@
 //! might take for a command: the command then runs as it is ([`plain`]), as on Windows, and
 //! stopping it only closes its channel.
 
+use std::collections::VecDeque;
 use std::ffi::OsStr;
 use std::future::Future;
 use std::hash::{BuildHasher, RandomState};
@@ -27,6 +29,7 @@ use std::time::Duration;
 use bytes::Bytes;
 use russh::{ChannelMsg, ChannelReadHalf, Sig};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::mpsc;
 use tokio::time::Instant;
 
 use crate::error::SshError;
@@ -123,6 +126,13 @@ pub enum Stopped {
     MayRun,
 }
 
+/// A piece of what a command that [`run_streaming`] runs printed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Output {
+    Stdout(Bytes),
+    Stderr(Bytes),
+}
+
 /// Runs `command` with the login shell on a new exec channel of `session` and returns what it
 /// printed, like [`SshSession::exec_output`] with no stdin. It starts in `workdir`, absolute or
 /// from the home directory, or else in the home directory. When `stop` completes first, the
@@ -134,12 +144,35 @@ pub async fn run(
     workdir: Option<&str>,
     stop: impl Future<Output = ()>,
 ) -> Result<CommandRun, SshError> {
+    run_with(session, command, workdir, stop, None).await
+}
+
+/// [`run`], which sends what the command prints to `output` as it comes, and keeps none of it:
+/// the result's [`CommandRun::output`] has only the exit status. Sending waits while `output` is
+/// full. Once its receiver is gone, what the command prints is dropped.
+pub async fn run_streaming(
+    session: &SshSession,
+    command: &str,
+    workdir: Option<&str>,
+    stop: impl Future<Output = ()>,
+    output: mpsc::Sender<Output>,
+) -> Result<CommandRun, SshError> {
+    run_with(session, command, workdir, stop, Some(&output)).await
+}
+
+async fn run_with(
+    session: &SshSession,
+    command: &str,
+    workdir: Option<&str>,
+    stop: impl Future<Output = ()>,
+    sink: Option<&mpsc::Sender<Output>>,
+) -> Result<CommandRun, SshError> {
     check(command, workdir)?;
     tokio::pin!(stop);
     let shared = session.shared();
     // Win32-OpenSSH runs commands with cmd.exe or PowerShell, which have no `sh`.
     if !shared.plain_commands() && session.server_os() != Some(ServerOs::Windows) {
-        match wrapped(session, command, workdir, stop.as_mut()).await? {
+        match wrapped(session, command, workdir, stop.as_mut(), sink).await? {
             Some(run) => return Ok(run),
             None => {
                 tracing::info!("the host cannot run the command script; commands run as they are");
@@ -153,7 +186,7 @@ pub async fn run(
              the directory in the command",
         ));
     }
-    plain(session, command, stop).await
+    plain(session, command, stop, sink).await
 }
 
 /// What [`SCRIPT`] cannot take: a NUL character, or a directory on more than one line.
@@ -178,12 +211,17 @@ fn request(command: &str, workdir: Option<&str>, marker: &str) -> String {
 }
 
 /// Runs `command` under [`SCRIPT`]. `None` when the channel ended before the script was ready, so
-/// the host cannot run it and nothing was sent.
+/// the host cannot run it and nothing was sent, to the host or to `sink`.
+///
+/// With a `sink`, the output goes there while the command runs, but not around the script's lines:
+/// what comes before the script is ready is held back until it is, and after a stop, until the
+/// script's report is taken out.
 async fn wrapped(
     session: &SshSession,
     command: &str,
     workdir: Option<&str>,
     mut stop: Pin<&mut impl Future<Output = ()>>,
+    sink: Option<&mpsc::Sender<Output>>,
 ) -> Result<Option<CommandRun>, SshError> {
     let n = nonce();
     let marker = marker(n);
@@ -205,6 +243,10 @@ async fn wrapped(
             msg = reader.wait() => match out.take(session, msg)? {
                 Step::More => {
                     if take_line(&mut out.output.stdout, &marker, Find::First).is_some() {
+                        if sink.is_some() {
+                            out.release();
+                            out.forward = true;
+                        }
                         break;
                     }
                 }
@@ -219,6 +261,7 @@ async fn wrapped(
         }
     }
 
+    out.flush(sink).await;
     let feed = writer
         .half()
         .data_bytes(Bytes::from(request(command, workdir, &marker)));
@@ -232,6 +275,8 @@ async fn wrapped(
             // short, but would not say so.
             () = &mut stop, if fed && deadline.is_none() => {
                 deadline = Some(Instant::now() + STOP_WAIT);
+                // The script's report comes next.
+                out.forward = false;
                 if writer.half().eof().await.is_err() {
                     break false;
                 }
@@ -243,16 +288,29 @@ async fn wrapped(
                     tracing::debug!("run: sending the command ended early: {e}");
                 }
             }
-            msg = reader.wait() => match out.take(session, msg)? {
-                Step::More => {}
-                Step::Ended => break true,
-            },
+            () = out.send_next(sink), if !out.pending.is_empty() => {}
+            // Output waits for the receiver, without holding up the stop; after it, the report
+            // comes into `output`.
+            msg = reader.wait(), if out.pending.is_empty() || deadline.is_some() => {
+                match out.take(session, msg)? {
+                    Step::More => {}
+                    Step::Ended => break true,
+                }
+            }
         }
     };
     if ended {
         writer.ended();
     }
     let report = take_line(&mut out.output.stdout, &marker, Find::Last);
+    if sink.is_some() {
+        out.release();
+        if deadline.is_some() {
+            out.offer(sink);
+        } else {
+            out.flush(sink).await;
+        }
+    }
     let stopped = match (deadline, report.as_deref()) {
         (None, _) => None,
         (Some(_), Some("ended")) => Some(Stopped::Ended),
@@ -273,6 +331,7 @@ async fn plain(
     session: &SshSession,
     command: &str,
     mut stop: Pin<&mut impl Future<Output = ()>>,
+    sink: Option<&mpsc::Sender<Output>>,
 ) -> Result<CommandRun, SshError> {
     let Some((mut reader, writer, _slot)) = open(session, stop.as_mut()).await? else {
         return Ok(not_started());
@@ -283,27 +342,32 @@ async fn plain(
         .await
         .map_err(SshError::from)?;
     let _ = writer.half().eof().await;
-    let mut out = Collected::default();
+    let mut out = Collected {
+        forward: sink.is_some(),
+        ..Collected::default()
+    };
     loop {
         tokio::select! {
             biased;
             () = &mut stop => {
                 let _ = writer.half().signal(Sig::TERM).await;
+                out.offer(sink);
                 return Ok(CommandRun {
                     output: out.output,
                     stopped: Some(Stopped::MayRun),
                 });
             }
-            msg = reader.wait() => match out.take(session, msg)? {
-                Step::More => {}
-                Step::Ended => {
+            () = out.send_next(sink), if !out.pending.is_empty() => {}
+            msg = reader.wait(), if out.pending.is_empty() => {
+                if let Step::Ended = out.take(session, msg)? {
                     writer.ended();
+                    out.flush(sink).await;
                     return Ok(CommandRun {
                         output: out.output,
                         stopped: None,
                     });
                 }
-            },
+            }
         }
     }
 }
@@ -488,6 +552,10 @@ struct Collected {
     output: ExecOutput,
     /// The server accepted the exec request.
     accepted: bool,
+    /// Output goes to `pending`, for [`Self::send_next`] or [`Self::flush`] to send, instead of
+    /// into `output`.
+    forward: bool,
+    pending: VecDeque<Output>,
 }
 
 /// Whether a channel goes on after a message.
@@ -504,6 +572,14 @@ impl Collected {
             Some(ChannelMsg::Success) => self.accepted = true,
             Some(ChannelMsg::Failure) => {
                 return Err(SshError::channel("the server refused to run the command"));
+            }
+            Some(ChannelMsg::Data { data }) if self.forward => {
+                self.pending
+                    .push_back(Output::Stdout(Bytes::copy_from_slice(&data)));
+            }
+            Some(ChannelMsg::ExtendedData { data, .. }) if self.forward => {
+                self.pending
+                    .push_back(Output::Stderr(Bytes::copy_from_slice(&data)));
             }
             Some(ChannelMsg::Data { data }) => {
                 if out.stdout.len() + data.len() > MAX_EXEC_OUTPUT {
@@ -528,6 +604,57 @@ impl Collected {
             }
         }
         Ok(Step::More)
+    }
+
+    /// Moves what `output` holds to `pending`.
+    fn release(&mut self) {
+        let stdout = std::mem::take(&mut self.output.stdout);
+        let stderr = std::mem::take(&mut self.output.stderr);
+        if !stdout.is_empty() {
+            self.pending.push_back(Output::Stdout(stdout.into()));
+        }
+        if !stderr.is_empty() {
+            self.pending.push_back(Output::Stderr(stderr.into()));
+        }
+    }
+
+    /// Sends the first piece of `pending` once `sink` has room for it. A receiver that is gone
+    /// takes nothing more.
+    async fn send_next(&mut self, sink: Option<&mpsc::Sender<Output>>) {
+        let permit = match sink {
+            Some(sink) => sink.reserve().await.ok(),
+            None => None,
+        };
+        match (permit, self.pending.pop_front()) {
+            (Some(permit), Some(piece)) => permit.send(piece),
+            _ => self.pending.clear(),
+        }
+    }
+
+    /// Sends what of `pending` `sink` has room for now, in order, and drops the rest: after a stop,
+    /// a receiver that stopped reading would hold up the end.
+    fn offer(&mut self, sink: Option<&mpsc::Sender<Output>>) {
+        let Some(sink) = sink else {
+            return;
+        };
+        for piece in std::mem::take(&mut self.pending) {
+            if sink.try_send(piece).is_err() {
+                return;
+            }
+        }
+    }
+
+    /// Sends `pending` to `sink`, in order.
+    async fn flush(&mut self, sink: Option<&mpsc::Sender<Output>>) {
+        let Some(sink) = sink else {
+            return;
+        };
+        for piece in std::mem::take(&mut self.pending) {
+            // A receiver that is gone takes nothing more.
+            if sink.send(piece).await.is_err() {
+                return;
+            }
+        }
     }
 }
 

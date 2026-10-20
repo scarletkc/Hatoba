@@ -46,3 +46,38 @@
   align-items: center;
   gap: 8px;
 }
+
+/* What programs did through the hatoba command (HOST-15) */
+.activity {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 40px;
+  padding: 8px 14px;
+}
+
+.activityIcon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--fg2);
+}
+
+.activityText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.activityWhat {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.activityMeta {
+  font-size: 11.5px;
+  color: var(--fg2);
+  overflow-wrap: anywhere;
+}

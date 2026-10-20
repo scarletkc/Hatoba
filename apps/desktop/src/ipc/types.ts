@@ -914,6 +914,23 @@ export interface CliCommandView {
   location: string;
   /** Whether that folder is on the PATH Hatoba started with. Only Linux reports false, until the next sign-in. */
   on_path: boolean;
+  /** HOST-15: other programs may use the saved hosts through the command. Only counts while the command is on. */
+  access: boolean;
+}
+
+/** What a program did through the `hatoba` command (HOST-15), newest first. Kept until the vault locks. */
+export interface CliActivity {
+  id: string;
+  kind: "exec" | "upload" | "download";
+  host_id: string;
+  host_name: string;
+  /** The command, or the file's source and target. */
+  detail: string;
+  started_at: number;
+  state: "running" | "done" | "failed";
+  /** The exit status of a command that ended. */
+  status: number | null;
+  error: string | null;
 }
 
 /** What the update check found (spec §11). */
@@ -1683,4 +1700,6 @@ export interface EventMap {
   "app://notification-click": NotificationTarget;
   /** WIN-10: the tray menu's **Update to vX.Y.Z** was clicked. */
   "tray://update": null;
+  /** HOST-15: what other programs did through the `hatoba` command changed. */
+  "cli://activity": { entries: CliActivity[] };
 }

@@ -140,6 +140,10 @@ The labels that these files name in English, as the interface shows them in Simp
 | Minimize to tray | 最小化到托盘 |
 | Quit Hatoba | 退出 Hatoba |
 | Notify when the AI assistant finishes or needs approval | AI 助手完成或需要确认时通知 |
+| Use the hatoba command in terminals | 在终端中使用 hatoba 命令 |
+| Let other programs use saved hosts | 允许其他程序使用已保存的主机 |
+| Recent use | 最近使用 |
+| Details | 详情 |
 | Refresh interval | 刷新间隔 |
 | Export Encrypted Backup | 导出加密备份 |
 | Export… | 导出… |

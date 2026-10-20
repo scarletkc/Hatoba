@@ -253,6 +253,22 @@ The labels that these files name in English, as the interface shows them in Japa
 | Show | 表示 |
 | Left Out | 除外中 |
 
+## `references/command-line.md`
+
+### Opening hosts
+
+| en | ja |
+|---|---|
+| Use the hatoba command in terminals | ターミナルで hatoba コマンドを使う |
+
+### Other programs
+
+| en | ja |
+|---|---|
+| Let other programs use saved hosts | 他のプログラムに保存済みのホストを使わせる |
+| Recent use | 最近の利用 |
+| Details | 詳細 |
+
 ## `references/shortcuts.md`
 
 ### App shortcuts

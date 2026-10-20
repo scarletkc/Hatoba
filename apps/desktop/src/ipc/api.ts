@@ -34,6 +34,7 @@ import type {
   AppError,
   AppInfo,
   BuiltinSkillView,
+  CliActivity,
   CliCommandView,
   ConflictView,
   ConnectOptions,
@@ -120,6 +121,13 @@ export interface HatobaApi {
   cli_command_get(): Promise<CliCommandView>;
   /** Adds or removes the `hatoba` command. On macOS this may wait for an administrator's password. */
   cli_command_set(enabled: boolean): Promise<CliCommandView>;
+  /**
+   * HOST-15: lets other programs use the saved hosts through the command, or stops them. Turning it
+   * on puts the launcher in place again, which on macOS may wait for an administrator's password.
+   */
+  cli_access_set(enabled: boolean): Promise<CliCommandView>;
+  /** What other programs did through the command since the unlock, newest first (HOST-15). */
+  cli_activity_list(): Promise<CliActivity[]>;
 
   // vault
   vault_status(): Promise<VaultStatus>;

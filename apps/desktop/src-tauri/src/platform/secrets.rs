@@ -6,7 +6,10 @@
 use hatoba_core::platform::SecretStore;
 use zeroize::Zeroizing;
 
-const SERVICE: &str = "app.hatoba.desktop";
+/// The build's Tauri identifier (`build.rs`): `app.hatoba.desktop` for every released build, as
+/// the records saved so far are named, while a build with another identifier, such as a test
+/// build, keeps its own and never reads or removes the app's.
+const SERVICE: &str = env!("HATOBA_IDENTIFIER");
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct KeyringStore;
@@ -36,6 +39,20 @@ impl SecretStore for KeyringStore {
         match entry(key)?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(store_error(e)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Released builds keep the names their records were saved under.
+    #[test]
+    fn released_builds_keep_their_credential_names() {
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../../tauri.conf.json")).unwrap();
+        assert_eq!(conf["identifier"], "app.hatoba.desktop");
+        if option_env!("TAURI_CONFIG").is_none() {
+            assert_eq!(super::SERVICE, "app.hatoba.desktop");
         }
     }
 }
