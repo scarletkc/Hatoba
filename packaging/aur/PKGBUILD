@@ -2,8 +2,8 @@
 # Contributor: czyt <czytcn@gmail.com>
 #
 # hatoba-bin in the AUR, packaged from the deb package of a GitHub release. After each stable
-# release, the Release workflow sets pkgver to its version, fills in the checksums, and pushes this
-# file with its .SRCINFO (docs/releasing.md, Package managers).
+# release, the Release workflow's AUR job sets pkgver to its version, fills in the checksums, and
+# pushes this file with its .SRCINFO (docs/releasing.md, Package managers).
 pkgname=hatoba-bin
 pkgver=0.0.0
 pkgrel=1

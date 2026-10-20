@@ -98,13 +98,13 @@ Each stable release reaches winget, Scoop, and the AUR once it is published. Pre
 
 - **winget.** The **winget** job runs [WinGet Releaser](https://github.com/vedantmgoyal9/winget-releaser), which takes the manifests of the newest `ScarletKc.Hatoba` version in [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs), points them at the release's Windows installer, and opens a pull request there from your fork. A winget moderator merges it.
 - **Scoop.** The `hatoba` manifest in the [Extras bucket](https://github.com/ScoopInstaller/Extras) has `checkver` and `autoupdate`: the bucket's Excavator workflow checks the latest stable release every four hours and updates the manifest's version and hash from `SHA256SUMS.txt`. Nothing runs in this repository.
-- **AUR.** The **AUR** job sets `pkgver` in [`packaging/aur/PKGBUILD`](../packaging/aur/PKGBUILD) to the release's version, fills in the checksums from the release, builds the package to check it, and pushes it with its `.SRCINFO` to [`hatoba-bin`](https://aur.archlinux.org/packages/hatoba-bin).
+- **AUR.** While the repository variable `AUR_PUBLISH` is `true`, the **AUR** job sets `pkgver` in [`packaging/aur/PKGBUILD`](../packaging/aur/PKGBUILD) to the release's version, fills in the checksums from the release, builds the package to check it, and pushes it with its `.SRCINFO` to [`hatoba-bin`](https://aur.archlinux.org/packages/hatoba-bin).
 
 They find the files by their names in the release (`INSTALLERS` in `release.mjs`). Renaming the Windows installer also needs a change to `installers-regex` of the winget job and to the `autoupdate` URL of the Scoop manifest. Renaming the deb package needs a change to the URL in `source` of the PKGBUILD.
 
 ### Set up the package managers
 
-Do this once. Until then, the winget and AUR jobs fail after the release is published, which leaves the release as it is.
+Do this once. Until then, the winget job fails after the release is published, which leaves the release as it is, and the AUR job is skipped.
 
 1. In the repository's **Settings → Environments**, create an environment named `packages`. Leave **Required reviewers** off. Under **Deployment branches and tags**, choose **Selected branches and tags** and add `main`.
 2. For winget:
@@ -120,6 +120,7 @@ Do this once. Until then, the winget and AUR jobs fail after the release is publ
 3. For the AUR:
    1. If someone else maintains `hatoba-bin`, ask them to add your AUR account as a co-maintainer.
    2. Generate an SSH key without a passphrase with `ssh-keygen -t ed25519 -N '' -C hatoba-bin -f <a folder outside the repository>/aur`. Add `aur.pub` under **My Account → SSH Public Key** on the AUR, and add the contents of `aur` to the `packages` environment as the secret `AUR_SSH_PRIVATE_KEY`. The key can push to every package of your AUR account.
+   3. Once the account can push to `hatoba-bin`, add the repository variable `AUR_PUBLISH` with the value `true` under **Settings → Secrets and variables → Actions → Variables**.
 4. For Scoop, open a package request issue in [ScoopInstaller/Extras](https://github.com/ScoopInstaller/Extras/issues/new/choose), then a pull request that adds `bucket/hatoba.json` and closes the issue.
 
 ### When a submission fails

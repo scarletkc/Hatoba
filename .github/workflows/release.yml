@@ -218,7 +218,8 @@ jobs:
   aur:
     name: AUR
     needs: [preflight, publish]
-    if: needs.preflight.outputs.prerelease == 'false'
+    # Runs once the repository variable AUR_PUBLISH is true, when the AUR account can push.
+    if: needs.preflight.outputs.prerelease == 'false' && vars.AUR_PUBLISH == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Holds the AUR SSH key, as for the winget job.
