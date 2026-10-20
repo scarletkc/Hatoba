@@ -247,6 +247,72 @@ const without =
 
 const anyArgs = () => true;
 
+/**
+ * What one option takes: `false` no value, `true` a value (after `=` or in the next word, for a short option
+ * also in the rest of its word, as in `-n20`), and a pattern an optional value, which is the next word only when
+ * the pattern matches it, as journalctl reads `-b -1`.
+ */
+type Arity = boolean | RegExp;
+
+/** A tool's options that only read, by long name and by short letter. */
+interface Options {
+  long: Record<string, Arity>;
+  short: Record<string, Arity>;
+}
+
+/**
+ * {@link Options} from their names: the long ones separated by spaces, one that takes a value ending in `=`, and the
+ * short ones in getopt's form, a letter that takes a value followed by `:` (`c:n:qv`). `optional` names, by long
+ * name or short letter, the options whose value is optional.
+ */
+function options(long: string, short: string, optional: Record<string, RegExp> = {}): Options {
+  const out: Options = {
+    long: Object.fromEntries(long.split(/\s+/).filter(Boolean).map((n) => [n.replace(/=$/, ""), n.endsWith("=")])),
+    short: Object.fromEntries([...short.matchAll(/(.)(:?)/g)].map(([, c, value]) => [c, value === ":"])),
+  };
+  for (const [name, pattern] of Object.entries(optional)) (name.length === 1 ? out.short : out.long)[name] = pattern;
+  return out;
+}
+
+/**
+ * The operands of `args`, or null when an option is not one of `options`, so that an option nobody checked
+ * asks. Long options need their full name; a cluster of short options ends at the first that takes a value.
+ * A lone `-` (standard input) is an operand, and so is every word after `--`.
+ */
+function operands(args: readonly string[], { long, short }: Options): string[] | null {
+  const out: string[] = [];
+  /** How many words after `i` an option's value takes: none when it is attached or the option takes none. */
+  const value = (arity: Arity, attached: boolean, i: number) => (attached || arity === false ? 0 : arity === true || arity.test(args[i + 1] ?? "") ? 1 : 0);
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--") {
+      out.push(...args.slice(i + 1));
+      break;
+    }
+    if (a.startsWith("--")) {
+      const eq = a.indexOf("=");
+      const name = a.slice(2, eq < 0 ? undefined : eq);
+      if (!Object.hasOwn(long, name)) return null;
+      i += value(long[name], eq >= 0, i);
+    } else if (a.length > 1 && a.startsWith("-")) {
+      for (let j = 1; j < a.length; j++) {
+        if (!Object.hasOwn(short, a[j])) return null;
+        if (short[a[j]] !== false) {
+          i += value(short[a[j]], j < a.length - 1, i);
+          break;
+        }
+      }
+    } else out.push(a);
+  }
+  return out;
+}
+
+/** Arguments with only the options of `known`. */
+const reads = (known: Options) => (args: string[]) => operands(args, known) !== null;
+
+/** The entry of `table` named `key`, not one of its prototype's. */
+const own = <T>(table: Record<string, T>, key: string | undefined): T | undefined => (key !== undefined && Object.hasOwn(table, key) ? table[key] : undefined);
+
 /** The first word that is no option, and what follows it. */
 function firstWord(args: string[]): [string | undefined, string[]] {
   const at = args.findIndex((a) => !a.startsWith("-"));
@@ -293,8 +359,16 @@ function gitReads(args: string[]): boolean {
       return lists(["--delete", "--move", "--copy", "--force", "--set-upstream-to", "--unset-upstream", "--edit-description", "--track", "--create-reflog"], "dDmMcCfut", false);
     case "tag":
       return lists(["--delete", "--annotate", "--sign", "--local-user", "--force", "--message", "--file", "--edit", "--create-reflog"], "dasufmFe", true);
-    case "remote":
-      return rest.every((a) => a === "-v" || a === "--verbose") || rest[0] === "get-url" || rest[0] === "show";
+    case "remote": {
+      if (rest.every((a) => a === "-v" || a === "--verbose") || rest[0] === "get-url") return true;
+      if (rest[0] !== "show") return false;
+      // `remote show <name>` asks the remote for its branches, through core.sshCommand or a credential helper,
+      // unless -n is given; without a name it lists the remotes.
+      const args = rest.slice(1);
+      const end = args.indexOf("--");
+      const names = operands(args, { long: {}, short: { n: false } });
+      return !!names && (names.length === 0 || (end < 0 ? args : args.slice(0, end)).includes("-n"));
+    }
     case "stash":
       return rest[0] === "list" || rest[0] === "show";
     case "reflog": {
@@ -306,123 +380,71 @@ function gitReads(args: string[]): boolean {
   }
 }
 
+const DOCKER_PS = options("all filter= format= help last= latest no-trunc quiet size", "af:ln:qs");
+
+const DOCKER_IMAGES = options("all digests filter= format= help no-trunc quiet tree", "af:q");
+
+/** Not `--follow`, and not `--details`, which prints the environment variables a log option names. */
+const DOCKER_LOGS = options("help since= tail= timestamps until=", "n:t");
+
+const DOCKER_FORMAT = options("format= help", "f:");
+
 /**
- * `docker` or `podman` listing containers and images. Not `inspect`, which prints a container's
- * environment, where passwords often are.
+ * `docker` and `podman` subcommands that list containers and images, with the options of each that only read. Not
+ * `inspect`, which prints a container's environment, where passwords often are.
  */
-function dockerReads(args: string[]): boolean {
-  const [sub, ...rest] = args;
-  const follows = (xs: string[]) => xs.some((a) => refused(a, ["--follow"], "f"));
-  switch (sub) {
-    case "ps":
-    case "images":
-    case "version":
-    case "info":
-      return true;
-    case "logs":
-      return !follows(rest);
-    case "container":
-      return ["ls", "list", "ps"].includes(rest[0]) || (rest[0] === "logs" && !follows(rest));
-    case "image":
-      return ["ls", "list"].includes(rest[0]);
-    case "compose":
-      return ["ps", "ls", "images", "version"].includes(rest[0]) || (rest[0] === "logs" && !follows(rest));
-    default:
-      return false;
-  }
-}
+const DOCKER_READS: Record<string, Options> = { ps: DOCKER_PS, images: DOCKER_IMAGES, logs: DOCKER_LOGS, version: DOCKER_FORMAT, info: DOCKER_FORMAT };
+
+/** The subcommands of {@link DOCKER_READS} that come after a group's name. */
+const DOCKER_GROUPS: Record<string, Record<string, Options>> = {
+  container: { ls: DOCKER_PS, list: DOCKER_PS, ps: DOCKER_PS, logs: DOCKER_LOGS },
+  image: { ls: DOCKER_IMAGES, list: DOCKER_IMAGES },
+  compose: {
+    ps: options("all dry-run filter= format= help no-trunc orphans quiet services status=", "aq"),
+    ls: options("all dry-run filter= format= help quiet", "aq"),
+    images: options("dry-run format= help quiet", "q"),
+    version: options("dry-run format= help short", "f:"),
+    logs: options("dry-run help index= no-color no-log-prefix since= tail= timestamps until=", "n:t"),
+  },
+};
+
+/** `docker` or `podman` with a subcommand of {@link DOCKER_READS} or {@link DOCKER_GROUPS}, first, and only its options. */
+const dockerReads =
+  (podman: boolean) =>
+  (args: string[]): boolean => {
+    const group = own(DOCKER_GROUPS, args[0]);
+    const known = group ? own(group, args[1]) : own(DOCKER_READS, args[0]);
+    if (!known) return false;
+    // podman's `logs -n` is `--names`, which takes no value. Reading its other `-n` that way too is safe: the
+    // value it takes is then checked as an option.
+    const short = podman && known.short.n === true ? { ...known.short, n: false } : known.short;
+    return operands(args.slice(group ? 2 : 1), { long: known.long, short }) !== null;
+  };
 
 const KUBECTL_READS = ["get", "describe", "logs", "top", "version", "explain", "api-resources", "api-versions", "cluster-info"];
 
 /**
- * The options of {@link KUBECTL_READS} that only read, by long name: true for one that takes a value (after `=`,
- * in the next word, or for a short one in the rest of its word, as in `-owide`). Every other option asks,
- * among them those that pick the API server, its TLS trust, the credentials or the kubeconfig (whose `exec`
- * plugins run programs), which would send the cluster's credentials elsewhere; those that write files
- * (`--cache-dir`, `--profile-output`, `--output-directory`); those that follow output (`--watch`, `--follow`);
- * and `get`'s raw API paths, manifests and kustomizations, which name objects another way.
+ * The options of {@link KUBECTL_READS} that only read. Every other option asks, among them those that pick the API
+ * server, its TLS trust, the credentials or the kubeconfig (whose `exec` plugins run programs), which would send the
+ * cluster's credentials elsewhere; those that write files (`--cache-dir`, `--profile-output`, `--output-directory`);
+ * those that follow output (`--watch`, `--follow`); and `get`'s raw API paths, manifests and kustomizations, which
+ * name objects another way.
  */
-const KUBECTL_LONG: Record<string, boolean> = {
-  "all-containers": false,
-  "all-namespaces": false,
-  "all-pods": false,
-  "allow-missing-template-keys": false,
-  "api-group": true,
-  "api-version": true,
-  cached: false,
-  categories: true,
-  "chunk-size": true,
-  client: false,
-  container: true,
-  containers: false,
-  context: true,
-  "field-selector": true,
-  "ignore-errors": false,
-  "ignore-not-found": false,
-  "label-columns": true,
-  "limit-bytes": true,
-  "max-log-requests": true,
-  namespace: true,
-  namespaced: false,
-  namespaces: true,
-  "no-headers": false,
-  output: true,
-  "pod-running-timeout": true,
-  prefix: false,
-  previous: false,
-  recursive: false,
-  "request-timeout": true,
-  selector: true,
-  "server-print": false,
-  "show-capacity": false,
-  "show-events": false,
-  "show-kind": false,
-  "show-labels": false,
-  "show-managed-fields": false,
-  since: true,
-  "since-time": true,
-  "sort-by": true,
-  sum: false,
-  tail: true,
-  template: true,
-  timestamps: false,
-  "use-protocol-buffers": false,
-  v: true,
-  verbs: true,
-};
+const KUBECTL = options(
+  `all-containers all-namespaces all-pods allow-missing-template-keys api-group= api-version= cached categories= chunk-size= client container=
+  containers context= field-selector= ignore-errors ignore-not-found label-columns= limit-bytes= max-log-requests= namespace= namespaced namespaces=
+  no-headers output= pod-running-timeout= prefix previous recursive request-timeout= selector= server-print show-capacity show-events show-kind
+  show-labels show-managed-fields since= since-time= sort-by= sum tail= template= timestamps use-protocol-buffers v= verbs=`,
+  "Ac:L:l:n:o:pRv:",
+);
 
-/** The short forms of {@link KUBECTL_LONG}'s options. */
-const KUBECTL_SHORT: Record<string, boolean> = { n: true, v: true, A: false, o: true, l: true, L: true, R: false, c: true, p: false };
-
-/** `kubectl` with a verb that only reads, first, and only options of {@link KUBECTL_LONG} and {@link KUBECTL_SHORT}. */
+/** `kubectl` with a verb that only reads, first, and only the options of {@link KUBECTL}. */
 function kubectlReads(args: string[]): boolean {
   const [sub, ...rest] = args;
   if (!KUBECTL_READS.includes(sub)) return false;
-  const names: string[] = [];
-  for (let i = 0; i < rest.length; i++) {
-    const a = rest[i];
-    if (a === "--") {
-      names.push(...rest.slice(i + 1));
-      break;
-    }
-    if (a.startsWith("--")) {
-      const eq = a.indexOf("=");
-      const name = a.slice(2, eq < 0 ? undefined : eq);
-      if (!Object.hasOwn(KUBECTL_LONG, name)) return false;
-      if (KUBECTL_LONG[name] && eq < 0) i++;
-    } else if (a.length > 1 && a.startsWith("-")) {
-      // A cluster of short options, the first that takes a value taking the rest of the word or the next one.
-      for (let j = 1; j < a.length; j++) {
-        if (!Object.hasOwn(KUBECTL_SHORT, a[j])) return false;
-        if (KUBECTL_SHORT[a[j]]) {
-          if (j === a.length - 1) i++;
-          break;
-        }
-      }
-    } else names.push(a);
-  }
+  const names = operands(rest, KUBECTL);
   // `get secret -o yaml` prints the secrets' values; resource types are case-insensitive.
-  return sub !== "get" || !names.flatMap((a) => a.split(",")).some((n) => /^secrets?($|[/.])/i.test(n));
+  return !!names && (sub !== "get" || !names.flatMap((a) => a.split(",")).some((n) => /^secrets?($|[/.])/i.test(n)));
 }
 
 const SYSTEMCTL_READS = [
@@ -492,6 +514,123 @@ function dmesgReads(args: string[]): boolean {
   return args.every((a) => /^-[THkxdLe]+$/.test(a) || /^--(ctime|human|kernel|decode|reltime|notime|nopager|raw|color(=\w+)?|time-format=[\w-]+|(level|facility)=[\w,]+)$/.test(a));
 }
 
+/** `tail`'s options that only read: not `--follow`, `-f` and `-F`, nor the options that only matter while following. */
+const TAIL = options("bytes= help lines= quiet silent verbose version zero-terminated", "c:n:qvz");
+
+/**
+ * `tail` with only the options of {@link TAIL}, and the obsolete `tail -20`. GNU tail also reads `+20` and `+f` as
+ * the obsolete form, which follows with an `f`.
+ */
+function tailReads(args: string[]): boolean {
+  const files = operands(/^-\d+[bcl]?$/.test(args[0] ?? "") ? args.slice(1) : args, TAIL);
+  return !!files && !files.some((f) => /^\+\d*[bcl]?f$/.test(f));
+}
+
+/**
+ * `sort`'s options that only read: not `--output` and `-o`, `--compress-program`, which runs the program it names,
+ * or `--temporary-directory` and `-T`, which pick where it writes.
+ */
+const SORT = options(
+  `batch-size= buffer-size= check debug dictionary-order field-separator= files0-from= general-numeric-sort help human-numeric-sort ignore-case
+  ignore-leading-blanks ignore-nonprinting key= merge month-sort numeric-sort parallel= random-sort random-source= reverse sort= stable unique version
+  version-sort zero-terminated`,
+  "bCcdfghik:MmnRrS:st:uVz",
+);
+
+/**
+ * `file`'s options that only read: not `--compile` and `-C`, which writes the compiled magic file, `-p`, which sets
+ * the files' access times back, `-z` and `-Z`, which may run a decompression program found on `PATH`, or `-S`,
+ * which turns its sandbox off.
+ */
+const FILE = options(
+  `apple brief checking-printout debug dereference exclude= exclude-quiet= extension files-from= help keep-going list magic-file= mime mime-encoding
+  mime-type no-buffer no-dereference no-pad parameter= print0 raw separator= special-files version`,
+  "0bcde:F:f:hikLlm:NnP:rsv",
+);
+
+/**
+ * `ss`'s options that only read: not `--kill` and `-K`, which close sockets, `--diag` and `-D`, which writes a
+ * file, or `--events` and `-E`, which keeps printing until stopped.
+ */
+const SS = options(
+  `all bpf cgroup context contexts dccp extended family= filter= help info inet-sockopt ipv4 ipv6 listening memory mptcp net= no-header numeric
+  oneline options packet processes query= raw resolve sctp socket= summary tcp threads tipc tipcinfo tos udp unix version vsock xdp`,
+  "046A:abdeF:f:HhilMmN:nOoprSsTtuVwxZz",
+);
+
+/** The boot `journalctl -b` takes from the next word: an offset, a boot ID with or without one, or `all`. */
+const JOURNAL_BOOT = /^(all|[+-]?\d+|[0-9a-f]{32}([+-]\d+)?)$/i;
+
+/** The count `journalctl -n` takes from the next word. */
+const JOURNAL_LINES = /^(all|\+?\d+)$/;
+
+/**
+ * `journalctl`'s options that only read: not `--follow` and `-f`, the vacuuming, rotating, flushing, syncing, and
+ * relinquishing commands, `--update-catalog`, the sealing keys' `--setup-keys`, `--force`, and `--interval`,
+ * `--cursor-file`, which writes the last entry's cursor to the file, or `--image`, which mounts a disk image.
+ */
+const JOURNALCTL = options(
+  `after-cursor= all case-sensitive catalog cursor= directory= disk-usage dmesg dump-catalog exclude-identifier= facility= field= fields file= full
+  grep= header help identifier= list-boots list-catalog list-namespaces machine= merge namespace= no-full no-hostname no-pager no-tail output=
+  output-fields= pager-end priority= quiet reverse root= show-cursor since= system this-boot truncate-newline unit= until= user user-unit= utc verify
+  verify-key= version`,
+  "ac:D:eF:g:hklM:mNo:p:qrS:T:t:U:u:x",
+  { boot: JOURNAL_BOOT, b: JOURNAL_BOOT, lines: JOURNAL_LINES, n: JOURNAL_LINES },
+);
+
+/**
+ * `rg`'s options that only read: not `--pre`, which runs a program on each file, `--hostname-bin`, which runs one
+ * to look up the host name, or `--search-zip` and `-z`, which run the decompression programs found on `PATH`.
+ */
+const RG = options(
+  `after-context= auto-hybrid-regex before-context= binary block-buffered byte-offset case-sensitive color= colors= column context= context-separator=
+  count count-matches crlf debug dfa-size-limit= encoding= engine= field-context-separator= field-match-separator= file= files files-with-matches
+  files-without-match fixed-strings follow generate= glob= glob-case-insensitive heading help hidden hyperlink-format= iglob= ignore ignore-case
+  ignore-dot ignore-exclude ignore-file= ignore-file-case-insensitive ignore-files ignore-global ignore-messages ignore-parent ignore-vcs include-zero
+  invert-match json line-buffered line-number line-regexp max-columns= max-columns-preview max-count= max-depth= max-filesize= maxdepth= messages mmap
+  multiline multiline-dotall no-auto-hybrid-regex no-binary no-block-buffered no-byte-offset no-column no-config no-context-separator no-crlf
+  no-filename no-fixed-strings no-follow no-glob-case-insensitive no-heading no-hidden no-ignore no-ignore-dot no-ignore-exclude
+  no-ignore-file-case-insensitive no-ignore-files no-ignore-global no-ignore-messages no-ignore-parent no-ignore-vcs no-include-zero no-invert-match
+  no-json no-line-buffered no-line-number no-max-columns-preview no-messages no-mmap no-multiline no-multiline-dotall no-one-file-system no-pcre2
+  no-pcre2-unicode no-require-git no-search-zip no-sort-files no-stats no-text no-trim no-unicode null null-data one-file-system only-matching passthru
+  path-separator= pcre2 pcre2-unicode pcre2-version pretty quiet regex-size-limit= regexp= replace= require-git smart-case sort= sort-files sortr=
+  stats stop-on-nonmatch text threads= trace trim type= type-add= type-clear= type-list type-not= unicode unrestricted version vimgrep with-filename
+  word-regexp`,
+  ".0A:aB:bC:cd:E:e:Ff:g:HhIij:LlM:m:NnoPpqr:SsT:t:UuVvwx",
+);
+
+/**
+ * The primaries of `find`'s expression that only read, by the number of words they take: not `-exec`, `-execdir`,
+ * `-ok`, and `-okdir`, which run programs, `-delete`, or `-fprint`, `-fprint0`, `-fprintf`, and `-fls`, which write
+ * files. Those that take a word end in `=`.
+ */
+const FIND_PRIMARIES: Record<string, number> = Object.fromEntries(
+  `! ( ) , -a -and -daystart -depth -empty -executable -false -follow -ignore_readdir_race -ls -mount -nogroup -noignore_readdir_race -noleaf -not
+  -nouser -nowarn -o -or -print -print0 -prune -quit -readable -true -warn -writable -xdev
+  -amin= -anewer= -atime= -cmin= -cnewer= -context= -ctime= -files0-from= -fstype= -gid= -group= -ilname= -iname= -inum= -ipath= -iregex= -iwholename=
+  -links= -lname= -maxdepth= -mindepth= -mmin= -mtime= -name= -newer= -path= -perm= -printf= -regex= -regextype= -samefile= -size= -type= -uid= -used=
+  -user= -wholename= -xtype=`
+    .split(/\s+/)
+    .map((p) => [p.replace(/=$/, ""), p.endsWith("=") ? 1 : 0]),
+);
+
+/**
+ * `find` with only the primaries of {@link FIND_PRIMARIES} and `-newerXY`. Before the starting points it takes `-H`,
+ * `-L`, `-P`, `-D` with its debug options, `-O` with a level, and BSD find's `-E`, `-X`, `-s`, and `-x`; the expression
+ * starts at the first word that begins with `-` or is `(`, `)`, `!`, or `,`.
+ */
+function findReads(args: string[]): boolean {
+  let i = 0;
+  for (; i < args.length && /^-([HLPEXsx]+|O\d*|D)$/.test(args[i]); i++) if (args[i] === "-D") i++;
+  while (i < args.length && !args[i].startsWith("-") && !["(", ")", "!", ","].includes(args[i])) i++;
+  for (; i < args.length; i++) {
+    const words = /^-newer[aBcm][aBcmt]$/.test(args[i]) ? 1 : own(FIND_PRIMARIES, args[i]);
+    if (words === undefined) return false;
+    i += words;
+  }
+  return true;
+}
+
 interface Rule {
   ok: (args: string[]) => boolean;
   /** An unquoted glob may stand among the arguments: no option of the command writes or runs anything. */
@@ -505,15 +644,15 @@ const READ_ONLY: Record<string, Rule> = {
   ls: free,
   cat: free,
   head: free,
-  tail: { ok: without(["--follow"], "fF"), globs: true },
+  tail: { ok: tailReads, globs: true },
   grep: free,
   egrep: free,
   fgrep: free,
-  rg: { ok: without(["--pre", "--hostname-bin"]) },
-  find: { ok: (args) => !args.some((a) => ["-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprint0", "-fprintf", "-fls"].includes(a)) },
+  rg: { ok: reads(RG) },
+  find: { ok: findReads },
   wc: free,
   stat: free,
-  file: { ok: without(["--compile"], "C") },
+  file: { ok: reads(FILE) },
   du: free,
   df: free,
   pwd: free,
@@ -553,22 +692,17 @@ const READ_ONLY: Record<string, Rule> = {
   sha1sum: free,
   sha256sum: free,
   sha512sum: free,
-  sort: { ok: without(["--output", "--compress-program"], "o") },
+  sort: { ok: reads(SORT) },
   uniq: { ok: uniqReads },
-  ss: { ok: without(["--kill", "--diag"], "KD") },
+  ss: { ok: reads(SS) },
   netstat: free,
   ip: { ok: ipReads },
   dmesg: { ok: dmesgReads },
   systemctl: { ok: systemctlReads },
-  journalctl: {
-    ok: without(
-      ["--vacuum", "--rotate", "--follow", "--flush", "--sync", "--relinquish-var", "--smart-relinquish-var", "--setup-keys", "--update-catalog", "--cursor-file"],
-      "f",
-    ),
-  },
+  journalctl: { ok: reads(JOURNALCTL) },
   git: { ok: gitReads },
-  docker: { ok: dockerReads },
-  podman: { ok: dockerReads },
+  docker: { ok: dockerReads(false) },
+  podman: { ok: dockerReads(true) },
   kubectl: { ok: kubectlReads },
 };
 
