@@ -86,6 +86,7 @@ pub(super) fn read(path: Option<&Path>) -> AppResult<Source> {
         location: Some(location),
         encrypted: false,
         entries: entries(sessions),
+        ..Source::default()
     })
 }
 

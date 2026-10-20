@@ -17,6 +17,11 @@ pub(super) const MAX_DEPTH: usize = 16;
 
 /// Reads a file of at most [`MAX_FILE_BYTES`].
 pub(super) fn read_file(path: &Path) -> AppResult<Vec<u8>> {
+    read_file_up_to(path, MAX_FILE_BYTES)
+}
+
+/// Reads a file of at most `max` bytes.
+pub(super) fn read_file_up_to(path: &Path, max: u64) -> AppResult<Vec<u8>> {
     let file = std::fs::File::open(path).map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
             AppError::not_found(&path.display().to_string())
@@ -25,10 +30,10 @@ pub(super) fn read_file(path: &Path) -> AppResult<Vec<u8>> {
         }
     })?;
     let mut bytes = Vec::new();
-    file.take(MAX_FILE_BYTES + 1)
+    file.take(max + 1)
         .read_to_end(&mut bytes)
         .map_err(AppError::io)?;
-    if bytes.len() as u64 > MAX_FILE_BYTES {
+    if bytes.len() as u64 > max {
         return Err(AppError::io(format!("{} is too large", path.display())));
     }
     Ok(bytes)

@@ -30,7 +30,7 @@ const CHOOSE: Record<ImportSource, Choice[]> = {
   finalshell: [{ directory: true }],
   mobaxterm: [{ extensions: ["mxtsessions", "ini"] }],
   putty: [{ extensions: ["reg"] }],
-  securecrt: [{ directory: true }],
+  securecrt: [{ extensions: ["xml"] }, { directory: true }],
   tabby: [{ extensions: ["yaml", "yml"] }],
 };
 

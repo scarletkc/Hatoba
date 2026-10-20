@@ -65,6 +65,7 @@ fn parse(text: &str) -> AppResult<Source> {
         location: None,
         encrypted: false,
         entries,
+        ..Source::default()
     })
 }
 
