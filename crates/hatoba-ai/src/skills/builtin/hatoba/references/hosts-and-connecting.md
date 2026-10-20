@@ -37,7 +37,7 @@ Other labels: **Not saved**, **Remove from Recent**, **Username**.
 - FinalShell: its data folder (`%LOCALAPPDATA%\finalshell` on Windows, `~/Library/FinalShell` on macOS, `~/.finalshell` on Linux), or a copy of it.
 - MobaXterm: `%APPDATA%\MobaXterm\MobaXterm.ini`, the `MobaXterm.ini` beside the portable edition, or a `.mxtsessions` file from **Export all sessions to file**.
 - PuTTY: the saved sessions in the registry on Windows and in `~/.putty/sessions` on macOS and Linux, or a `.reg` file of the key `HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions` exported in Registry Editor.
-- SecureCRT: the `Sessions` folder in SecureCRT's configuration folder (`%APPDATA%\VanDyke\Config` on Windows, `~/Library/Application Support/VanDyke/SecureCRT/Config` on macOS, `~/.vandyke/SecureCRT/Config` on Linux), a configuration folder kept elsewhere or copied from another computer, or its `Sessions` folder.
+- SecureCRT: the `Sessions` folder in SecureCRT's configuration folder (`%APPDATA%\VanDyke\Config` on Windows, `~/Library/Application Support/VanDyke/SecureCRT/Config` on macOS, `~/.vandyke/SecureCRT/Config` on Linux), an `.xml` file from **Tools → Export Settings**, a configuration folder kept elsewhere or copied from another computer, or its `Sessions` folder.
 - Tabby: `config.yaml` in Tabby's folder (`%APPDATA%\tabby`, `~/Library/Application Support/tabby`, `~/.config/tabby`). A config encrypted with Tabby's vault can't be read until its encryption is turned off in Tabby.
 
 What comes along:

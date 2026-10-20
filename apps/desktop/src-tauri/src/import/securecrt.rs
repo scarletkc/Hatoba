@@ -1,19 +1,27 @@
 //! SecureCRT sessions (SSH-15): one `.ini` file per session in the `Sessions` folder of SecureCRT's
 //! configuration folder, whose subfolders are the session folders. Each line holds one setting,
 //! `S:"Name"=text`, `D:"Name"=` a number in hex, or `Z:"Name"=` the number of the lines that follow
-//! with a list's items. A session can sign in with the key file set for all sessions, kept in
-//! `SSH2.ini`, and reach its server through another session, which SecureCRT calls a firewall.
-//! The passwords SecureCRT saves are encrypted, with the configuration passphrase when one is set,
-//! so they are not imported.
+//! with a list's items. **Tools → Export Settings** writes the same settings to an XML file, in a
+//! `<key>` element for each folder and session. A session can sign in with the key file set for
+//! all sessions, kept in `SSH2.ini`, and reach its server through another session, which
+//! SecureCRT calls a firewall. The passwords SecureCRT saves are encrypted, with the configuration
+//! passphrase when one is set, so they are not imported.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use quick_xml::XmlVersion;
+use quick_xml::escape::resolve_predefined_entity;
+use quick_xml::events::{BytesStart, Event};
 use zeroize::Zeroizing;
 
-use super::text;
+use super::text::{self, MAX_FILE_BYTES, MAX_FILES};
 use super::{Entry, Jump, Source, non_empty};
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
+
+/// The largest XML export an import reads. A session takes about 20 KB in it, so this holds
+/// [`MAX_FILES`] of them.
+const MAX_EXPORT_BYTES: u64 = 16 * MAX_FILE_BYTES;
 
 /// Where SecureCRT on Windows keeps the configuration folder chosen in its Global Options, under
 /// `HKEY_CURRENT_USER`.
@@ -35,6 +43,13 @@ const READ: &[&str] = &[
 ];
 
 pub(super) fn read(path: Option<&Path>) -> AppResult<Source> {
+    if let Some(file) = path.filter(|p| p.is_file()) {
+        return Ok(Source {
+            entries: read_export(file)?,
+            location: Some(file.to_string_lossy().into_owned()),
+            encrypted: false,
+        });
+    }
     let Some((config, sessions)) = path.map(folders).or_else(default_folders) else {
         return Ok(Source::default());
     };
@@ -144,10 +159,7 @@ fn expand_env(path: &str) -> String {
 /// The SSH sessions under `root`, the sessions folder, with the folders between as their folder.
 /// The default session and the files that keep each folder's order are left out.
 fn read_sessions(root: &Path, config: Option<&Path>) -> AppResult<Vec<Entry>> {
-    let places = Places {
-        config: config.map(Path::to_path_buf),
-        documents: dirs::document_dir(),
-    };
+    let places = Places::new(config);
     // The key file of the sessions that use the global setting.
     let global_key = match config.map(|c| c.join("SSH2.ini")).filter(|p| p.is_file()) {
         Some(path) => identity(&parse(&read_text(&path)?)),
@@ -170,35 +182,64 @@ fn read_sessions(root: &Path, config: Option<&Path>) -> AppResult<Vec<Entry>> {
         {
             continue;
         }
-        let id = folder
-            .iter()
-            .map(String::as_str)
-            .chain([name.as_str()])
-            .collect::<Vec<_>>()
-            .join("/");
         let settings = parse(&read_text(&path)?);
         entries.extend(entry(
             &settings,
-            id,
             name,
             folder,
             global_key.as_deref(),
             &places,
         ));
     }
-    // A firewall session names the session's path as SecureCRT shows it, in any case.
+    link_firewalls(&mut entries);
+    Ok(entries)
+}
+
+/// The sessions in the XML file that SecureCRT's Export Settings writes. `${VDS_CONFIG_PATH}` in
+/// its paths stands for this device's configuration folder, as it does once SecureCRT imports
+/// the file.
+fn read_export(path: &Path) -> AppResult<Vec<Entry>> {
+    let text = {
+        let bytes = Zeroizing::new(text::read_file_up_to(path, MAX_EXPORT_BYTES)?);
+        Zeroizing::new(text::decode(&bytes))
+    };
+    let export = parse_export(&text)
+        .map_err(|e| AppError::invalid("path", format!("not a SecureCRT export: {e}")))?;
+    if export.sessions.len() > MAX_FILES {
+        return Err(AppError::io("the export holds too many sessions"));
+    }
+    let config = default_folders().and_then(|(config, _)| config);
+    Ok(export_entries(export, &Places::new(config.as_deref())))
+}
+
+/// The SSH sessions of an export, with the key file its `SSH2` settings set for all sessions.
+fn export_entries(export: Export, places: &Places) -> Vec<Entry> {
+    let global_key = identity(&export.ssh2);
+    let mut entries: Vec<Entry> = export
+        .sessions
+        .into_iter()
+        .filter_map(|(folder, name, settings)| {
+            entry(&settings, name, folder, global_key.as_deref(), places)
+        })
+        .collect();
+    link_firewalls(&mut entries);
+    entries
+}
+
+/// Points each jump to the session it names, which a firewall names by its path as SecureCRT
+/// shows it, in any case.
+fn link_firewalls(entries: &mut [Entry]) {
     let ids: HashMap<String, String> = entries
         .iter()
         .map(|e| (e.id.to_lowercase(), e.id.clone()))
         .collect();
-    for entry in &mut entries {
+    for entry in entries {
         if let Some(Jump::Entry(target)) = &mut entry.jump
             && let Some(id) = ids.get(&target.to_lowercase())
         {
             target.clone_from(id);
         }
     }
-    Ok(entries)
 }
 
 /// A file's text, wiped when dropped along with its bytes: it holds the passwords the session
@@ -286,6 +327,213 @@ fn setting_line(line: &str) -> Option<(u8, &str, &str)> {
     Some((kind, name, value))
 }
 
+/// What an import reads from an XML export.
+#[derive(Debug, Default)]
+struct Export {
+    /// The sessions, each with the folders it is in, its name and its settings.
+    sessions: Vec<(Vec<String>, String, Settings)>,
+    /// The settings in the `SSH2` key, which hold the key file for all sessions.
+    ssh2: Settings,
+}
+
+/// The sessions and settings in an XML export: `<key>` elements in a `<VanDyke>` element, the
+/// sessions and their folders in the `Sessions` key. A key's settings are `<string>` elements,
+/// `<dword>` elements with a number in decimal, and `<array>` elements with a `<string>` for each
+/// item. A folder's order is in a `__FolderData__` key.
+fn parse_export(text: &str) -> Result<Export, String> {
+    let mut reader = quick_xml::Reader::from_str(text);
+    let mut parser = ExportParser::default();
+    loop {
+        match reader.read_event().map_err(|e| e.to_string())? {
+            Event::Start(e) => parser.start(&e, false)?,
+            Event::Empty(e) => parser.start(&e, true)?,
+            Event::Text(e) => parser.text(&e.xml10_content()),
+            Event::CData(e) => parser.text(&e),
+            Event::GeneralRef(e) => match e.resolve_char_ref().map_err(|e| e.to_string())? {
+                Some(c) => parser.text(c.encode_utf8(&mut [0; 4])),
+                None => parser.text(resolve_predefined_entity(&e).unwrap_or_default()),
+            },
+            Event::End(e) => parser.end(e.name().as_ref()),
+            Event::Eof => break,
+            _ => {}
+        }
+    }
+    match parser.root {
+        Root::Closed => Ok(parser.export),
+        Root::Missing => Err("it has no VanDyke element".into()),
+        Root::Open => Err("it ends early".into()),
+    }
+}
+
+/// Whether the `VanDyke` element has been read.
+#[derive(Debug, Default)]
+enum Root {
+    #[default]
+    Missing,
+    Open,
+    Closed,
+}
+
+/// Reads an export one element at a time.
+#[derive(Debug, Default)]
+struct ExportParser {
+    root: Root,
+    /// The keys around the element being read, by name, with the settings each holds.
+    keys: Vec<(String, Settings)>,
+    /// The setting being read.
+    value: Option<Value>,
+    export: Export,
+}
+
+/// A setting being read from its element.
+#[derive(Debug)]
+struct Value {
+    /// `string`, `dword` or `array`.
+    tag: &'static str,
+    name: String,
+    text: String,
+    /// A list's items, and the one being read.
+    items: Vec<String>,
+    item: Option<String>,
+}
+
+impl ExportParser {
+    fn start(&mut self, e: &BytesStart, empty: bool) -> Result<(), String> {
+        let tag = e.name();
+        let tag = tag.as_ref();
+        match self.root {
+            Root::Missing if tag == "VanDyke" => {
+                self.root = if empty { Root::Closed } else { Root::Open };
+                return Ok(());
+            }
+            Root::Missing => return Err(format!("it starts with a {tag} element")),
+            Root::Open => {}
+            Root::Closed => return Ok(()),
+        }
+        if let Some(value) = &mut self.value {
+            if value.tag == "array" && tag == "string" {
+                if empty {
+                    value.items.push(String::new());
+                } else {
+                    value.item = Some(String::new());
+                }
+            }
+            return Ok(());
+        }
+        let tag = match tag {
+            "key" if !empty => {
+                self.keys.push((name_of(e)?, Settings::default()));
+                return Ok(());
+            }
+            "string" => "string",
+            "dword" => "dword",
+            "array" => "array",
+            // A binary value, or an empty key.
+            _ => return Ok(()),
+        };
+        let value = Value {
+            tag,
+            name: name_of(e)?,
+            text: String::new(),
+            items: Vec::new(),
+            item: None,
+        };
+        if empty {
+            self.set(value);
+        } else {
+            self.value = Some(value);
+        }
+        Ok(())
+    }
+
+    fn text(&mut self, text: &str) {
+        match &mut self.value {
+            Some(Value {
+                item: Some(item), ..
+            }) => item.push_str(text),
+            Some(value) if value.tag != "array" => value.text.push_str(text),
+            _ => {}
+        }
+    }
+
+    fn end(&mut self, tag: &str) {
+        if !matches!(self.root, Root::Open) {
+            return;
+        }
+        match &mut self.value {
+            Some(value) if value.item.is_some() => {
+                if tag == "string" {
+                    value.items.extend(value.item.take());
+                }
+            }
+            Some(value) if value.tag == tag => {
+                if let Some(value) = self.value.take() {
+                    self.set(value);
+                }
+            }
+            Some(_) => {}
+            None if tag == "key" => {
+                if let Some((name, settings)) = self.keys.pop() {
+                    self.close_key(name, settings);
+                }
+            }
+            None if tag == "VanDyke" => self.root = Root::Closed,
+            None => {}
+        }
+    }
+
+    /// Keeps a setting of the key being read, when an import reads it.
+    fn set(&mut self, value: Value) {
+        let Some((_, settings)) = self.keys.last_mut() else {
+            return;
+        };
+        if !READ.contains(&value.name.as_str()) {
+            return;
+        }
+        let setting = match value.tag {
+            "string" => Setting::Text(value.text),
+            "dword" => match value.text.trim().parse() {
+                Ok(n) => Setting::Number(n),
+                Err(_) => return,
+            },
+            _ => Setting::List(value.items),
+        };
+        settings.0.insert(value.name, setting);
+    }
+
+    /// Keeps a key that has been read: a session, which holds settings, in the `Sessions` key or
+    /// a folder in it, or the `SSH2` key. The default session and the folders' order are left
+    /// out.
+    fn close_key(&mut self, name: String, settings: Settings) {
+        let Some(((top, _), folders)) = self.keys.split_first() else {
+            if name.eq_ignore_ascii_case("SSH2") {
+                self.export.ssh2 = settings;
+            }
+            return;
+        };
+        if !top.eq_ignore_ascii_case("Sessions")
+            || settings.0.is_empty()
+            || name.eq_ignore_ascii_case("__FolderData__")
+            || (folders.is_empty() && name.eq_ignore_ascii_case("Default"))
+        {
+            return;
+        }
+        let folder = folders.iter().map(|(name, _)| name.clone()).collect();
+        self.export.sessions.push((folder, name, settings));
+    }
+}
+
+/// The `name` attribute of an element.
+fn name_of(e: &BytesStart) -> Result<String, String> {
+    match e.try_get_attribute("name").map_err(|e| e.to_string())? {
+        Some(name) => Ok(name
+            .normalized_value(XmlVersion::Implicit1_0)
+            .map_err(|e| e.to_string())?
+            .into_owned()),
+        None => Ok(String::new()),
+    }
+}
+
 /// The private key file the settings name; older versions wrote it without `V2`.
 fn identity(settings: &Settings) -> Option<String> {
     non_empty(settings.text("Identity Filename V2"))
@@ -298,13 +546,24 @@ struct Places {
     config: Option<PathBuf>,
     /// `${VDS_USER_DATA_PATH}`: the user's documents folder.
     documents: Option<PathBuf>,
+    /// `${VDS_SSH_DATA_PATH}`: the user's `.ssh` folder.
+    ssh: Option<PathBuf>,
 }
 
 impl Places {
+    fn new(config: Option<&Path>) -> Self {
+        Self {
+            config: config.map(Path::to_path_buf),
+            documents: dirs::document_dir(),
+            ssh: dirs::home_dir().map(|home| home.join(".ssh")),
+        }
+    }
+
     fn expand(&self, path: &str) -> String {
         for (placeholder, dir) in [
             ("${VDS_CONFIG_PATH}", &self.config),
             ("${VDS_USER_DATA_PATH}", &self.documents),
+            ("${VDS_SSH_DATA_PATH}", &self.ssh),
         ] {
             if let (Some(rest), Some(dir)) = (path.strip_prefix(placeholder), dir) {
                 // The rest is written with the separators of the system that saved it.
@@ -318,10 +577,10 @@ impl Places {
     }
 }
 
-/// One session; `None` for one that is not SSH2, such as Telnet, serial, RDP or SSH1.
+/// One session, by its name and the folders it is in; `None` for one that is not SSH2, such as
+/// Telnet, serial, RDP or SSH1.
 fn entry(
     s: &Settings,
-    id: String,
     name: String,
     folder: Vec<String>,
     global_key: Option<&str>,
@@ -371,7 +630,13 @@ fn entry(
         .filter(|p| *p != 0)
         .unwrap_or(22);
     Some(Entry {
-        id,
+        // The session's path, as a firewall names it.
+        id: folder
+            .iter()
+            .map(String::as_str)
+            .chain([name.as_str()])
+            .collect::<Vec<_>>()
+            .join("/"),
         name,
         address,
         port,
@@ -420,25 +685,18 @@ mod tests {
                 "C:\\Users\\ops\\AppData\\Roaming\\VanDyke\\Config",
             )),
             documents: Some(PathBuf::from("C:\\Users\\ops\\Documents")),
+            ssh: Some(PathBuf::from("C:\\Users\\ops\\.ssh")),
         }
     }
 
     /// A session file with only the given settings.
     fn bare(text: &str) -> Option<Entry> {
-        entry(
-            &parse(text),
-            "s".into(),
-            "s".into(),
-            vec![],
-            None,
-            &places(),
-        )
+        entry(&parse(text), "s".into(), vec![], None, &places())
     }
 
     fn entry_of(settings: &str, global_key: Option<&str>) -> Option<Entry> {
         entry(
             &parse(&text::decode(session(settings).as_bytes())),
-            "s".into(),
             "s".into(),
             vec![],
             global_key,
@@ -530,6 +788,12 @@ mod tests {
         assert_eq!(
             entry_of(plain, global).unwrap().identity_files,
             ["D:\\keys\\web.ppk"]
+        );
+        let ssh = "S:\"Hostname\"=web\r\nD:\"Use Global Public Key\"=00000000\r\n\
+                   S:\"Identity Filename V2\"=${VDS_SSH_DATA_PATH}\\id_ed25519\r\n";
+        assert_eq!(
+            entry_of(ssh, global).unwrap().identity_files,
+            [format!("C:\\Users\\ops\\.ssh{sep}id_ed25519")]
         );
 
         // A session that does not sign in with a public key.
@@ -720,6 +984,246 @@ mod tests {
         assert_eq!(source.entries.len(), 1_200);
         let in_site = |site: &str| source.entries.iter().filter(|e| e.folder == [site]).count();
         assert_eq!((in_site("Site 0"), in_site("Site 11")), (100, 100));
+    }
+
+    /// An XML export as SecureCRT 9 writes it, with most of each key's settings left out: tabs,
+    /// the settings in order of name, and the files the settings name, such as key files.
+    const EXPORT: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<VanDyke version="3.0">
+	<key name="Security">
+		<string name="Passphrase">03:637dca491ee5dc1979744cecc6d4b0d662285574c56fc6b2aa97afaa2b9a5429</string>
+	</key>
+	<key name="Global">
+		<array name="Status Bar Item List">
+			<string>Protocol Information</string>
+			<string>Cursor Position</string>
+		</array>
+		<string name="Username">not a session</string>
+	</key>
+	<key name="Sessions">
+		<key name="Jump">
+			<key name="Bastion">
+				<dword name="[SSH2] Port">22</dword>
+				<array name="Description"/>
+				<string name="Firewall Name">None</string>
+				<string name="Hostname">bastion.example.org</string>
+				<string name="Identity Filename V2"/>
+				<dword name="Is Session">1</dword>
+				<string name="Password V2">02:4ffff611d02e5d7f8c94f65b5ff9b89ff97b086237df6ab06607e429</string>
+				<string name="Protocol Name">SSH2</string>
+				<string name="SSH2 Authentications V2">publickey,keyboard-interactive,password,gssapi</string>
+				<dword name="Use Global Public Key">1</dword>
+				<string name="Username">jump</string>
+			</key>
+			<key name="__FolderData__">
+				<string name="Hostname">not a session</string>
+				<string name="Session List">Bastion:</string>
+			</key>
+		</key>
+		<key name="生产">
+			<key name="DB">
+				<key name="pg">
+					<dword name="[SSH2] Port">2222</dword>
+					<array name="Description">
+						<string>主数据库</string>
+						<string>rack 4 &amp; 5 &lt;east&gt;</string>
+					</array>
+					<string name="Firewall Name">Session:jump/bastion</string>
+					<string name="Hostname">10.0.0.2</string>
+					<dword name="Is Session">1</dword>
+					<binary name="Normal Font v2">f3 ff ff ff 00 00 00 00</binary>
+					<string name="Protocol Name">SSH2</string>
+					<dword name="Use Global Public Key">1</dword>
+					<string name="Username">postgres</string>
+				</key>
+			</key>
+			<key name="Default">
+				<string name="Hostname">10.0.0.3</string>
+				<dword name="Is Session">1</dword>
+				<string name="Protocol Name">SSH2</string>
+				<dword name="Use Global Public Key">0</dword>
+				<string name="Identity Filename V2">${VDS_SSH_DATA_PATH}\id_ed25519</string>
+			</key>
+			<key name="console">
+				<dword name="Is Session">1</dword>
+				<string name="Protocol Name">Serial</string>
+				<string name="Com Port">COM3</string>
+			</key>
+			<key name="Office">
+				<string name="Firewall Name">Office SOCKS</string>
+				<string name="Hostname">office.example.org</string>
+				<dword name="Is Session">1</dword>
+				<string name="Protocol Name">SSH2</string>
+			</key>
+			<key name="switch">
+				<dword name="Port">23</dword>
+				<string name="Hostname">10.0.9.1</string>
+				<dword name="Is Session">1</dword>
+				<string name="Protocol Name">Telnet</string>
+			</key>
+		</key>
+		<key name="Default">
+			<string name="Hostname">template.example.org</string>
+			<dword name="Is Session">1</dword>
+			<string name="Protocol Name">SSH2</string>
+		</key>
+		<key name="Default_RDP">
+			<string name="Hostname">desktop.example.org</string>
+			<dword name="Is Session">1</dword>
+			<string name="Protocol Name">RDP</string>
+		</key>
+		<key name="web">
+			<dword name="[SSH2] Port">0</dword>
+			<string name="Hostname">web.example.org</string>
+			<dword name="Is Session">1</dword>
+			<string name="Protocol Name">SSH2</string>
+			<string name="Username"/>
+		</key>
+	</key>
+	<key name="Commands"/>
+	<key name="SSH2">
+		<string name="Identity Filename V2">${VDS_CONFIG_PATH}\Keys\id_rsa</string>
+		<dword name="Public Key Type">0</dword>
+		<array name="Agent Keys To Load"/>
+	</key>
+	<key name="Files">
+		<key name="File 0">
+			<string name="Path">${VDS_CONFIG_PATH}\Keys\id_rsa</string>
+			<binary name="Contents">2d 2d 2d 2d 2d 42 45 47 49 4e</binary>
+		</key>
+	</key>
+</VanDyke>
+"#;
+
+    #[test]
+    fn an_export_is_read_with_its_folders_firewalls_and_global_key() {
+        let entries = export_entries(parse_export(EXPORT).unwrap(), &places());
+        let found: Vec<(&str, &str, u16, Vec<String>)> = entries
+            .iter()
+            .map(|e| (e.id.as_str(), e.address.as_str(), e.port, e.folder.clone()))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                (
+                    "Jump/Bastion",
+                    "bastion.example.org",
+                    22,
+                    vec!["Jump".to_owned()]
+                ),
+                (
+                    "生产/DB/pg",
+                    "10.0.0.2",
+                    2222,
+                    vec!["生产".to_owned(), "DB".to_owned()]
+                ),
+                ("生产/Default", "10.0.0.3", 22, vec!["生产".to_owned()]),
+                (
+                    "生产/Office",
+                    "office.example.org",
+                    22,
+                    vec!["生产".to_owned()]
+                ),
+                ("web", "web.example.org", 22, vec![]),
+            ]
+        );
+        let sep = std::path::MAIN_SEPARATOR_STR;
+        let global =
+            format!("C:\\Users\\ops\\AppData\\Roaming\\VanDyke\\Config{sep}Keys{sep}id_rsa");
+        let (bastion, pg, default, office, web) = (
+            &entries[0],
+            &entries[1],
+            &entries[2],
+            &entries[3],
+            &entries[4],
+        );
+        assert_eq!(
+            (bastion.name.as_str(), bastion.username.as_deref()),
+            ("Bastion", Some("jump"))
+        );
+        assert_eq!(bastion.identity_files, std::slice::from_ref(&global));
+        assert_eq!(pg.username.as_deref(), Some("postgres"));
+        assert_eq!(pg.note, "主数据库\nrack 4 & 5 <east>");
+        assert_eq!(
+            pg.jump,
+            Some(Jump::Entry("Jump/Bastion".into())),
+            "in any case"
+        );
+        assert_eq!(pg.identity_files, [global]);
+        assert_eq!(
+            default.identity_files,
+            [format!("C:\\Users\\ops\\.ssh{sep}id_ed25519")]
+        );
+        assert_eq!(
+            office.skipped_proxy.as_deref(),
+            Some("SecureCRT firewall Office SOCKS")
+        );
+        assert_eq!((web.username.as_deref(), web.note.as_str()), (None, ""));
+        assert_eq!(
+            web.identity_files, pg.identity_files,
+            "the global setting by default"
+        );
+    }
+
+    #[test]
+    fn an_export_is_read_from_the_file_chosen() {
+        let config = Config::new();
+        config.write(
+            "SecureCRT.xml",
+            &format!("\u{feff}{}", EXPORT.replace('\n', "\r\n")),
+        );
+        let file = config.0.join("SecureCRT.xml");
+        let source = read(Some(&file)).unwrap();
+        assert_eq!(source.location, Some(file.to_string_lossy().into_owned()));
+        let ids: Vec<&str> = source.entries.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            [
+                "Jump/Bastion",
+                "生产/DB/pg",
+                "生产/Default",
+                "生产/Office",
+                "web"
+            ]
+        );
+
+        config.write("Sessions/web.ini", &session("S:\"Hostname\"=web\r\n"));
+        let error = read(Some(&config.0.join("Sessions").join("web.ini"))).unwrap_err();
+        assert_eq!(error.code, crate::error::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn a_thousand_sessions_read_from_an_export() {
+        let mut xml = String::from("<VanDyke version=\"3.0\">\n<key name=\"Sessions\">\n");
+        for site in 0..12 {
+            xml.push_str(&format!("<key name=\"Site {site}\">\n"));
+            for i in 0..100 {
+                xml.push_str(&format!(
+                    "<key name=\"sw{i:02}\">\n\
+                     <dword name=\"[SSH2] Port\">22</dword>\n\
+                     <array name=\"Description\"/>\n\
+                     <string name=\"Hostname\">10.0.{site}.{i}</string>\n\
+                     <dword name=\"Is Session\">1</dword>\n\
+                     <string name=\"Protocol Name\">SSH2</string>\n\
+                     </key>\n"
+                ));
+            }
+            xml.push_str("</key>\n");
+        }
+        xml.push_str("</key>\n</VanDyke>\n");
+        let entries = export_entries(parse_export(&xml).unwrap(), &places());
+        assert_eq!(entries.len(), 1_200);
+        let in_site = |site: &str| entries.iter().filter(|e| e.folder == [site]).count();
+        assert_eq!((in_site("Site 0"), in_site("Site 11")), (100, 100));
+    }
+
+    #[test]
+    fn a_file_that_is_not_an_export_is_refused() {
+        assert!(parse_export("<VanDyke version=\"3.0\"></VanDyke>").is_ok());
+        assert!(parse_export("<?xml version=\"1.0\"?>\n<config/>").is_err());
+        assert!(parse_export("<VanDyke><key name=\"Sessions\">").is_err());
+        assert!(parse_export("<VanDyke><key name=\"Sessions\"></string></VanDyke>").is_err());
+        assert!(parse_export("S:\"Hostname\"=web").is_err());
     }
 
     #[cfg(windows)]

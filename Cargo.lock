@@ -2367,6 +2367,7 @@ dependencies = [
  "libc",
  "objc2-foundation",
  "objc2-local-authentication",
+ "quick-xml 0.42.0",
  "reqwest",
  "rustls",
  "security-framework 3.7.0",
