@@ -222,7 +222,8 @@ async fn listen(app: &AppHandle, stop: &CancellationToken) -> std::io::Result<()
     let _ = std::fs::remove_file(&path);
     let listener = tokio::net::UnixListener::bind(&path)?;
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
-    let owner = std::fs::metadata(&path)?.uid();
+    let bound = std::fs::metadata(&path)?;
+    let owner = bound.uid();
     let mut idle = tokio::time::interval(IDLE_CHECK);
     let result = loop {
         tokio::select! {
@@ -238,7 +239,10 @@ async fn listen(app: &AppHandle, stop: &CancellationToken) -> std::io::Result<()
             }
         }
     };
-    let _ = std::fs::remove_file(&path);
+    // A listener that started after this one stopped has its own socket there.
+    if std::fs::metadata(&path).is_ok_and(|m| m.ino() == bound.ino() && m.dev() == bound.dev()) {
+        let _ = std::fs::remove_file(&path);
+    }
     result
 }
 
@@ -472,7 +476,10 @@ impl Ctx<'_> {
         if !self.epoch.is_cancelled() {
             format!("the hatoba command ended, which stopped {what}.")
         } else if state(self.app).vault().is_unlocked() {
-            format!("\"{SWITCH}\" was turned off in Hatoba, which stopped {what}.")
+            // Turning off the command itself, the switch above, ends it too.
+            format!(
+                "\"{SWITCH}\" or the hatoba command was turned off in Hatoba, which stopped {what}."
+            )
         } else {
             format!("Hatoba locked, which stopped {what}.")
         }
@@ -491,6 +498,8 @@ impl Ctx<'_> {
     async fn lease(&self, target: &Target) -> Result<pool::Lease, String> {
         let state = state(self.app);
         if let Some(session) = state.ssh.connection_for_host(&target.id, &target.config) {
+            // The pool's own connection to the host goes once the commands on it are done.
+            state.cli.pool.release(&target.id);
             return Ok(pool::Lease::borrowed(session));
         }
         let leasing = state

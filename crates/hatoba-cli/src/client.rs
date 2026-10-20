@@ -323,12 +323,19 @@ fn open(app: &App, args: Vec<OsString>) -> i32 {
 /// `hatoba` command is copied to on Windows.
 fn main_exe(app: &App) -> Option<PathBuf> {
     let me = std::env::current_exe().ok()?;
-    let name = format!("{}{}", app.main_binary, std::env::consts::EXE_SUFFIX);
+    find_main_exe(&me, app.main_binary)
+}
+
+/// [`main_exe`] for the command at `me`. On Windows `bin\hatoba.exe` is also `bin\Hatoba.exe`,
+/// since names there ignore case, so the command itself is passed over.
+fn find_main_exe(me: &std::path::Path, main_binary: &str) -> Option<PathBuf> {
+    let name = format!("{main_binary}{}", std::env::consts::EXE_SUFFIX);
+    let me = std::fs::canonicalize(me).ok()?;
     me.ancestors()
         .skip(1)
         .take(2)
         .map(|dir| dir.join(&name))
-        .find(|exe| exe.is_file())
+        .find(|exe| exe.is_file() && std::fs::canonicalize(exe).is_ok_and(|exe| exe != me))
 }
 
 /// The hosts as a table: name, target and group, with nothing cut short.
@@ -382,6 +389,24 @@ fn width(text: &str) -> usize {
 mod tests {
     use super::*;
     use crate::protocol::AuthKind;
+
+    /// The copy in `bin` opens the app one folder up, never itself.
+    #[test]
+    fn the_command_in_bin_finds_the_app_above_it() {
+        let dir = std::env::temp_dir().join(format!("hatoba-cli-find-{}", std::process::id()));
+        let bin = dir.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let suffix = std::env::consts::EXE_SUFFIX;
+        let (app, command) = (
+            dir.join(format!("Hatoba{suffix}")),
+            bin.join(format!("hatoba{suffix}")),
+        );
+        std::fs::write(&app, b"app").unwrap();
+        std::fs::write(&command, b"command").unwrap();
+        let found = find_main_exe(&command, "Hatoba").unwrap();
+        assert_eq!(found, std::fs::canonicalize(&app).unwrap());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     fn host(name: &str, address: &str, group: Option<&str>) -> HostInfo {
         HostInfo {

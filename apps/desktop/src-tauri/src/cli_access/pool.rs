@@ -149,6 +149,20 @@ impl Pool {
         Ok(lease)
     }
 
+    /// Lets go of the host's connection, which closes once no command or copy runs on it.
+    pub fn release(&self, host_id: &str) {
+        let slots = lock(&self.slots);
+        let Some(slot) = slots.get(host_id) else {
+            return;
+        };
+        // A slot in use is making its connection, which the next lease replaces.
+        if let Ok(mut slot) = slot.try_lock()
+            && let Some(pooled) = slot.take()
+        {
+            pooled.retire();
+        }
+    }
+
     /// Closes the connections unused for `idle`, and those that closed on their own.
     pub fn close_idle(&self, idle: Duration) {
         let mut slots = lock(&self.slots);

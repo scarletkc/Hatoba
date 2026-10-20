@@ -305,7 +305,11 @@ async fn wrapped(
     let report = take_line(&mut out.output.stdout, &marker, Find::Last);
     if sink.is_some() {
         out.release();
-        out.flush(sink).await;
+        if deadline.is_some() {
+            out.offer(sink);
+        } else {
+            out.flush(sink).await;
+        }
     }
     let stopped = match (deadline, report.as_deref()) {
         (None, _) => None,
@@ -347,6 +351,7 @@ async fn plain(
             biased;
             () = &mut stop => {
                 let _ = writer.half().signal(Sig::TERM).await;
+                out.offer(sink);
                 return Ok(CommandRun {
                     output: out.output,
                     stopped: Some(Stopped::MayRun),
@@ -623,6 +628,19 @@ impl Collected {
         match (permit, self.pending.pop_front()) {
             (Some(permit), Some(piece)) => permit.send(piece),
             _ => self.pending.clear(),
+        }
+    }
+
+    /// Sends what of `pending` `sink` has room for now, in order, and drops the rest: after a stop,
+    /// a receiver that stopped reading would hold up the end.
+    fn offer(&mut self, sink: Option<&mpsc::Sender<Output>>) {
+        let Some(sink) = sink else {
+            return;
+        };
+        for piece in std::mem::take(&mut self.pending) {
+            if sink.try_send(piece).is_err() {
+                return;
+            }
         }
     }
 

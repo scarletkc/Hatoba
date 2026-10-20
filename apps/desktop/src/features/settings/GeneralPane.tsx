@@ -254,9 +254,11 @@ function CliActivityList() {
       <SettingRow
         label={t("settings.cliAccess.activity")}
         hint={
-          entries?.length === 0
-            ? t("settings.cliAccess.activity.empty")
-            : t("settings.cliAccess.activity.hint", { n: entries?.length ?? 0 })
+          entries === null
+            ? undefined
+            : entries.length === 0
+              ? t("settings.cliAccess.activity.empty")
+              : t("settings.cliAccess.activity.hint", { n: entries.length })
         }
       >
         {!!entries?.length && (
