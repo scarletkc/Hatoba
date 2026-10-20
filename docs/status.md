@@ -115,6 +115,7 @@ A contributor tried these by hand on an Apple Silicon Mac; the maintainer has no
 | Update check in Settings → About | ✅ | Reads `latest.json` through the Tauri updater: stable versions from the latest release, prereleases from the newest release in the GitHub API. Unit tests run against a mock endpoint and a mock release list. The automatic check runs after the first unlock and again a day later while Hatoba runs, and the tray menu offers the update (unit tests). Tried on Windows against a published release |
 | Star prompt and **Report a Problem** (§9) | ✅ | Unit tests cover when the prompt shows and the bug report link. Filling in the bug report form tried on GitHub |
 | Signed updates through the Tauri updater | 🟡 | **Download and Install** in Settings → About. Tried end to end on Windows with a local endpoint ([Signed updates](development.md#signed-updates)) and against a published release, not yet on Linux or macOS |
+| Updates of package-manager installs (Scoop, AUR) | 🟡 | A `managed-by-package-manager` marker in the resource folder turns the in-app update off, and the About page names the package manager instead. Unit tests cover reading the marker, the skipped automatic check, the missing sidebar dot and tray item, and the About page; tried in the browser mock (`?manager=scoop`). Not yet tried with a Scoop or AUR install |
 
 ## AI assistant (§13)
 
