@@ -100,7 +100,7 @@ Each stable release reaches winget, Scoop, and the AUR once it is published. Pre
 - **Scoop.** The `hatoba` manifest in the [Extras bucket](https://github.com/ScoopInstaller/Extras) has `checkver` and `autoupdate`: the bucket's Excavator workflow checks the latest stable release every four hours and updates the manifest's version and hash from `SHA256SUMS.txt`. Nothing runs in this repository.
 - **AUR.** The **AUR** job sets `pkgver` in [`packaging/aur/PKGBUILD`](../packaging/aur/PKGBUILD) to the release's version, fills in the checksums from the release, builds the package to check it, and pushes it with its `.SRCINFO` to [`hatoba-bin`](https://aur.archlinux.org/packages/hatoba-bin).
 
-They find the files by their names in the release (`INSTALLERS` in `release.mjs`). Renaming the Windows installer needs the same change in `installers-regex` of the winget job and in the `autoupdate` URL of the Scoop manifest, and renaming the deb package in `source` of the PKGBUILD.
+They find the files by their names in the release (`INSTALLERS` in `release.mjs`). Renaming the Windows installer also needs a change to `installers-regex` of the winget job and to the `autoupdate` URL of the Scoop manifest, and renaming the deb package to `source` in the PKGBUILD.
 
 ### Set up the package managers
 
@@ -120,13 +120,13 @@ Do this once. Until then, the winget and AUR jobs fail after the release is publ
 3. For the AUR:
    1. If someone else maintains `hatoba-bin`, ask them to add your AUR account as a co-maintainer.
    2. Generate an SSH key without a passphrase with `ssh-keygen -t ed25519 -N '' -C hatoba-bin -f aur`. Add `aur.pub` under **My Account → SSH Public Key** on the AUR, and add the contents of `aur` to the `packages` environment as the secret `AUR_SSH_PRIVATE_KEY`. The key can push to every package of your AUR account.
-4. For Scoop, open a package request issue in [ScoopInstaller/Extras](https://github.com/ScoopInstaller/Extras/issues/new/choose), then a pull request that adds `bucket/hatoba.json` and closes the issue. The manifest extracts the Windows installer with 7-Zip, as the bucket's other Tauri apps do.
+4. For Scoop, open a package request issue in [ScoopInstaller/Extras](https://github.com/ScoopInstaller/Extras/issues/new/choose), then a pull request that adds `bucket/hatoba.json` and closes the issue.
 
 ### When a submission fails
 
 - **winget, before its pull request.** When the job stops before it opens a pull request, for example because `WINGET_TOKEN` expired or the fork could not be synced, fix the cause and choose **Re-run failed jobs**.
 - **winget, after its pull request.** Once the pull request exists, don't rerun the job: follow the bot's comments on the pull request, and push fixes to its branch in your fork. When an antivirus engine flags the installer, submit it to [Microsoft's file submission](https://www.microsoft.com/wdsi/filesubmission) as a false positive, then ask on the pull request for validation to run again.
-- **AUR.** A rerun uses the release commit, so it cannot pick up a fix to the PKGBUILD. When the test build fails, for example because the package needs a new dependency, fix `packaging/aur/PKGBUILD` on `main`, then push the fixed version by hand: clone `ssh://aur@aur.archlinux.org/hatoba-bin.git`, copy the PKGBUILD in, set `pkgver` and raise `pkgrel`, run `updpkgsums` and `makepkg --printsrcinfo > .SRCINFO`, and commit and push both files. When the push was refused, check the SSH key and the co-maintainer access, then rerun the job.
+- **AUR.** A rerun uses the release commit, so it cannot pick up a fix to the PKGBUILD. When the test build fails, for example because the package needs a new dependency, fix `packaging/aur/PKGBUILD` on `main`, then push the fixed version by hand: clone `ssh://aur@aur.archlinux.org/hatoba-bin.git`, copy the PKGBUILD in, set `pkgver` (and raise `pkgrel` when the AUR already has that version), run `updpkgsums` and `makepkg --printsrcinfo > .SRCINFO`, and commit and push both files. When the push was refused, check the SSH key and the co-maintainer access, then rerun the job.
 - **Scoop.** When the manifest stops updating, fix it with a pull request to the Extras bucket.
 
 ## Retry a failed release
