@@ -13,21 +13,30 @@ use hatoba_ssh::ConnectConfig;
 
 /// Fills the agent sockets of the hops of `cfg` that sign in with the agent. The first call may
 /// wait for the login shell, which runs once (see `platform::login_shell`).
-#[cfg(unix)]
 pub async fn resolve(cfg: &mut ConnectConfig) {
     use hatoba_ssh::AuthMethod;
 
+    if !cfg!(unix) {
+        return;
+    }
     let uses_agent =
         |auth: &AuthMethod| matches!(auth, AuthMethod::Agent | AuthMethod::AgentThenAsk);
-    let hosts: Vec<Option<String>> = cfg
+    // Each hop's address, user and port, which `IdentityAgent` is matched and expanded with.
+    let hops: Vec<Option<(String, String, u16)>> = cfg
         .jump
         .iter()
-        .map(|j| uses_agent(&j.auth).then(|| j.host.clone()))
-        .chain(std::iter::once(
-            uses_agent(&cfg.auth).then(|| cfg.host.clone()),
-        ))
+        .map(|j| (&j.auth, &j.host, &j.username, j.port))
+        .chain(std::iter::once((
+            &cfg.auth,
+            &cfg.host,
+            &cfg.username,
+            cfg.port,
+        )))
+        .map(|(auth, host, user, port)| {
+            uses_agent(auth).then(|| (host.clone(), user.clone(), port))
+        })
         .collect();
-    if hosts.iter().all(Option::is_none) {
+    if hops.iter().all(Option::is_none) {
         return;
     }
     let Ok(mut sockets) = tauri::async_runtime::spawn_blocking(move || {
@@ -40,14 +49,13 @@ pub async fn resolve(cfg: &mut ConnectConfig) {
             .filter(|s| !s.is_empty());
         let env = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());
         let shell = || crate::platform::login_shell::ssh_auth_sock().map(str::to_owned);
-        hosts
-            .into_iter()
-            .map(|host| {
-                let Some(host) = host else {
+        hops.into_iter()
+            .map(|hop| {
+                let Some((host, user, port)) = hop else {
                     return Vec::new();
                 };
                 let identity_agent = config.as_deref().and_then(|text| {
-                    hatoba_ssh::config::identity_agent(text, &host, home.as_deref())
+                    hatoba_ssh::config::identity_agent(text, &host, &user, port, home.as_deref())
                 });
                 sockets_for(identity_agent.as_deref(), inherited.as_deref(), env, shell)
             })
@@ -63,15 +71,11 @@ pub async fn resolve(cfg: &mut ConnectConfig) {
     }
 }
 
-#[cfg(not(unix))]
-pub async fn resolve(_cfg: &mut ConnectConfig) {}
-
 /// The sockets one hop tries, in order; empty keeps the agent `SSH_AUTH_SOCK` names.
 ///
 /// `identity_agent` is the hop's `IdentityAgent` as `~/.ssh/config` writes it, `inherited` the
 /// `SSH_AUTH_SOCK` Hatoba started with, `env` reads a variable an `IdentityAgent` of `$NAME`
 /// points at, and `shell` the login shell's `SSH_AUTH_SOCK`, asked only when it is needed.
-#[cfg(any(unix, test))]
 fn sockets_for(
     identity_agent: Option<&str>,
     inherited: Option<&str>,

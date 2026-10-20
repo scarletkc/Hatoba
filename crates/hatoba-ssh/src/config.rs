@@ -87,22 +87,29 @@ pub fn parse_ssh_config_with_home(text: &str, home: Option<&str>) -> Vec<SshConf
         .collect()
 }
 
-/// The `IdentityAgent` that applies to a connection to `host`, as `ssh user@host` reads it from
-/// `text`: the first value of the blocks that match, with `~`, `%d`, `%h`, `%p`, `%r`, `%%` and
-/// `${NAME}` expanded. The value is returned as written otherwise, so `none`, `SSH_AUTH_SOCK` and
-/// `$NAME` are the caller's to read.
-pub fn identity_agent(text: &str, host: &str, home: Option<&str>) -> Option<String> {
+/// The `IdentityAgent` that applies to a connection to `host`, as `ssh -l user -p port host`
+/// reads it from `text`: the first value of the blocks that match, with `~`, `%d`, `%h`, `%p`,
+/// `%r`, `%%` and `${NAME}` expanded. The value is returned as written otherwise, so `none`,
+/// `SSH_AUTH_SOCK` and `$NAME` are the caller's to read.
+pub fn identity_agent(
+    text: &str,
+    host: &str,
+    user: &str,
+    port: u16,
+    home: Option<&str>,
+) -> Option<String> {
     let blocks = parse_blocks(text);
     let value = blocks
         .iter()
         .filter(|b| !b.ignored && block_applies(b, host))
         .find_map(|b| b.identity_agent.clone())?;
-    let resolved = resolve_alias(host, &blocks, home);
     let ctx = ExpandCtx {
         alias: host,
-        hostname: resolved.hostname.unwrap_or_else(|| host.to_owned()),
-        user: resolved.user,
-        port: resolved.port.unwrap_or(22),
+        hostname: resolve_alias(host, &blocks, home)
+            .hostname
+            .unwrap_or_else(|| host.to_owned()),
+        user: Some(user.to_owned()),
+        port,
         home,
     };
     Some(expand_path(&expand_env(&value), &ctx))
@@ -777,90 +784,55 @@ Host *
         assert!(glob_match("A*b", "axxB"));
     }
 
+    fn agent(text: &str, host: &str) -> Option<String> {
+        identity_agent(text, host, "me", 22, Some("/home/me"))
+    }
+
     #[test]
     fn identity_agent_of_host_star_keeps_quoted_spaces_and_expands_home() {
-        let text = "Host *
-  IdentityAgent \"~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock\"
-";
+        let text = "Host *\n  IdentityAgent \"~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock\"\n";
         assert_eq!(
-            identity_agent(text, "example.com", Some("/Users/me")).as_deref(),
-            Some("/Users/me/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock")
+            agent(text, "example.com").as_deref(),
+            Some("/home/me/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock")
         );
     }
 
     #[test]
     fn identity_agent_first_matching_block_wins() {
-        let text = "Host work.example.com
-  IdentityAgent ~/work.sock
-Host *
-  IdentityAgent ~/all.sock
-";
-        let agent = |host| identity_agent(text, host, Some("/home/me"));
+        let text = "Host work.example.com\n  IdentityAgent ~/work.sock\nHost *\n  IdentityAgent ~/all.sock\n";
         assert_eq!(
-            agent("work.example.com").as_deref(),
+            agent(text, "work.example.com").as_deref(),
             Some("/home/me/work.sock")
         );
         assert_eq!(
-            agent("other.example.com").as_deref(),
+            agent(text, "other.example.com").as_deref(),
             Some("/home/me/all.sock")
         );
     }
 
     #[test]
     fn identity_agent_follows_negation_and_skips_match_blocks() {
-        let text = "Host * !bastion
-  IdentityAgent ~/a.sock
-Match host bastion
-  IdentityAgent ~/b.sock
-";
-        assert_eq!(identity_agent(text, "bastion", Some("/home/me")), None);
+        let text = "Host * !bastion\n  IdentityAgent ~/a.sock\nMatch host bastion\n  IdentityAgent ~/b.sock\n";
+        assert_eq!(agent(text, "bastion"), None);
+        assert_eq!(agent("Host other\n  User x\n", "web"), None);
+    }
+
+    #[test]
+    fn identity_agent_expands_tokens_from_the_hop() {
+        let text = "Host web\n  HostName 10.0.0.5\n  User config-user\n  IdentityAgent %d/agent-%h-%r-%p.sock\n";
+        // The user and port are the hop's own, as with `ssh -l alice -p 2222 web`.
         assert_eq!(
-            identity_agent(
-                "Host other
-  User x
-",
-                "web",
-                Some("/home/me")
-            ),
-            None
+            identity_agent(text, "web", "alice", 2222, Some("/home/me")).as_deref(),
+            Some("/home/me/agent-10.0.0.5-alice-2222.sock")
         );
     }
 
     #[test]
-    fn identity_agent_expands_tokens_and_leaves_keywords_as_written() {
-        let text = "Host web
-  HostName 10.0.0.5
-  IdentityAgent %d/agent-%h.sock
-";
-        assert_eq!(
-            identity_agent(text, "web", Some("/home/me")).as_deref(),
-            Some("/home/me/agent-10.0.0.5.sock")
-        );
-        let agent = |text| identity_agent(text, "web", Some("/home/me"));
-        assert_eq!(
-            agent(
-                "IdentityAgent none
-"
-            )
-            .as_deref(),
-            Some("none")
-        );
-        assert_eq!(
-            agent(
-                "IdentityAgent SSH_AUTH_SOCK
-"
-            )
-            .as_deref(),
-            Some("SSH_AUTH_SOCK")
-        );
-        assert_eq!(
-            agent(
-                "IdentityAgent $BW_SOCK
-"
-            )
-            .as_deref(),
-            Some("$BW_SOCK")
-        );
+    fn identity_agent_leaves_keywords_as_written() {
+        for value in ["none", "SSH_AUTH_SOCK", "$BW_SOCK"] {
+            let text = format!("IdentityAgent {value}\n");
+            assert_eq!(agent(&text, "web").as_deref(), Some(value));
+        }
     }
 
     #[test]

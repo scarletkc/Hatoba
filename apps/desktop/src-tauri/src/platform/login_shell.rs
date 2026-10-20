@@ -65,6 +65,11 @@ pub fn ssh_auth_sock() -> Option<&'static str> {
     login_env().and_then(|env| env.ssh_auth_sock.as_deref())
 }
 
+#[cfg(not(unix))]
+pub fn ssh_auth_sock() -> Option<&'static str> {
+    None
+}
+
 /// The one run of the login shell, made by the first caller.
 #[cfg(unix)]
 fn login_env() -> Option<&'static LoginEnv> {
