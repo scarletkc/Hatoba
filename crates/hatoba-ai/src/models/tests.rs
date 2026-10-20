@@ -1108,6 +1108,41 @@ fn known_models_match_ids_with_vendor_prefixes_and_suffixes_but_not_other_versio
 }
 
 #[test]
+fn newer_models_dev_data_wins_and_keeps_what_it_dropped() {
+    use Effort::{High, Low, Medium};
+    let older = models_dev();
+    let newer = models_dev::ModelsDev::parse(
+        json!({
+            "anthropic": {"models": {
+                "claude-opus-5": {"limit": {"context": 1_000_000, "output": 128_000},
+                                  "reasoning": true,
+                                  "reasoning_options": [{"type": "effort", "values": ["high"]}]},
+            }},
+            "openai": {"models": {
+                "gpt-5": {"limit": {"context": 400_000, "output": 64_000}, "reasoning": true,
+                          "reasoning_options": [{"type": "effort", "values": ["low", "medium"]}]},
+            }},
+        })
+        .to_string()
+        .as_bytes(),
+    )
+    .unwrap()
+    .catalog
+    .over(&older);
+    let known = |id: &str| newer.lookup(id, Protocol::Responses);
+    // New, changed, and dropped since: the older data still knows it.
+    assert!(newer.knows("claude-opus-5"));
+    assert_eq!(
+        known("gpt-5").map(|m| (m.max_output_tokens, m.efforts)),
+        Some((Some(64_000), Some(vec![Low, Medium])))
+    );
+    assert_eq!(
+        known("o3-mini").and_then(|m| m.efforts),
+        Some(vec![Low, Medium, High])
+    );
+}
+
+#[test]
 fn models_dev_data_keeps_what_it_needs_and_refuses_what_is_not_its_data() {
     let full = models_dev::ModelsDev::parse(models_dev_data().to_string().as_bytes()).unwrap();
     // What it keeps reads back the same, without the gateway, the costs and the other labs.

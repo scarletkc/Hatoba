@@ -212,6 +212,7 @@ fn levels(model: &SnapshotModel, source: &Source) -> Option<Vec<Effort>> {
     )
 }
 
+#[derive(Clone)]
 struct Entry {
     /// The normalized id, alone or followed by a suffix ([`matches`]).
     key: String,
@@ -268,6 +269,21 @@ impl Catalog {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+
+    /// This catalog, with the models of `older` it does not have: newer data wins, and a model
+    /// models.dev has dropped since keeps the values it had, which do not change.
+    #[must_use]
+    pub fn over(mut self, older: &Catalog) -> Self {
+        let keys: HashSet<String> = self.entries.iter().map(|e| e.key.clone()).collect();
+        self.entries.extend(
+            older
+                .entries
+                .iter()
+                .filter(|e| !keys.contains(&e.key))
+                .cloned(),
+        );
+        self
     }
 
     /// Whether it knows model `id`, on whichever protocol.
@@ -353,9 +369,11 @@ fn current() -> Arc<Catalog> {
         .unwrap_or_else(|| BUNDLED.clone())
 }
 
-/// Makes `catalog` the one [`known_model`] reads, in place of the bundled snapshot's.
+/// Makes `catalog`, over the bundled snapshot's ([`Catalog::over`]), the one [`known_model`]
+/// reads.
 pub fn install(catalog: Catalog) {
-    *INSTALLED.write().unwrap_or_else(PoisonError::into_inner) = Some(Arc::new(catalog));
+    let catalog = Arc::new(catalog.over(&BUNDLED));
+    *INSTALLED.write().unwrap_or_else(PoisonError::into_inner) = Some(catalog);
 }
 
 /// What models.dev says about model `id` on `protocol` ([`Catalog::lookup`]), from the installed
