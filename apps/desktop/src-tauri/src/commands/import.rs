@@ -13,7 +13,7 @@ use hatoba_core::vault::Vault;
 use hatoba_ssh::ParsedKey;
 use tauri::{AppHandle, State};
 
-use crate::commands::hosts::{MAX_NAME_CHARS, check_item_size};
+use crate::commands::hosts::{MAX_NAME_CHARS, too_large_to_sync};
 use crate::commands::proxies::MAX_CREDENTIAL_BYTES;
 use crate::dto::{ImportCandidate, ImportPreview, ImportResult, ImportSource};
 use crate::error::AppResult;
@@ -305,12 +305,18 @@ fn import_hosts(v: &mut Vault, prepared: Prepared) -> AppResult<ImportResult> {
             note: entry.note,
             ..Host::default()
         };
-        // As the host editor does while sync is on, a host too large to sync is not saved: its
-        // note, which other clients don't bound, is left out instead.
+        // As the host editor does while sync is on, a host too large to sync is not saved. Its
+        // note, which other clients don't bound, is left out when that is enough.
         let mut item = Item::Host(host.clone());
-        if !host.note.is_empty() && check_item_size(v, &item).is_err() {
+        if too_large_to_sync(v, &item)? {
             host.note.clear();
             item = Item::Host(host);
+            if too_large_to_sync(v, &item)? {
+                result.warnings.push(format!(
+                    "{name}: it is too large to sync and was not imported"
+                ));
+                continue;
+            }
             result.warnings.push(format!(
                 "{name}: its note was too long to sync and was not imported"
             ));
@@ -1184,24 +1190,32 @@ mod tests {
             note,
             ..entry(name, &[])
         };
+        let max = hatoba_core::model::MAX_ITEM_PLAINTEXT_BYTES;
         let result = import(
             &mut v,
             vec![
-                noted(
-                    "long",
-                    "n".repeat(hatoba_core::model::MAX_ITEM_PLAINTEXT_BYTES),
-                ),
+                noted("long", "n".repeat(max)),
                 noted("short", "on the rack".into()),
+                // Too large without its note too.
+                Entry {
+                    username: Some("u".repeat(max)),
+                    ..noted("huge", "rack A".into())
+                },
             ],
-            &["long", "short"],
+            &["long", "short", "huge"],
             &[],
         );
         assert_eq!(
             result.warnings,
-            ["long: its note was too long to sync and was not imported"]
+            [
+                "long: its note was too long to sync and was not imported",
+                "huge: it is too large to sync and was not imported",
+            ]
         );
+        assert_eq!(result.hosts_created, 2);
         assert_eq!(host(&v, "long").1.note, "");
         assert_eq!(host(&v, "short").1.note, "on the rack");
+        assert!(v.hosts().iter().all(|(_, h)| h.name != "huge"));
     }
 
     #[test]
