@@ -37,7 +37,7 @@ Other labels: **Not saved**, **Remove from Recent**, **Username**.
 - FinalShell: its data folder (`%LOCALAPPDATA%\finalshell` on Windows, `~/Library/FinalShell` on macOS, `~/.finalshell` on Linux), or a copy of it.
 - MobaXterm: `%APPDATA%\MobaXterm\MobaXterm.ini`, the `MobaXterm.ini` beside the portable edition, or a `.mxtsessions` file from **Export all sessions to file**.
 - PuTTY: the saved sessions in the registry on Windows and in `~/.putty/sessions` on macOS and Linux, or a `.reg` file of the key `HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions` exported in Registry Editor.
-- SecureCRT: the `Sessions` folder in SecureCRT's configuration folder (`%APPDATA%\VanDyke\Config` on Windows, `~/Library/Application Support/VanDyke/SecureCRT/Config` on macOS, `~/.vandyke/SecureCRT/Config` on Linux), a configuration folder kept elsewhere or copied from another computer, or its `Sessions` folder.
+- SecureCRT: the `Sessions` folder in SecureCRT's configuration folder (`%APPDATA%\VanDyke\Config` on Windows, `~/Library/Application Support/VanDyke/SecureCRT/Config` on macOS, `~/.vandyke/SecureCRT/Config` on Linux), an `.xml` file from **Tools → Export Settings**, a configuration folder kept elsewhere or copied from another computer, or its `Sessions` folder.
 - Tabby: `config.yaml` in Tabby's folder (`%APPDATA%\tabby`, `~/Library/Application Support/tabby`, `~/.config/tabby`). A config encrypted with Tabby's vault can't be read until its encryption is turned off in Tabby.
 
 What comes along:
@@ -48,7 +48,7 @@ What comes along:
 - SetEnv becomes the host's environment variables: the first SetEnv line that applies counts, as in OpenSSH, and a variable Hatoba can't use (see Environment variables below) is left out with a warning. SendEnv is not imported.
 - Saved passwords are not imported.
 
-Entries show their private key file (struck through if missing). Only the checkbox under the list (off by default), which lists the files, imports private keys into the encrypted vault, PuTTY `.ppk` files included; passphrase-protected ones are skipped. A SecureCRT session brings its own key file, or the one set for all sessions in SecureCRT's Global Options when it uses the global setting. Otherwise hosts use **Ask Each Time**, or the SSH agent for a Tabby profile set to it. Keys that Xshell or FinalShell keep themselves, or that are in Tabby's vault, are not imported: the entry shows **Key stays in Xshell** (or the client's name), and the key can be exported from that client and imported on the Keys page.
+Entries show their private key file (struck through if missing). Only the checkbox under the list (off by default), which lists the files, imports private keys into the encrypted vault, PuTTY `.ppk` files included; passphrase-protected ones are skipped. A SecureCRT session brings its own key file, or the one set for all sessions in SecureCRT's Global Options when it uses the global setting; an export from **Tools → Export Settings** holds those key files, so they import from it on another computer too. Otherwise hosts use **Ask Each Time**, or the SSH agent for a Tabby profile set to it. Keys that Xshell or FinalShell keep themselves, or that are in Tabby's vault, are not imported: the entry shows **Key stays in Xshell** (or the client's name), and the key can be exported from that client and imported on the Keys page.
 
 Other labels: **Select All**, **Select None**.
 

@@ -19,7 +19,35 @@ fn main() {
     }
 
     embed_worker_bundle();
+    export_app_names();
     tauri_build::try_build(attributes).expect("failed to run tauri-build");
+}
+
+/// `HATOBA_IDENTIFIER` and `HATOBA_MAIN_BINARY`, the `identifier` and `mainBinaryName` of the
+/// build's Tauri configuration, for the `hatoba` command (HOST-15) and the app to agree on where it
+/// listens. `tauri build --config` hands what it overrides to the build in `TAURI_CONFIG`.
+fn export_app_names() {
+    println!("cargo:rerun-if-env-changed=TAURI_CONFIG");
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tauri.conf.json");
+    println!("cargo:rerun-if-changed={}", path.display());
+    let read = |text: &str| serde_json::from_str::<serde_json::Value>(text).ok();
+    let base = read(&std::fs::read_to_string(&path).expect("read tauri.conf.json"))
+        .expect("tauri.conf.json is JSON");
+    let over = std::env::var("TAURI_CONFIG")
+        .ok()
+        .and_then(|text| read(&text));
+    for (key, var) in [
+        ("identifier", "HATOBA_IDENTIFIER"),
+        ("mainBinaryName", "HATOBA_MAIN_BINARY"),
+    ] {
+        let value = over
+            .as_ref()
+            .and_then(|o| o.get(key))
+            .or_else(|| base.get(key))
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_else(|| panic!("tauri.conf.json has no {key}"));
+        println!("cargo:rustc-env={var}={value}");
+    }
 }
 
 /// Copies the Worker bundle from `scripts/worker/bundle.mjs` into OUT_DIR for `include_str!`, or

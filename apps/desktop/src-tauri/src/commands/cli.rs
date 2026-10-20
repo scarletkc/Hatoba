@@ -1,12 +1,13 @@
 //! The command line (HOST-13): the arguments `hatoba …` was started with, and the `hatoba`
-//! command itself (Settings → General).
+//! command itself (Settings → General), whose own commands other programs use the saved hosts
+//! with (HOST-15).
 
 use hatoba_core::Vault;
 use serde_json::Value;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::commands::settings::stored_prefs;
-use crate::dto::CliCommandView;
+use crate::dto::{CliActivity, CliCommandView};
 use crate::error::{AppError, AppResult};
 use crate::launch;
 use crate::platform;
@@ -15,6 +16,9 @@ use crate::state::AppState;
 /// Whether the command is on, kept in the local prefs beside the `LocalPrefs` fields. Those leave
 /// it alone (`merge_prefs`), so only `cli_command_set` writes it.
 const PREF: &str = "cli_command";
+/// HOST-15: whether other programs may use the saved hosts through the command, kept the same way
+/// and written only by `cli_access_set`.
+const ACCESS_PREF: &str = "cli_access";
 
 /// The arguments of the launches the window has not handled yet, oldest first. Each is taken
 /// once, and only while the vault is unlocked: a launch during a lock waits for the unlock.
@@ -27,49 +31,91 @@ pub fn launch_take(state: State<'_, AppState>) -> AppResult<Vec<Vec<String>>> {
 #[tauri::command]
 #[specta::specta]
 pub fn cli_command_get(state: State<'_, AppState>) -> AppResult<CliCommandView> {
-    let enabled = enabled(&state.vault())?;
-    view(enabled)
+    view(&state.vault())
 }
 
 /// Adds or removes the command. On macOS this may wait for an administrator's password.
 #[tauri::command]
 #[specta::specta]
 pub async fn cli_command_set(
+    app: AppHandle,
     state: State<'_, AppState>,
     enabled: bool,
 ) -> AppResult<CliCommandView> {
-    tauri::async_runtime::spawn_blocking(move || {
+    blocking(move || {
         if enabled {
             platform::cli::install()
         } else {
             platform::cli::uninstall()
         }
     })
-    .await
-    .map_err(|e| AppError::internal(e.to_string()))??;
-    set_enabled(&mut state.vault(), enabled)?;
-    view(enabled)
+    .await?;
+    set_flag(&mut state.vault(), PREF, enabled)?;
+    crate::cli_access::sync(&app);
+    view(&state.vault())
 }
 
-fn view(enabled: bool) -> AppResult<CliCommandView> {
+/// HOST-15: lets other programs use the saved hosts through the command, or stops them. Turning it
+/// on puts the launcher in place again, so one from before HOST-15 runs the command's own
+/// commands; on macOS that may wait for an administrator's password.
+#[tauri::command]
+#[specta::specta]
+pub async fn cli_access_set(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> AppResult<CliCommandView> {
+    if enabled && flag(&state.vault(), PREF)? {
+        blocking(platform::cli::install).await?;
+    }
+    set_flag(&mut state.vault(), ACCESS_PREF, enabled)?;
+    crate::cli_access::sync(&app);
+    view(&state.vault())
+}
+
+/// What other programs did through the command since the unlock, newest first (HOST-15).
+#[tauri::command]
+#[specta::specta]
+pub fn cli_activity_list(state: State<'_, AppState>) -> AppResult<Vec<CliActivity>> {
+    state.with_unlocked(|_| Ok(state.cli.activity()))
+}
+
+async fn blocking(f: impl FnOnce() -> AppResult<()> + Send + 'static) -> AppResult<()> {
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))?
+}
+
+fn view(vault: &Vault) -> AppResult<CliCommandView> {
     let location = platform::cli::location()?;
     Ok(CliCommandView {
-        enabled,
+        enabled: flag(vault, PREF)?,
         on_path: platform::cli::on_path(&location),
         location: location.display().to_string(),
+        access: flag(vault, ACCESS_PREF)?,
     })
 }
 
+/// Whether the app listens for the command's own commands (HOST-15): while the command and the
+/// setting are both on. Readable while the vault is locked.
+pub fn access_on(vault: &Vault) -> bool {
+    flag(vault, PREF).unwrap_or(false) && flag(vault, ACCESS_PREF).unwrap_or(false)
+}
+
 fn enabled(vault: &Vault) -> AppResult<bool> {
+    flag(vault, PREF)
+}
+
+fn flag(vault: &Vault, key: &str) -> AppResult<bool> {
     Ok(stored_prefs(vault.local_prefs()?.as_deref())
-        .get(PREF)
+        .get(key)
         .and_then(Value::as_bool)
         .unwrap_or(false))
 }
 
-fn set_enabled(vault: &mut Vault, enabled: bool) -> AppResult<()> {
+fn set_flag(vault: &mut Vault, key: &str, on: bool) -> AppResult<()> {
     let mut prefs = stored_prefs(vault.local_prefs()?.as_deref());
-    prefs.insert(PREF.to_owned(), Value::Bool(enabled));
+    prefs.insert(key.to_owned(), Value::Bool(on));
     let json = serde_json::to_string(&prefs).map_err(|e| AppError::internal(e.to_string()))?;
     Ok(vault.set_local_prefs(&json)?)
 }
@@ -95,7 +141,7 @@ pub fn restore(state: &AppState) {
 mod tests {
     use hatoba_core::Vault;
 
-    use super::{enabled, set_enabled};
+    use super::{ACCESS_PREF, PREF, access_on, enabled, set_flag};
     use crate::commands::settings::merge_prefs;
     use crate::dto::LocalPrefs;
 
@@ -105,7 +151,7 @@ mod tests {
         let mut vault = Vault::open_in_memory().unwrap();
         assert!(!enabled(&vault).unwrap());
 
-        set_enabled(&mut vault, true).unwrap();
+        set_flag(&mut vault, PREF, true).unwrap();
         let json = merge_prefs(
             vault.local_prefs().unwrap().as_deref(),
             &LocalPrefs::default(),
@@ -113,7 +159,20 @@ mod tests {
         vault.set_local_prefs(&json.unwrap()).unwrap();
         assert!(enabled(&vault).unwrap());
 
-        set_enabled(&mut vault, false).unwrap();
+        set_flag(&mut vault, PREF, false).unwrap();
         assert!(!enabled(&vault).unwrap());
+    }
+
+    /// HOST-15: programs reach the hosts only while both switches are on.
+    #[test]
+    fn access_needs_the_command_and_the_setting() {
+        let mut vault = Vault::open_in_memory().unwrap();
+        assert!(!access_on(&vault));
+        set_flag(&mut vault, ACCESS_PREF, true).unwrap();
+        assert!(!access_on(&vault));
+        set_flag(&mut vault, PREF, true).unwrap();
+        assert!(access_on(&vault));
+        set_flag(&mut vault, PREF, false).unwrap();
+        assert!(!access_on(&vault));
     }
 }

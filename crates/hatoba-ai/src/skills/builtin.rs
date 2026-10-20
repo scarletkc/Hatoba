@@ -61,6 +61,10 @@ const FILES: &[(&str, &str)] = &[
         include_str!("builtin/hatoba/references/ai-tools.md"),
     ),
     (
+        "references/command-line.md",
+        include_str!("builtin/hatoba/references/command-line.md"),
+    ),
+    (
         "references/dashboard.md",
         include_str!("builtin/hatoba/references/dashboard.md"),
     ),

@@ -23,6 +23,8 @@ export function createTauriApi(): HatobaApi {
     launch_take: () => commands.launchTake(),
     cli_command_get: () => commands.cliCommandGet(),
     cli_command_set: (enabled) => commands.cliCommandSet(enabled),
+    cli_access_set: (enabled) => commands.cliAccessSet(enabled),
+    cli_activity_list: () => commands.cliActivityList(),
 
     vault_status: () => commands.vaultStatus(),
     vault_create: (password) => commands.vaultCreate(password),

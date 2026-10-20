@@ -23,6 +23,7 @@ pub(super) fn read(path: Option<&Path>) -> AppResult<Source> {
         location: Some(path.to_string_lossy().into_owned()),
         encrypted: false,
         entries: parse(&text, &Places::of_this_device()),
+        ..Source::default()
     })
 }
 

@@ -253,6 +253,22 @@ The labels that these files name in English, as the interface shows them in Simp
 | Show | 显示 |
 | Left Out | 未纳入 |
 
+## `references/command-line.md`
+
+### Opening hosts
+
+| en | zh-CN |
+|---|---|
+| Use the hatoba command in terminals | 在终端中使用 hatoba 命令 |
+
+### Other programs
+
+| en | zh-CN |
+|---|---|
+| Let other programs use saved hosts | 允许其他程序使用已保存的主机 |
+| Recent use | 最近使用 |
+| Details | 详情 |
+
 ## `references/shortcuts.md`
 
 ### App shortcuts

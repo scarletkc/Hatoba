@@ -92,6 +92,9 @@ pub async fn lock_vault(app: &AppHandle, reason: LockReason) {
     // The hashes of credentials it compares start over, so none outlives the unlocked vault.
     state.dashboard.stop_all();
     crate::dashboard::forget_secret_hashes();
+    // HOST-15: what other programs run through the `hatoba` command stops, and its connections
+    // close.
+    state.cli.lock(app);
     let disconnect = async {
         if disconnects_on_lock(&state) {
             // The sessions open now: one opened after an unlock in the meantime stays.

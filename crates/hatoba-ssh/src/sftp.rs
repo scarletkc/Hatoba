@@ -124,6 +124,13 @@ impl SftpClient {
             .map_err(|e| self.err("resolve", ".", e))
     }
 
+    /// Whether `path` is a directory, or a symlink to one; `None` when it cannot be read, as when
+    /// nothing is there.
+    pub async fn is_dir(&self, path: &str) -> Option<bool> {
+        let meta = self.sftp.metadata(path).await.ok()?;
+        Some(meta.permissions.unwrap_or(0) & S_IFMT == S_IFDIR)
+    }
+
     /// Lists a directory: directories first, then names case-insensitively;
     /// `.` and `..` are omitted. Symlinks to directories are reported with
     /// `is_dir = true` (and `is_symlink = true`).

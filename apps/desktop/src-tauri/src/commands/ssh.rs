@@ -85,6 +85,7 @@ fn overrides(options: &ConnectOptions) -> Overrides {
             .clone()
             .filter(|p| !p.is_empty())
             .map(Zeroizing::new),
+        ask_password: false,
     }
 }
 

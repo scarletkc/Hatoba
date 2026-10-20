@@ -30,6 +30,7 @@ pub(super) fn read(path: Option<&Path>) -> AppResult<Source> {
         location: Some(location.to_string_lossy().into_owned()),
         encrypted: false,
         entries,
+        ..Source::default()
     })
 }
 

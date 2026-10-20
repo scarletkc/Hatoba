@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/hatoba-ai", "crates/hatoba-core", "crates/hatoba-local", "crates/hatoba-ssh", "apps/desktop/src-tauri"]
+members = ["crates/hatoba-ai", "crates/hatoba-cli", "crates/hatoba-core", "crates/hatoba-local", "crates/hatoba-ssh", "apps/desktop/src-tauri"]
 
 [workspace.package]
 version = "0.4.2"
@@ -11,6 +11,7 @@ rust-version = "1.90"
 
 [workspace.dependencies]
 hatoba-ai = { path = "crates/hatoba-ai" }
+hatoba-cli = { path = "crates/hatoba-cli" }
 hatoba-core = { path = "crates/hatoba-core" }
 hatoba-local = { path = "crates/hatoba-local" }
 hatoba-ssh = { path = "crates/hatoba-ssh" }

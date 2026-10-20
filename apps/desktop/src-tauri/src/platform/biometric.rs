@@ -137,7 +137,9 @@ mod imp {
 
         use crate::error::{AppError, AppResult, ErrorCode};
 
-        const CREDENTIAL: &str = "app.hatoba.desktop.vault";
+        /// `app.hatoba.desktop.vault` for released builds; another identifier's build has its own
+        /// (see `secrets::SERVICE`).
+        const CREDENTIAL: &str = concat!(env!("HATOBA_IDENTIFIER"), ".vault");
         /// Fixed challenge; secrecy comes from the TPM-held private key, not from this value.
         const CHALLENGE: &[u8] = b"hatoba/windows-hello/challenge/v1";
 

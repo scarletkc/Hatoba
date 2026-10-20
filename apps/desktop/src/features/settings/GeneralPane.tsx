@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
-import { Button, Switch } from "@/components/controls";
+import { Button, Icon, Switch } from "@/components/controls";
 import { Group } from "@/components/layout";
 import { PopupSelect, toast } from "@/components/overlay";
-import { useT } from "@/i18n";
+import { formatDateTime, formatRelative, useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
-import type { CliCommandView, CloseAction, TerminalSettings } from "@/ipc/types";
+import type { CliActivity, CliCommandView, CloseAction, TerminalSettings } from "@/ipc/types";
 import { pickSavePath } from "@/lib/native";
 import { defaultRightClick } from "@/lib/platform";
 import { Pane, SettingRow, usePrefs, type PaneProps } from "./shared";
@@ -29,8 +29,8 @@ function withCurrent(choices: number[], current: number): number[] {
 
 /**
  * Settings → General: terminal mouse behaviour (WIN-05), reachability dots (HOST-10), the close
- * button (WIN-10), AI notifications (AI-07), the `hatoba` command (HOST-13), the dashboard
- * (HOST-14), backup (VAULT-07).
+ * button (WIN-10), AI notifications (AI-07), the `hatoba` command (HOST-13) and other programs'
+ * use of the saved hosts through it (HOST-15), the dashboard (HOST-14), backup (VAULT-07).
  */
 export function GeneralPane({ settings, updateTerminal }: PaneProps) {
   const t = useT();
@@ -102,7 +102,7 @@ export function GeneralPane({ settings, updateTerminal }: PaneProps) {
       </Group>
 
       <Group>
-        <CliCommandRow />
+        <CliCommandRows />
       </Group>
 
       <Group>
@@ -139,8 +139,11 @@ export function GeneralPane({ settings, updateTerminal }: PaneProps) {
   );
 }
 
-/** HOST-13: the `hatoba` command. It lives in the system, so the row asks the backend for its state. */
-function CliCommandRow() {
+/**
+ * HOST-13: the `hatoba` command, and under it HOST-15's switch and what programs did through it. The
+ * command lives in the system, so the rows ask the backend for its state.
+ */
+function CliCommandRows() {
   const t = useT();
   const platform = useApp((a) => a.info.platform);
   const [cli, setCli] = useState<CliCommandView | null>(null);
@@ -157,11 +160,11 @@ function CliCommandRow() {
     };
   }, []);
 
-  const toggle = async (enabled: boolean) => {
+  const toggle = async (change: () => Promise<CliCommandView>) => {
     if (!cli) return;
     setBusy(true);
     try {
-      setCli(await api.cli_command_set(enabled));
+      setCli(await change());
     } catch (e) {
       const err = toAppError(e);
       // macOS: the administrator password prompt was closed.
@@ -191,8 +194,96 @@ function CliCommandRow() {
   );
 
   return (
-    <SettingRow label={t("settings.cli")} hint={hint}>
-      <Switch label={t("settings.cli")} checked={cli?.enabled ?? false} disabled={!cli || busy} onChange={(on) => void toggle(on)} />
-    </SettingRow>
+    <>
+      <SettingRow label={t("settings.cli")} hint={hint}>
+        <Switch
+          label={t("settings.cli")}
+          checked={cli?.enabled ?? false}
+          disabled={!cli || busy}
+          onChange={(on) => void toggle(() => api.cli_command_set(on))}
+        />
+      </SettingRow>
+      {cli?.enabled && (
+        <SettingRow label={t("settings.cliAccess")} hint={t("settings.cliAccess.hint")}>
+          <Switch label={t("settings.cliAccess")} checked={cli.access} disabled={busy} onChange={(on) => void toggle(() => api.cli_access_set(on))} />
+        </SettingRow>
+      )}
+      {cli?.enabled && cli.access && <CliActivityList />}
+    </>
+  );
+}
+
+const ACTIVITY_ICON: Record<CliActivity["kind"], string> = {
+  exec: "terminal-window",
+  upload: "upload-simple",
+  download: "download-simple",
+};
+
+/** HOST-15: what programs did through the command since the unlock, newest first, under **Details**. */
+function CliActivityList() {
+  const t = useT();
+  const [entries, setEntries] = useState<CliActivity[] | null>(null);
+  const [details, setDetails] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    // Listening first, so no use is missed; an event is newer than the list.
+    let pushed = false;
+    const sub = api.listen("cli://activity", (e) => {
+      pushed = true;
+      setEntries(e.entries);
+    });
+    void sub
+      .then(() => api.cli_activity_list())
+      .then((list) => live && !pushed && setEntries(list))
+      .catch(() => {});
+    return () => {
+      live = false;
+      void sub.then((un) => un());
+    };
+  }, []);
+
+  const outcome = (a: CliActivity) => {
+    if (a.state === "running") return t("settings.cliAccess.running");
+    if (a.state === "failed") return a.error ?? "";
+    return a.kind === "exec" ? t("settings.cliAccess.exit", { status: a.status ?? 0 }) : t("settings.cliAccess.copied");
+  };
+
+  return (
+    <>
+      <SettingRow
+        label={t("settings.cliAccess.activity")}
+        hint={
+          entries === null
+            ? undefined
+            : entries.length === 0
+              ? t("settings.cliAccess.activity.empty")
+              : t("settings.cliAccess.activity.hint", { n: entries.length })
+        }
+      >
+        {!!entries?.length && (
+          <Button
+            size="xs"
+            trailingIcon={details ? "caret-up" : "caret-down"}
+            aria-expanded={details}
+            onClick={() => setDetails((open) => !open)}
+          >
+            {t("settings.cliAccess.activity.details")}
+          </Button>
+        )}
+      </SettingRow>
+      {details && entries?.map((a) => (
+        <div key={a.id} className={s.activity}>
+          <Icon name={ACTIVITY_ICON[a.kind]} className={s.activityIcon} />
+          <span className={s.activityText}>
+            <span className={s.activityWhat}>{a.detail}</span>
+            <span className={s.activityMeta} title={formatDateTime(t.locale, a.started_at)}>
+              {a.host_name} · {formatRelative(t.locale, a.started_at)} ·{" "}
+              <span className={a.state === "failed" ? s.warn : undefined}>{outcome(a)}</span>
+            </span>
+          </span>
+        </div>
+      ))}
+    </>
   );
 }

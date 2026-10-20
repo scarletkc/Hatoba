@@ -1,0 +1,27 @@
+[package]
+name = "hatoba-cli"
+description = "The hatoba command's own commands, which use the running Hatoba app's saved hosts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+# The app's data folder, which holds the socket.
+dirs = "6"
+
+[target.'cfg(windows)'.dependencies]
+# The user's SID, which names the pipe and is the only one let in, and the pipe server's owner.
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Authorization",
+  "Win32_System_Pipes",
+  "Win32_System_Threading",
+] }
