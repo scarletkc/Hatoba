@@ -26,4 +26,7 @@ sha256sums=('SKIP'
 package() {
   bsdtar --no-same-owner -xf data.tar.gz -C "${pkgdir}"
   install -Dm644 "LICENSE-${pkgver}" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  # In its resource folder, this marker makes Hatoba leave updates to pacman.
+  install -dm755 "${pkgdir}/usr/lib/Hatoba"
+  printf 'aur\n' > "${pkgdir}/usr/lib/Hatoba/managed-by-package-manager"
 }
