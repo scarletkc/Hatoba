@@ -42,7 +42,7 @@ On a `release/vX.Y.Z` branch from the latest `main`, run:
 node scripts/release/bump.mjs minor --note "Release title"
 ```
 
-The version argument is `patch` (the default), `minor`, `major`, or an explicit version such as `1.2.3` or `v1.3.0-rc.1`. A version is `MAJOR.MINOR.PATCH`, optionally followed by `-alpha.N`, `-beta.N`, or `-rc.N`, and the new version must be greater than the current one. From a prerelease, `patch` moves to its final release. The script also refreshes the snapshot of [models.dev](https://models.dev)'s data that the app uses until it fetches the data itself (`crates/hatoba-ai/src/models/models-dev.json`), so it needs the network and Cargo. Add `--dry-run` to list the files without changing them.
+The version argument is `patch` (the default), `minor`, `major`, or an explicit version such as `1.2.3` or `v1.3.0-rc.1`. A version is `MAJOR.MINOR.PATCH`, optionally followed by `-alpha.N`, `-beta.N`, or `-rc.N`, and the new version must be greater than the current one. From a prerelease, `patch` moves to its final release. The script also refreshes the snapshot of [models.dev](https://models.dev)'s data that the app uses until it fetches the data itself (`crates/hatoba-ai/src/models/models-dev.json`) with Cargo; when models.dev cannot be reached, it says so and the snapshot stays as it is. Add `--dry-run` to list the files without changing them.
 
 `--note` creates `docs/release-notes/X.Y.Z.md` with a `## Release title` heading. Below the heading, write what users get and what they must do, such as redeploying their Worker. A note is optional when an earlier release exists, but a note file must have both the heading and a body.
 

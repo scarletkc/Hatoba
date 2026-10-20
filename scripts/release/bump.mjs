@@ -48,9 +48,16 @@ function main() {
     console.log(`${verb} ${path}`);
   }
   if (!values.worker) {
-    // AI-03: the models.dev data the app uses until it fetches its own.
+    // AI-03: the models.dev data the app ships. A release does not wait for models.dev: when it
+    // cannot be reached, the snapshot stays as the last release had it.
     if (dryRun) console.log(`Would update ${MODELS_DEV_SNAPSHOT}`);
-    else execFileSync("cargo", ["run", "--quiet", "-p", "hatoba-ai", "--example", "models_dev_snapshot"], { cwd: ROOT, stdio: "inherit" });
+    else {
+      try {
+        execFileSync("cargo", ["run", "--quiet", "-p", "hatoba-ai", "--example", "models_dev_snapshot"], { cwd: ROOT, stdio: "inherit" });
+      } catch {
+        console.warn(`Could not refresh ${MODELS_DEV_SNAPSHOT}; it stays as it is.`);
+      }
+    }
   }
   console.log(`${current} -> ${version}`);
   if (note && !dryRun) console.log(`Write the body of ${note} before releasing.`);
