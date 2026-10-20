@@ -2182,22 +2182,29 @@ pub struct SkillView {
     pub updated_at: i64,
 }
 
-/// A memory of the AI assistant (AI-53).
+/// A memory of the AI assistant (AI-53): a global one, with neither `host_id` nor `local`, or a
+/// host memory of a saved host or of a computer's local terminal.
 #[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
 pub struct AiMemoryView {
     pub id: String,
     pub name: String,
     pub content: String,
+    pub host_id: Option<String>,
+    /// The computer's name, while `host_id` is `None`.
+    pub local: Option<String>,
     pub updated_at: i64,
 }
 
-/// A memory to save from Settings → AI (AI-53).
+/// A memory to save from Settings → AI (AI-53), in the scope `host_id` and `local` name, as in
+/// [`AiMemoryView`].
 #[derive(Debug, Clone, Deserialize, Type)]
 pub struct AiMemoryInput {
     /// `None` creates a memory.
     pub id: Option<String>,
     pub name: String,
     pub content: String,
+    pub host_id: Option<String>,
+    pub local: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]

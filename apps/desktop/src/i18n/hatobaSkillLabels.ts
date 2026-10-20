@@ -511,7 +511,8 @@ export const AREAS: Area[] = [
       "references/ai-instructions.md": {
         "": [
           "aiSettings.instructions", "hosts.edit.sec.ai", "ai.tool.memory", "aiSettings.memory.row",
-          "aiSettings.memory.add", "aiSettings.memory.deleteAll",
+          "aiSettings.memory.add", "aiSettings.memory.deleteAll", "aiSettings.memory.scope.global",
+          "terminal.local.thisComputer", "aiSettings.memory.f.scope",
         ],
       },
       "references/ai-settings.md": {

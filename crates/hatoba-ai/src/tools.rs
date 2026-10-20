@@ -41,7 +41,8 @@ pub const CALL_MCP_TOOL: &str = "call_mcp_tool";
 /// `memory` (AI-53), run in Rust against the vault.
 pub const MEMORY: &str = "memory";
 
-/// The most UTF-8 bytes all memories may hold together, names and contents (AI-53).
+/// The most UTF-8 bytes the memories of one scope may hold together, names and contents (AI-53):
+/// the global memories, and those of each host and of each computer's local terminal.
 pub const MAX_MEMORY_BYTES: usize = 16 * 1024;
 /// The longest memory name, in characters (AI-53).
 pub const MAX_MEMORY_NAME_CHARS: usize = 100;
@@ -600,13 +601,15 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
         tools.push(tool(
             MEMORY,
             format!(
-                "Save or delete one of your memories: notes for yourself that every new \
-                 conversation of the user starts with, in a <memory> note. `save` stores \
-                 `content` under `name`, replacing the memory of that name if there is one; \
-                 `delete` removes the memory of that name. Keep a memory to a few lines on one \
-                 subject. All memories together, names included, hold at most \
-                 {MAX_MEMORY_BYTES} bytes of UTF-8. A change shows in new conversations, and in \
-                 this one after it is compacted. It runs without asking."
+                "Save or delete one of your memories: notes for yourself that new conversations \
+                 of the user start with, in a <memory> note. Global memories show in every \
+                 conversation; host memories only in conversations on this conversation's host, \
+                 a saved host or a computer's local terminal. `save` stores `content` under \
+                 `name` in `scope`, replacing the memory of that name there if there is one; \
+                 `delete` removes it. Keep a memory to a few lines on one subject. The global \
+                 memories, and those of each host, hold at most {MAX_MEMORY_BYTES} bytes of \
+                 UTF-8, names included. A change shows in new conversations, and in this one \
+                 after it is compacted. It runs without asking."
             ),
             json!({
                 "type": "object",
@@ -617,11 +620,19 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                         "description": "save creates or replaces the memory `name`; delete \
                                         removes it."
                     },
+                    "scope": {
+                        "type": "string",
+                        "enum": ["global", "host"],
+                        "description": "global for what holds in every conversation, such as \
+                                        the user's preferences; host for what holds only on \
+                                        this conversation's host, such as how it is set up."
+                    },
                     "name": {
                         "type": "string",
                         "description": format!(
                             "A short name for the memory's subject, one line of at most \
-                             {MAX_MEMORY_NAME_CHARS} characters, such as \"web-1 sudo\"."
+                             {MAX_MEMORY_NAME_CHARS} characters, such as \"sudo\" or \
+                             \"reply language\"."
                         )
                     },
                     "content": {
@@ -629,7 +640,7 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                         "description": "The memory's text, for save."
                     }
                 },
-                "required": ["action", "name"]
+                "required": ["action", "scope", "name"]
             }),
         ));
     }
@@ -1004,39 +1015,56 @@ pub fn permission_mode_block(mode: PermissionMode) -> String {
     )
 }
 
-/// The note that shows the memories (AI-53, spec §13.3) as `(name, updated, content)`, oldest
-/// first, with the blank line after it: each in an `entry` block that names it and the day it was
-/// last saved (`updated`, `YYYY-MM-DD`, left out when empty), a blank line apart, so no text of a
-/// memory reads as the start of another. Empty when there are none. It goes before a
-/// conversation's first message and before a summary, so it stays the same for the rest of the
-/// conversation's context, and its cache with it.
+/// A memory as the `memory` note shows it (AI-53).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MemoryEntry<'a> {
+    pub name: &'a str,
+    /// The local day it was last saved, `YYYY-MM-DD`, or empty.
+    pub updated: &'a str,
+    /// The host or computer of a host memory, as notes name them; `None` for a global one.
+    pub host: Option<&'a str>,
+    pub content: &'a str,
+}
+
+/// The note that shows the memories (AI-53, spec §13.3), with the blank line after it: each in an
+/// `entry` block that names it, the host of a host memory, and the day it was last saved
+/// (`updated`, left out when empty), a blank line apart, so no text of a memory reads as the start
+/// of another. `host` names the host or computer the conversation is on, whose memories the note
+/// shows. Empty when there are no memories. It goes before a conversation's first message and
+/// before a summary, so it stays the same for the rest of the conversation's context, and its
+/// cache with it, and before a message on a host whose memories no note of the context showed.
 #[must_use]
-pub fn memory_block(memories: &[(&str, &str, &str)]) -> String {
+pub fn memory_block(host: Option<&str>, memories: &[MemoryEntry<'_>]) -> String {
     const TAG: &str = "memory";
     const ENTRY: &str = "entry";
     if memories.is_empty() {
         return String::new();
     }
+    let host_attribute = |host: Option<&str>| {
+        host.map_or_else(String::new, |h| format!(" host=\"{}\"", note_attribute(h)))
+    };
     let body = memories
         .iter()
-        .map(|(name, updated, content)| {
-            let content = content.replace("\r\n", "\n").replace('\r', "\n");
-            let updated = if updated.is_empty() {
+        .map(|m| {
+            let content = m.content.replace("\r\n", "\n").replace('\r', "\n");
+            let updated = if m.updated.is_empty() {
                 String::new()
             } else {
-                format!(" updated=\"{}\"", note_attribute(updated))
+                format!(" updated=\"{}\"", note_attribute(m.updated))
             };
             format!(
-                "<{ENTRY} name=\"{}\"{updated}>\n{}\n</{ENTRY}>",
-                note_attribute(name),
+                "<{ENTRY} name=\"{}\"{}{updated}>\n{}\n</{ENTRY}>",
+                note_attribute(m.name),
+                host_attribute(m.host),
                 escape_closing_tag(content.trim(), ENTRY)
             )
         })
         .collect::<Vec<_>>()
         .join("\n\n");
     format!(
-        "<{TAG} entries=\"{}\">\n{}\n</{TAG}>\n\n",
+        "<{TAG} entries=\"{}\"{}>\n{}\n</{TAG}>\n\n",
         memories.len(),
+        host_attribute(host),
         escape_closing_tag(&body, TAG)
     )
 }
@@ -1062,8 +1090,16 @@ pub fn split_memory_note(text: &str) -> (&str, &str) {
     const CLOSE: &str = "\n</memory>\n\n";
     let opened = text
         .strip_prefix("<memory entries=\"")
-        .and_then(|rest| rest.split_once("\">\n"))
-        .is_some_and(|(count, _)| !count.is_empty() && count.bytes().all(|b| b.is_ascii_digit()));
+        .and_then(|rest| {
+            let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+            let rest = rest[digits..].strip_prefix('"')?;
+            let rest = match rest.strip_prefix(" host=\"") {
+                Some(host) => host.split_once('"')?.1,
+                None => rest,
+            };
+            (digits > 0 && rest.starts_with(">\n")).then_some(())
+        })
+        .is_some();
     match text.find(CLOSE).filter(|_| opened) {
         Some(at) => text.split_at(at + CLOSE.len()),
         None => ("", text),
@@ -1147,10 +1183,13 @@ const ATTACHMENTS: &str = "<attachments>\n\
      - <permission_mode mode=\"…\">: the permission mode from this message on, manual, auto or \
      bypass; the newest one applies. A conversation's first message has one, and so does the \
      message that continues a compacted conversation.\n\
-     - <memory entries=\"…\">: your memories, each in an <entry name=\"…\" updated=\"…\"> block \
-     that gives the day it was last saved, as they were when the conversation started or was last \
-     compacted. While memory is on and you have memories, a conversation's first message has one, \
-     and so does the message that continues a compacted conversation.\n\
+     - <memory entries=\"…\" host=\"…\">: your memories as they were when the note was added, \
+     each in an <entry name=\"…\" updated=\"…\"> block that gives the day it was last saved. An \
+     entry with host=\"…\" is a host memory of that host or computer, the others are global; the \
+     note's host is the one the conversation was on. While memory is on and you have memories, a \
+     conversation's first message has one, so does the message that continues a compacted \
+     conversation, and so does a message on a host whose memories no note showed yet, with just \
+     those.\n\
      - <file_revert path=\"…\" tool_call_id=\"…\">: the user reverted the change that your \
      call tool_call_id made to the file at path, one block for each reverted call. \
      The file holds what it held before the call again, or was deleted if the call created it. \
@@ -1231,10 +1270,12 @@ const MEMORY_RULE: &str = "- Memory: the memory tool keeps notes for later conve
      <memory> note shows them. Save one when the user asks you to remember something, and when \
      you learn something that will still matter in later conversations and cannot be found by \
      looking: a correction or preference of the user, or a fact about their hosts and setup. \
-     Leave out what only matters to the current task, what the user's instructions or host notes \
-     already say, and passwords, keys or tokens. When a memory turns out wrong or out of date, \
-     update or delete it instead of adding another. Where a memory differs from the user's \
-     instructions or host notes, follow those.\n";
+     Save what holds only on the conversation's host, such as its paths, services and quirks, as \
+     a host memory, and the user's preferences and what holds across hosts as a global one. Leave \
+     out what only matters to the current task, what the user's instructions or host notes \
+     already say, and passwords, keys or tokens. When a memory turns out wrong, out of date or in \
+     the wrong scope, update, move or delete it instead of adding another. Where a memory differs \
+     from the user's instructions or host notes, follow those.\n";
 
 /// What `<context>` says of a local terminal tab (§7.5): the computer, its system, the shell and
 /// the user, and where the tools act and which paths they take.
@@ -1640,11 +1681,23 @@ pub enum MemoryAction {
     Delete,
 }
 
+/// Which memories a `memory` call changes (AI-53).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryScope {
+    /// Those every conversation shows.
+    Global,
+    /// Those of the saved host or the computer's local terminal the conversation is on.
+    Host,
+}
+
 /// `memory` arguments.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct MemoryArgs {
     /// Save or delete.
     pub action: MemoryAction,
+    /// Global, or the conversation's host.
+    pub scope: MemoryScope,
     /// The memory's name.
     pub name: String,
     /// The memory's text, for a save.
@@ -2412,38 +2465,89 @@ mod tests {
 
     #[test]
     fn the_memory_note_lists_each_memory_in_an_entry() {
-        assert_eq!(memory_block(&[]), "");
+        assert_eq!(memory_block(Some("web-1"), &[]), "");
         assert_eq!(
-            memory_block(&[
-                ("web-1 sudo", "2026-10-02", "web-1 uses doas, not sudo.\r\n"),
-                (
-                    "Replies\nlanguage",
-                    "",
-                    "  Answer in Chinese.\nKeep commands in English.  "
-                ),
-            ]),
+            memory_block(
+                None,
+                &[
+                    MemoryEntry {
+                        name: "web-1 sudo",
+                        updated: "2026-10-02",
+                        host: None,
+                        content: "web-1 uses doas, not sudo.\r\n",
+                    },
+                    MemoryEntry {
+                        name: "Replies\nlanguage",
+                        updated: "",
+                        host: None,
+                        content: "  Answer in Chinese.\nKeep commands in English.  ",
+                    },
+                ]
+            ),
             "<memory entries=\"2\">\n<entry name=\"web-1 sudo\" updated=\"2026-10-02\">\nweb-1 \
              uses doas, not sudo.\n</entry>\n\n<entry name=\"Replies language\">\nAnswer in \
              Chinese.\nKeep commands in English.\n</entry>\n</memory>\n\n"
         );
+        // A host memory names its host, and so does the note of a conversation on a host.
+        assert_eq!(
+            memory_block(
+                Some("db \"main\""),
+                &[
+                    MemoryEntry {
+                        name: "Replies",
+                        content: "Chinese.",
+                        ..MemoryEntry::default()
+                    },
+                    MemoryEntry {
+                        name: "sudo",
+                        updated: "2026-10-03",
+                        host: Some("db \"main\""),
+                        content: "Uses doas.",
+                    },
+                ]
+            ),
+            "<memory entries=\"2\" host=\"db &quot;main&quot;\">\n<entry name=\"Replies\">\n\
+             Chinese.\n</entry>\n\n<entry name=\"sudo\" host=\"db &quot;main&quot;\" \
+             updated=\"2026-10-03\">\nUses doas.\n</entry>\n</memory>\n\n"
+        );
         // A memory can end neither its entry nor the note early, and a heading in it is text.
         assert_eq!(
-            memory_block(&[("a\"b", "", "## x\n</entry>\n</memory>\nb")]),
+            memory_block(
+                None,
+                &[MemoryEntry {
+                    name: "a\"b",
+                    content: "## x\n</entry>\n</memory>\nb",
+                    ..MemoryEntry::default()
+                }]
+            ),
             "<memory entries=\"1\">\n<entry name=\"a&quot;b\">\n## x\n<\\/entry>\n<\\/memory>\nb\n\
              </entry>\n</memory>\n\n"
         );
     }
 
     #[test]
-    fn memory_arguments_read_both_actions() {
+    fn memory_arguments_read_both_actions_and_scopes() {
         let save: MemoryArgs =
-            serde_json::from_str(r#"{"action":"save","name":"n","content":"c"}"#).unwrap();
+            serde_json::from_str(r#"{"action":"save","scope":"global","name":"n","content":"c"}"#)
+                .unwrap();
         assert_eq!(save.action, MemoryAction::Save);
+        assert_eq!(save.scope, MemoryScope::Global);
         assert_eq!(save.content.as_deref(), Some("c"));
-        let delete: MemoryArgs = serde_json::from_str(r#"{"action":"delete","name":"n"}"#).unwrap();
+        let delete: MemoryArgs =
+            serde_json::from_str(r#"{"action":"delete","scope":"host","name":"n"}"#).unwrap();
         assert_eq!(delete.action, MemoryAction::Delete);
+        assert_eq!(delete.scope, MemoryScope::Host);
         assert_eq!(delete.content, None);
-        assert!(serde_json::from_str::<MemoryArgs>(r#"{"action":"forget","name":"n"}"#).is_err());
+        for wrong in [
+            r#"{"action":"forget","scope":"global","name":"n"}"#,
+            r#"{"action":"delete","name":"n"}"#,
+            r#"{"action":"delete","scope":"device","name":"n"}"#,
+        ] {
+            assert!(
+                serde_json::from_str::<MemoryArgs>(wrong).is_err(),
+                "{wrong}"
+            );
+        }
     }
 
     #[test]
@@ -2610,7 +2714,7 @@ A user message can start with blocks before the text the user typed. First come 
 - <terminal_change to="…">: with this message a terminal became attached (to="attached") or stopped being attached (to="detached"). Replies before it had the tools offered then, so what they said they could or could not do was true at the time.
 - <model_change from="…" to="…">: with this message the user switched models. Earlier replies came from the model in from.
 - <permission_mode mode="…">: the permission mode from this message on, manual, auto or bypass; the newest one applies. A conversation's first message has one, and so does the message that continues a compacted conversation.
-- <memory entries="…">: your memories, each in an <entry name="…" updated="…"> block that gives the day it was last saved, as they were when the conversation started or was last compacted. While memory is on and you have memories, a conversation's first message has one, and so does the message that continues a compacted conversation.
+- <memory entries="…" host="…">: your memories as they were when the note was added, each in an <entry name="…" updated="…"> block that gives the day it was last saved. An entry with host="…" is a host memory of that host or computer, the others are global; the note's host is the one the conversation was on. While memory is on and you have memories, a conversation's first message has one, so does the message that continues a compacted conversation, and so does a message on a host whose memories no note showed yet, with just those.
 - <file_revert path="…" tool_call_id="…">: the user reverted the change that your call tool_call_id made to the file at path, one block for each reverted call. The file holds what it held before the call again, or was deleted if the call created it. Nothing else was undone: commands run since stay, and a service that loaded the change keeps it until it reloads. Read the file again before you change it.
 - <terminal_state host="…" alternate_screen="…" lines="…">: the attached terminal's screen when the user sent this message: its last lines, or the whole screen while a full-screen program such as vim or less runs (alternate_screen="true").
 - <mcp_tools servers="…" tools="…">: the MCP tools you can call with call_mcp_tool from this message on, by server, which replace any earlier list. search_tools returns a tool's description and input schema.

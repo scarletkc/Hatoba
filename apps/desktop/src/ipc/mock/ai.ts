@@ -28,6 +28,7 @@ import type {
   LocalShellKind,
   QuickTarget,
 } from "../types";
+import type { AiMemoryMock, MemoryPlace } from "./aiMemory";
 import { mockLocale, VISITOR } from "./visitor";
 
 type AiApi = Pick<
@@ -72,8 +73,8 @@ export interface AiMockDeps {
     start: HatobaApi["mcp_server_start"];
     toolInfo: HatobaApi["mcp_tool_info"];
   };
-  /** The memory mock's `memory` tool (AI-53). */
-  memory?: (action: string, name: string, content: string) => { status: "ok" | "error"; content: string };
+  /** The memory mock's `memory` tool (AI-53), in a conversation on `place`. */
+  memory?: AiMemoryMock["memory_tool"];
 }
 
 type Assistant = Extract<AiEntryView, { role: "assistant" }>;
@@ -1506,9 +1507,20 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           status: "ok",
           content: `URL: ${String(args.url ?? "")} | Content type: text/html | ${args.full_page === true ? "Whole page" : "Main content"} | Characters 0-230 of 230\nTitle: Module ngx_http_upstream_module\n${args.full_page === true ? "" : "Navigation, sidebars and footers are left out. For the whole page, call fetch_url with full_page true.\n"}\n# Module ngx_http_upstream_module\n\nThe ngx_http_upstream_module module is used to define groups of servers that can be referenced by the proxy_pass directive.\n\n## keepalive\n\nActivates the cache for connections to upstream servers.`,
         };
-      case "memory":
+      case "memory": {
         await wait(150);
-        return deps.memory?.(String(args.action ?? ""), String(args.name ?? ""), String(args.content ?? "")) ?? { status: "error", content: "Memory is not available." };
+        if (!deps.memory) return { status: "error", content: "Memory is not available." };
+        // Like Rust's `memory_place`: a saved host that exists, or a computer's local terminal.
+        const host = ((await deps.hosts?.()) ?? []).find((h) => h.id === c.view.host_id);
+        const local = !c.view.host_id && !c.view.quick_target ? c.view.local : null;
+        const place: MemoryPlace | null = host
+          ? { scope: `host:${host.id}`, name: host.name }
+          : local
+            ? { scope: `local:${local}`, name: localName(local) }
+            : null;
+        const text = (key: string) => String(args[key] ?? "");
+        return deps.memory({ action: text("action"), scope: text("scope"), name: text("name"), content: text("content") }, place);
+      }
       case "read_skill":
         await wait(200);
         if (args.name === "hatoba")
