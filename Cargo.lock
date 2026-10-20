@@ -2293,6 +2293,7 @@ dependencies = [
  "dom_query",
  "dom_smoothie",
  "encoding_rs",
+ "flate2",
  "futures",
  "htmd",
  "markup5ever_rcdom",

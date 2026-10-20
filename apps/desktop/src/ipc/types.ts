@@ -921,7 +921,7 @@ export type AiAuthHeader = "x-api-key" | "authorization";
 /** A thinking level (AI-05), lowest first. Where one is optional, null is Default. */
 export type AiEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
-/** A model of a provider (AI-03). Token limits are null when unknown. A provider's view fills what a row leaves unknown from the table of well-known models, as requests do. */
+/** A model of a provider (AI-03). Token limits are null when unknown. A provider's view fills what a row leaves unknown from models.dev, as requests do. */
 export interface AiModel {
   id: string;
   name: string;
@@ -929,7 +929,7 @@ export interface AiModel {
   max_output_tokens: number | null;
   /** The thinking levels the model accepts, lowest first (AI-05): [] for none, null when unknown (Low to High are offered). */
   efforts: AiEffort[] | null;
-  /** Whether the model supports adaptive thinking (Anthropic's model list or the table of well-known models), null when unknown. */
+  /** Whether the model supports adaptive thinking (Anthropic's model list or models.dev), null when unknown. */
   adaptive_thinking: boolean | null;
 }
 

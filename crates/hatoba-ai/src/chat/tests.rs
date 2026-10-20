@@ -2636,8 +2636,8 @@ fn anthropic_request_shapes_per_model_and_level() {
 }
 
 #[test]
-fn a_gateway_model_thinks_with_what_the_known_models_table_says() {
-    // Opus 4.8 behind a gateway whose list names only the id: without the table it got the
+fn a_gateway_model_thinks_with_what_models_dev_says() {
+    // Opus 4.8 behind a gateway whose list names only the id: without models.dev it got the
     // effort alone, Low to High, and answered without thinking.
     let entries = vec![AiEntry::user(1, "hi")];
     let mut opus = ModelSpec::new("claude-opus-4-8");

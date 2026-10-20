@@ -1,12 +1,16 @@
-// Sets a new release version in every version file and can start its release note. With --worker,
-// sets the sync Worker version instead, which a change to the Worker raises.
+// Sets a new release version in every version file, refreshes the snapshot of models.dev's data the
+// app ships, and can start its release note. With --worker, sets the sync Worker version instead,
+// which a change to the Worker raises.
 // Usage: node scripts/release/bump.mjs [patch|minor|major|VERSION] [--note TITLE | --worker] [--dry-run]
 // patch is the default. docs/releasing.md describes the release steps.
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { NOTES_DIR, ROOT, VERSION_FILES, WORKER_VERSION_FILES, nextVersion, planBump, readVersion } from "./version.mjs";
+
+const MODELS_DEV_SNAPSHOT = "crates/hatoba-ai/src/models/models-dev.json";
 
 /** Adds the release note for `version`, which starts with `## TITLE`, to the planned changes. */
 export function planNote(root, changes, version, title) {
@@ -42,6 +46,11 @@ function main() {
     }
     const verb = path === note ? (dryRun ? "Would create" : "Created") : dryRun ? "Would update" : "Updated";
     console.log(`${verb} ${path}`);
+  }
+  if (!values.worker) {
+    // AI-03: the models.dev data the app uses until it fetches its own.
+    if (dryRun) console.log(`Would update ${MODELS_DEV_SNAPSHOT}`);
+    else execFileSync("cargo", ["run", "--quiet", "-p", "hatoba-ai", "--example", "models_dev_snapshot"], { cwd: ROOT, stdio: "inherit" });
   }
   console.log(`${current} -> ${version}`);
   if (note && !dryRun) console.log(`Write the body of ${note} before releasing.`);

@@ -24,7 +24,7 @@ use zeroize::Zeroizing;
 use crate::ai::{
     AiEnv, EventSink, MAX_TITLE_CHARS, auth_header, chatgpt, conversation_view,
     conversation_view_at, core_effort, drop_levels_of_old_protocol, effort_view, find_conversation,
-    listed_effort, model_spec, protocol, search_kind,
+    listed_effort, model_spec, models_dev, protocol, search_kind,
 };
 use crate::dto::{
     AiAuthHeader, AiAutoVerdict, AiChatgptSignIn, AiChatgptStatus, AiChatgptView,
@@ -108,7 +108,7 @@ pub(crate) fn provider_view(v: &Vault, id: &str, p: &AiProvider) -> AiProviderVi
             CoreAuthHeader::XApiKey => AiAuthHeader::XApiKey,
             CoreAuthHeader::Authorization => AiAuthHeader::Authorization,
         },
-        // What a row leaves unknown shows as the table of well-known models has it (AI-03), as
+        // What a row leaves unknown shows as models.dev has it (AI-03), as
         // requests use it.
         models: p
             .models
@@ -602,6 +602,12 @@ pub async fn ai_provider_models(
     // Registered with the read, so a lock either came first or aborts the request.
     let (config, op) =
         state.with_unlocked(|v| Ok((provider_config_for(v, &input)?, state.ai.background_op())))?;
+    // AI-03: the list gets models.dev's data, fetched once a run.
+    let _ = tokio::time::timeout(
+        models_dev::LIST_WAIT,
+        models_dev::fetch_once(state.ai.http()),
+    )
+    .await;
     let models = hatoba_ai::models::list_models(&state.ai.http(), &config, op.token())
         .await
         .map_err(|e| {
@@ -637,6 +643,7 @@ pub async fn ai_provider_test(
     let (config, op) =
         state.with_unlocked(|v| Ok((provider_config_for(v, &input)?, state.ai.background_op())))?;
     let model = input.models.first().map(|m| m.id.trim().to_owned());
+    models_dev::fetch_once(state.ai.http());
     let outcome =
         hatoba_ai::models::test_connection(&state.ai.http(), &config, model.as_deref(), op.token())
             .await;
@@ -1523,7 +1530,7 @@ mod tests {
     }
 
     #[test]
-    fn rows_a_list_left_unknown_show_and_send_what_the_known_models_table_says() {
+    fn rows_a_list_left_unknown_show_and_send_what_models_dev_says() {
         let mut v = vault();
         let row = |id: &str| AiModel {
             id: id.into(),
@@ -1582,7 +1589,7 @@ mod tests {
         assert_eq!(spec.efforts.map(|e| e.len()), Some(5));
 
         // The form saves what the view showed. Moved to Chat Completions, where a gateway
-        // translates Anthropic's levels its own way, the table's levels for Anthropic go and only
+        // translates Anthropic's levels its own way, models.dev's levels for Anthropic go and only
         // the limits are filled; the levels the user picked stay.
         let mut moved = input.clone();
         moved.id = Some(view.id.clone());

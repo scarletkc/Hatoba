@@ -4186,8 +4186,8 @@ fn resolve_model(
 }
 
 /// Saved model `model` of `provider` as a request takes it: what the row leaves unknown comes
-/// from the table of well-known models for the provider's protocol (AI-03), so a model saved
-/// before the table knew it, or typed in, gets the same as one fetched now.
+/// from models.dev for the provider's protocol (AI-03), so a model saved before models.dev knew
+/// it, or typed in, gets the same as one fetched now.
 pub fn model_spec(provider: &AiProvider, model: &CoreModel) -> ModelSpec {
     let mut spec = ModelSpec {
         id: model.id.clone(),
@@ -4214,10 +4214,10 @@ fn request_protocol(provider: &AiProvider) -> Protocol {
 }
 
 /// AI-03: when the form saves `provider` with another protocol than `before` had, the levels and
-/// adaptive thinking a row holds as the table of well-known models gave them for the old protocol
-/// are dropped, so the table fills what the new one takes. The form shows a row's unknown fields
-/// as the table has them and saves what it shows, so without this a gateway's Claude model moved
-/// to Chat Completions would keep sending Anthropic's levels there.
+/// adaptive thinking a row holds as models.dev gave them for the old protocol are dropped, so
+/// models.dev fills what the new one takes. The form shows a row's unknown fields as models.dev
+/// has them and saves what it shows, so without this a gateway's Claude model moved to Chat
+/// Completions would keep sending Anthropic's levels there.
 pub fn drop_levels_of_old_protocol(before: &AiProvider, provider: &mut AiProvider) {
     let old = request_protocol(before);
     if old == request_protocol(provider) {
@@ -4231,7 +4231,7 @@ pub fn drop_levels_of_old_protocol(before: &AiProvider, provider: &mut AiProvide
             .efforts
             .as_ref()
             .map(|levels| levels.iter().copied().map(model_effort).collect::<Vec<_>>());
-        if known.efforts.is_some() && levels.as_deref() == known.efforts {
+        if known.efforts.is_some() && levels == known.efforts {
             model.efforts = None;
         }
         if known.adaptive_thinking.is_some() && model.adaptive_thinking == known.adaptive_thinking {
@@ -6374,6 +6374,7 @@ pub mod conn;
 mod files;
 pub mod memory;
 pub mod mentions;
+pub mod models_dev;
 mod search;
 #[cfg(test)]
 mod tests;
