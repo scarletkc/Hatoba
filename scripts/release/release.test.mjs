@@ -14,6 +14,7 @@ import {
   collectDist,
   composeNotes,
   git,
+  releaseOutputs,
   releaseTarget,
   signatureName,
   updateNotes,
@@ -406,4 +407,9 @@ test("writes install instructions for each platform, with macOS marked experimen
   ];
   assert.equal(notes, `## First release\n\nHello.\n\n${install.join("\n\n")}\n`);
   assert.equal(updateNotes(notes, "0.2.0", REPOSITORY), "## First release\n\nHello.");
+});
+
+test("marks only a version with a prerelease stage as a prerelease in the job outputs", () => {
+  assert.equal(releaseOutputs("1.2.3"), "version=1.2.3\ntag=v1.2.3\nprerelease=false\n");
+  assert.equal(releaseOutputs("1.3.0-rc.1"), "version=1.3.0-rc.1\ntag=v1.3.0-rc.1\nprerelease=true\n");
 });

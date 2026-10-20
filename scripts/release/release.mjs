@@ -6,6 +6,8 @@
 //                                    the updater's public key
 //   gate                             Require a CI pass, an approval-gated release environment, and a
 //                                    signing environment limited to selected branches
+//   outputs                          Print the version, the tag, and whether it is a prerelease as
+//                                    the step outputs of a GitHub Actions job
 //   notes --output FILE              Write the release notes
 //   dist --platform NAME --bundle DIR --output DIR
 //                                    Collect the platform's installers and their updater signatures
@@ -39,7 +41,8 @@ export const TAURI_CONFIG = "apps/desktop/src-tauri/tauri.conf.json";
  * of the installer in latest.json: the updater looks for `<os>-<arch>-<bundle type>`, then for
  * `<os>-<arch>`. Only installers with that key have an updater signature: on macOS people download
  * the disk image, while the updater installs the app bundle from an `archive`, which `tauri build`
- * writes only when it makes updater artifacts.
+ * writes only when it makes updater artifacts. The package managers also find the Windows installer
+ * and the deb package by `name` (docs/releasing.md, Package managers).
  */
 export const INSTALLERS = {
   nsis: {
@@ -160,6 +163,14 @@ export function releaseTarget(version, root = ROOT) {
     }
   }
   return { tag, sha };
+}
+
+/**
+ * The release's version, tag, and whether it is a prerelease, as `name=value` lines for
+ * $GITHUB_OUTPUT. The package manager jobs in release.yml run only for a stable release.
+ */
+export function releaseOutputs(version) {
+  return `version=${version}\ntag=v${version}\nprerelease=${isPrerelease(version)}\n`;
 }
 
 /** Returns the handwritten release note of `version`, or null when there is none. */
@@ -541,6 +552,9 @@ async function main() {
     case "gate":
       await gate(repository);
       break;
+    case "outputs":
+      process.stdout.write(releaseOutputs(version));
+      break;
     case "notes": {
       const output = option("output");
       mkdirSync(dirname(output), { recursive: true });
@@ -558,7 +572,7 @@ async function main() {
       await publish(version, repository, option("notes"), option("dist"));
       break;
     default:
-      throw new Error(`Unknown command '${command ?? ""}'. Use check, gate, notes, dist, or publish.`);
+      throw new Error(`Unknown command '${command ?? ""}'. Use check, gate, outputs, notes, dist, or publish.`);
   }
 }
 
