@@ -6,9 +6,9 @@
 use hatoba_core::platform::SecretStore;
 use zeroize::Zeroizing;
 
-/// The build's Tauri identifier (`build.rs`): `app.hatoba.desktop` for every released build, as the
-/// records saved so far are named, while a build with another identifier, such as a test build, keeps
-/// its own and never reads or removes the app's.
+/// The build's Tauri identifier (`build.rs`): `app.hatoba.desktop` for every released build, as
+/// the records saved so far are named, while a build with another identifier, such as a test
+/// build, keeps its own and never reads or removes the app's.
 const SERVICE: &str = env!("HATOBA_IDENTIFIER");
 
 #[derive(Debug, Default, Clone, Copy)]

@@ -164,8 +164,11 @@ pub fn sync(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         if let Err(e) = listen(&app, &stop).await {
             tracing::warn!("the hatoba command cannot reach Hatoba: listening failed: {e}");
+            // `sync` cancels the token under this lock before it starts another listener.
+            let state = crate::state::state(&app);
+            let mut listener = lock(&state.cli.listener);
             if !stop.is_cancelled() {
-                lock(&crate::state::state(&app).cli.listener).take();
+                listener.take();
             }
         }
     });
@@ -193,9 +196,15 @@ async fn listen(app: &AppHandle, stop: &CancellationToken) -> std::io::Result<()
             () = stop.cancelled() => return Ok(()),
             _ = idle.tick() => state(app).cli.pool.close_idle(pool::IDLE),
             connected = server.connect() => {
-                connected?;
                 let client = std::mem::replace(&mut server, create(false)?);
-                tauri::async_runtime::spawn(serve(app.clone(), client));
+                match connected {
+                    Ok(()) => {
+                        tauri::async_runtime::spawn(serve(app.clone(), client));
+                    }
+                    // A command that was killed before the app took it, which leaves the
+                    // instance unusable but the others fine.
+                    Err(e) => tracing::debug!("a hatoba command did not connect: {e}"),
+                }
             }
         }
     }
@@ -642,7 +651,8 @@ async fn run_exec(ctx: &Ctx<'_>, target: &Target, command: &str, cwd: Option<&st
     };
     if cwd.is_some() && lease.session.server_os() == Some(hatoba_ssh::ServerOs::Windows) {
         return End::error(format!(
-            "{} runs commands with cmd.exe or PowerShell, so --cwd cannot start one in another              directory. Leave out --cwd and change the directory in the command.",
+            "{} runs commands with cmd.exe or PowerShell, so --cwd cannot start one in another \
+             directory. Leave out --cwd and change the directory in the command.",
             target.name
         ));
     }

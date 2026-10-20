@@ -1,10 +1,10 @@
 //! The connections `hatoba exec` and `hatoba cp` run over (HOST-15): one per saved host, kept
 //! between commands so that a program running many of them signs in once, and closed after
-//! [`IDLE`] unused, when the host connects another way, or with the lock.
+//! [`IDLE`] unused, when the host connects another way and the commands on it are done, or with
+//! the lock.
 
 use std::collections::HashMap;
 use std::future::Future;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -30,9 +30,17 @@ struct Pooled {
     use_: Arc<Use>,
 }
 
+#[derive(Default)]
 struct Use {
-    leases: AtomicUsize,
-    last: Mutex<Instant>,
+    state: Mutex<UseState>,
+}
+
+#[derive(Default)]
+struct UseState {
+    leases: usize,
+    last: Option<Instant>,
+    /// The pool let go of the connection while commands ran on it; the last one closes it.
+    retired: bool,
 }
 
 /// A connection for one command or copy. The pool's stays open while one is out.
@@ -54,15 +62,19 @@ impl Lease {
 impl Drop for Lease {
     fn drop(&mut self) {
         if let Some(use_) = &self.use_ {
-            *lock(&use_.last) = Instant::now();
-            use_.leases.fetch_sub(1, Ordering::Relaxed);
+            let mut state = lock(&use_.state);
+            state.last = Some(Instant::now());
+            state.leases -= 1;
+            if state.retired && state.leases == 0 {
+                close(self.session.clone());
+            }
         }
     }
 }
 
 impl Pooled {
     fn lease(&self) -> Lease {
-        self.use_.leases.fetch_add(1, Ordering::Relaxed);
+        lock(&self.use_.state).leases += 1;
         Lease {
             session: self.session.clone(),
             use_: Some(Arc::clone(&self.use_)),
@@ -70,10 +82,21 @@ impl Pooled {
     }
 
     fn idle_for(&self) -> Duration {
-        if self.use_.leases.load(Ordering::Relaxed) > 0 {
+        let state = lock(&self.use_.state);
+        if state.leases > 0 {
             return Duration::ZERO;
         }
-        lock(&self.use_.last).elapsed()
+        state.last.map_or(Duration::ZERO, |last| last.elapsed())
+    }
+
+    /// Closes the connection once no command or copy runs on it.
+    fn retire(self) {
+        let mut state = lock(&self.use_.state);
+        if state.leases == 0 {
+            close(self.session);
+        } else {
+            state.retired = true;
+        }
     }
 }
 
@@ -109,7 +132,7 @@ impl Pool {
             return Ok(pooled.lease());
         }
         if let Some(old) = slot.take() {
-            close(old.session);
+            old.retire();
         }
         let session = connect().await?;
         if epoch.is_cancelled() {
@@ -119,10 +142,7 @@ impl Pool {
         let pooled = Pooled {
             session,
             config: config.to_owned(),
-            use_: Arc::new(Use {
-                leases: AtomicUsize::new(0),
-                last: Mutex::new(Instant::now()),
-            }),
+            use_: Arc::default(),
         };
         let lease = pooled.lease();
         *slot = Some(pooled);

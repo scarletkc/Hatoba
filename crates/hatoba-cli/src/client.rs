@@ -261,12 +261,17 @@ fn connect(app: &App) -> Result<Stream, String> {
     /// The app opens the next instance of the pipe right after one connects; until then, a
     /// client is told that every instance is busy.
     const PIPE_BUSY: i32 = 231;
+    /// `SecurityIdentification << 16`: a server that took the pipe's name before Hatoba, which
+    /// `check_server` turns away after the open, can learn who this user is but not act as them.
+    const SECURITY_IDENTIFICATION: u32 = 1 << 16;
+    use std::os::windows::fs::OpenOptionsExt;
     let name = endpoint::endpoint(app.identifier).map_err(|e| e.to_string())?;
     let mut tries = 0;
     let pipe = loop {
         match std::fs::OpenOptions::new()
             .read(true)
             .write(true)
+            .security_qos_flags(SECURITY_IDENTIFICATION)
             .open(&name)
         {
             Ok(pipe) => break pipe,

@@ -286,3 +286,21 @@ async fn a_stopped_streamed_command_passes_on_only_its_own_output() {
     assert_eq!(stdout, b"started\n");
     assert!(processes("sleep 306").is_empty());
 }
+
+/// HOST-15: a program that stops reading the output, as a pager does, does not hold up a stop.
+#[tokio::test]
+async fn a_stop_ends_a_streamed_command_whose_output_nobody_reads() {
+    let server = server!();
+    let session = server.connect_key("ed25519", None).await;
+    let (tx, _unread) = tokio::sync::mpsc::channel(1);
+    let command = "while :; do echo line; sleep 0.01; done";
+    let stop = tokio::time::sleep(Duration::from_secs(1));
+    let run = tokio::time::timeout(
+        Duration::from_secs(20),
+        remote_command::run_streaming(&session, command, None, stop, tx),
+    )
+    .await
+    .expect("the stop waited for the output to be read")
+    .unwrap();
+    assert_eq!(run.stopped, Some(Stopped::Ended));
+}

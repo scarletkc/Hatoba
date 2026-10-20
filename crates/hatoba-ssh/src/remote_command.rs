@@ -18,6 +18,7 @@
 //! might take for a command: the command then runs as it is ([`plain`]), as on Windows, and
 //! stopping it only closes its channel.
 
+use std::collections::VecDeque;
 use std::ffi::OsStr;
 use std::future::Future;
 use std::hash::{BuildHasher, RandomState};
@@ -287,10 +288,11 @@ async fn wrapped(
                     tracing::debug!("run: sending the command ended early: {e}");
                 }
             }
-            msg = reader.wait() => {
-                let step = out.take(session, msg)?;
-                out.flush(sink).await;
-                match step {
+            () = out.send_next(sink), if !out.pending.is_empty() => {}
+            // Output waits for the receiver, without holding up the stop; after it, the report
+            // comes into `output`.
+            msg = reader.wait(), if out.pending.is_empty() || deadline.is_some() => {
+                match out.take(session, msg)? {
                     Step::More => {}
                     Step::Ended => break true,
                 }
@@ -350,11 +352,11 @@ async fn plain(
                     stopped: Some(Stopped::MayRun),
                 });
             }
-            msg = reader.wait() => {
-                let step = out.take(session, msg)?;
-                out.flush(sink).await;
-                if let Step::Ended = step {
+            () = out.send_next(sink), if !out.pending.is_empty() => {}
+            msg = reader.wait(), if out.pending.is_empty() => {
+                if let Step::Ended = out.take(session, msg)? {
                     writer.ended();
+                    out.flush(sink).await;
                     return Ok(CommandRun {
                         output: out.output,
                         stopped: None,
@@ -545,9 +547,10 @@ struct Collected {
     output: ExecOutput,
     /// The server accepted the exec request.
     accepted: bool,
-    /// Output goes to `pending`, for [`Self::flush`] to send, instead of into `output`.
+    /// Output goes to `pending`, for [`Self::send_next`] or [`Self::flush`] to send, instead of
+    /// into `output`.
     forward: bool,
-    pending: Vec<Output>,
+    pending: VecDeque<Output>,
 }
 
 /// Whether a channel goes on after a message.
@@ -567,11 +570,11 @@ impl Collected {
             }
             Some(ChannelMsg::Data { data }) if self.forward => {
                 self.pending
-                    .push(Output::Stdout(Bytes::copy_from_slice(&data)));
+                    .push_back(Output::Stdout(Bytes::copy_from_slice(&data)));
             }
             Some(ChannelMsg::ExtendedData { data, .. }) if self.forward => {
                 self.pending
-                    .push(Output::Stderr(Bytes::copy_from_slice(&data)));
+                    .push_back(Output::Stderr(Bytes::copy_from_slice(&data)));
             }
             Some(ChannelMsg::Data { data }) => {
                 if out.stdout.len() + data.len() > MAX_EXEC_OUTPUT {
@@ -603,10 +606,23 @@ impl Collected {
         let stdout = std::mem::take(&mut self.output.stdout);
         let stderr = std::mem::take(&mut self.output.stderr);
         if !stdout.is_empty() {
-            self.pending.push(Output::Stdout(stdout.into()));
+            self.pending.push_back(Output::Stdout(stdout.into()));
         }
         if !stderr.is_empty() {
-            self.pending.push(Output::Stderr(stderr.into()));
+            self.pending.push_back(Output::Stderr(stderr.into()));
+        }
+    }
+
+    /// Sends the first piece of `pending` once `sink` has room for it. A receiver that is gone
+    /// takes nothing more.
+    async fn send_next(&mut self, sink: Option<&mpsc::Sender<Output>>) {
+        let permit = match sink {
+            Some(sink) => sink.reserve().await.ok(),
+            None => None,
+        };
+        match (permit, self.pending.pop_front()) {
+            (Some(permit), Some(piece)) => permit.send(piece),
+            _ => self.pending.clear(),
         }
     }
 

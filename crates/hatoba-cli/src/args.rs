@@ -151,12 +151,19 @@ fn exec(args: Vec<String>) -> Result<Command, String> {
 fn copy(args: &[String]) -> Result<Command, String> {
     let mut prompt = true;
     let mut paths = Vec::new();
-    for arg in args {
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
         match arg.as_str() {
             "--no-prompt" => prompt = false,
             "-h" | "--help" => return Ok(Command::Help),
+            "--" => {
+                paths.extend(args.by_ref().map(String::as_str));
+                break;
+            }
             a if a.starts_with('-') && a.len() > 1 => {
-                return Err(format!("cp does not take {a}"));
+                return Err(format!(
+                    "cp does not take {a}; put -- before a path that starts with -"
+                ));
             }
             _ => paths.push(arg.as_str()),
         }
@@ -287,6 +294,18 @@ mod tests {
                 prompt: false,
             })
         );
+        assert_eq!(
+            parse_words(&["cp", "--", "-report.txt", "db:"]),
+            Ok(Command::Copy {
+                source: Place::Local("-report.txt".into()),
+                target: Place::Remote {
+                    host: "db".into(),
+                    path: String::new()
+                },
+                prompt: true,
+            })
+        );
+        assert!(parse_words(&["cp", "-report.txt", "db:"]).is_err());
         assert!(parse_words(&["cp", "a", "b"]).is_err());
         assert!(parse_words(&["cp", "db:a", "web:b"]).is_err());
         assert!(parse_words(&["cp", "db:a"]).is_err());
