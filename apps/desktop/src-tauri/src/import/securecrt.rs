@@ -47,15 +47,17 @@ pub(super) fn read(path: Option<&Path>) -> AppResult<Source> {
 
 /// The configuration folder, when known, and the sessions folder for a chosen folder: the
 /// configuration folder, its `Sessions` folder, or the `VanDyke` folder with a `Config` folder.
-/// A session folder may also be called `Sessions`, so a sessions folder, which holds the default
-/// session's `Default.ini`, is not looked into.
+/// A session folder may also be called `Sessions`, so a sessions folder, called `Sessions` or
+/// holding the default session's `Default.ini`, is not looked into.
 fn folders(chosen: &Path) -> (Option<PathBuf>, PathBuf) {
-    let is_sessions = |dir: &Path| {
-        ["Default.ini", "__FolderData__.ini"]
+    let named_sessions = chosen
+        .file_name()
+        .is_some_and(|n| n.eq_ignore_ascii_case("Sessions"));
+    let is_sessions = named_sessions
+        || ["Default.ini", "__FolderData__.ini"]
             .iter()
-            .any(|f| dir.join(f).is_file())
-    };
-    if !is_sessions(chosen) {
+            .any(|f| chosen.join(f).is_file());
+    if !is_sessions {
         for config in [chosen.to_path_buf(), chosen.join("Config")] {
             let sessions = config.join("Sessions");
             if sessions.is_dir() {
@@ -63,9 +65,7 @@ fn folders(chosen: &Path) -> (Option<PathBuf>, PathBuf) {
             }
         }
     }
-    let config = chosen
-        .file_name()
-        .is_some_and(|n| n.eq_ignore_ascii_case("Sessions"))
+    let config = named_sessions
         .then(|| chosen.parent().map(Path::to_path_buf))
         .flatten();
     (config, chosen.to_path_buf())
@@ -159,7 +159,12 @@ fn read_sessions(root: &Path, config: Option<&Path>) -> AppResult<Vec<Entry>> {
         let Some(name) = file_name
             .len()
             .checked_sub(".ini".len())
-            .filter(|&at| at > 0 && file_name[at..].eq_ignore_ascii_case(".ini"))
+            .filter(|&at| {
+                at > 0
+                    && file_name
+                        .get(at..)
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case(".ini"))
+            })
             .map(|at| file_name[..at].to_owned())
         else {
             continue;
@@ -631,6 +636,9 @@ mod tests {
             "S:\"Protocol Name\"=Serial\r\nS:\"Com Port\"=COM3\r\n",
         );
         config.write("Sessions/readme.txt", "S:\"Hostname\"=not a session\r\n");
+        // Names whose last four bytes do not start at a character.
+        config.write("Sessions/文文", "");
+        config.write("Sessions/生产/备份.ini.bak", "");
 
         let from_config = read(Some(&config.0)).unwrap();
         let from_sessions = read(Some(&config.0.join("Sessions"))).unwrap();
@@ -693,9 +701,14 @@ mod tests {
             "Sessions/Sessions/cache.ini",
             &session("S:\"Hostname\"=cache.example.org\r\n"),
         );
-        let source = read(Some(&config.0.join("Sessions"))).unwrap();
-        let ids: Vec<&str> = source.entries.iter().map(|e| e.id.as_str()).collect();
-        assert_eq!(ids, ["Sessions/cache", "web"]);
+        let ids = || -> Vec<String> {
+            let source = read(Some(&config.0.join("Sessions"))).unwrap();
+            source.entries.into_iter().map(|e| e.id).collect()
+        };
+        assert_eq!(ids(), ["Sessions/cache", "web"]);
+        // A copy without the default session, told by its name.
+        std::fs::remove_file(config.0.join("Sessions").join("Default.ini")).unwrap();
+        assert_eq!(ids(), ["Sessions/cache", "web"]);
     }
 
     #[test]
