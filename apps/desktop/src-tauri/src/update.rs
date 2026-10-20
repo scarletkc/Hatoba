@@ -112,12 +112,12 @@ async fn check_with<R: Runtime>(
 /// Downloads the update the last check found, checks its signature, and runs its installer,
 /// which closes Hatoba and starts the new version. Returns only when that fails.
 pub async fn install(app: &AppHandle, progress: &Channel<UpdateProgress>) -> AppResult<()> {
-    if let Some(manager) = package_manager(app) {
+    if package_manager(app).is_some() {
         // The installer would put a second copy beside the package manager's, or overwrite its
         // files.
-        return Err(AppError::internal(format!(
-            "{manager:?} installed Hatoba and updates it"
-        )));
+        return Err(AppError::internal(
+            "a package manager installed Hatoba and updates it",
+        ));
     }
     let state = app.state::<AppState>();
     let update = state
