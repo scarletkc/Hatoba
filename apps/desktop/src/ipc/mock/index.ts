@@ -13,6 +13,7 @@ import type {
   SshErrorKind,
   StarPrompt,
   SyncStatus,
+  TunnelForwardView,
   TunnelsEvent,
   VaultStatus,
 } from "../types";
@@ -138,7 +139,7 @@ export function createMockApi(): HatobaApi {
    * opens, as a network failure would.
    */
   const tunnelDemo = q.get("tunnel");
-  const tunnels = new Map<string, { name: string; forwards: Map<string, { port: number; dest: string }> }>();
+  const tunnels = new Map<string, { name: string; forwards: Map<string, Omit<TunnelForwardView, "forward_id">> }>();
   let tunnelVersion = 0;
   const tunnelList = (): TunnelsEvent => ({
     version: tunnelVersion,
@@ -148,8 +149,8 @@ export function createMockApi(): HatobaApi {
         host_id,
         host_name: t.name,
         forwards: [...t.forwards.entries()]
-          .map(([forward_id, f]) => ({ forward_id, local_port: f.port, dest: f.dest }))
-          .sort((a, b) => a.local_port - b.local_port),
+          .map(([forward_id, f]) => ({ forward_id, ...f }))
+          .sort((a, b) => a.port - b.port),
       })),
   });
   const tunnelsChanged = () => {
@@ -761,7 +762,7 @@ export function createMockApi(): HatobaApi {
       for (const f of forwards.filter((x) => x.host_id === hostId && x.auto_start && !tunnels.get(hostId)?.forwards.has(x.id))) {
         const port = f.bind_port || 49152 + Math.floor(Math.random() * 1000);
         activeForwards.set(`${sid}/${f.id}`, port);
-        emit("ssh://forward", { session_id: sid, forward_id: f.id, state: "running", local_port: port, error: null });
+        emit("ssh://forward", { session_id: sid, forward_id: f.id, state: "running", port, error: null });
       }
       return sid;
     },
@@ -925,7 +926,12 @@ export function createMockApi(): HatobaApi {
 
     forwards_list: async (hostId) => forwards.filter((f) => f.host_id === hostId),
     forward_save: async (input) => {
-      const f: ForwardView = { ...input, id: input.id ?? id("f"), bind_address: input.bind_address || "127.0.0.1" };
+      const f: ForwardView = {
+        ...input,
+        id: input.id ?? id("f"),
+        bind_address: input.bind_address || (input.kind === "remote" ? "localhost" : "127.0.0.1"),
+        ...(input.kind === "dynamic" && { dest_host: "", dest_port: 0 }),
+      };
       forwards = input.id ? forwards.map((x) => (x.id === f.id ? f : x)) : [...forwards, f];
       touch();
       return f;
@@ -940,12 +946,12 @@ export function createMockApi(): HatobaApi {
       const f = forwards.find((x) => x.id === fid) ?? fail("not_found");
       const port = f.bind_port || 49152 + Math.floor(Math.random() * 1000);
       activeForwards.set(`${sid}/${fid}`, port);
-      emit("ssh://forward", { session_id: sid, forward_id: fid, state: "running", local_port: port, error: null });
+      emit("ssh://forward", { session_id: sid, forward_id: fid, state: "running", port, error: null });
       return port;
     },
     forward_stop: async (sid, fid) => {
       activeForwards.delete(`${sid}/${fid}`);
-      emit("ssh://forward", { session_id: sid, forward_id: fid, state: "stopped", local_port: null, error: null });
+      emit("ssh://forward", { session_id: sid, forward_id: fid, state: "stopped", port: null, error: null });
     },
     forwards_active: async (sid) =>
       [...activeForwards.entries()].filter(([k]) => k.startsWith(`${sid}/`)).map(([k, port]) => [k.split("/")[1], port] as [string, number]),
@@ -977,8 +983,13 @@ export function createMockApi(): HatobaApi {
       const running = t.forwards.get(fid);
       if (running) return running.port;
       const port = f.bind_port || 49152 + Math.floor(Math.random() * 1000);
-      const dest = `${f.dest_host.includes(":") ? `[${f.dest_host}]` : f.dest_host}:${f.dest_port}`;
-      t.forwards.set(fid, { port, dest });
+      const hostPort = (host: string, p: number) => `${host.includes(":") ? `[${host}]` : host}:${p}`;
+      t.forwards.set(fid, {
+        kind: f.kind,
+        port,
+        listen: hostPort(f.kind === "remote" ? f.bind_address : "localhost", port),
+        dest: f.kind === "dynamic" ? "" : hostPort(f.dest_host, f.dest_port),
+      });
       tunnelsChanged();
       return port;
     },

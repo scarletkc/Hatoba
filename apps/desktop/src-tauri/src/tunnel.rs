@@ -6,12 +6,12 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use hatoba_core::model::{ForwardKind, Item, PortForward};
+use hatoba_core::model::{Item, PortForward};
 use hatoba_ssh::{ConnectConfig, SshSession};
 use tauri::AppHandle;
 use tauri_specta::Event;
 
-use crate::dto::{TunnelForwardView, TunnelLostEvent, TunnelView, TunnelsEvent};
+use crate::dto::{TunnelLostEvent, TunnelView, TunnelsEvent};
 use crate::error::{AppError, AppResult};
 use crate::ssh::{LiveSession, Overrides, build_config, connect_with};
 use crate::state::{AppState, now_ms, state};
@@ -35,12 +35,12 @@ impl Tunnels {
     }
 }
 
-/// The host's saved local forward.
+/// The host's saved forward.
 fn saved_forward(state: &AppState, host_id: &str, forward_id: &str) -> AppResult<PortForward> {
     state.with_unlocked(|v| {
         v.get(forward_id)
             .and_then(Item::as_forward)
-            .filter(|f| f.host_id == host_id && f.kind == ForwardKind::Local)
+            .filter(|f| f.host_id == host_id)
             .cloned()
             .ok_or_else(|| AppError::not_found("forward"))
     })
@@ -54,7 +54,7 @@ enum Via {
 }
 
 /// Starts the saved forward on the host's connection for forwards, connecting first when there is
-/// none, and returns the local port. A forward already running there returns its port.
+/// none, and returns the port it listens on. A forward already running there returns its port.
 pub async fn start(
     app: &AppHandle,
     host_id: &str,
@@ -108,7 +108,7 @@ pub async fn stop(app: &AppHandle, host_id: &str, forward_id: &str) {
     changed(app);
 }
 
-/// The forward's local port while it runs without a terminal.
+/// The forward's port while it runs without a terminal.
 pub fn running_port(state: &AppState, host_id: &str, forward_id: &str) -> Option<u16> {
     let (_, live) = state.ssh.tunnel_for_host(host_id)?;
     live.forward_port(forward_id)
@@ -126,15 +126,7 @@ fn snapshot(state: &AppState, version: u64) -> TunnelsEvent {
         .tunnels()
         .into_iter()
         .filter_map(|(_, live)| {
-            let forwards: Vec<TunnelForwardView> = live
-                .running_forwards()
-                .into_iter()
-                .map(|(forward_id, local_port, dest)| TunnelForwardView {
-                    forward_id,
-                    local_port,
-                    dest,
-                })
-                .collect();
+            let forwards = live.running_forwards();
             (!forwards.is_empty()).then(|| TunnelView {
                 host_id: live.host_id.clone().unwrap_or_default(),
                 host_name: live.tunnel.clone().unwrap_or_default(),

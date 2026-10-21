@@ -219,11 +219,11 @@ export const commands = {
 	forwardDelete: (id: string) => __TAURI_INVOKE<null>("forward_delete", { id }),
 	forwardStart: (sessionId: string, forwardId: string) => __TAURI_INVOKE<number>("forward_start", { sessionId, forwardId }),
 	forwardStop: (sessionId: string, forwardId: string) => __TAURI_INVOKE<null>("forward_stop", { sessionId, forwardId }),
-	/**  Forwards currently running on a session: `(forward_id, local_port)`. */
+	/**  Forwards currently running on a session: `(forward_id, port)`. */
 	forwardsActive: (sessionId: string) => __TAURI_INVOKE<([string, number])[]>("forwards_active", { sessionId }),
 	/**
 	 *  FWD-05: starts the saved forward without a terminal, on the host's connection for forwards,
-	 *  and returns the local port.
+	 *  and returns the port it listens on.
 	 */
 	tunnelForwardStart: (hostId: string, forwardId: string, options: TunnelOptions) => __TAURI_INVOKE<number>("tunnel_forward_start", { hostId, forwardId, options }),
 	/**
@@ -1639,12 +1639,23 @@ export type FileEntry = {
 export type ForwardInput = {
 	id: string | null,
 	host_id: string,
+	kind: ForwardKind,
 	bind_address: string,
 	bind_port: number,
+	/**  Ignored for a dynamic forward. */
 	dest_host: string,
 	dest_port: number,
 	auto_start: boolean,
 };
+
+/**  Which way a forward goes. */
+export type ForwardKind = 
+/**  `ssh -L`: listens on this computer, and the server connects to the destination. */
+"local" | 
+/**  `ssh -R`: listens on the server, and this computer connects to the destination. */
+"remote" | 
+/**  `ssh -D`: a SOCKS proxy on this computer, whose connections the server opens. */
+"dynamic";
 
 export type ForwardState = "running" | "stopped" | "failed";
 
@@ -1653,17 +1664,28 @@ export type ForwardStatusEvent = {
 	session_id: string,
 	forward_id: string,
 	state: ForwardState,
-	/**  The actually bound local port (differs from `bind_port` when it was 0). */
-	local_port: number | null,
+	/**
+	 *  The port it actually listens on (differs from `bind_port` when that was 0), on the server
+	 *  for a remote forward.
+	 */
+	port: number | null,
 	error: string | null,
 };
 
-/**  A saved local (`-L`) forward. Remote and dynamic forwards are P2. */
+/**
+ *  A saved forward. The bind address and port are on this computer, or on the server for a
+ *  remote forward.
+ */
 export type ForwardView = {
 	id: string,
 	host_id: string,
+	kind: ForwardKind,
 	bind_address: string,
 	bind_port: number,
+	/**
+	 *  As the server reaches it, or as this computer does for a remote forward; empty and 0 for
+	 *  a dynamic one.
+	 */
 	dest_host: string,
 	dest_port: number,
 	auto_start: boolean,
@@ -2491,6 +2513,10 @@ export type TrayMenuInput = {
 	forwards: string,
 	copy_address: string,
 	stop_forward: string,
+	/**  Where a remote forward listens, with `{addr}` for its address on the server (FWD-03). */
+	on_server: string,
+	/**  What a dynamic forward is (FWD-04). */
+	socks_proxy: string,
 };
 
 /**  WIN-10: the tray menu's **Update to vX.Y.Z** was clicked. */
@@ -2499,9 +2525,21 @@ export type TrayUpdateEvent = null;
 /**  FWD-05: a forward running without a terminal. */
 export type TunnelForwardView = {
 	forward_id: string,
-	/**  The actually bound local port (differs from `bind_port` when it was 0). */
-	local_port: number,
-	/**  `host:port`, as the server reaches it. */
+	kind: ForwardKind,
+	/**
+	 *  The port it actually listens on (differs from `bind_port` when that was 0), on the server
+	 *  for a remote forward.
+	 */
+	port: number,
+	/**
+	 *  `host:port` it listens on: `localhost:port` on this computer, or the bind address on the
+	 *  server for a remote forward.
+	 */
+	listen: string,
+	/**
+	 *  `host:port` it leads to, as the server reaches it, or as this computer does for a remote
+	 *  forward; empty for a dynamic one.
+	 */
 	dest: string,
 };
 
@@ -2529,7 +2567,7 @@ export type TunnelView = {
 	host_id: string,
 	/**  The host's name when the connection was made. */
 	host_name: string,
-	/**  By local port. */
+	/**  By port. */
 	forwards: TunnelForwardView[],
 };
 

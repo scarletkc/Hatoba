@@ -6,8 +6,9 @@
 //! locks the vault and quits, and a left click opens the window (Linux shows the menu instead).
 //! While a check has found a newer release, it also offers **Update to vX.Y.Z**, which opens the
 //! window to install it from Settings → About. The forwards running without a terminal (FWD-05)
-//! follow under **Port Forwarding**, each with its address to copy and **Stop**. The WebView sets
-//! the menu's labels, so they follow the app's language.
+//! follow under **Port Forwarding**, each with **Stop**, and with its address to copy when it
+//! listens on this computer. The WebView sets the menu's labels, so they follow the app's
+//! language.
 //!
 //! macOS keeps its own close button, which hides the window (MAC-06), and the Dock, so it has no
 //! tray.
@@ -28,8 +29,8 @@ mod imp {
     use tauri_specta::Event;
 
     use crate::dto::{
-        CloseAction, ClosePromptEvent, LocalPrefs, LockReason, TrayMenuInput, TrayUpdateEvent,
-        TunnelView,
+        CloseAction, ClosePromptEvent, ForwardKind, LocalPrefs, LockReason, TrayMenuInput,
+        TrayUpdateEvent, TunnelForwardView, TunnelView,
     };
     use crate::state::AppState;
     use crate::{lock, platform};
@@ -56,6 +57,9 @@ mod imp {
         heading: String,
         copy: String,
         stop: String,
+        /// With `{addr}` for where a remote forward listens on the server.
+        on_server: String,
+        socks: String,
         /// Of the `tunnels` list (`TunnelsEvent::version`).
         version: u64,
         tunnels: Vec<TunnelView>,
@@ -154,6 +158,8 @@ mod imp {
                 heading: "Port Forwarding".to_owned(),
                 copy: "Copy Address".to_owned(),
                 stop: "Stop".to_owned(),
+                on_server: "{addr} on the server".to_owned(),
+                socks: "SOCKS proxy".to_owned(),
                 version: 0,
                 tunnels: Vec::new(),
                 items: Vec::new(),
@@ -189,15 +195,19 @@ mod imp {
             }
             None => {}
         }
-        let (heading, copy, stop) = (
+        let (heading, copy, stop, on_server, socks) = (
             menu.forwards.clone(),
             menu.copy_address.clone(),
             menu.stop_forward.clone(),
+            menu.on_server.clone(),
+            menu.socks_proxy.clone(),
         );
         on_forwards(app, move |forwards| {
             forwards.heading = heading;
             forwards.copy = copy;
             forwards.stop = stop;
+            forwards.on_server = on_server;
+            forwards.socks = socks;
         });
     }
 
@@ -262,13 +272,17 @@ mod imp {
         let mut items = vec![MenuItemKind::MenuItem(heading)];
         for tunnel in &forwards.tunnels {
             for forward in &tunnel.forwards {
-                let address = format!("localhost:{}", forward.local_port);
-                let copy_id = format!("{FORWARD_COPY}{address}");
-                let copy = MenuItem::with_id(app, copy_id, &forwards.copy, true, None::<&str>)?;
                 let stop_id = format!("{FORWARD_STOP}{}:{}", tunnel.host_id, forward.forward_id);
                 let stop = MenuItem::with_id(app, stop_id, &forwards.stop, true, None::<&str>)?;
-                let label = format!("{}  {address} → {}", tunnel.host_name, forward.dest);
-                let entry = Submenu::with_items(app, label, true, &[&copy, &stop])?;
+                let label = format!("{}  {}", tunnel.host_name, addresses(forwards, forward));
+                // A remote forward's address is on the server: nothing here connects to it.
+                let entry = if forward.kind == ForwardKind::Remote {
+                    Submenu::with_items(app, label, true, &[&stop])?
+                } else {
+                    let copy_id = format!("{FORWARD_COPY}{}", forward.listen);
+                    let copy = MenuItem::with_id(app, copy_id, &forwards.copy, true, None::<&str>)?;
+                    Submenu::with_items(app, label, true, &[&copy, &stop])?
+                };
                 items.push(MenuItemKind::Submenu(entry));
             }
         }
@@ -276,6 +290,19 @@ mod imp {
             app,
         )?));
         Ok(items)
+    }
+
+    /// Where a running forward listens and where it leads.
+    fn addresses(forwards: &Forwards, forward: &TunnelForwardView) -> String {
+        match forward.kind {
+            ForwardKind::Local => format!("{} → {}", forward.listen, forward.dest),
+            ForwardKind::Remote => format!(
+                "{} → {}",
+                forwards.on_server.replace("{addr}", &forward.listen),
+                forward.dest
+            ),
+            ForwardKind::Dynamic => format!("{} ({})", forward.listen, forwards.socks),
+        }
     }
 
     /// A running forward's **Copy Address** or **Stop**.

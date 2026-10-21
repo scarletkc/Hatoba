@@ -66,13 +66,13 @@ export function useHostTunnel(hostId: string | null): TunnelView | undefined {
   return useStore((s) => (hostId ? s.tunnels.find((x) => x.host_id === hostId) : undefined));
 }
 
-/** The forward's local port while it runs without a terminal. */
+/** The forward's port while it runs without a terminal: on the server for a remote forward. */
 export function tunnelPort(tunnel: TunnelView | undefined, forwardId: string): number | null {
-  return tunnel?.forwards.find((f) => f.forward_id === forwardId)?.local_port ?? null;
+  return tunnel?.forwards.find((f) => f.forward_id === forwardId)?.port ?? null;
 }
 
 /**
- * Starts a saved forward without a terminal and resolves to its local port, or to null when the user cancels a
+ * Starts a saved forward without a terminal and resolves to its port, or to null when the user cancels a
  * question. The host's first one connects, asking what its sign-in needs as a terminal does (SSH-03).
  */
 export async function startTunnelForward(hostId: string, forwardId: string): Promise<number | null> {

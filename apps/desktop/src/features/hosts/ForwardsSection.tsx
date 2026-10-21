@@ -22,6 +22,7 @@ export function hostPort(host: string, port: number | string): string {
 const toInput = (f: ForwardView, patch: Partial<ForwardInput> = {}): ForwardInput => ({
   id: f.id,
   host_id: f.host_id,
+  kind: f.kind,
   bind_address: f.bind_address,
   bind_port: f.bind_port,
   dest_host: f.dest_host,
@@ -87,7 +88,7 @@ export function ForwardsSection({ hostId }: { hostId: string | null }) {
     if (port !== null) return { localPort: port, sessionId: null };
     for (const sessionId of hostId ? hostSessionIds(hostId) : []) {
       const run = bySession[sessionId]?.[f.id];
-      if (run?.state === "running" && run.localPort !== null) return { localPort: run.localPort, sessionId };
+      if (run?.state === "running" && run.port !== null) return { localPort: run.port, sessionId };
     }
     return null;
   };

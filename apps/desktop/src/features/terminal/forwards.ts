@@ -2,10 +2,11 @@ import { create } from "zustand";
 import { api } from "@/ipc/api";
 import type { ForwardState, ForwardStatusEvent } from "@/ipc/types";
 
-/** What one session knows about one saved forward (FWD-01/02). Forwards without an entry are stopped. */
+/** What one session knows about one saved forward (FWD-01..04). Forwards without an entry are stopped. */
 export interface ForwardRun {
   state: ForwardState;
-  localPort: number | null;
+  /** Where it listens while it runs: on the server for a remote forward. */
+  port: number | null;
   error: string | null;
   /** Ordering stamp, so a late `forwards_active` snapshot never overwrites a newer event. */
   seq: number;
@@ -40,19 +41,19 @@ function put(sessionId: string, forwardId: string, run: Omit<ForwardRun, "seq">)
 export function applyForwardEvent(ev: ForwardStatusEvent) {
   put(ev.session_id, ev.forward_id, {
     state: ev.state,
-    localPort: ev.state === "running" ? ev.local_port : null,
+    port: ev.state === "running" ? ev.port : null,
     error: ev.state === "failed" ? ev.error : null,
   });
 }
 
-export const markForwardRunning = (sessionId: string, forwardId: string, localPort: number) =>
-  put(sessionId, forwardId, { state: "running", localPort, error: null });
+export const markForwardRunning = (sessionId: string, forwardId: string, port: number) =>
+  put(sessionId, forwardId, { state: "running", port, error: null });
 
 export const markForwardStopped = (sessionId: string, forwardId: string) =>
-  put(sessionId, forwardId, { state: "stopped", localPort: null, error: null });
+  put(sessionId, forwardId, { state: "stopped", port: null, error: null });
 
 export const markForwardFailed = (sessionId: string, forwardId: string, error: string) =>
-  put(sessionId, forwardId, { state: "failed", localPort: null, error });
+  put(sessionId, forwardId, { state: "failed", port: null, error });
 
 /**
  * Initial state of a session that just connected: auto-start forwards may already be running and
@@ -69,9 +70,9 @@ export async function syncActiveForwards(sessionId: string): Promise<void> {
   if (ended.has(sessionId)) return;
   useStore.setState((s) => {
     const runs: Record<string, ForwardRun> = { ...(s.bySession[sessionId] ?? NONE) };
-    for (const [forwardId, localPort] of active) {
+    for (const [forwardId, port] of active) {
       if ((runs[forwardId]?.seq ?? 0) > before) continue; // an event newer than this request wins
-      runs[forwardId] = { state: "running", localPort, error: null, seq: ++seq };
+      runs[forwardId] = { state: "running", port, error: null, seq: ++seq };
     }
     return { bySession: { ...s.bySession, [sessionId]: runs } };
   });

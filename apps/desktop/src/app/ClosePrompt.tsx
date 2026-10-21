@@ -83,6 +83,8 @@ export function useTrayMenu() {
         forwards: translate(locale, "terminal.fwd"),
         copy_address: translate(locale, "hosts.menu.copyAddress"),
         stop_forward: translate(locale, "terminal.fwd.stop"),
+        on_server: translate(locale, "terminal.fwd.onServer", { addr: "{addr}" }),
+        socks_proxy: translate(locale, "terminal.fwd.socks"),
       })
       .catch(() => {});
   }, [locale, unlocked, version, installing]);

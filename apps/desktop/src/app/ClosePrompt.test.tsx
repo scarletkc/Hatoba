@@ -152,6 +152,8 @@ describe("useTrayMenu", () => {
         forwards: "Port Forwarding",
         copy_address: "Copy Address",
         stop_forward: "Stop",
+        on_server: "{addr} on the server",
+        socks_proxy: "SOCKS proxy",
       },
     ]);
   });

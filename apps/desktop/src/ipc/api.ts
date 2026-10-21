@@ -244,16 +244,16 @@ export interface HatobaApi {
   /** Ends the shell and the console programs it started. */
   local_close(session_id: string): Promise<void>;
 
-  // port forwarding (FWD-01/02)
+  // port forwarding (FWD-01..05)
   forwards_list(host_id: string): Promise<ForwardView[]>;
   forward_save(input: ForwardInput): Promise<ForwardView>;
   forward_delete(id: string): Promise<void>;
-  /** Starts a saved forward on a live session; resolves to the bound local port. */
+  /** Starts a saved forward on a live session; resolves to the port it listens on (on the server for a remote forward). */
   forward_start(session_id: string, forward_id: string): Promise<number>;
   forward_stop(session_id: string, forward_id: string): Promise<void>;
-  /** `[forward_id, local_port]` pairs running on a session. */
+  /** `[forward_id, port]` pairs running on a session. */
   forwards_active(session_id: string): Promise<[string, number][]>;
-  /** FWD-05: starts a saved forward without a terminal, on the host's own connection; resolves to the local port. */
+  /** FWD-05: starts a saved forward without a terminal, on the host's own connection; resolves to the port it listens on. */
   tunnel_forward_start(host_id: string, forward_id: string, options: TunnelOptions): Promise<number>;
   /** FWD-05: the host's connection for forwards closes with its last one. */
   tunnel_forward_stop(host_id: string, forward_id: string): Promise<void>;

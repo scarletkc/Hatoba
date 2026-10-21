@@ -26,6 +26,8 @@ export default defineMessages({
     "terminal.fwd.copied": "已复制 {addr}",
     "terminal.fwd.manage": "管理端口转发…",
     "terminal.fwd.inBackground": "在后台运行",
+    "terminal.fwd.onServer": "服务器上的 {addr}",
+    "terminal.fwd.socks": "SOCKS 代理",
 
     // resource usage (TERM-12)
     "terminal.stats": "资源占用",
@@ -214,6 +216,8 @@ export default defineMessages({
     "terminal.fwd.copied": "Copied {addr}",
     "terminal.fwd.manage": "Manage Port Forwarding…",
     "terminal.fwd.inBackground": "In the background",
+    "terminal.fwd.onServer": "{addr} on the server",
+    "terminal.fwd.socks": "SOCKS proxy",
 
     // resource usage (TERM-12)
     "terminal.stats": "Resource Usage",
@@ -397,6 +401,8 @@ export default defineMessages({
     "terminal.fwd.copied": "{addr} をコピーしました",
     "terminal.fwd.manage": "ポートフォワーディングを管理…",
     "terminal.fwd.inBackground": "バックグラウンドで実行中",
+    "terminal.fwd.onServer": "サーバーの {addr}",
+    "terminal.fwd.socks": "SOCKS プロキシ",
 
     // resource usage (TERM-12)
     "terminal.stats": "リソース使用状況",

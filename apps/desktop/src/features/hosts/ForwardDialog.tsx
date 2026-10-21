@@ -1,11 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { errorMessage } from "@/app/errors";
-import { Button, Checkbox, Icon, TextField } from "@/components/controls";
+import { Button, Checkbox, Icon, Segmented, TextField } from "@/components/controls";
 import { FormRow, Group } from "@/components/layout";
 import { FooterSpacer, Sheet, SheetHeader } from "@/components/overlay";
-import { useT } from "@/i18n";
+import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
-import type { ForwardView } from "@/ipc/types";
+import type { ForwardKind, ForwardView } from "@/ipc/types";
 import s from "./ForwardDialog.module.css";
 
 type FieldKey = "bind_address" | "bind_port" | "dest_host" | "dest_port";
@@ -13,6 +13,13 @@ type Errors = Partial<Record<FieldKey, string>>;
 
 const FIELDS: readonly string[] = ["bind_address", "bind_port", "dest_host", "dest_port"];
 const LABEL_COLUMN = "120px minmax(0,1fr)";
+const KINDS: readonly ForwardKind[] = ["local", "remote", "dynamic"];
+
+const KIND_TEXT: Record<ForwardKind, { label: MessageKey; subtitle: MessageKey }> = {
+  local: { label: "hosts.fwd.kind.local", subtitle: "hosts.fwd.dialog.subtitle" },
+  remote: { label: "hosts.fwd.kind.remote", subtitle: "hosts.fwd.dialog.subtitleRemote" },
+  dynamic: { label: "hosts.fwd.kind.dynamic", subtitle: "hosts.fwd.dialog.subtitleDynamic" },
+};
 
 /** A whole number in [min, 65535]. */
 const validPort = (text: string, min: number) => {
@@ -26,7 +33,13 @@ const exposesPort = (address: string) => {
   return a !== "" && a !== "localhost" && a !== "::1" && !a.startsWith("127.");
 };
 
-/** Add / edit one local forward (FWD-01, FWD-02). Saved straight to the backend, not with the host form. */
+/** Where a new forward listens: a remote one where `ssh -R` does. */
+const defaultBind = (kind: ForwardKind) => (kind === "remote" ? "localhost" : "127.0.0.1");
+
+/**
+ * Add / edit one forward: local (FWD-01), remote (FWD-03) or dynamic SOCKS (FWD-04), and whether it starts with the
+ * connection (FWD-02). Saved straight to the backend, not with the host form.
+ */
 export function ForwardDialog({
   hostId,
   forward,
@@ -41,10 +54,12 @@ export function ForwardDialog({
   const t = useT();
   const ids = { form: useId(), bind: useId(), bindPort: useId(), dest: useId(), destPort: useId() };
   const bindPortRef = useRef<HTMLInputElement>(null);
-  const [bindAddress, setBindAddress] = useState(forward?.bind_address ?? "127.0.0.1");
+  const [kind, setKind] = useState<ForwardKind>(forward?.kind ?? "local");
+  const [bindAddress, setBindAddress] = useState(forward?.bind_address ?? defaultBind("local"));
   const [bindPort, setBindPort] = useState(forward ? String(forward.bind_port) : "");
-  const [destHost, setDestHost] = useState(forward?.dest_host ?? "127.0.0.1");
-  const [destPort, setDestPort] = useState(forward ? String(forward.dest_port) : "");
+  // A dynamic forward has no destination: one changed to another kind starts from the usual one.
+  const [destHost, setDestHost] = useState(forward?.dest_host || "127.0.0.1");
+  const [destPort, setDestPort] = useState(forward?.dest_port ? String(forward.dest_port) : "");
   const [autoStart, setAutoStart] = useState(forward?.auto_start ?? false);
   const [errors, setErrors] = useState<Errors>({});
   const [general, setGeneral] = useState<string | null>(null);
@@ -55,17 +70,28 @@ export function ForwardDialog({
     if (!forward) bindPortRef.current?.focus();
   }, [forward]);
 
+  const remote = kind === "remote";
+  const hasDest = kind !== "dynamic";
+
   const clear = (field: FieldKey) => {
     setErrors((e) => (e[field] ? { ...e, [field]: undefined } : e));
     setGeneral(null);
   };
 
+  const changeKind = (next: ForwardKind) => {
+    // An address left at one kind's default moves to the next one's.
+    if (bindAddress.trim() === defaultBind(kind)) setBindAddress(defaultBind(next));
+    setKind(next);
+    setErrors({});
+    setGeneral(null);
+  };
+
   const validate = (): Errors => {
     const e: Errors = {};
-    if (!bindAddress.trim()) e.bind_address = t("hosts.fwd.err.bindRequired");
-    if (!validPort(bindPort, 0)) e.bind_port = t("hosts.fwd.err.localPort");
-    if (!destHost.trim()) e.dest_host = t("hosts.fwd.err.destRequired");
-    if (!validPort(destPort, 1)) e.dest_port = t("hosts.fwd.err.destPort");
+    if (!bindAddress.trim()) e.bind_address = t(remote ? "hosts.fwd.err.serverBindRequired" : "hosts.fwd.err.bindRequired");
+    if (!validPort(bindPort, 0)) e.bind_port = t(remote ? "hosts.fwd.err.serverPort" : "hosts.fwd.err.localPort");
+    if (hasDest && !destHost.trim()) e.dest_host = t("hosts.fwd.err.destRequired");
+    if (hasDest && !validPort(destPort, 1)) e.dest_port = t("hosts.fwd.err.destPort");
     return e;
   };
 
@@ -94,10 +120,11 @@ export function ForwardDialog({
       const saved = await api.forward_save({
         id: forward?.id ?? null,
         host_id: hostId,
+        kind,
         bind_address: bindAddress.trim(),
         bind_port: Number(bindPort),
-        dest_host: destHost.trim(),
-        dest_port: Number(destPort),
+        dest_host: hasDest ? destHost.trim() : "",
+        dest_port: hasDest ? Number(destPort) : 0,
         auto_start: autoStart,
       });
       onSaved(saved);
@@ -116,7 +143,7 @@ export function ForwardDialog({
   };
 
   const exposed = exposesPort(bindAddress);
-  const localError = [errors.bind_address, errors.bind_port].filter(Boolean).join(" ");
+  const bindError = [errors.bind_address, errors.bind_port].filter(Boolean).join(" ");
   const destError = [errors.dest_host, errors.dest_port].filter(Boolean).join(" ");
 
   return (
@@ -137,7 +164,7 @@ export function ForwardDialog({
     >
       <SheetHeader
         title={forward ? t("hosts.fwd.dialog.editTitle") : t("hosts.fwd.dialog.addTitle")}
-        subtitle={t("hosts.fwd.dialog.subtitle")}
+        subtitle={t(KIND_TEXT[kind].subtitle)}
       />
       {/* Keys stay inside the dialog: the host editor behind it saves on Enter (React events bubble through portals). */}
       <form
@@ -157,7 +184,15 @@ export function ForwardDialog({
           </div>
         )}
         <Group>
-          <FormRow label={t("hosts.fwd.f.local")} htmlFor={ids.bind} columns={LABEL_COLUMN} top>
+          <FormRow label={t("hosts.fwd.f.kind")} columns={LABEL_COLUMN}>
+            <Segmented<ForwardKind>
+              ariaLabel={t("hosts.fwd.f.kind")}
+              value={kind}
+              options={KINDS.map((k) => ({ value: k, label: t(KIND_TEXT[k].label) }))}
+              onChange={changeKind}
+            />
+          </FormRow>
+          <FormRow label={t(remote ? "hosts.fwd.f.server" : "hosts.fwd.f.local")} htmlFor={ids.bind} columns={LABEL_COLUMN} top>
             <div className={s.stack}>
               <div className={s.addrRow}>
                 <TextField
@@ -187,57 +222,59 @@ export function ForwardDialog({
                   }}
                 />
               </div>
-              {localError ? (
+              {bindError ? (
                 <div className={s.error} role="alert">
-                  {localError}
+                  {bindError}
+                </div>
+              ) : exposed ? (
+                <div className={s.warn}>
+                  <Icon name="warning" size={13} />
+                  {t(remote ? "hosts.fwd.f.gatewayPorts" : "hosts.fwd.f.exposedWarn")}
                 </div>
               ) : (
-                exposed && (
-                  <div className={s.warn}>
-                    <Icon name="warning" size={13} />
-                    {t("hosts.fwd.f.exposedWarn")}
+                kind === "dynamic" && <div className={s.hint}>{t("hosts.fwd.f.socksHint")}</div>
+              )}
+            </div>
+          </FormRow>
+          {hasDest && (
+            <FormRow label={t("hosts.fwd.f.dest")} htmlFor={ids.dest} columns={LABEL_COLUMN} top>
+              <div className={s.stack}>
+                <div className={s.addrRow}>
+                  <TextField
+                    id={ids.dest}
+                    mono
+                    value={destHost}
+                    invalid={!!errors.dest_host}
+                    onChange={(e) => {
+                      setDestHost(e.target.value);
+                      clear("dest_host");
+                    }}
+                  />
+                  <label className={s.portLabel} htmlFor={ids.destPort}>
+                    {t("hosts.f.port")}
+                  </label>
+                  <TextField
+                    id={ids.destPort}
+                    mono
+                    inputMode="numeric"
+                    value={destPort}
+                    invalid={!!errors.dest_port}
+                    onChange={(e) => {
+                      setDestPort(e.target.value);
+                      clear("dest_port");
+                    }}
+                  />
+                </div>
+                {destError ? (
+                  <div className={s.error} role="alert">
+                    {destError}
                   </div>
-                )
-              )}
-            </div>
-          </FormRow>
-          <FormRow label={t("hosts.fwd.f.dest")} htmlFor={ids.dest} columns={LABEL_COLUMN} top>
-            <div className={s.stack}>
-              <div className={s.addrRow}>
-                <TextField
-                  id={ids.dest}
-                  mono
-                  value={destHost}
-                  invalid={!!errors.dest_host}
-                  onChange={(e) => {
-                    setDestHost(e.target.value);
-                    clear("dest_host");
-                  }}
-                />
-                <label className={s.portLabel} htmlFor={ids.destPort}>
-                  {t("hosts.f.port")}
-                </label>
-                <TextField
-                  id={ids.destPort}
-                  mono
-                  inputMode="numeric"
-                  value={destPort}
-                  invalid={!!errors.dest_port}
-                  onChange={(e) => {
-                    setDestPort(e.target.value);
-                    clear("dest_port");
-                  }}
-                />
+                ) : (
+                  <div className={s.hint}>{t(remote ? "hosts.fwd.f.destHintRemote" : "hosts.fwd.f.destHint")}</div>
+                )}
               </div>
-              {destError ? (
-                <div className={s.error} role="alert">
-                  {destError}
-                </div>
-              ) : (
-                <div className={s.hint}>{t("hosts.fwd.f.destHint")}</div>
-              )}
-            </div>
-          </FormRow>
+            </FormRow>
+          )}
           <FormRow label="" columns={LABEL_COLUMN}>
             <Checkbox checked={autoStart} onChange={setAutoStart}>
               {t("hosts.fwd.f.autoStart")}

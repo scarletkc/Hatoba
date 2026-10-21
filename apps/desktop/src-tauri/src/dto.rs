@@ -1215,6 +1215,10 @@ pub struct TrayMenuInput {
     pub forwards: String,
     pub copy_address: String,
     pub stop_forward: String,
+    /// Where a remote forward listens, with `{addr}` for its address on the server (FWD-03).
+    pub on_server: String,
+    /// What a dynamic forward is (FWD-04).
+    pub socks_proxy: String,
 }
 
 /// A system notification (AI-07). The WebView sends one only while the window is not focused.
@@ -1341,15 +1345,52 @@ pub enum LockReason {
     Sleep,
 }
 
-// ───────────────────────── Port forwarding (FWD-01/02) ─────────────────────────
+// ───────────────────────── Port forwarding (FWD-01..05) ─────────────────────────
 
-/// A saved local (`-L`) forward. Remote and dynamic forwards are P2.
+/// Which way a forward goes.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ForwardKind {
+    /// `ssh -L`: listens on this computer, and the server connects to the destination.
+    Local,
+    /// `ssh -R`: listens on the server, and this computer connects to the destination.
+    Remote,
+    /// `ssh -D`: a SOCKS proxy on this computer, whose connections the server opens.
+    Dynamic,
+}
+
+impl From<hatoba_core::model::ForwardKind> for ForwardKind {
+    fn from(kind: hatoba_core::model::ForwardKind) -> Self {
+        use hatoba_core::model::ForwardKind as K;
+        match kind {
+            K::Local => Self::Local,
+            K::Remote => Self::Remote,
+            K::Dynamic => Self::Dynamic,
+        }
+    }
+}
+
+impl From<ForwardKind> for hatoba_core::model::ForwardKind {
+    fn from(kind: ForwardKind) -> Self {
+        match kind {
+            ForwardKind::Local => Self::Local,
+            ForwardKind::Remote => Self::Remote,
+            ForwardKind::Dynamic => Self::Dynamic,
+        }
+    }
+}
+
+/// A saved forward. The bind address and port are on this computer, or on the server for a
+/// remote forward.
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct ForwardView {
     pub id: String,
     pub host_id: String,
+    pub kind: ForwardKind,
     pub bind_address: String,
     pub bind_port: u16,
+    /// As the server reaches it, or as this computer does for a remote forward; empty and 0 for
+    /// a dynamic one.
     pub dest_host: String,
     pub dest_port: u16,
     pub auto_start: bool,
@@ -1359,8 +1400,10 @@ pub struct ForwardView {
 pub struct ForwardInput {
     pub id: Option<String>,
     pub host_id: String,
+    pub kind: ForwardKind,
     pub bind_address: String,
     pub bind_port: u16,
+    /// Ignored for a dynamic forward.
     pub dest_host: String,
     pub dest_port: u16,
     pub auto_start: bool,
@@ -1381,8 +1424,9 @@ pub struct ForwardStatusEvent {
     pub session_id: String,
     pub forward_id: String,
     pub state: ForwardState,
-    /// The actually bound local port (differs from `bind_port` when it was 0).
-    pub local_port: Option<u16>,
+    /// The port it actually listens on (differs from `bind_port` when that was 0), on the server
+    /// for a remote forward.
+    pub port: Option<u16>,
     pub error: Option<String>,
 }
 
@@ -1398,9 +1442,15 @@ pub struct TunnelOptions {
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct TunnelForwardView {
     pub forward_id: String,
-    /// The actually bound local port (differs from `bind_port` when it was 0).
-    pub local_port: u16,
-    /// `host:port`, as the server reaches it.
+    pub kind: ForwardKind,
+    /// The port it actually listens on (differs from `bind_port` when that was 0), on the server
+    /// for a remote forward.
+    pub port: u16,
+    /// `host:port` it listens on: `localhost:port` on this computer, or the bind address on the
+    /// server for a remote forward.
+    pub listen: String,
+    /// `host:port` it leads to, as the server reaches it, or as this computer does for a remote
+    /// forward; empty for a dynamic one.
     pub dest: String,
 }
 
@@ -1410,7 +1460,7 @@ pub struct TunnelView {
     pub host_id: String,
     /// The host's name when the connection was made.
     pub host_name: String,
-    /// By local port.
+    /// By port.
     pub forwards: Vec<TunnelForwardView>,
 }
 

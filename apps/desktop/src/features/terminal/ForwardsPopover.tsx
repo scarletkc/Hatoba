@@ -119,7 +119,7 @@ export function ForwardsPopover({
       {saved?.map((f) => {
         const own = runs[f.id];
         const port = own?.state === "running" ? null : tunnelPort(tunnel, f.id);
-        const run: ForwardRun | undefined = port === null ? own : { state: "running", localPort: port, error: null, seq: 0 };
+        const run: ForwardRun | undefined = port === null ? own : { state: "running", port, error: null, seq: 0 };
         return (
           <ForwardRow
             key={f.id}
@@ -170,9 +170,13 @@ function ForwardRow({
 }) {
   const t = useT();
   const state = run?.state ?? "stopped";
-  const running = state === "running" && run?.localPort != null;
+  const livePort = state === "running" ? (run?.port ?? null) : null;
+  const running = livePort !== null;
   const failed = state === "failed";
-  const local = running ? `localhost:${run.localPort}` : hostPort(f.bind_address, f.bind_port || t("terminal.fwd.autoPort"));
+  const port = livePort ?? (f.bind_port || t("terminal.fwd.autoPort"));
+  // A remote forward listens on the server: nothing here connects to it, so it has nothing to copy.
+  const remote = f.kind === "remote";
+  const address = running && !remote ? `localhost:${port}` : hostPort(f.bind_address, port);
 
   return (
     <div className={s.row}>
@@ -180,14 +184,14 @@ function ForwardRow({
         <Icon name={running ? "check-circle" : failed ? "warning-circle" : "circle"} fill={running || failed} />
       </span>
       <div className={s.body}>
-        {running ? (
-          <button type="button" className={cx(s.address, s.addressCopy)} title={t("terminal.fwd.copy", { addr: local })} onClick={() => onCopy(local)}>
-            {local}
+        {running && !remote ? (
+          <button type="button" className={cx(s.address, s.addressCopy)} title={t("terminal.fwd.copy", { addr: address })} onClick={() => onCopy(address)}>
+            {address}
           </button>
         ) : (
-          <span className={s.address}>{local}</span>
+          <span className={s.address}>{remote ? t("terminal.fwd.onServer", { addr: address }) : address}</span>
         )}
-        <span className={s.dest}>→ {hostPort(f.dest_host, f.dest_port)}</span>
+        <span className={s.dest}>{f.kind === "dynamic" ? t("terminal.fwd.socks") : `→ ${hostPort(f.dest_host, f.dest_port)}`}</span>
         {background && <span className={s.where}>{t("terminal.fwd.inBackground")}</span>}
         {failed && run?.error && <span className={s.error}>{run.error}</span>}
       </div>

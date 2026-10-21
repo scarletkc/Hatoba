@@ -19,7 +19,9 @@ use tokio::sync::{OnceCell, oneshot};
 use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
-use crate::dto::{AuthPrompt, AuthPromptField, HostKeyPrompt, HostKeyPromptKind};
+use crate::dto::{
+    AuthPrompt, AuthPromptField, ForwardKind, HostKeyPrompt, HostKeyPromptKind, TunnelForwardView,
+};
 use crate::error::{AppError, AppResult, SshErrorKind};
 use crate::state::{AppState, now_ms, state};
 use crate::sync;
@@ -39,16 +41,18 @@ pub struct LiveSession {
     /// FWD-05: the host's name when the connection was made, on a connection without a terminal.
     pub tunnel: Option<String>,
     pub sftp: OnceCell<SftpClient>,
-    /// Running local port forwards by forward item id (FWD-01).
+    /// Running port forwards by forward item id (FWD-01, FWD-03, FWD-04).
     forwards: Mutex<HashMap<String, RunningForward>>,
     /// Resource usage sampling while the terminal shows it (TERM-12), with the id of its start.
     stats: Mutex<Option<(u64, StatsHandle)>>,
 }
 
-/// A forward listening on this computer, and the `host:port` it reaches from the server.
-struct RunningForward {
-    handle: ForwardHandle,
-    dest: String,
+/// A running forward, and the addresses that name it (see [`TunnelForwardView`]).
+pub struct RunningForward {
+    pub handle: ForwardHandle,
+    pub kind: ForwardKind,
+    pub listen: String,
+    pub dest: String,
 }
 
 impl LiveSession {
@@ -101,10 +105,8 @@ impl LiveSession {
         }
     }
 
-    pub fn add_forward(&self, id: &str, handle: ForwardHandle, dest: String) {
-        if let Some(old) =
-            lock(&self.forwards).insert(id.to_owned(), RunningForward { handle, dest })
-        {
+    pub fn add_forward(&self, id: &str, running: RunningForward) {
+        if let Some(old) = lock(&self.forwards).insert(id.to_owned(), running) {
             old.handle.stop();
         }
     }
@@ -124,24 +126,31 @@ impl LiveSession {
         lock(&self.forwards)
             .get(id)
             .filter(|f| f.handle.is_running())
-            .map(|f| f.handle.local_port())
+            .map(|f| f.handle.port())
     }
 
+    /// The forwards running: `(forward_id, port)`.
     pub fn active_forwards(&self) -> Vec<(String, u16)> {
         self.running_forwards()
             .into_iter()
-            .map(|(id, port, _)| (id, port))
+            .map(|f| (f.forward_id, f.port))
             .collect()
     }
 
-    /// The forwards running: `(forward_id, local_port, dest)`, by local port.
-    pub fn running_forwards(&self) -> Vec<(String, u16, String)> {
+    /// The forwards running, by port.
+    pub fn running_forwards(&self) -> Vec<TunnelForwardView> {
         let mut list: Vec<_> = lock(&self.forwards)
             .iter()
             .filter(|(_, f)| f.handle.is_running())
-            .map(|(id, f)| (id.clone(), f.handle.local_port(), f.dest.clone()))
+            .map(|(id, f)| TunnelForwardView {
+                forward_id: id.clone(),
+                kind: f.kind,
+                port: f.handle.port(),
+                listen: f.listen.clone(),
+                dest: f.dest.clone(),
+            })
             .collect();
-        list.sort_by_key(|(_, port, _)| *port);
+        list.sort_by_key(|f| f.port);
         list
     }
 

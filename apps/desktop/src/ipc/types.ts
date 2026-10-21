@@ -510,15 +510,20 @@ export const FRAME_ERROR = 2;
 /** The backend session id, sent before connecting, so a tab can answer its prompts if it closes. */
 export const FRAME_SESSION = 3;
 
-// ───────────────────────── Port forwarding (FWD-01/02) ─────────────────────────
+// ───────────────────────── Port forwarding (FWD-01..05) ─────────────────────────
 
-/** A saved local (`-L`) forward. Remote / dynamic forwards are P2. */
+/** `-L` listens here (FWD-01), `-R` on the server (FWD-03), `-D` is a SOCKS proxy here (FWD-04). */
+export type ForwardKind = "local" | "remote" | "dynamic";
+
+/** A saved forward. The bind address and port are on this computer, or on the server for a remote forward. */
 export interface ForwardView {
   id: string;
   host_id: string;
+  kind: ForwardKind;
   bind_address: string;
-  /** 0 = pick a free port. */
+  /** 0 = pick a free port (the server picks for a remote forward). */
   bind_port: number;
+  /** Empty and 0 for a dynamic forward. */
   dest_host: string;
   dest_port: number;
   /** FWD-02: start whenever the host connects. */
@@ -528,6 +533,7 @@ export interface ForwardView {
 export interface ForwardInput {
   id: string | null;
   host_id: string;
+  kind: ForwardKind;
   bind_address: string;
   bind_port: number;
   dest_host: string;
@@ -541,7 +547,8 @@ export interface ForwardStatusEvent {
   session_id: string;
   forward_id: string;
   state: ForwardState;
-  local_port: number | null;
+  /** Where it listens: on the server for a remote forward. */
+  port: number | null;
   error: string | null;
 }
 
@@ -554,8 +561,12 @@ export interface TunnelOptions {
 /** FWD-05: a forward running without a terminal. */
 export interface TunnelForwardView {
   forward_id: string;
-  local_port: number;
-  /** `host:port`, as the server reaches it. */
+  kind: ForwardKind;
+  /** Where it listens: on the server for a remote forward. */
+  port: number;
+  /** `host:port` it listens on: `localhost:port` here, or the bind address on the server for a remote forward. */
+  listen: string;
+  /** `host:port` it leads to; empty for a dynamic forward. */
   dest: string;
 }
 
@@ -564,7 +575,7 @@ export interface TunnelView {
   host_id: string;
   /** The host's name when the connection was made. */
   host_name: string;
-  /** By local port. */
+  /** By port. */
   forwards: TunnelForwardView[];
 }
 
@@ -907,6 +918,10 @@ export interface TrayMenuInput {
   forwards: string;
   copy_address: string;
   stop_forward: string;
+  /** FWD-03: where a remote forward listens, with `{addr}` for its address on the server. */
+  on_server: string;
+  /** FWD-04: what a dynamic forward is. */
+  socks_proxy: string;
 }
 
 /** AI-07: a system notification, sent only while the window is not focused. */

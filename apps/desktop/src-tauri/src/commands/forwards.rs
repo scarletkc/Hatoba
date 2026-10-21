@@ -1,8 +1,8 @@
-//! Local port forwarding (FWD-01), auto-start with the connection (FWD-02), and forwards that run
-//! without a terminal (FWD-05).
+//! Port forwarding: local (FWD-01), remote (FWD-03) and dynamic SOCKS (FWD-04), auto-start with
+//! the connection (FWD-02), and forwards that run without a terminal (FWD-05).
 
 use hatoba_core::model::{ForwardKind, Item, PortForward};
-use hatoba_ssh::LocalForward;
+use hatoba_ssh::{DynamicForward, LocalForward, RemoteForward};
 use tauri::{AppHandle, State};
 use tauri_specta::Event;
 use zeroize::Zeroizing;
@@ -11,7 +11,7 @@ use crate::dto::{
     ForwardInput, ForwardState, ForwardStatusEvent, ForwardView, TunnelOptions, TunnelsEvent,
 };
 use crate::error::{AppError, AppResult};
-use crate::ssh::{LiveSession, Overrides};
+use crate::ssh::{LiveSession, Overrides, RunningForward};
 use crate::state::{AppState, state as app_state};
 use crate::{sync, tunnel};
 
@@ -19,6 +19,7 @@ fn view(id: &str, f: &PortForward) -> ForwardView {
     ForwardView {
         id: id.to_owned(),
         host_id: f.host_id.clone(),
+        kind: f.kind.into(),
         bind_address: f.bind_address.clone(),
         bind_port: f.bind_port,
         dest_host: f.dest_host.clone().unwrap_or_default(),
@@ -34,7 +35,7 @@ pub fn forwards_list(state: State<'_, AppState>, host_id: String) -> AppResult<V
         let mut list: Vec<ForwardView> = v
             .forwards()
             .iter()
-            .filter(|(_, f)| f.host_id == host_id && f.kind == ForwardKind::Local)
+            .filter(|(_, f)| f.host_id == host_id)
             .map(|(id, f)| view(id, f))
             .collect();
         list.sort_by_key(|f| (f.bind_port, f.dest_port));
@@ -49,37 +50,47 @@ pub fn forward_save(
     state: State<'_, AppState>,
     input: ForwardInput,
 ) -> AppResult<ForwardView> {
-    let bind_address = match input.bind_address.trim() {
-        "" => "127.0.0.1".to_owned(),
-        a => a.to_owned(),
+    let kind = ForwardKind::from(input.kind);
+    // A remote forward listens where `ssh -R` does by default.
+    let bind_address = match (input.bind_address.trim(), kind) {
+        ("", ForwardKind::Remote) => "localhost".to_owned(),
+        ("", _) => "127.0.0.1".to_owned(),
+        (a, _) => a.to_owned(),
     };
     if bind_address.chars().any(char::is_whitespace) {
         return Err(AppError::invalid("bind_address", "invalid bind address"));
     }
-    let dest_host = input.dest_host.trim().to_owned();
-    if dest_host.is_empty() || dest_host.chars().any(char::is_whitespace) {
-        return Err(AppError::invalid(
-            "dest_host",
-            "destination host is required",
-        ));
-    }
-    if input.dest_port == 0 {
-        return Err(AppError::invalid(
-            "dest_port",
-            "port must be between 1 and 65535",
-        ));
-    }
+    let dest = match kind {
+        ForwardKind::Dynamic => None,
+        ForwardKind::Local | ForwardKind::Remote => {
+            let dest_host = input.dest_host.trim().to_owned();
+            if dest_host.is_empty() || dest_host.chars().any(char::is_whitespace) {
+                return Err(AppError::invalid(
+                    "dest_host",
+                    "destination host is required",
+                ));
+            }
+            if input.dest_port == 0 {
+                return Err(AppError::invalid(
+                    "dest_port",
+                    "port must be between 1 and 65535",
+                ));
+            }
+            Some((dest_host, input.dest_port))
+        }
+    };
     let saved = state.with_unlocked(|v| {
         v.get(&input.host_id)
             .and_then(Item::as_host)
             .ok_or_else(|| AppError::not_found("host"))?;
+        let (dest_host, dest_port) = dest.unzip();
         let forward = PortForward {
             host_id: input.host_id.clone(),
-            kind: ForwardKind::Local,
+            kind,
             bind_address,
             bind_port: input.bind_port,
-            dest_host: Some(dest_host),
-            dest_port: Some(input.dest_port),
+            dest_host,
+            dest_port,
             auto_start: input.auto_start,
             updated_at: 0,
         };
@@ -127,14 +138,14 @@ fn emit(
     session_id: &str,
     forward_id: &str,
     state: ForwardState,
-    local_port: Option<u16>,
+    port: Option<u16>,
     error: Option<String>,
 ) {
     let _ = ForwardStatusEvent {
         session_id: session_id.to_owned(),
         forward_id: forward_id.to_owned(),
         state,
-        local_port,
+        port,
         error,
     }
     .emit(app);
@@ -149,18 +160,55 @@ fn host_port(host: &str, port: u16) -> String {
     }
 }
 
-/// Starts one saved forward on a live session and returns its local port.
+/// Starts one saved forward on a live session and returns the port it listens on.
 pub async fn open(live: &LiveSession, forward_id: &str, f: &PortForward) -> AppResult<u16> {
-    let spec = LocalForward {
-        bind_address: f.bind_address.clone(),
-        bind_port: f.bind_port,
-        dest_host: f.dest_host.clone().unwrap_or_default(),
-        dest_port: f.dest_port.unwrap_or_default(),
+    let bind_address = f.bind_address.clone();
+    let dest_host = f.dest_host.clone().unwrap_or_default();
+    let dest_port = f.dest_port.unwrap_or_default();
+    let dest = host_port(&dest_host, dest_port);
+    let (handle, listen, dest) = match f.kind {
+        ForwardKind::Local => {
+            let spec = LocalForward {
+                bind_address,
+                bind_port: f.bind_port,
+                dest_host,
+                dest_port,
+            };
+            let handle = live.session.local_forward(spec).await?;
+            let listen = host_port("localhost", handle.port());
+            (handle, listen, dest)
+        }
+        ForwardKind::Remote => {
+            let spec = RemoteForward {
+                bind_address,
+                bind_port: f.bind_port,
+                dest_host,
+                dest_port,
+            };
+            let handle = live.session.remote_forward(spec).await?;
+            let listen = host_port(&f.bind_address, handle.port());
+            (handle, listen, dest)
+        }
+        ForwardKind::Dynamic => {
+            let spec = DynamicForward {
+                bind_address,
+                bind_port: f.bind_port,
+            };
+            let handle = live.session.dynamic_forward(spec).await?;
+            let listen = host_port("localhost", handle.port());
+            (handle, listen, String::new())
+        }
     };
-    let dest = host_port(&spec.dest_host, spec.dest_port);
-    let handle = live.session.local_forward(spec).await?;
-    let port = handle.local_port();
-    live.add_forward(forward_id, handle, dest);
+    let port = handle.port();
+    live.add_forward(
+        forward_id,
+        RunningForward {
+            handle,
+            kind: f.kind.into(),
+            listen,
+            dest,
+        },
+    );
     Ok(port)
 }
 
@@ -209,7 +257,6 @@ pub async fn start_auto(app: &AppHandle, session_id: &str, live: &LiveSession, h
                 .filter(|(id, f)| {
                     f.host_id == host_id
                         && f.auto_start
-                        && f.kind == ForwardKind::Local
                         && tunnel::running_port(&state, host_id, id).is_none()
                 })
                 .collect())
@@ -264,7 +311,7 @@ pub fn forward_stop(
     Ok(())
 }
 
-/// Forwards currently running on a session: `(forward_id, local_port)`.
+/// Forwards currently running on a session: `(forward_id, port)`.
 #[tauri::command]
 #[specta::specta]
 pub fn forwards_active(
@@ -275,7 +322,7 @@ pub fn forwards_active(
 }
 
 /// FWD-05: starts the saved forward without a terminal, on the host's connection for forwards,
-/// and returns the local port.
+/// and returns the port it listens on.
 #[tauri::command]
 #[specta::specta]
 pub async fn tunnel_forward_start(
