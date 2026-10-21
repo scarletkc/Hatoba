@@ -222,7 +222,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Online | 在线 |
 | Offline | 离线 |
 | Waiting | 等待中 |
-| Read over an open terminal | 通过已打开的终端读取 |
+| Read over an open connection | 通过已打开的连接读取 |
 | Refresh interval | 刷新间隔 |
 | Highlight CPU usage above | CPU 占用高亮阈值 |
 | Highlight memory usage above | 内存占用高亮阈值 |

@@ -20,7 +20,7 @@ use crate::convert::stats_view;
 use crate::dto::{
     ConnectOptions, HostInput, QuickTarget, SessionState, SessionStateEvent, StatsEvent, TestResult,
 };
-use crate::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult, SshErrorKind};
 use crate::ssh::{LiveSession, Overrides, build_config, connect_with, resolve_proxy};
 use crate::state::AppState;
 
@@ -232,28 +232,37 @@ async fn open_terminal(
         Target::Host(host_id, overrides) => {
             let mut retried = false;
             loop {
-                let tab = connection::join_tab(app, host_id, &overrides, session_id)
+                let (tab, joined) = connection::join_tab(app, host_id, &overrides, session_id)
                     .await
                     .map_err(fail)?;
-                match tab
-                    .connection()
-                    .session
-                    .open_shell(shell_opts.clone())
-                    .await
-                {
-                    Ok((shell, events)) => break (LiveSession::shared(tab, shell), events),
-                    // The server allows no more sessions on the connection (`MaxSessions`): the
-                    // tab opens another, once.
-                    Err(e)
-                        if e.kind == hatoba_ssh::SshErrorKind::Channel
-                            && !retried
-                            && !tab.connection().session.is_closed() =>
-                    {
-                        tab.connection().mark_full();
-                        retried = true;
+                let conn = Arc::clone(tab.connection());
+                let opening = conn.session.open_shell(shell_opts.clone());
+                let opened = if joined {
+                    tokio::time::timeout(connection::JOIN_TIMEOUT, opening).await
+                } else {
+                    Ok(opening.await)
+                };
+                // On a connection that was open before the tab, the tab opens another, once, when
+                // that one stopped answering (unnoticed until its keepalives go unanswered), closed
+                // meanwhile, or allows no more sessions (`MaxSessions`).
+                match opened {
+                    Ok(Ok((shell, events))) => break (LiveSession::shared(tab, shell), events),
+                    Err(_) if !retried => conn.mark_stale(),
+                    Err(_) => {
+                        return Err(fail(AppError::ssh(
+                            SshErrorKind::Timeout,
+                            "the server did not open the shell in time",
+                        )));
                     }
-                    Err(e) => return Err(fail(e.into())),
+                    Ok(Err(_)) if joined && !retried && conn.session.is_closed() => {}
+                    Ok(Err(e))
+                        if joined && !retried && e.kind == hatoba_ssh::SshErrorKind::Channel =>
+                    {
+                        conn.mark_full();
+                    }
+                    Ok(Err(e)) => return Err(fail(e.into())),
                 }
+                retried = true;
             }
         }
     };

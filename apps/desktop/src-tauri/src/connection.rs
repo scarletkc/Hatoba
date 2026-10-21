@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Duration;
 
 use hatoba_core::model::{ForwardKind, Item, PortForward};
 use hatoba_core::vault::Vault;
@@ -30,6 +31,12 @@ use crate::state::{AppState, now_ms, state};
 /// sessions on a connection by default (`MaxSessions`), and each tab may also hold one for SFTP,
 /// besides the resource usage readouts of the tab in front and of the dashboard.
 pub const TABS_PER_CONNECTION: usize = 4;
+
+/// How long a tab's shell or a forward may take to open on a connection that was open before it,
+/// before the connection is taken for one that stopped answering: a channel opens in one round
+/// trip, and a connection the network dropped is otherwise noticed only once its keepalives go
+/// unanswered (SSH-06), after a minute or more.
+pub const JOIN_TIMEOUT: Duration = Duration::from_secs(10);
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
@@ -57,8 +64,10 @@ struct Users {
     forwards: HashMap<String, RunningForward>,
     /// Forwards that failed to start on it, until they start or stop.
     failed: HashMap<String, AppError>,
-    /// The server refused a shell on it: no further tab joins it.
+    /// The server refused a shell on it: no further tab joins it until a tab leaves.
     full: bool,
+    /// It stopped answering: no further tab or forward joins it.
+    stale: bool,
     /// Nothing is left on it, and it is closing.
     closing: bool,
 }
@@ -89,7 +98,10 @@ impl Tab {
 
 impl Drop for Tab {
     fn drop(&mut self) {
-        self.0.leave(|u| u.tabs -= 1);
+        self.0.leave(|u| {
+            u.tabs -= 1;
+            u.full = false;
+        });
     }
 }
 
@@ -116,6 +128,7 @@ impl Connection {
         let mut users = self.users();
         if users.closing
             || users.full
+            || users.stale
             || users.tabs >= TABS_PER_CONNECTION
             || self.session.is_closed()
         {
@@ -127,7 +140,7 @@ impl Connection {
 
     fn hold(self: &Arc<Self>) -> Option<Starting> {
         let mut users = self.users();
-        if users.closing || self.session.is_closed() {
+        if users.closing || users.stale || self.session.is_closed() {
             return None;
         }
         users.starting += 1;
@@ -137,6 +150,11 @@ impl Connection {
     /// The server refused a shell on it: later tabs open another connection.
     pub fn mark_full(&self) {
         self.users().full = true;
+    }
+
+    /// It stopped answering: later tabs and forwards open another connection.
+    pub fn mark_stale(&self) {
+        self.users().stale = true;
     }
 
     fn leave(&self, change: impl FnOnce(&mut Users)) {
@@ -332,13 +350,14 @@ pub fn record_connected(state: &AppState, host_id: &str, session: &SshSession) {
 }
 
 /// A place for a terminal tab on the saved host's connection, which connects first when no
-/// connection has room. `session_id` is the tab's, which answers the questions signing in asks.
+/// connection has room, and whether that connection was open before. `session_id` is the tab's,
+/// which answers the questions signing in asks.
 pub async fn join_tab(
     app: &AppHandle,
     host_id: &str,
     overrides: &Overrides,
     session_id: &str,
-) -> AppResult<Tab> {
+) -> AppResult<(Tab, bool)> {
     let state = state(app);
     let gate = state.connections.gate(host_id);
     let _held = gate.lock().await;
@@ -350,15 +369,16 @@ pub async fn join_tab(
         .iter()
         .find_map(Connection::join_tab)
     {
-        return Ok(tab);
+        return Ok((tab, true));
     }
     let starting = open(app, &state, host_id, overrides, Some(session_id)).await?;
-    starting.0.join_tab().ok_or_else(|| {
+    let tab = starting.0.join_tab().ok_or_else(|| {
         AppError::ssh(
             SshErrorKind::Disconnected,
             "the connection closed as it opened",
         )
-    })
+    })?;
+    Ok((tab, false))
 }
 
 /// Starts the saved forward on the host's connection, connecting first when there is none, and
@@ -378,19 +398,26 @@ pub async fn start(
         return Ok(port);
     }
     let config = config_of(&state, host_id)?;
-    let starting = match state
+    if let Some(starting) = state
         .connections
         .of_host(host_id, Some(&config))
         .iter()
         .find_map(Connection::hold)
     {
-        Some(starting) => starting,
-        None => {
-            let starting = open(app, &state, host_id, overrides, None).await?;
-            record_connected(&state, host_id, &starting.0.session);
-            starting
+        let conn = &starting.0;
+        match tokio::time::timeout(JOIN_TIMEOUT, open_forward(&state, conn, forward_id)).await {
+            // One that closed meanwhile, or stopped answering, makes way for another.
+            Ok(started) if started.is_ok() || !conn.session.is_closed() => {
+                drop(starting);
+                changed(app);
+                return started;
+            }
+            Ok(_) => {}
+            Err(_) => conn.mark_stale(),
         }
-    };
+    }
+    let starting = open(app, &state, host_id, overrides, None).await?;
+    record_connected(&state, host_id, &starting.0.session);
     let conn = &starting.0;
     // The host's auto-start forwards started with a connection opened for this one.
     let started = match conn.forward_port(forward_id) {
@@ -497,6 +524,48 @@ pub fn stop(app: &AppHandle, host_id: &str, forward_id: &str) {
     let mut found = false;
     for conn in state.connections.of_host(host_id, None) {
         found |= conn.stop_forward(forward_id);
+    }
+    if found {
+        changed(app);
+    }
+}
+
+/// After a sync pull: stops the forwards whose rule, or whose host, another device deleted.
+pub fn forget_deleted(app: &AppHandle) {
+    let state = state(app);
+    let running: Vec<(Arc<Connection>, String)> = state
+        .connections
+        .all()
+        .into_iter()
+        .flat_map(|conn| {
+            let users = conn.users();
+            let ids: Vec<String> = users
+                .forwards
+                .keys()
+                .chain(users.failed.keys())
+                .cloned()
+                .collect();
+            drop(users);
+            ids.into_iter().map(move |id| (Arc::clone(&conn), id))
+        })
+        .collect();
+    // Read with no connection's lock held, which a start takes before the vault's.
+    let Ok(deleted) = state.with_unlocked(|v| {
+        Ok(running
+            .into_iter()
+            .filter(|(conn, id)| {
+                v.get(&conn.host_id).and_then(Item::as_host).is_none()
+                    || v.get(id)
+                        .and_then(Item::as_forward)
+                        .is_none_or(|f| f.host_id != conn.host_id)
+            })
+            .collect::<Vec<_>>())
+    }) else {
+        return;
+    };
+    let mut found = false;
+    for (conn, id) in deleted {
+        found |= conn.stop_forward(&id);
     }
     if found {
         changed(app);

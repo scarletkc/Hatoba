@@ -37,6 +37,17 @@ pub fn forwards_list_all(state: State<'_, AppState>) -> AppResult<Vec<ForwardVie
     })
 }
 
+/// An address as it is listened on or connected to: an IPv6 literal typed as ssh writes it, in
+/// brackets, loses them.
+fn unbracketed(address: &str) -> &str {
+    let address = address.trim();
+    address
+        .strip_prefix('[')
+        .and_then(|a| a.strip_suffix(']'))
+        .filter(|a| a.contains(':'))
+        .unwrap_or(address)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn forward_save(
@@ -46,7 +57,7 @@ pub fn forward_save(
 ) -> AppResult<ForwardView> {
     let kind = ForwardKind::from(input.kind);
     // A remote forward listens where `ssh -R` does by default.
-    let bind_address = match (input.bind_address.trim(), kind) {
+    let bind_address = match (unbracketed(&input.bind_address), kind) {
         ("", ForwardKind::Remote) => "localhost".to_owned(),
         ("", _) => "127.0.0.1".to_owned(),
         (a, _) => a.to_owned(),
@@ -57,7 +68,7 @@ pub fn forward_save(
     let dest = match kind {
         ForwardKind::Dynamic => None,
         ForwardKind::Local | ForwardKind::Remote => {
-            let dest_host = input.dest_host.trim().to_owned();
+            let dest_host = unbracketed(&input.dest_host).to_owned();
             if dest_host.is_empty() || dest_host.chars().any(char::is_whitespace) {
                 return Err(AppError::invalid(
                     "dest_host",
@@ -155,4 +166,17 @@ pub fn forward_stop(app: AppHandle, host_id: String, forward_id: String) {
 #[specta::specta]
 pub fn connections_list(state: State<'_, AppState>) -> ConnectionsEvent {
     connection::list(&state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::unbracketed;
+
+    #[test]
+    fn an_ipv6_address_in_brackets_loses_them() {
+        assert_eq!(unbracketed(" [::1] "), "::1");
+        assert_eq!(unbracketed("[fd00::5]"), "fd00::5");
+        assert_eq!(unbracketed("127.0.0.1"), "127.0.0.1");
+        assert_eq!(unbracketed("[db.internal]"), "[db.internal]");
+    }
 }

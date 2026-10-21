@@ -151,7 +151,7 @@ export default defineMessages({
     // port forwarding (FWD-01, FWD-02)
     "hosts.fwd.count": "{n} 条",
     "hosts.fwd.empty": "还没有端口转发",
-    "hosts.fwd.emptyBody": "把本机的端口经主机的 SSH 连接转发到服务器能访问的地址，相当于 ssh -L。",
+    "hosts.fwd.emptyBody": "经主机的 SSH 连接转发端口：本地（ssh -L）、远程（ssh -R），或者 SOCKS 代理（ssh -D）。",
     "hosts.fwd.add": "添加转发…",
     "hosts.fwd.autoStart": "自动启动",
     "hosts.fwd.autoStartFor": "连接时自动启动 {rule}",
@@ -366,7 +366,7 @@ export default defineMessages({
     "hosts.fwd.count": "{n} forwards",
     "hosts.fwd.count_one": "{n} forward",
     "hosts.fwd.empty": "No port forwards yet",
-    "hosts.fwd.emptyBody": "Forward a port on this computer through a host’s SSH connection to an address the server can reach, like ssh -L.",
+    "hosts.fwd.emptyBody": "Forward ports through a host’s SSH connection: local (ssh -L), remote (ssh -R), or a SOCKS proxy (ssh -D).",
     "hosts.fwd.add": "Add Forward…",
     "hosts.fwd.autoStart": "Auto-start",
     "hosts.fwd.autoStartFor": "Start {rule} when connecting",
@@ -575,7 +575,7 @@ export default defineMessages({
     // port forwarding (FWD-01, FWD-02)
     "hosts.fwd.count": "{n} 件",
     "hosts.fwd.empty": "ポートフォワーディングがまだありません",
-    "hosts.fwd.emptyBody": "このコンピューターのポートを、ホストの SSH 接続を通してサーバーから届くアドレスへ転送します（ssh -L と同じ）。",
+    "hosts.fwd.emptyBody": "ホストの SSH 接続を通してポートを転送します。ローカル（ssh -L）、リモート（ssh -R）、SOCKS プロキシ（ssh -D）を使えます。",
     "hosts.fwd.add": "転送を追加…",
     "hosts.fwd.autoStart": "自動起動",
     "hosts.fwd.autoStartFor": "接続時に {rule} を自動で開始",

@@ -567,6 +567,8 @@ pub async fn run_round(app: &AppHandle) -> AppResult<()> {
                 // AI-52: a ChatGPT provider deleted on another device ends its session here.
                 if report.pulled > 0 {
                     crate::ai::chatgpt::end_orphaned(&st);
+                    // FWD-05: a rule deleted on another device stops here.
+                    crate::connection::forget_deleted(app);
                 }
             }
             Ok(())

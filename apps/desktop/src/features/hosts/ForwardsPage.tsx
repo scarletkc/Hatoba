@@ -66,6 +66,17 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
     if (ready) focused.current?.scrollIntoView({ block: "start" });
   }, [ready, hostId]);
 
+  // A rule that ran since, started from a tab or with the connection, drops the failure of an earlier start here.
+  useEffect(() => {
+    setFailures((all) => {
+      const ran = Object.keys(all).filter((id) => connections.some((c) => runningForward(c, id)));
+      if (ran.length === 0) return all;
+      const rest = { ...all };
+      for (const id of ran) delete rest[id];
+      return rest;
+    });
+  }, [connections]);
+
   const markPending = (id: string, on: boolean) => setPending((p) => toggled(p, id, on));
   const markStarting = (id: string, on: boolean) => setStarting((p) => toggled(p, id, on));
   const setFailure = (id: string, message: string | null) =>

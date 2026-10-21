@@ -5,7 +5,7 @@ import { Icon, Spinner } from "@/components/controls";
 import { overlayStyles, toast, type MenuAnchor } from "@/components/overlay";
 import { hostPort } from "@/features/hosts/address";
 import { forwardFailure, runningForward, useHostConnection } from "@/features/hosts/connections";
-import { startForward, stopForward, useForwardRules, useHostForwardRules } from "@/features/hosts/forwards";
+import { startForward, stopForward, useHostForwardRules } from "@/features/hosts/forwards";
 import { useT } from "@/i18n";
 import type { ForwardView, RunningForwardView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
@@ -33,12 +33,11 @@ export function ForwardsPopover({
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
   const saved = useHostForwardRules(hostId);
-  const { loadFailed } = useForwardRules();
   const conn = useHostConnection(hostId);
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   // Re-measured as rows appear.
-  const { pos, locked } = useStatusPopover(ref, anchor, onClose, "[data-forwards-trigger]", [saved, loadFailed, conn, errors]);
+  const { pos, locked } = useStatusPopover(ref, anchor, onClose, "[data-forwards-trigger]", [saved, conn, errors]);
 
   const setBusyFor = (id: string, on: boolean) =>
     setBusy((b) => {
@@ -86,12 +85,6 @@ export function ForwardsPopover({
   return createPortal(
     <div ref={ref} role="dialog" aria-label={t("terminal.fwd")} className={cx(s.popover, overlayStyles.popIn)} style={pos}>
       <div className={s.header}>{t("terminal.fwd")}</div>
-      {!saved && !loadFailed && (
-        <div className={s.note}>
-          <Spinner />
-        </div>
-      )}
-      {!saved && loadFailed && <div className={cx(s.note, s.noteError)}>{t("terminal.fwd.loadFailed")}</div>}
       {saved?.length === 0 && <div className={s.note}>{t("terminal.fwd.none")}</div>}
       {saved?.map((f) => {
         const running = runningForward(conn, f.id);

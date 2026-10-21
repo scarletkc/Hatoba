@@ -573,6 +573,15 @@ export function createMockApi(): HatobaApi {
     },
     host_delete: async (hid) => {
       hosts = hosts.filter((h) => h.id !== hid).map((h) => (h.jump_host_id === hid ? { ...h, jump_host_id: null } : h));
+      // Its forwards go with it, and stop where they run; its tabs stay connected.
+      forwards = forwards.filter((f) => f.host_id !== hid);
+      const c = connections.get(hid);
+      if (c && (c.forwards.size > 0 || c.failed.size > 0)) {
+        c.forwards.clear();
+        c.failed.clear();
+        closeIfUnused(hid);
+        connectionsChanged();
+      }
       touch();
     },
     host_duplicate: async (hid) => {

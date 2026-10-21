@@ -18,13 +18,13 @@ Other labels: **No Group**, **Filesystems**.
 ## How hosts are read
 
 - Hosts are read only while the page is shown, the window is visible and the vault is unlocked. Leaving the page stops reading, and the connections close a minute later, so a look at a tab and back does not sign in again. Locking closes them at once.
-- Each host is read every 3 seconds by default (**Refresh interval** in Settings → General), over a connected tab's connection or else over a background SSH connection of its own. At most 8 connections are being set up at once, which keeps many hosts behind one jump host under OpenSSH's default `MaxStartups`. Until a jump host has let one connection through, the hosts behind it try it one at a time.
+- Each host is read every 3 seconds by default (**Refresh interval** in Settings → General), over the host's open connection (its terminal tabs' and port forwards') or else over a background SSH connection of its own. At most 8 connections are being set up at once, which keeps many hosts behind one jump host under OpenSSH's default `MaxStartups`. Until a jump host has let one connection through, the hosts behind it try it one at a time.
 - A host whose first hop (the host, or its outermost jump host) does not answer the online probe is shown **Offline** and is not signed in to until it answers; it is checked again every minute, or at once with **Retry** in its menu.
 - When a host's connection settings change (on another device, say), the dashboard connects again with the new ones and drops the readings made with the old ones.
-- **Opening a tab** on a host the dashboard is connected to takes over that connection: the tab opens its shell without signing in again, then sets the environment variables and starts the forwards set to start with the connection. Closing the tab closes the connection, and the dashboard connects again.
+- **Opening a tab** or starting a forward on a host the dashboard is connected to takes over that connection: a tab opens its shell without signing in again, then sets the environment variables, and the forwards set to start with the connection start. Once no tab and no forward is left on it, the connection closes and the dashboard connects again.
 - Servers that do not run Linux show their online status only. The dashboard signs in once to find that out, and again only after the vault was locked or the host's connection settings changed.
 
-Other labels: **Online**, **Waiting**, **Read over an open terminal**, **Highlight CPU usage above**, **Highlight memory usage above**, **Highlight disk usage above**.
+Other labels: **Online**, **Waiting**, **Read over an open connection**, **Highlight CPU usage above**, **Highlight memory usage above**, **Highlight disk usage above**.
 
 ## Hosts that need the user
 

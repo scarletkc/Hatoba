@@ -19,7 +19,7 @@ The bar above the terminal shows the connection state, the target `user@host:por
 
 - **Show Resource Usage** turns on the resource usage readout described below. It is enabled only when connected.
 - **Find in terminal** opens the find bar.
-- **Port Forwarding** (a badge shows how many forwards run) opens the forwards popover; see `references/port-forwarding.md`. It is enabled only when connected.
+- **Port Forwarding** (a badge shows how many forwards run) opens the forwards popover; see `references/port-forwarding.md`. It shows only for a host with forwarding rules, and is enabled only when connected.
 - **SFTP** shows or hides the file panel beside the terminal; see `references/sftp.md`. It is enabled only when connected.
 - **More actions** (the … button) opens the tab menu below.
 

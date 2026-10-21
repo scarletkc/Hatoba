@@ -222,7 +222,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Online | オンライン |
 | Offline | オフライン |
 | Waiting | 待機中 |
-| Read over an open terminal | 開いているターミナル経由で読み取り |
+| Read over an open connection | 開いている接続経由で読み取り |
 | Refresh interval | 更新間隔 |
 | Highlight CPU usage above | CPU 使用率の強調しきい値 |
 | Highlight memory usage above | メモリ使用率の強調しきい値 |
