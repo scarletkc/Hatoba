@@ -117,6 +117,13 @@ export const en = {
     } as Record<string, string>,
     size: (megabytes: string) => `${megabytes} MB`,
     install: "Install",
+    packageManager: "Package manager",
+    /** Inline Markdown, followed by the commands of PACKAGE_COMMANDS in consts.ts. */
+    packages: {
+      windows: "Install Hatoba from the Extras bucket of [Scoop](https://scoop.sh), which then updates it with `scoop update hatoba`:",
+      linux:
+        "On Arch Linux and distributions based on it, install [`hatoba-bin`](https://aur.archlinux.org/packages/hatoba-bin) from the AUR with an AUR helper such as yay. It then updates with the rest of the system:",
+    } as Record<string, string>,
     sha256: "SHA-256",
     copy: "Copy",
     copied: "Copied",

@@ -113,6 +113,11 @@ export const zh: Messages = {
     },
     size: (megabytes) => `${megabytes} MB`,
     install: "安装",
+    packageManager: "使用包管理器",
+    packages: {
+      windows: "从 [Scoop](https://scoop.sh) 的 Extras bucket 安装 Hatoba，之后用 `scoop update hatoba` 更新：",
+      linux: "在 Arch Linux 及其衍生发行版上，用 yay 等 AUR 助手从 AUR 安装 [`hatoba-bin`](https://aur.archlinux.org/packages/hatoba-bin)，之后它会随系统一起更新：",
+    },
     sha256: "SHA-256",
     copy: "复制",
     copied: "已复制",

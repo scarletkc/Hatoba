@@ -83,8 +83,25 @@ account.
 
 The [download page](https://hatoba.fog.moe/download/) offers the newest
 release for your system, with its checksums and install steps, and
-[Releases](https://github.com/scarletkc/Hatoba/releases) has every version. The
-maintainer uses Windows, so the Linux and macOS builds get little testing on
+[Releases](https://github.com/scarletkc/Hatoba/releases) has every version.
+
+Package managers can install and update it too. On Windows, from the Extras
+bucket of [Scoop](https://scoop.sh):
+
+```powershell
+scoop bucket add extras
+scoop install extras/hatoba
+```
+
+On Arch Linux and distributions based on it, install
+[`hatoba-bin`](https://aur.archlinux.org/packages/hatoba-bin) from the AUR with
+an AUR helper such as yay:
+
+```sh
+yay -S hatoba-bin
+```
+
+The maintainer uses Windows, so the Linux and macOS builds get little testing on
 real machines. If something doesn't work on them, please
 [open an issue](https://github.com/scarletkc/Hatoba/issues).
 

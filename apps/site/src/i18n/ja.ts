@@ -114,6 +114,12 @@ export const ja: Messages = {
     },
     size: (megabytes) => `${megabytes} MB`,
     install: "インストール方法",
+    packageManager: "パッケージマネージャー",
+    packages: {
+      windows: "[Scoop](https://scoop.sh) の Extras バケットから Hatoba をインストールできます。その後は `scoop update hatoba` で更新します。",
+      linux:
+        "Arch Linux とその派生ディストリビューションでは、yay などの AUR ヘルパーで AUR から [`hatoba-bin`](https://aur.archlinux.org/packages/hatoba-bin) をインストールできます。その後はシステムと一緒に更新されます。",
+    },
     sha256: "SHA-256",
     copy: "コピー",
     copied: "コピーしました",
