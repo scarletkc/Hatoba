@@ -1098,6 +1098,17 @@ fn any_chunking_assembles_the_same_response() {
             assert_eq!(assemble(AnthropicStream::new(false), stream, size), whole);
         }
     }
+    let whole = assemble(
+        AnthropicStream::new(true),
+        ANTHROPIC_PROGRESS,
+        ANTHROPIC_PROGRESS.len(),
+    );
+    for size in [1, 2, 7, 64] {
+        assert_eq!(
+            assemble(AnthropicStream::new(true), ANTHROPIC_PROGRESS, size),
+            whole
+        );
+    }
     for stream in [OPENAI_TEXT, DEEPSEEK, GEMINI, OPENAI_NO_USAGE] {
         let whole = assemble(ChatCompletionsStream::new(), stream, stream.len());
         for size in [1, 3, 64] {
@@ -2948,11 +2959,11 @@ async fn anthropic_progress_updates_stream_as_answer_text() {
         "run_command",
         "{\"command\": \"du -sh /var/*\"}",
     );
+    // The update shows once the tool call that follows it starts.
     assert_eq!(
-        events[..3],
+        events[..2],
         [
-            text("The root filesystem is at 97%."),
-            text(" Checking what fills /var next."),
+            text("The root filesystem is at 97%. Checking what fills /var next."),
             StreamEvent::ToolCall(du.clone()),
         ]
     );
@@ -3235,4 +3246,119 @@ async fn a_refused_beta_and_a_replay_refusal_still_get_an_answer() {
     // Progress updates with `raw`, summarized with `raw`, then summarized and rebuilt.
     assert_eq!(server.received_requests().await.unwrap().len(), 3);
     assert!(!sent_beta(&server, 2).await);
+}
+
+/// An Anthropic stream of `blocks`: `thinking` and `text` blocks with their text, and
+/// `tool_use` blocks with their text as the tool's name.
+fn anthropic_stream(blocks: &[(&str, &str)], stop_reason: &str) -> String {
+    let mut out = String::new();
+    let mut event = |value: Value| {
+        out.push_str(&format!(
+            "event: {}
+data: {value}
+
+",
+            value["type"].as_str().unwrap()
+        ));
+    };
+    event(json!({"type": "message_start",
+                 "message": {"usage": {"input_tokens": 1, "output_tokens": 1}}}));
+    for (index, (kind, text)) in (0u64..).zip(blocks) {
+        let (block, delta) = match *kind {
+            "thinking" => (
+                json!({"type": "thinking", "thinking": "", "signature": ""}),
+                json!({"type": "thinking_delta", "thinking": text}),
+            ),
+            "text" => (
+                json!({"type": "text", "text": ""}),
+                json!({"type": "text_delta", "text": text}),
+            ),
+            _ => (
+                json!({"type": "tool_use", "id": format!("toolu_{index}"), "name": text,
+                       "input": {}}),
+                Value::Null,
+            ),
+        };
+        event(json!({"type": "content_block_start", "index": index, "content_block": block}));
+        if !delta.is_null() && !text.is_empty() {
+            event(json!({"type": "content_block_delta", "index": index, "delta": delta}));
+        }
+        event(json!({"type": "content_block_stop", "index": index}));
+    }
+    event(
+        json!({"type": "message_delta", "delta": {"stop_reason": stop_reason},
+                 "usage": {"output_tokens": 9}}),
+    );
+    event(json!({"type": "message_stop"}));
+    out
+}
+
+#[test]
+fn progress_updates_are_only_the_thinking_right_before_a_tool_call() {
+    let progress = |blocks: &[(&str, &str)], stop: &str| {
+        let stream = anthropic_stream(blocks, stop);
+        let (assembled, events) = assemble(AnthropicStream::new(true), &stream, 16);
+        let assembled = assembled.unwrap();
+        (assembled.text, assembled.reasoning, events)
+    };
+    // What Anthropic sends: an empty reasoning block, then the progress update.
+    let (text, reasoning, events) = progress(
+        &[
+            ("thinking", ""),
+            ("thinking", "Checking /var."),
+            ("tool_use", "run_command"),
+        ],
+        "tool_use",
+    );
+    assert_eq!((text.as_str(), reasoning.as_str()), ("Checking /var.", ""));
+    // The update shows before the call it introduces.
+    assert_eq!(events[0], self::text("Checking /var."));
+    assert!(matches!(events[1], StreamEvent::ToolCall(_)));
+    // Reasoning with text (a provider that ignored the display) stays reasoning; the block
+    // right before the call is still the update.
+    let (text, reasoning, _) = progress(
+        &[
+            ("thinking", "Disk is full."),
+            ("thinking", "Checking /var."),
+            ("tool_use", "run_command"),
+        ],
+        "tool_use",
+    );
+    assert_eq!(
+        (text.as_str(), reasoning.as_str()),
+        ("Checking /var.", "Disk is full.")
+    );
+    // Before the answer, thinking text is reasoning.
+    let (text, reasoning, _) = progress(
+        &[("thinking", "Disk is full."), ("text", "It is /var.")],
+        "end_turn",
+    );
+    assert_eq!(
+        (text.as_str(), reasoning.as_str()),
+        ("It is /var.", "Disk is full.")
+    );
+    // So is thinking text the response ends with.
+    let (text, reasoning, _) = progress(
+        &[(
+            "thinking",
+            "This part of the response was interrupted before it finished.",
+        )],
+        "max_tokens",
+    );
+    assert_eq!(text, "");
+    assert_eq!(
+        reasoning,
+        "This part of the response was interrupted before it finished."
+    );
+    // Without `display: "updates"` every thinking block is reasoning.
+    let stream = anthropic_stream(
+        &[("thinking", "Checking /var."), ("tool_use", "run_command")],
+        "tool_use",
+    );
+    let (assembled, _) = assemble(AnthropicStream::new(false), &stream, 16);
+    let assembled = assembled.unwrap();
+    assert_eq!(
+        (assembled.text.as_str(), assembled.reasoning.as_str()),
+        ("", "Checking /var.")
+    );
 }

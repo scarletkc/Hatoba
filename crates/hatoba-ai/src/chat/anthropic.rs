@@ -6,8 +6,9 @@
 //! redacted thinking and block types Hatoba does not know come back unchanged on replay.
 //!
 //! Under `display: "updates"` reasoning blocks come back empty, and a `thinking` block with text
-//! is a progress update the model wrote for the user before a tool call: its text is answer
-//! text, not reasoning.
+//! right before a tool call is a progress update the model wrote for the user: its text is
+//! answer text, not reasoning. Thinking text anywhere else (from a provider that ignored the
+//! display) stays reasoning, so the text is held until the next block starts and shows which.
 
 use std::collections::BTreeMap;
 
@@ -106,8 +107,12 @@ pub(crate) struct AnthropicStream {
     stop_reason: Option<String>,
     usage: UsageCounts,
     done: bool,
-    /// The request asked for `display: "updates"`, so thinking text is progress updates.
+    /// The request asked for `display: "updates"`, so thinking text right before a tool call is
+    /// a progress update.
     updates: bool,
+    /// Under `display: "updates"`, the text of the latest `thinking` block, until the next block
+    /// starts.
+    held: Option<(u64, String)>,
 }
 
 impl AnthropicStream {
@@ -118,18 +123,39 @@ impl AnthropicStream {
         }
     }
 
-    /// Appends the text of a `thinking` block: answer text when it is a progress update,
-    /// reasoning otherwise.
+    /// Appends the text of a `thinking` block: reasoning, or under `display: "updates"` held
+    /// until the next block shows whether it is a progress update.
     fn push_thinking(
         &mut self,
         index: u64,
         text: &str,
         emit: &mut (dyn FnMut(StreamEvent) + Send),
     ) {
-        if self.updates {
-            self.push_text(index, text, emit);
-        } else {
+        if !self.updates {
             self.push_reasoning(index, text, emit);
+            return;
+        }
+        if text.is_empty() {
+            return;
+        }
+        match &mut self.held {
+            Some((at, held)) if *at == index => held.push_str(text),
+            _ => {
+                self.release(false, emit);
+                self.held = Some((index, text.to_owned()));
+            }
+        }
+    }
+
+    /// Emits the held thinking text: answer text when a tool call follows it, reasoning
+    /// otherwise.
+    fn release(&mut self, before_tool: bool, emit: &mut (dyn FnMut(StreamEvent) + Send)) {
+        if let Some((index, text)) = self.held.take() {
+            if before_tool {
+                self.push_text(index, &text, emit);
+            } else {
+                self.push_reasoning(index, &text, emit);
+            }
         }
     }
 
@@ -174,6 +200,8 @@ impl AnthropicStream {
         emit: &mut (dyn FnMut(StreamEvent) + Send),
     ) {
         let kind = block.get("type").and_then(Value::as_str).unwrap_or("");
+        // `tool_use`, `server_tool_use` and `mcp_tool_use`.
+        self.release(kind.ends_with("tool_use"), emit);
         let initial = match kind {
             "text" => block.get("text"),
             "thinking" => block.get("thinking"),
@@ -400,6 +428,7 @@ impl Assembler for AnthropicStream {
                 "the stream ended before the response was complete".into(),
             ));
         }
+        self.release(false, emit);
         let open: Vec<u64> = self
             .blocks
             .iter()
