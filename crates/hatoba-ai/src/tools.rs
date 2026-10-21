@@ -1454,13 +1454,15 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
         "- Answer in the user's language. Be concise, use Markdown, and put commands in code \
          blocks.\n",
     );
-    // These models' text before a tool call comes back as a progress update, which the API
-    // returns only as a short summary.
-    if tools && crate::chat::writes_progress_updates(ctx.model.id) {
-        out.push_str(
+    if tools {
+        // These models' text before a tool call comes back as a progress update, which the API
+        // returns only as a short summary.
+        out.push_str(if crate::chat::writes_progress_updates(ctx.model.id) {
             "- Text you write before a tool call reaches the user only as a short summary, so \
-             write your full answer after your last tool call.\n",
-        );
+             write your full answer after your last tool call.\n"
+        } else {
+            "- Write your full answer after your last tool call.\n"
+        });
     }
     let given = match (&instructions, &notes) {
         (Some(_), Some(_)) => Some("the user's instructions and the host notes below"),
@@ -2134,23 +2136,42 @@ mod tests {
         });
         assert!(!forgetful.contains(MEMORY_RULE));
         assert!(forgetful.contains("<memory entries="));
-        // Only a model whose text before a tool call comes back as a summarized progress update
-        // is told where its answer goes, and only when it can call tools.
-        let answer_rule = "write your full answer after your last tool call";
-        assert!(prompt.contains(answer_rule));
-        for (id, tools) in [
-            ("claude-opus-5", PromptTools::Terminal),
-            ("gpt-5.5", PromptTools::NoTerminal),
-            ("claude-opus-5-5", PromptTools::None),
-            ("claude-opus-5-5", PromptTools::SideQuestion),
+        // Every model that can call tools is told where its answer goes; only one whose text
+        // before a tool call comes back as a summarized progress update is told why.
+        let summary = "reaches the user only as a short summary";
+        assert!(prompt.contains(&format!(
+            "{summary}, so write your full answer after your last tool call.\n"
+        )));
+        for (id, tools, rule, why) in [
+            ("claude-opus-5", PromptTools::Terminal, true, false),
+            ("gpt-5.5", PromptTools::NoTerminal, true, false),
+            ("claude-sonnet-5-5", PromptTools::NoTerminal, true, true),
+            ("claude-opus-5-5", PromptTools::None, false, false),
+            ("claude-opus-5-5", PromptTools::SideQuestion, false, false),
         ] {
             let other = system_prompt(&PromptContext {
                 model: PromptModel { id, ..OPUS },
                 tools,
                 ..ctx
             });
-            assert!(!other.contains(answer_rule), "{id} with {tools:?}");
+            let label = format!("{id} with {tools:?}");
+            assert_eq!(
+                other.contains("ite your full answer after your last tool call."),
+                rule,
+                "{label}"
+            );
+            assert_eq!(other.contains(summary), why, "{label}");
         }
+        assert!(
+            system_prompt(&PromptContext {
+                model: PromptModel {
+                    id: "gpt-5.5",
+                    ..OPUS
+                },
+                ..ctx
+            })
+            .contains("\n- Write your full answer after your last tool call.\n")
+        );
         // Without instructions or notes, no section and no rule about them.
         for absent in ["<user_instructions>", "<host_notes", "Follow "] {
             assert!(!prompt.contains(absent), "unexpected {absent:?}");
