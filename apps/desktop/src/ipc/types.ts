@@ -1281,6 +1281,8 @@ export type AiTurnEvent =
   | { kind: "request_started" }
   | { kind: "text"; delta: string }
   | { kind: "reasoning"; delta: string }
+  /** The model started thinking, also when no reasoning text comes with it (AI-06). */
+  | { kind: "thinking" }
   | { kind: "tool_call"; id: string; name: string; arguments: string }
   | { kind: "usage"; input_tokens: number; output_tokens: number; estimated: boolean }
   /** An entry was stored: the assistant response, a tool result, or a cancelled result. */

@@ -2099,6 +2099,8 @@ pub enum AiTurnEvent {
     Reasoning {
         delta: String,
     },
+    /// The model started thinking, also when no reasoning text comes with it (AI-06).
+    Thinking,
     ToolCall {
         id: String,
         name: String,

@@ -1725,7 +1725,13 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
     if (live && (live.text || live.reasoning || live.toolCalls.length > 0)) return null;
     if (turn.calls.length > 0) return null;
     const key: MessageKey =
-      turn.phase === "tools" ? "ai.status.working" : turn.phase === "starting" && mcpStarting ? "ai.status.mcpStarting" : "ai.status.waiting";
+      turn.phase === "tools"
+        ? "ai.status.working"
+        : turn.phase === "starting" && mcpStarting
+          ? "ai.status.mcpStarting"
+          : live?.thinking
+            ? "ai.reasoning.active"
+            : "ai.status.waiting";
     return (
       <div className={s.status}>
         <Spinner size={13} />

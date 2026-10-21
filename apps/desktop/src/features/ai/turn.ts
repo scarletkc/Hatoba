@@ -5,6 +5,8 @@ import type { HardRule } from "./autoRules";
 export interface LiveResponse {
   text: string;
   reasoning: string;
+  /** A thinking block started, whether or not reasoning text came with it (AI-06). */
+  thinking: boolean;
   toolCalls: AiToolCall[];
   usage: AiUsage | null;
 }
@@ -68,7 +70,7 @@ export function approvalOf(turn: TurnState | null | undefined): CallInfo | null 
   return turn?.calls.find((c) => c.state === "approval") ?? null;
 }
 
-const emptyLive = (): LiveResponse => ({ text: "", reasoning: "", toolCalls: [], usage: null });
+const emptyLive = (): LiveResponse => ({ text: "", reasoning: "", thinking: false, toolCalls: [], usage: null });
 
 /** The id of the user's message the panel shows until `ai_send` / `ai_edit_resend` returns the stored entry. */
 export const LOCAL_ENTRY = "~local";
@@ -110,6 +112,9 @@ export function reduceTurnEvent(s: TurnSnapshot, ev: AiTurnEvent): TurnSnapshot 
       return s;
     case "request_started":
       return { ...s, outcome: null, turn: { ...(turn ?? newTurn()), phase: "waiting", live: emptyLive(), error: null } };
+    case "thinking":
+      if (!turn) return s;
+      return { ...s, turn: { ...turn, phase: "streaming", live: { ...(turn.live ?? emptyLive()), thinking: true } } };
     case "text":
     case "reasoning":
     case "tool_call":

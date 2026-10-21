@@ -640,6 +640,7 @@ async fn anthropic_streams_thinking_text_and_tool_use() {
     assert_eq!(
         events,
         vec![
+            StreamEvent::Thinking,
             reasoning("The user asks about disk"),
             reasoning(" space; df answers it."),
             text("I'll check the disk"),
@@ -909,6 +910,8 @@ async fn anthropic_keeps_redacted_thinking_and_unknown_blocks() {
     assert_eq!(
         events,
         vec![
+            // Redacted thinking has no text, but the model thought.
+            StreamEvent::Thinking,
             text("Nginx reloads its configuration"),
             text(" with nginx -s reload."),
             StreamEvent::Usage(usage(10, 40))
@@ -2961,8 +2964,10 @@ async fn anthropic_progress_updates_stream_as_answer_text() {
     );
     // The update shows once the tool call that follows it starts.
     assert_eq!(
-        events[..2],
+        events[..4],
         [
+            StreamEvent::Thinking,
+            StreamEvent::Thinking,
             text("The root filesystem is at 97%. Checking what fills /var next."),
             StreamEvent::ToolCall(du.clone()),
         ]
@@ -3048,12 +3053,70 @@ async fn anthropic_falls_back_to_summarized_when_updates_are_refused() {
     assert!(requests[0].headers.get("anthropic-beta").is_some());
     assert!(requests[1].headers.get("anthropic-beta").is_none());
 
-    // The next request to that base URL asks for the summarized display straight away.
+    // One refusal could be a passing error: the next call tries progress updates again.
+    let (result, _) = run(&p, &req).await;
+    result.unwrap();
+    assert_eq!(server.received_requests().await.unwrap().len(), 4);
+    assert!(sent_beta(&server, 2).await);
+    // After a second refusal in a row, that base URL and model get the summarized display
+    // straight away.
     let (result, _) = run(&p, &req).await;
     result.unwrap();
     let requests = server.received_requests().await.unwrap();
-    assert_eq!(requests.len(), 3);
-    assert!(requests[2].headers.get("anthropic-beta").is_none());
+    assert_eq!(requests.len(), 5);
+    assert!(!sent_beta(&server, 4).await);
+    // Another model behind the same gateway may reach another upstream, so it still tries.
+    let sonnet = ModelSpec::new("claude-sonnet-5-5");
+    let (result, _) = run(
+        &p,
+        &with_effort(request(&sonnet, &entries, &tools), Some(High)),
+    )
+    .await;
+    result.unwrap();
+    assert!(sent_beta(&server, 5).await);
+}
+
+#[tokio::test]
+async fn an_accepted_request_clears_earlier_refusals_of_progress_updates() {
+    let server = MockServer::start().await;
+    let refuse = Mock::given(method("POST"))
+        .and(body_string_contains(r#""display":"updates""#))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "type": "error",
+            "error": {"type": "invalid_request_error", "message": "upstream hiccup"}
+        })))
+        .with_priority(1)
+        .up_to_n_times(1)
+        .mount_as_scoped(&server)
+        .await;
+    Mock::given(method("POST"))
+        .respond_with(sse(ANTHROPIC_PROGRESS))
+        .mount(&server)
+        .await;
+    let p = provider(&server, Protocol::Anthropic);
+    let model = ModelSpec::new("claude-opus-5-5");
+    let entries = vec![AiEntry::user(1, "hi")];
+    let req = request(&model, &entries, &[]);
+    // A passing refusal, confirmed by the summarized retry: one strike.
+    run(&p, &req).await.0.unwrap();
+    drop(refuse);
+    // Accepted next time, which clears it.
+    run(&p, &req).await.0.unwrap();
+    assert!(sent_beta(&server, 2).await);
+    // So a later passing refusal is one strike again, not the second.
+    Mock::given(method("POST"))
+        .and(body_string_contains(r#""display":"updates""#))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "type": "error",
+            "error": {"type": "invalid_request_error", "message": "upstream hiccup"}
+        })))
+        .with_priority(1)
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    run(&p, &req).await.0.unwrap();
+    run(&p, &req).await.0.unwrap();
+    assert!(sent_beta(&server, 5).await);
 }
 
 #[test]
@@ -3254,10 +3317,7 @@ fn anthropic_stream(blocks: &[(&str, &str)], stop_reason: &str) -> String {
     let mut out = String::new();
     let mut event = |value: Value| {
         out.push_str(&format!(
-            "event: {}
-data: {value}
-
-",
+            "event: {}\ndata: {value}\n\n",
             value["type"].as_str().unwrap()
         ));
     };
@@ -3312,8 +3372,15 @@ fn progress_updates_are_only_the_thinking_right_before_a_tool_call() {
     );
     assert_eq!((text.as_str(), reasoning.as_str()), ("Checking /var.", ""));
     // The update shows before the call it introduces.
-    assert_eq!(events[0], self::text("Checking /var."));
-    assert!(matches!(events[1], StreamEvent::ToolCall(_)));
+    assert_eq!(
+        events[..3],
+        [
+            StreamEvent::Thinking,
+            StreamEvent::Thinking,
+            self::text("Checking /var.")
+        ]
+    );
+    assert!(matches!(events[3], StreamEvent::ToolCall(_)));
     // Reasoning with text (a provider that ignored the display) stays reasoning; the block
     // right before the call is still the update.
     let (text, reasoning, _) = progress(
@@ -3337,6 +3404,16 @@ fn progress_updates_are_only_the_thinking_right_before_a_tool_call() {
         (text.as_str(), reasoning.as_str()),
         ("It is /var.", "Disk is full.")
     );
+    // An update right after a text block is a paragraph of its own.
+    let (text, _, _) = progress(
+        &[
+            ("text", "I'll check the disk."),
+            ("thinking", "Root is at 97%."),
+            ("tool_use", "run_command"),
+        ],
+        "tool_use",
+    );
+    assert_eq!(text, "I'll check the disk.\n\nRoot is at 97%.");
     // So is thinking text the response ends with.
     let (text, reasoning, _) = progress(
         &[(

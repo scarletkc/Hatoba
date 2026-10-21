@@ -152,6 +152,14 @@ impl AnthropicStream {
     fn release(&mut self, before_tool: bool, emit: &mut (dyn FnMut(StreamEvent) + Send)) {
         if let Some((index, text)) = self.held.take() {
             if before_tool {
+                // A paragraph of its own, also right after a text block, which `push_text`
+                // would join directly.
+                if !self.text.is_empty()
+                    && self.last_text_block.is_some_and(|last| last + 1 == index)
+                {
+                    self.text.push_str("\n\n");
+                    emit(StreamEvent::Text("\n\n".into()));
+                }
                 self.push_text(index, &text, emit);
             } else {
                 self.push_reasoning(index, &text, emit);
@@ -202,6 +210,9 @@ impl AnthropicStream {
         let kind = block.get("type").and_then(Value::as_str).unwrap_or("");
         // `tool_use`, `server_tool_use` and `mcp_tool_use`.
         self.release(kind.ends_with("tool_use"), emit);
+        if matches!(kind, "thinking" | "redacted_thinking") {
+            emit(StreamEvent::Thinking);
+        }
         let initial = match kind {
             "text" => block.get("text"),
             "thinking" => block.get("thinking"),

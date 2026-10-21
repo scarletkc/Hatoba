@@ -135,6 +135,7 @@ fn kind(e: &AiTurnEvent) -> &'static str {
         AiTurnEvent::RequestStarted => "request_started",
         AiTurnEvent::Text { .. } => "text",
         AiTurnEvent::Reasoning { .. } => "reasoning",
+        AiTurnEvent::Thinking => "thinking",
         AiTurnEvent::ToolCall { .. } => "tool_call",
         AiTurnEvent::Usage { .. } => "usage",
         AiTurnEvent::Entry { .. } => "entry",

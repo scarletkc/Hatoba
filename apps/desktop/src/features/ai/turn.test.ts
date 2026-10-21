@@ -50,6 +50,7 @@ describe("reduceTurnEvent (§13.1)", () => {
     expect(s.turn?.live).toEqual({
       text: "Checking the disk.",
       reasoning: "The user wants disk usage.",
+      thinking: false,
       toolCalls: [{ id: "c1", name: "run_command", arguments: '{"command":"df -h"}' }],
       usage: { input_tokens: 10, output_tokens: 5, estimated: false },
     });
@@ -58,6 +59,14 @@ describe("reduceTurnEvent (§13.1)", () => {
     expect(stored.turn?.live).toBeNull();
     expect(stored.turn?.phase).toBe("tools");
     expect(stored.entries).toEqual([assistant]);
+  });
+
+  it("knows the model is thinking when no reasoning text comes with it (AI-06)", () => {
+    const s = run([{ kind: "request_started" }, { kind: "thinking" }]);
+    expect(s.turn?.phase).toBe("streaming");
+    expect(s.turn?.live).toMatchObject({ text: "", reasoning: "", thinking: true });
+    // The next request starts over.
+    expect(run([{ kind: "request_started" }], s).turn?.live?.thinking).toBe(false);
   });
 
   it("ends with the reason and keeps the provider error for Retry", () => {

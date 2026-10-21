@@ -2131,9 +2131,7 @@ mod tests {
         assert!(!forgetful.contains(MEMORY_RULE));
         assert!(forgetful.contains("<memory entries="));
         // Every model that can call tools is told where its answer goes, whatever the model.
-        let answer_rule = "
-- Write your full answer after your last tool call.
-";
+        let answer_rule = "\n- Write your full answer after your last tool call.\n";
         for (id, tools, told) in [
             ("claude-opus-5-5", PromptTools::Terminal, true),
             ("gpt-5.5", PromptTools::NoTerminal, true),

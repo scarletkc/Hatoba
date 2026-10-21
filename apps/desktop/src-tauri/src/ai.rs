@@ -3019,6 +3019,10 @@ impl AiManager {
         let mut forward = |event: StreamEvent| match event {
             StreamEvent::Text(delta) => send(AiSideEvent::Text { delta }),
             StreamEvent::Reasoning(delta) => send(AiSideEvent::Reasoning { delta }),
+            // The side panel shows only that the model thinks, which any reasoning event says.
+            StreamEvent::Thinking => send(AiSideEvent::Reasoning {
+                delta: String::new(),
+            }),
             _ => {}
         };
         let response = stream_chat(
@@ -6472,6 +6476,7 @@ fn stream_event(event: StreamEvent) -> AiTurnEvent {
     match event {
         StreamEvent::Text(delta) => AiTurnEvent::Text { delta },
         StreamEvent::Reasoning(delta) => AiTurnEvent::Reasoning { delta },
+        StreamEvent::Thinking => AiTurnEvent::Thinking,
         StreamEvent::ToolCall(call) => AiTurnEvent::ToolCall {
             id: call.id,
             name: call.name,
