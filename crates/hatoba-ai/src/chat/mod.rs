@@ -9,7 +9,11 @@
 //!   key in `x-api-key` or `Authorization: Bearer`, `max_tokens` from the model (16,000 when
 //!   unknown, at most 128,000) and top-level `cache_control`. A chosen thinking level adds
 //!   `output_config.effort` and, where the model supports it, adaptive thinking with summarized
-//!   display (see `request` for the rule at Default). No `temperature`, beta headers or
+//!   display (see `request` for the rule at Default). A model that writes progress updates
+//!   between tool calls gets `display: "updates"` instead, with its beta header, and its
+//!   progress updates stream as answer text; a 4xx about that display or header sends the
+//!   request again with summarized display, and requests to that base URL keep the summarized
+//!   display until the app restarts. No `temperature`, other beta headers or
 //!   `eager_input_streaming`, so any Anthropic-compatible vendor accepts the request. When a
 //!   request that replayed `raw` is refused with a 400 about thinking, signatures or blocks
 //!   (newer Claude models bind signed thinking to the exact prefix), it is sent once more with
@@ -62,8 +66,11 @@ pub(crate) mod tests_support {
     }
 }
 
+use std::collections::HashSet;
+use std::sync::{LazyLock, Mutex, PoisonError};
+
 use futures::StreamExt;
-use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
+use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 
@@ -76,6 +83,8 @@ use crate::entry::{AiEntry, AssistantEntry, Finish, ToolCall, Usage};
 use crate::error::AiError;
 use crate::net;
 use crate::provider::{Effort, ModelSpec, Protocol, ProviderConfig, validate_base_url};
+
+pub(crate) use self::request::writes_progress_updates;
 
 /// A tool offered to the model.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -223,11 +232,18 @@ pub async fn stream_chat(
             let url = net::endpoint(&base, "/v1/messages");
             let mut allow_raw = true;
             let mut with_effort = true;
+            let mut with_updates = !refuses_updates(&provider.base_url);
             loop {
-                let built = request::anthropic(req, allow_raw, with_effort);
+                let built = request::anthropic(req, allow_raw, with_effort, with_updates);
                 let (response, request_chars) = post(http, provider, &url, &built, cancel).await?;
                 if !response.status().is_success() {
                     let err = provider.error(response, cancel).await;
+                    // Before the effort check, which the word `display` also matches.
+                    if built.beta.is_some() && rejects_updates(&err) {
+                        with_updates = false;
+                        remember_refused_updates(&provider.base_url);
+                        continue;
+                    }
                     if built.sent_effort && rejects_effort(&err) {
                         with_effort = false;
                         if built.effort.is_some() {
@@ -241,7 +257,8 @@ pub async fn stream_chat(
                     }
                     return Err(err);
                 }
-                let assembled = consume(response, AnthropicStream::new(), cancel, on_event).await?;
+                let stream = AnthropicStream::new(built.beta.is_some());
+                let assembled = consume(response, stream, cancel, on_event).await?;
                 return Ok(into_entry(req, assembled, request_chars, on_event));
             }
         }
@@ -350,6 +367,39 @@ pub(crate) fn rejects_summary(err: &AiError) -> bool {
     }
 }
 
+/// Whether an Anthropic error is a 4xx about `display: "updates"` or its beta header, which a
+/// vendor or gateway that does not pass the header on returns. The request is then retried with
+/// summarized display, keeping the level.
+pub(crate) fn rejects_updates(err: &AiError) -> bool {
+    match err {
+        AiError::Http { status, message } if (400..500).contains(status) => {
+            let message = message.to_ascii_lowercase();
+            ["display", "beta", "updates"]
+                .iter()
+                .any(|word| message.contains(word))
+        }
+        _ => false,
+    }
+}
+
+/// Base URLs that refused `display: "updates"` since the app started, so their requests do not
+/// each fail once before the summarized retry.
+static REFUSED_UPDATES: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Mutex::default);
+
+fn refuses_updates(base_url: &str) -> bool {
+    REFUSED_UPDATES
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .contains(base_url)
+}
+
+fn remember_refused_updates(base_url: &str) {
+    REFUSED_UPDATES
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .insert(base_url.to_owned());
+}
+
 /// Whether an Anthropic error is the 400 that newer Claude models return when replayed thinking
 /// blocks no longer match the request's prefix (or any other complaint about replayed blocks):
 /// the request is then retried once without `raw`.
@@ -379,7 +429,13 @@ async fn post(
         .map_err(|_| AiError::Protocol("the request could not be encoded".into()))?;
     let request_chars = body.chars().count();
     let response = provider
-        .send(cancel, |headers| {
+        .send(cancel, |mut headers| {
+            if let Some(beta) = built.beta {
+                headers.insert(
+                    HeaderName::from_static("anthropic-beta"),
+                    HeaderValue::from_static(beta),
+                );
+            }
             json_post(http, url, headers, body.clone())
         })
         .await?;

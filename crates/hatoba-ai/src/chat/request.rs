@@ -61,6 +61,13 @@
 //!   said ([`known_model`](crate::models::known_model)), or, for a model neither knows, whether
 //!   it thinks by default. `budget_tokens` and `thinking: {type: "disabled"}` are never sent:
 //!   current models refuse both.
+//! - Anthropic, on a model that writes progress updates ([`writes_progress_updates`]): the text
+//!   it writes for the user between tool calls comes back as `thinking` blocks, which the
+//!   summarized display mixes with reasoning beyond telling apart. Such a model gets
+//!   `display: "updates"` instead, with the beta header [`UPDATES_BETA`]: its reasoning comes
+//!   back empty and each progress update as text, which the panel shows as answer text. With
+//!   `with_updates` false (the retry after a 4xx about that display or its header, which a vendor
+//!   or gateway that does not pass the header on returns) it gets the summarized display.
 //! - Anthropic `max_tokens` is the model's output limit, at most 128,000, or 16,000 when the limit
 //!   is unknown. Thinking counts against it, but a larger guess could exceed what an
 //!   Anthropic-compatible vendor allows and fail every request, so an unknown limit stays 16,000
@@ -97,7 +104,13 @@ pub(crate) struct Built {
     pub sent_summary: bool,
     /// The level the body asks for; `None` at Default.
     pub effort: Option<Effort>,
+    /// The `anthropic-beta` header the body needs: [`UPDATES_BETA`] when it asks for
+    /// `display: "updates"`.
+    pub beta: Option<&'static str>,
 }
+
+/// The beta header an Anthropic request needs for `thinking.display: "updates"`.
+pub(crate) const UPDATES_BETA: &str = "thinking-display-updates-2026-08-18";
 
 /// The Claude generation a model id names: `claude-opus-5-5` and `us.anthropic.claude-fable-5-1`
 /// are 5, `claude-opus-4-8` is 4, `claude-3-5-sonnet-20241022` is 3. `None` for other ids.
@@ -115,6 +128,38 @@ pub(crate) fn claude_generation(id: &str) -> Option<u32> {
 /// generation and later. Opus 4.8 and 4.7 do not.
 pub(crate) fn thinks_by_default(model: &ModelSpec) -> bool {
     claude_generation(&model.id).is_some_and(|generation| generation >= 5)
+}
+
+/// Whether a Claude model writes progress updates between tool calls, which Anthropic returns as
+/// `thinking` blocks: Fable 5, Mythos 5.1, Opus 5.5, Sonnet 5.5 and their later versions. Opus 5,
+/// Sonnet 5, Mythos 5 and Haiku models write that text as `text` blocks.
+pub(crate) fn writes_progress_updates(id: &str) -> bool {
+    let id = id.to_ascii_lowercase();
+    // Vertex appends `@date`, OpenRouter writes `claude-opus-5.5`.
+    let id = id.split('@').next().unwrap_or_default();
+    let Some(start) = id.find("claude-") else {
+        return false;
+    };
+    let mut parts = id[start + "claude-".len()..].split(['-', '.']);
+    let family = parts.next().unwrap_or_default();
+    // A version number has one or two digits; a date suffix has eight.
+    let mut number = || {
+        parts
+            .next()
+            .filter(|part| part.len() <= 2)
+            .and_then(|part| part.parse::<u32>().ok())
+    };
+    let Some(major) = number() else {
+        return false;
+    };
+    let minor = number().unwrap_or(0);
+    let since = match family {
+        "fable" => (5, 0),
+        "mythos" => (5, 1),
+        "opus" | "sonnet" => (5, 5),
+        _ => return false,
+    };
+    (major, minor) >= since
 }
 
 /// Whether an Anthropic request may send `thinking: {type: "adaptive"}`: what the model list or
@@ -525,6 +570,7 @@ pub(crate) fn chat_completions(
         sent_effort: effort.is_some(),
         sent_summary: false,
         effort,
+        beta: None,
     }
 }
 
@@ -673,6 +719,7 @@ pub(crate) fn responses(
         sent_effort: reasoning,
         sent_summary: reasoning && with_summary,
         effort,
+        beta: None,
     }
 }
 
@@ -698,8 +745,14 @@ fn push_blocks(messages: &mut Vec<(Role, Vec<Value>)>, role: Role, blocks: Vec<V
 /// thinking-binding retry). When the request offers no tools there are no `tool_use` and
 /// `tool_result` blocks in it, which Anthropic refuses without `tools`: calls and results are sent
 /// as text and merge with the neighbouring messages of their role (see the module docs). With
-/// `with_effort` false there is no `thinking` and no `output_config`.
-pub(crate) fn anthropic(req: &ChatRequest<'_>, allow_raw: bool, with_effort: bool) -> Built {
+/// `with_effort` false there is no `thinking` and no `output_config`; with `with_updates` false
+/// thinking is summarized on every model.
+pub(crate) fn anthropic(
+    req: &ChatRequest<'_>,
+    allow_raw: bool,
+    with_effort: bool,
+    with_updates: bool,
+) -> Built {
     let (turns, used_raw) = plan(req, Protocol::Anthropic, allow_raw);
     let mut messages: Vec<(Role, Vec<Value>)> = Vec::new();
     for turn in turns {
@@ -781,6 +834,7 @@ pub(crate) fn anthropic(req: &ChatRequest<'_>, allow_raw: bool, with_effort: boo
     let thinking = with_effort
         && adaptive_thinking(req.model)
         && (effort.is_some() || thinks_by_default(req.model));
+    let updates = thinking && with_updates && writes_progress_updates(&req.model.id);
 
     let mut body = Map::new();
     body.insert("model".into(), json!(req.model.id));
@@ -793,9 +847,10 @@ pub(crate) fn anthropic(req: &ChatRequest<'_>, allow_raw: bool, with_effort: boo
         ),
     );
     if thinking {
+        let display = if updates { "updates" } else { "summarized" };
         body.insert(
             "thinking".into(),
-            json!({"type": "adaptive", "display": "summarized"}),
+            json!({"type": "adaptive", "display": display}),
         );
     }
     if let Some(effort) = effort {
@@ -827,6 +882,7 @@ pub(crate) fn anthropic(req: &ChatRequest<'_>, allow_raw: bool, with_effort: boo
         sent_effort: thinking || effort.is_some(),
         sent_summary: false,
         effort,
+        beta: updates.then_some(UPDATES_BETA),
     }
 }
 

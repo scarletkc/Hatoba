@@ -1454,6 +1454,14 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
         "- Answer in the user's language. Be concise, use Markdown, and put commands in code \
          blocks.\n",
     );
+    // These models' text before a tool call comes back as a progress update, which the API
+    // returns only as a short summary.
+    if tools && crate::chat::writes_progress_updates(ctx.model.id) {
+        out.push_str(
+            "- Text you write before a tool call reaches the user only as a short summary, so \
+             write your full answer after your last tool call.\n",
+        );
+    }
     let given = match (&instructions, &notes) {
         (Some(_), Some(_)) => Some("the user's instructions and the host notes below"),
         (Some(_), None) => Some("the user's instructions below"),
@@ -2126,6 +2134,23 @@ mod tests {
         });
         assert!(!forgetful.contains(MEMORY_RULE));
         assert!(forgetful.contains("<memory entries="));
+        // Only a model whose text before a tool call comes back as a summarized progress update
+        // is told where its answer goes, and only when it can call tools.
+        let answer_rule = "write your full answer after your last tool call";
+        assert!(prompt.contains(answer_rule));
+        for (id, tools) in [
+            ("claude-opus-5", PromptTools::Terminal),
+            ("gpt-5.5", PromptTools::NoTerminal),
+            ("claude-opus-5-5", PromptTools::None),
+            ("claude-opus-5-5", PromptTools::SideQuestion),
+        ] {
+            let other = system_prompt(&PromptContext {
+                model: PromptModel { id, ..OPUS },
+                tools,
+                ..ctx
+            });
+            assert!(!other.contains(answer_rule), "{id} with {tools:?}");
+        }
         // Without instructions or notes, no section and no rule about them.
         for absent in ["<user_instructions>", "<host_notes", "Follow "] {
             assert!(!prompt.contains(absent), "unexpected {absent:?}");
@@ -2715,6 +2740,7 @@ The SSH server identifies itself as "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5".
 - You can call several tools in one response. When calls do not depend on each other, such as reading several files or running several checks, make them together in the same response rather than one at a time.
 - Prefer glob to find files, grep to search them, and read_file, edit_file and write_file to read and change them, over the same work with find, grep, cat, sed or heredocs in the shell: edit_file and write_file show the user the change and can be reverted. Fall back to the shell when these tools cannot do the job, such as finding files by size or age, or files that need sudo. Use send_input for anything that needs the shell's working directory, environment or sudo session, or that is interactive, and run_command for the rest.
 - Answer in the user's language. Be concise, use Markdown, and put commands in code blocks.
+- Text you write before a tool call reaches the user only as a short summary, so write your full answer after your last tool call.
 - Follow the user's instructions and the host notes below; where they differ from the rules above, follow them instead. Which tool calls need the user's approval is still up to Hatoba.
 </rules>
 

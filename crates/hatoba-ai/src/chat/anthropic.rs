@@ -4,6 +4,10 @@
 //! takes its deltas (`text_delta`, `thinking_delta`, `signature_delta`, `input_json_delta`,
 //! `citations_delta`; unknown deltas are merged field by field), so thinking signatures,
 //! redacted thinking and block types Hatoba does not know come back unchanged on replay.
+//!
+//! Under `display: "updates"` reasoning blocks come back empty, and a `thinking` block with text
+//! is a progress update the model wrote for the user before a tool call: its text is answer
+//! text, not reasoning.
 
 use std::collections::BTreeMap;
 
@@ -102,11 +106,31 @@ pub(crate) struct AnthropicStream {
     stop_reason: Option<String>,
     usage: UsageCounts,
     done: bool,
+    /// The request asked for `display: "updates"`, so thinking text is progress updates.
+    updates: bool,
 }
 
 impl AnthropicStream {
-    pub(crate) fn new() -> Self {
-        Self::default()
+    pub(crate) fn new(updates: bool) -> Self {
+        Self {
+            updates,
+            ..Self::default()
+        }
+    }
+
+    /// Appends the text of a `thinking` block: answer text when it is a progress update,
+    /// reasoning otherwise.
+    fn push_thinking(
+        &mut self,
+        index: u64,
+        text: &str,
+        emit: &mut (dyn FnMut(StreamEvent) + Send),
+    ) {
+        if self.updates {
+            self.push_text(index, text, emit);
+        } else {
+            self.push_reasoning(index, text, emit);
+        }
     }
 
     /// Appends answer text. Adjacent text blocks (as citations produce) join directly; text
@@ -169,7 +193,7 @@ impl AnthropicStream {
             if is_text {
                 self.push_text(index, &initial, emit);
             } else {
-                self.push_reasoning(index, &initial, emit);
+                self.push_thinking(index, &initial, emit);
             }
         }
     }
@@ -197,7 +221,7 @@ impl AnthropicStream {
             "thinking_delta" => {
                 let thinking = str_of("thinking");
                 merge_field(&mut block.value, "thinking", &json!(thinking));
-                self.push_reasoning(index, &thinking, emit);
+                self.push_thinking(index, &thinking, emit);
             }
             "signature_delta" => {
                 merge_field(&mut block.value, "signature", &json!(str_of("signature")));

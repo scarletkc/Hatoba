@@ -333,7 +333,7 @@ fn raw_of_another_protocol_is_rebuilt() {
     );
     // Responses items to one that now speaks Anthropic Messages.
     let entries = tool_history(Protocol::Responses, &model.id);
-    let built = request::anthropic(&request(&model, &entries, &tools), true, true);
+    let built = request::anthropic(&request(&model, &entries, &tools), true, true, true);
     assert!(!built.used_raw);
     // A Chat Completions message object is no item array either.
     let entries = tool_history(Protocol::ChatCompletions, &model.id);

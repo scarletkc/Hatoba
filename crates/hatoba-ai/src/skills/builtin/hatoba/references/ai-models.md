@@ -17,7 +17,7 @@ Under the current model, the same menu has a **Thinking Level** row. It lists **
 - The model button shows the level, Default included. When the input area has no room, it leaves out the level, then the model's name, and shows only its cube icon; hover it for both. A level the model lacks is sent as the highest lower level it has (Default when there is none), and the menu shows the level that is actually sent.
 - Each conversation keeps the level of its last message, and that syncs to the other devices. A new conversation starts at "Thinking level for new conversations" in Settings → AI (Default unless changed); the levels a model offers are set in the provider's model list (`references/ai-settings.md`).
 - If the provider refuses the level fields, Hatoba sends the message again without them and the panel says that the model doesn't accept the chosen level and the message went at its default level (`references/troubleshooting-ai.md`).
-- Model reasoning, when the provider returns it, is shown above the answer as **Reasoning**, collapsed.
+- Model reasoning, when the provider returns it, is shown above the answer as **Reasoning**, collapsed. Claude models that write short progress notes between tool calls (such as Claude Opus 5.5 and Sonnet 5.5) show no reasoning over the Anthropic protocol: their notes appear in the reply, before the tool calls they introduce. A provider or gateway that refuses this gets the reasoning instead, with the notes in it.
 
 ## Context and compaction
 
