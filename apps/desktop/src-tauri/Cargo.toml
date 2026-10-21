@@ -7,7 +7,8 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 publish = false
-# `src/bin/hatoba-cli.rs` is the second binary; the app is this one.
+# `src/bin/hatoba-cli.rs` is the second binary; the app is this one. `tauri dev` builds only the
+# app, so on Windows `scripts/dev/before-dev.mjs` builds `hatoba-cli` beside it (HOST-15).
 default-run = "hatoba-desktop"
 
 [lib]

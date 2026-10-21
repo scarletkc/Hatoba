@@ -114,7 +114,7 @@ mod imp {
     use winreg::{RegKey, RegValue};
 
     use super::{COMMENT, path_with, path_without, write_if_changed};
-    use crate::error::{AppError, AppResult};
+    use crate::error::{AppError, AppResult, ErrorCode};
 
     /// The console program installed beside the executable, and its copy in `bin`.
     const CONSOLE: &str = "hatoba-cli.exe";
@@ -136,10 +136,11 @@ mod imp {
         let bin = location()?;
         let console = std::env::current_exe()?.with_file_name(CONSOLE);
         if !console.is_file() {
-            return Err(AppError::internal(format!(
-                "{} is missing",
-                console.display()
-            )));
+            // Settings names the file in `detail`.
+            return Err(AppError {
+                field: Some("console".into()),
+                ..AppError::new(ErrorCode::NotFound, console.display().to_string())
+            });
         }
         std::fs::create_dir_all(&bin)?;
         replace_if_changed(&console, &bin.join(COMMAND))?;
