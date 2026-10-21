@@ -426,7 +426,7 @@ pub async fn start(
                 let (app, id) = (app.clone(), forward_id.to_owned());
                 tauri::async_runtime::spawn(async move {
                     let _ = opening.await;
-                    // The start went on elsewhere: what it left here, a forward or its failure, goes.
+                    // The start went on elsewhere: the forward or failure it left here goes.
                     if conn.stop_forward(&id) {
                         changed(&app);
                     }
