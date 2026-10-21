@@ -951,15 +951,26 @@ async fn wrong_port_is_refused_not_auth_failed() {
 
 // ----------------------------------------------------------------------- throughput & backpressure
 
+/// Turns off echo, newline translation and the prompt, and waits until the shell has done so:
+/// output read after this is the next command's own, plus a few bracketed-paste bytes.
+async fn quiet_shell(
+    shell: &hatoba_ssh::ShellHandle,
+    rx: &mut tokio::sync::mpsc::Receiver<ShellEvent>,
+) {
+    shell
+        .write(b"PS1=; stty -echo -onlcr; echo READY-$((1+1))\n".to_vec())
+        .await
+        .unwrap();
+    read_until(rx, Duration::from_secs(10), |o| contains(o, "READY-2")).await;
+}
+
 /// §11: a 50 MB `cat` must not freeze anything, and nothing may be lost.
 #[tokio::test]
 async fn fifty_megabytes_of_output_arrive_complete() {
     let server = server!();
     let session = server.connect_key("ed25519", None).await;
     let (shell, mut rx) = session.open_shell(ShellOptions::default()).await.unwrap();
-    shell.write(b"stty -echo -onlcr\n".to_vec()).await.unwrap();
-    tokio::time::sleep(Duration::from_millis(300)).await;
-    while rx.try_recv().is_ok() {}
+    quiet_shell(&shell, &mut rx).await;
 
     const SIZE: usize = 50 * 1000 * 1000;
     shell
@@ -1006,9 +1017,7 @@ async fn a_stalled_consumer_applies_backpressure() {
     let server = server!();
     let session = server.connect_key("ed25519", None).await;
     let (shell, mut rx) = session.open_shell(ShellOptions::default()).await.unwrap();
-    shell.write(b"stty -echo -onlcr\n".to_vec()).await.unwrap();
-    tokio::time::sleep(Duration::from_millis(300)).await;
-    while rx.try_recv().is_ok() {}
+    quiet_shell(&shell, &mut rx).await;
 
     const SIZE: usize = 60 * 1000 * 1000;
     shell
