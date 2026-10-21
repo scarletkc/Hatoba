@@ -84,7 +84,9 @@ const description =
                         aria-label={`${t.download.copy} ${t.download.sha256}: ${download.name}`}
                       >
                         <Icon name="copy" size={16} />
-                        <span aria-live="polite">{t.download.copy}</span>
+                        <span class="state" data-idle={t.download.copy} data-done={t.download.copied}>
+                          <span aria-live="polite">{t.download.copy}</span>
+                        </span>
                       </button>
                     </p>
                   </li>
@@ -106,7 +108,9 @@ const description =
                     aria-label={`${t.download.copy}: ${PACKAGE_COMMANDS[platform].join("; ")}`}
                   >
                     <Icon name="copy" size={16} />
-                    <span aria-live="polite">{t.download.copy}</span>
+                    <span class="state" data-idle={t.download.copy} data-done={t.download.copied}>
+                      <span aria-live="polite">{t.download.copy}</span>
+                    </span>
                   </button>
                 </div>
               </>
@@ -132,7 +136,7 @@ const description =
 
 <script>
   for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-copy]")) {
-    const label = button.querySelector("span")!;
+    const label = button.querySelector("[aria-live]")!;
     const idle = label.textContent;
     button.addEventListener("click", async () => {
       try {
@@ -282,6 +286,31 @@ const description =
   .copy:hover {
     color: var(--ink);
     border-color: var(--ink-2);
+  }
+
+  /* Both labels share one cell, so the button keeps its width when "Copy" turns into "Copied". */
+  .state {
+    display: inline-grid;
+    justify-items: center;
+  }
+
+  .state > *,
+  .state::before,
+  .state::after {
+    grid-area: 1 / 1;
+  }
+
+  .state::before,
+  .state::after {
+    visibility: hidden;
+  }
+
+  .state::before {
+    content: attr(data-idle);
+  }
+
+  .state::after {
+    content: attr(data-done);
   }
 
   h3 {
