@@ -69,6 +69,7 @@ export default defineMessages({
     "ai.queued": "排队中，当前任务结束后发送",
     "ai.queued.edit": "编辑",
     "ai.queued.editHint": "放回输入框修改（↑）",
+    "ai.queued.sendNow": "立即发送",
     "ai.queued.remove": "删除排队的消息",
     // AI-42: side questions
     "ai.side.ask": "顺便问一句",
@@ -573,6 +574,7 @@ export default defineMessages({
     "ai.queued": "Queued: sends when the turn ends",
     "ai.queued.edit": "Edit",
     "ai.queued.editHint": "Move it back to the input box to edit (↑)",
+    "ai.queued.sendNow": "Send Now",
     "ai.queued.remove": "Remove the Queued Message",
     // AI-42: side questions
     "ai.side.ask": "Ask a Side Question",
@@ -1075,6 +1077,7 @@ export default defineMessages({
     "ai.queued": "待機中：作業が終わったら送信します",
     "ai.queued.edit": "編集",
     "ai.queued.editHint": "入力欄に戻して編集（↑）",
+    "ai.queued.sendNow": "今すぐ送信",
     "ai.queued.remove": "待機中のメッセージを削除",
     // AI-42: side questions
     "ai.side.ask": "ついでに質問",

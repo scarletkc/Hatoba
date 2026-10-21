@@ -386,7 +386,7 @@ describe("Ctrl+Enter during a turn (§13.1)", () => {
   });
 });
 
-describe("the input box's keys (§13.1)", () => {
+describe("the input area (§13.1)", () => {
   let unmount: (() => void) | null = null;
   afterEach(() => {
     act(() => unmount?.());
@@ -446,5 +446,23 @@ describe("the input box's keys (§13.1)", () => {
     key(box, { key: "Enter", ctrlKey: true, keyCode: 13 });
     await act(flush);
     expect(sent.map((x) => x.text)).toEqual(["hello", "again"]);
+  });
+
+  it("sends the queued message alone with the card's Send Now, leaving the box", async () => {
+    const sent = turns();
+    await running(sent);
+    queueMessage(HOME_SLOT, "do this instead");
+    patchSlot(HOME_SLOT, { draft: "still typing" });
+    render();
+    const now = document.querySelector<HTMLButtonElement>('button[aria-label="Send Now"]')!;
+    expect(now.title).toBe("Stop and Send the Queued Message (Esc)");
+    await act(async () => now.click());
+    expect(ipc.stop).toHaveBeenCalledWith("c1");
+
+    sent[0].emit({ kind: "turn_ended", reason: "stopped" });
+    await act(flush);
+    await act(flush);
+    expect(sent.map((x) => x.text)).toEqual(["first", "do this instead"]);
+    expect(getSlot(HOME_SLOT)).toMatchObject({ queued: null, draft: "still typing" });
   });
 });

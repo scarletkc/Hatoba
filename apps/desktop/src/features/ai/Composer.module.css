@@ -37,7 +37,7 @@
   font-size: var(--text-xs);
 }
 
-.queuedRemove {
+.queuedAction {
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -51,7 +51,7 @@
   color: var(--fg3);
 }
 
-.queuedRemove:hover {
+.queuedAction:hover {
   background: var(--fill);
   color: var(--fg);
 }

@@ -467,7 +467,10 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
   );
 }
 
-/** §13.1: the message waiting for the turn to end, above the input box: its text and attachments, Edit and ×. */
+/**
+ * §13.1: the message waiting for the turn to end, above the input box: its text and attachments, Edit, Send Now
+ * (Stop, which then sends it) and ×.
+ */
 function QueuedCard({ slotId, queued }: { slotId: string; queued: QueuedMessage }) {
   const t = useT();
   return (
@@ -478,7 +481,10 @@ function QueuedCard({ slotId, queued }: { slotId: string; queued: QueuedMessage 
         <LinkButton className={s.queuedEdit} title={t("ai.queued.editHint")} onClick={() => editQueued(slotId)}>
           {t("ai.queued.edit")}
         </LinkButton>
-        <button type="button" className={s.queuedRemove} title={t("ai.queued.remove")} aria-label={t("ai.queued.remove")} onClick={() => discardQueued(slotId)}>
+        <button type="button" className={s.queuedAction} title={t("ai.stopAndSend")} aria-label={t("ai.queued.sendNow")} onClick={() => void stopTurn(slotId)}>
+          <Icon name="arrow-up" size={12} />
+        </button>
+        <button type="button" className={s.queuedAction} title={t("ai.queued.remove")} aria-label={t("ai.queued.remove")} onClick={() => discardQueued(slotId)}>
           <Icon name="x" size={12} />
         </button>
       </div>
