@@ -56,7 +56,10 @@ def open_page(p, url):
     page.on("pageerror", lambda e: print("page error:", e, flush=True))
     page.on("console", lambda m: m.type == "error" and print("console:", m.text, flush=True))
     page.goto(url)
-    page.wait_for_function("window.PROMO && window.PROMO.ready", timeout=60000)
+    page.wait_for_function("window.PROMO && (window.PROMO.ready || window.PROMO.error)", timeout=60000)
+    error = page.evaluate("window.PROMO.error")
+    if error:
+        raise SystemExit(f"The film didn't load: {error}")
     cdp = page.context.new_cdp_session(page)
     return browser, page, cdp
 
@@ -104,9 +107,6 @@ def main():
     args = ap.parse_args()
     work = args.out or WORK
     work.mkdir(parents=True, exist_ok=True)
-    snapshots = WORK / "snapshots" / args.lang
-    if not (snapshots / "hosts.html").exists():
-        raise SystemExit(f"No snapshots of the app in {snapshots}: run scripts/media/promo/capture.py with `pnpm dev` running first.")
 
     server = serve()
     url = f"http://127.0.0.1:{server.server_port}/{PAGE}?render&lang={args.lang}&bpm={args.bpm}"

@@ -796,7 +796,9 @@ const app = (() => {
   /* loading and measuring */
   async function load() {
     for (const name of SNAPS) {
-      const html = await (await fetch(`out/snapshots/${LANG}/${name}.html`)).text();
+      const res = await fetch(`out/snapshots/${LANG}/${name}.html`);
+      if (!res.ok) throw new Error(`no snapshot out/snapshots/${LANG}/${name}.html: run capture.py with \`pnpm dev\` running first`);
+      const html = await res.text();
       const f = el(win, 'snap', '', 'iframe');
       const loaded = new Promise((r) => (f.onload = r));
       f.srcdoc = html.replace('</head>', `<style>${SNAP_CSS}</style></head>`);
@@ -1596,4 +1598,8 @@ function controls() {
   if (Q.has('play')) toggle();
 }
 
-init();
+// render.py waits for PROMO.ready, or stops on PROMO.error.
+init().catch((e) => {
+  window.PROMO = { error: e.message };
+  console.error(e);
+});

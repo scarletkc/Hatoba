@@ -123,6 +123,8 @@ def main():
             pg.wait_for_timeout(1500)
             pg.get_by_label(re.compile("^" + re.escape(label["show_ai"]))).click()
             pg.wait_for_timeout(600)
+            for old in out.glob("ai-*.html"):
+                old.unlink()
             save(pg, "ai-empty")
             box = pg.locator("textarea").last
             box.fill(label["prompt"])
@@ -137,6 +139,11 @@ def main():
                     run.first.click()
                     runs += 1
                 pg.wait_for_timeout(200)
+            # promo.js plays exactly these stages: four approvals (RUNS), then the summary.
+            if not pg.get_by_text(label["fixed"], exact=True).count():
+                raise SystemExit(f"{lang}: the assistant didn't finish its reply within a minute")
+            if runs != 4:
+                raise SystemExit(f"{lang}: the conversation asked for {runs} approvals, and promo.js plays four")
             pg.wait_for_timeout(5000)
             save(pg, "ai-done")
 
