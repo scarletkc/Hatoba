@@ -233,22 +233,16 @@ pub async fn stream_chat(
             let mut with_effort = true;
             let mut with_updates = !refuses_updates(&provider.base_url);
             let mut updates_retried = false;
-            // This request is the retry without progress updates, so its answer says whether
-            // they were what the provider refused.
+            // This request is the retry without progress updates, so a complete answer to it
+            // says they were what the provider refused. A failure says nothing either way, and
+            // they stay off for the rest of this call.
             let mut confirming = false;
             loop {
                 let built = request::anthropic(req, allow_raw, with_effort, with_updates);
                 let (response, request_chars) = post(http, provider, &url, &built, cancel).await?;
                 if !response.status().is_success() {
                     let err = provider.error(response, cancel).await;
-                    if std::mem::take(&mut confirming) {
-                        if built.sent_effort && rejects_effort(&err) {
-                            // No thinking fields at all, so no progress updates either.
-                            remember_refused_updates(&provider.base_url);
-                        } else {
-                            with_updates = true;
-                        }
-                    }
+                    confirming = false;
                     if built.beta.is_some() && !updates_retried && may_refuse_updates(&err) {
                         with_updates = false;
                         updates_retried = true;
@@ -268,11 +262,11 @@ pub async fn stream_chat(
                     }
                     return Err(err);
                 }
+                let stream = AnthropicStream::new(built.beta.is_some());
+                let assembled = consume(response, stream, cancel, on_event).await?;
                 if confirming {
                     remember_refused_updates(&provider.base_url);
                 }
-                let stream = AnthropicStream::new(built.beta.is_some());
-                let assembled = consume(response, stream, cancel, on_event).await?;
                 return Ok(into_entry(req, assembled, request_chars, on_event));
             }
         }

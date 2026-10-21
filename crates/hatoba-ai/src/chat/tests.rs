@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
-use wiremock::matchers::{body_partial_json, method, path};
+use wiremock::matchers::{body_partial_json, body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 use zeroize::Zeroizing;
 
@@ -3108,4 +3108,131 @@ async fn an_unrelated_refusal_keeps_progress_updates() {
     let requests = server.received_requests().await.unwrap();
     assert_eq!(requests.len(), 4);
     assert!(requests[2].headers.get("anthropic-beta").is_some());
+}
+
+/// Whether request `i` of `server` carried the progress-updates beta header.
+async fn sent_beta(server: &MockServer, i: usize) -> bool {
+    server.received_requests().await.unwrap()[i]
+        .headers
+        .get("anthropic-beta")
+        .is_some()
+}
+
+#[tokio::test]
+async fn an_effort_refusal_is_not_a_refusal_of_progress_updates() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            json!({"output_config": {"effort": "high"}}),
+        ))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "type": "error",
+            "error": {"type": "invalid_request_error",
+                      "message": "This model does not support the effort parameter."}
+        })))
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .respond_with(sse(ANTHROPIC_TOOL))
+        .mount(&server)
+        .await;
+    let p = provider(&server, Protocol::Anthropic);
+    let model = ModelSpec::new("claude-opus-5-5");
+    let entries = vec![AiEntry::user(1, "hi")];
+    let req = with_effort(request(&model, &entries, &[]), Some(High));
+    // Progress updates, then the summarized display, then neither with the effort dropped.
+    let (result, events) = run(&p, &req).await;
+    result.unwrap();
+    assert_eq!(events[0], StreamEvent::EffortIgnored);
+    assert_eq!(server.received_requests().await.unwrap().len(), 3);
+    // The summarized retry failed too, so the base URL still gets progress updates.
+    let (result, _) = run(&p, &req).await;
+    result.unwrap();
+    assert!(sent_beta(&server, 3).await);
+}
+
+#[tokio::test]
+async fn a_failed_stream_is_not_a_refusal_of_progress_updates() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(body_string_contains(r#""display":"updates""#))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "type": "error",
+            "error": {"type": "invalid_request_error", "message": "messages: bad request"}
+        })))
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    // The summarized retry gets a 200 whose stream ends in an error event.
+    Mock::given(method("POST"))
+        .respond_with(sse(ANTHROPIC_ERROR))
+        .mount(&server)
+        .await;
+    let p = provider(&server, Protocol::Anthropic);
+    let model = ModelSpec::new("claude-opus-5-5");
+    let entries = vec![AiEntry::user(1, "hi")];
+    let req = request(&model, &entries, &[]);
+    let (result, _) = run(&p, &req).await;
+    assert_eq!(result.unwrap_err().status(), Some(529));
+    assert_eq!(server.received_requests().await.unwrap().len(), 2);
+    let (result, _) = run(&p, &req).await;
+    result.unwrap_err();
+    assert!(sent_beta(&server, 2).await);
+}
+
+#[tokio::test]
+async fn a_refused_beta_and_a_replay_refusal_still_get_an_answer() {
+    let server = MockServer::start().await;
+    // A gateway that refuses the beta header, and a replayed signature it no longer accepts.
+    Mock::given(method("POST"))
+        .and(body_string_contains(r#""display":"updates""#))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "type": "error",
+            "error": {"type": "invalid_request_error", "message": "unknown beta"}
+        })))
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(body_string_contains(r#""signature""#))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "type": "error",
+            "error": {"type": "invalid_request_error",
+                      "message": "messages.1.content.0: Invalid `signature` in `thinking` block"}
+        })))
+        .with_priority(2)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .respond_with(sse(ANTHROPIC_TOOL))
+        .mount(&server)
+        .await;
+    let p = provider(&server, Protocol::Anthropic);
+    let model = ModelSpec::new("claude-opus-5-5");
+    let earlier = AssistantEntry {
+        provider_id: PROVIDER_ID.into(),
+        model_id: model.id.clone(),
+        text: "Hello.".into(),
+        reasoning: None,
+        tool_calls: vec![],
+        finish: Finish::Stop,
+        usage: None,
+        raw: json!([
+            {"type": "thinking", "thinking": "", "signature": "EqMBreasoning=="},
+            {"type": "text", "text": "Hello."}
+        ]),
+        terminal: None,
+        interrupted: false,
+    };
+    let entries = vec![
+        AiEntry::user(1, "hi"),
+        AiEntry::assistant(2, earlier),
+        AiEntry::user(3, "and now?"),
+    ];
+    let (result, _) = run(&p, &request(&model, &entries, &[])).await;
+    result.unwrap();
+    // Progress updates with `raw`, summarized with `raw`, then summarized and rebuilt.
+    assert_eq!(server.received_requests().await.unwrap().len(), 3);
+    assert!(!sent_beta(&server, 2).await);
 }
