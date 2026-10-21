@@ -495,14 +495,14 @@ const sea = (() => {
       const e = spring(t - 8, 0.62, 0.8);
       return { s: lerp(1.2, 0.4, e), cx: 512, cy: 512, dx: LOCK_DX * spring(t - 10.4, 0.95, 0.75), frame: lerpRect(SEA_START, ICON_BOX, e), e };
     }
-    return { s: 1.1, cx: 512, cy: lerp(-40, 404, spring(t - 56.5, 0.5, 0.92)), dx: 0, frame: SEA_ALL, e: 0 };
+    return { s: 1.1, cx: 512, cy: lerp(-40, 404, spring(t - 56.25, 0.55, 0.9)), dx: 0, frame: SEA_ALL, e: 0 };
   }
 
   // Boats are servers: they bob on the waves, blink, and dock at the pier as it rises.
   const BOATS = [
     { name: 'prod-api-tokyo', tag: '#e0654f', dir: -1, seed: 1, t0: 1.0, keys: [[1.0, 430], [4.5, 176, 1.2]], end: [[57.2, -620], [57.3, -60, 2.1]] },
     { name: 'db-osaka-01', tag: '#8c66c9', dir: -1, seed: 2, t0: 1.45, keys: [[1.45, 1100], [4.7, 1230, 1.3]], end: [[57.2, 1700], [57.45, 1170, 2.1]] },
-    { name: 'homelab-pi', tag: '#9a9ca6', dir: 1, seed: 3, t0: 1.9, keys: [[1.9, -110], [4.6, -215, 1.4]] },
+    { name: 'homelab-pi', tag: '#9a9ca6', dir: 1, seed: 3, t0: 1.9, keys: [[1.9, -110], [4.4, -640, 2.0]] },
     { name: 'staging-web', tag: '#d7a43c', dir: 1, seed: 4, t0: 2.35, keys: [[2.35, 700], [4.6, 848, 1.2]] },
   ];
   const boats = BOATS.map((b) => {
@@ -610,7 +610,7 @@ const sea = (() => {
 
     shown(depth, t < 20);
     if (shown(pierWrap, t < 20)) {
-      const rise = (1 - spring(t - 5.45, 1.25, 0.5)) * 480;
+      const rise = (1 - spring(t - 5.45, 1.2, 0.66)) * 480;
       pier.setAttribute('transform', `translate(0 ${n2(rise)})`);
       depth.setAttribute('transform', `translate(0 ${n2(rise)})`);
       const k = spring(t - 6.15, 1.7, 0.5);
@@ -682,8 +682,8 @@ const sea = (() => {
 })();
 
 cue(0, 'waves', { gain: -10, dur: 11 });
-caption(C.sea1, 1.2, 4.0, 'headline big night', 112);
-caption(C.sea2, 4.5, 7.7, 'headline big night', 112);
+caption(C.sea1, 1.2, 4.0, 'headline big night', 96);
+caption(C.sea2, 4.5, 7.7, 'headline big night', 96);
 cue(8.0, 'whoosh', { gain: -4, dur: 1.6 });
 cue(9.3, 'thud', { gain: -8 });
 
@@ -1033,7 +1033,7 @@ const app = (() => {
     if (!shown(L.app, t >= T_MORPH && t < T_WIPE + 0.72)) return;
     const r = winRect(t);
     win.style.cssText = `left:${n2(r.x)}px;top:${n2(r.y)}px;width:${n2(r.w)}px;height:${n2(r.h)}px;border-radius:${n2(r.r)}px`;
-    const iconO = 1 - prog(t, T_MORPH + 0.02, 0.32);
+    const iconO = 1 - prog(t, T_MORPH + 0.02, 0.24);
     if (shown(icon, iconO > 0)) {
       const s = (Math.max(r.w, r.h) * 1024) / 896;
       icon.style.cssText = `width:${n2(s)}px;height:${n2(s)}px;margin:${n2(-s / 2)}px 0 0 ${n2(-s / 2)}px;opacity:${iconO.toFixed(3)}`;
