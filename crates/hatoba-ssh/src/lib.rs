@@ -3,7 +3,8 @@
 //! The crate is platform independent and has no dependency on Tauri. The
 //! entry point is [`connect`], which returns an [`SshSession`] from which
 //! shells ([`SshSession::open_shell`]), SFTP clients ([`SshSession::sftp`]),
-//! local port forwards ([`SshSession::local_forward`]), resource usage sampling
+//! port forwards ([`SshSession::local_forward`], [`SshSession::remote_forward`],
+//! [`SshSession::dynamic_forward`]), resource usage sampling
 //! ([`SshSession::open_stats`]) and one-off commands ([`SshSession::exec`], and
 //! [`remote_command::run`] for a command that stopping ends) are opened.
 //! The first hop can go through a SOCKS5 or HTTP proxy ([`ConnectConfig::proxy`]).
@@ -33,13 +34,14 @@ mod server_os;
 pub mod session;
 pub mod sftp;
 pub mod shell;
+mod socks;
 pub mod stats;
 #[cfg(all(test, unix))]
 mod test_sh;
 
 pub use config::{SshConfigHost, parse_ssh_config, parse_ssh_config_with_home};
 pub use error::{SshError, SshErrorKind};
-pub use forward::{ForwardHandle, LocalForward};
+pub use forward::{DynamicForward, ForwardHandle, LocalForward, RemoteForward};
 pub use hostkey::{HostKeyInfo, HostKeyVerifier};
 pub use interactive::{KeyboardInteractive, Prompt, PromptRequest};
 pub use keys::{

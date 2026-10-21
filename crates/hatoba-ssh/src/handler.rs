@@ -1,13 +1,13 @@
-//! The russh client handler: host key verification, the server's identification string and
-//! disconnect tracking.
+//! The russh client handler: host key verification, the server's identification string,
+//! disconnect tracking, and the connections the server opens for remote forwards.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use russh::Names;
-use russh::client::{self, DisconnectReason};
+use russh::client::{self, ChannelOpenHandle, DisconnectReason, Msg};
 use russh::keys::PublicKeyOrCertificate;
-use tokio::sync::watch;
+use russh::{Channel, Names};
+use tokio::sync::{mpsc, watch};
 
 use crate::error::{SshError, SshErrorKind};
 use crate::hostkey::{HostKeyInfo, HostKeyVerifier};
@@ -60,6 +60,30 @@ pub(crate) struct SessionShared {
     server_id: OnceLock<String>,
     /// The host could not run `remote_command`'s script, so commands run as they are.
     plain_commands: AtomicBool,
+    /// The remote forwards listening on the server (FWD-03).
+    remote: Mutex<RemoteRoutes>,
+}
+
+/// A connection the server accepted on a remote forward's port, not yet confirmed: the forward
+/// confirms it once its destination answers, as `ssh -R` does.
+pub(crate) struct Forwarded {
+    pub(crate) channel: Channel<Msg>,
+    pub(crate) reply: ChannelOpenHandle,
+}
+
+#[derive(Default)]
+struct RemoteRoutes {
+    next_id: u64,
+    routes: Vec<RemoteRoute>,
+}
+
+struct RemoteRoute {
+    id: u64,
+    /// The address as the `tcpip-forward` request named it, which the server sends back.
+    address: String,
+    /// The port the server listens on; 0 until the server names the one it picked.
+    port: u32,
+    tx: mpsc::UnboundedSender<Forwarded>,
 }
 
 impl SessionShared {
@@ -69,7 +93,63 @@ impl SessionShared {
             reason: Mutex::new(None),
             server_id: OnceLock::new(),
             plain_commands: AtomicBool::new(false),
+            remote: Mutex::new(RemoteRoutes::default()),
         })
+    }
+
+    fn routes(&self) -> std::sync::MutexGuard<'_, RemoteRoutes> {
+        self.remote.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Sends the connections the server accepts on `address:port` to `tx` from now on, before
+    /// the server is asked to listen there, so that none arrives unrouted. Returns the route's id.
+    pub(crate) fn add_remote_route(
+        &self,
+        address: &str,
+        port: u32,
+        tx: mpsc::UnboundedSender<Forwarded>,
+    ) -> u64 {
+        let mut routes = self.routes();
+        routes.next_id += 1;
+        let id = routes.next_id;
+        routes.routes.push(RemoteRoute {
+            id,
+            address: address.to_owned(),
+            port,
+            tx,
+        });
+        id
+    }
+
+    /// The port the server picked for a route asked with port 0.
+    pub(crate) fn set_remote_port(&self, id: u64, port: u32) {
+        if let Some(route) = self.routes().routes.iter_mut().find(|r| r.id == id) {
+            route.port = port;
+        }
+    }
+
+    pub(crate) fn remove_remote_route(&self, id: u64) {
+        self.routes().routes.retain(|r| r.id != id);
+    }
+
+    /// Hands a connection the server accepted on `address:port` to its forward. The address the
+    /// request named comes back, but not from every server, so the port alone decides when it
+    /// does not match; a route still waiting for the port the server picks comes last. A
+    /// connection no forward takes is dropped, which refuses it, and `false` returned.
+    fn route_forwarded(&self, address: &str, port: u32, forwarded: Forwarded) -> bool {
+        let routes = self.routes();
+        let route = routes
+            .routes
+            .iter()
+            .find(|r| r.port == port && r.address == address)
+            .or_else(|| routes.routes.iter().find(|r| r.port == port))
+            .or_else(|| {
+                routes
+                    .routes
+                    .iter()
+                    .find(|r| r.port == 0 && r.address == address)
+            });
+        route.is_some_and(|route| route.tx.send(forwarded).is_ok())
     }
 
     /// Records the server's identification string. It never changes, so the first one stays.
@@ -192,6 +272,29 @@ impl client::Handler for ClientHandler {
         session: &mut client::Session,
     ) -> Result<(), Self::Error> {
         self.shared.set_server_id(session.remote_sshid());
+        Ok(())
+    }
+
+    /// A connection to a remote forward's port (FWD-03).
+    async fn server_channel_open_forwarded_tcpip(
+        &mut self,
+        channel: Channel<Msg>,
+        connected_address: &str,
+        connected_port: u32,
+        _originator_address: &str,
+        _originator_port: u32,
+        reply: ChannelOpenHandle,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        let forwarded = Forwarded { channel, reply };
+        if !self
+            .shared
+            .route_forwarded(connected_address, connected_port, forwarded)
+        {
+            tracing::debug!(
+                "refused a forwarded connection to {connected_address}:{connected_port}: no                  forward listens there"
+            );
+        }
         Ok(())
     }
 

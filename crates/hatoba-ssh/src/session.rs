@@ -14,7 +14,7 @@ use zeroize::Zeroizing;
 
 use crate::auth::{self, AuthContext};
 use crate::error::{SshError, SshErrorKind};
-use crate::forward::{self, ForwardHandle, LocalForward};
+use crate::forward::{self, DynamicForward, ForwardHandle, LocalForward, RemoteForward};
 use crate::handler::{ClientHandler, CloseReason, SessionShared};
 use crate::hostkey::HostKeyVerifier;
 use crate::interactive::KeyboardInteractive;
@@ -757,7 +757,20 @@ impl SshSession {
     /// Listens on a local TCP port and forwards every connection through the
     /// SSH server to `fwd.dest_host:fwd.dest_port` (`ssh -L`).
     pub async fn local_forward(&self, fwd: LocalForward) -> Result<ForwardHandle, SshError> {
-        forward::start(self.clone(), fwd).await
+        forward::start_local(self.clone(), fwd).await
+    }
+
+    /// Asks the server to listen on `fwd.bind_address:fwd.bind_port` and connects every
+    /// connection it accepts there to `fwd.dest_host:fwd.dest_port` from this computer
+    /// (`ssh -R`). Fails when the server refuses to listen there.
+    pub async fn remote_forward(&self, fwd: RemoteForward) -> Result<ForwardHandle, SshError> {
+        forward::start_remote(self.clone(), fwd).await
+    }
+
+    /// Listens on a local TCP port as a SOCKS 4, 4a and 5 proxy whose connections the SSH
+    /// server opens (`ssh -D`).
+    pub async fn dynamic_forward(&self, fwd: DynamicForward) -> Result<ForwardHandle, SshError> {
+        forward::start_dynamic(self.clone(), fwd).await
     }
 
     /// Runs `command` and returns `(exit status, stdout)`. If the command is

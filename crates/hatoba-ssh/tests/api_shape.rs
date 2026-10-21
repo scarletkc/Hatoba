@@ -2,8 +2,9 @@
 //! (the Tauri shell keeps them in managed state).
 
 use hatoba_ssh::{
-    ConnectConfig, FileEntry, ForwardHandle, HostKeyInfo, ParsedKey, SftpClient, ShellEvent,
-    ShellHandle, SshError, SshSession, StatsEvent, StatsHandle,
+    ConnectConfig, DynamicForward, FileEntry, ForwardHandle, HostKeyInfo, LocalForward, ParsedKey,
+    RemoteForward, SftpClient, ShellEvent, ShellHandle, SshError, SshSession, StatsEvent,
+    StatsHandle,
 };
 
 fn send_sync<T: Send + Sync>() {}
@@ -43,6 +44,22 @@ fn futures_are_send() {
         assert_send(&s.open_stats(std::time::Duration::from_secs(2)));
         assert_send(&s.disconnect());
         assert_send(&s.closed());
+        assert_send(&s.local_forward(LocalForward {
+            bind_address: String::new(),
+            bind_port: 0,
+            dest_host: String::new(),
+            dest_port: 1,
+        }));
+        assert_send(&s.remote_forward(RemoteForward {
+            bind_address: String::new(),
+            bind_port: 0,
+            dest_host: String::new(),
+            dest_port: 1,
+        }));
+        assert_send(&s.dynamic_forward(DynamicForward {
+            bind_address: String::new(),
+            bind_port: 0,
+        }));
         assert_send(&sftp.list("/"));
         assert_send(&sftp.home());
         assert_send(&sftp.remove_recursive("/x"));
