@@ -120,25 +120,36 @@ fn parse_marked(output: &str, marker: &str) -> Option<(Option<String>, Option<St
 
 /// Runs `shell -ilc` (interactive login, so `.zprofile`, `.zshrc` and the like are read) and
 /// returns its `PATH` and `SSH_AUTH_SOCK`; `None` when it fails, prints nothing usable, or takes
-/// longer than `timeout`. It runs with no stdin, its stderr dropped, and in a process group of its
-/// own, so giving up kills whatever its rc files started along with it.
+/// longer than `timeout`. It runs with no stdin, its stderr dropped, and in a session of its own,
+/// so giving up kills whatever its rc files started along with it.
 #[cfg(unix)]
 fn run_login_shell(shell: &str, marker: &str, timeout: std::time::Duration) -> Option<LoginEnv> {
     use std::io::Read;
     use std::os::unix::process::CommandExt;
     use std::process::{Command, Stdio};
 
-    let mut child = Command::new(shell)
+    let mut command = Command::new(shell);
+    command
         .args([
             "-ilc",
             &format!("printf '%s%s%s%s%s' {marker} \"$PATH\" {marker} \"$SSH_AUTH_SOCK\" {marker}"),
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .process_group(0)
-        .spawn()
-        .ok()?;
+        .stderr(Stdio::null());
+    // A session rather than only a process group: with no controlling terminal, an interactive
+    // shell does not stop on SIGTTIN when the app itself runs in a terminal (the `hatoba`
+    // command, `tauri dev`). Its process group id is still its pid, which `kill_group` uses.
+    // SAFETY: `setsid` is async-signal-safe, which is all `pre_exec` may call.
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let mut child = command.spawn().ok()?;
     let mut stdout = child.stdout.take()?;
     let (tx, rx) = std::sync::mpsc::channel();
     // A reader thread, so the wait below can give up: a shell that leaves a background process
