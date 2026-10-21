@@ -1,7 +1,8 @@
 """Render the promo film from index.html, frame by frame.
 
 usage:
-  python scripts/media/promo/render.py [--lang en|zh] [--bpm 120] [--music track.mp3] [--out DIR]
+  python scripts/media/promo/capture.py              # once, with `pnpm dev` running
+  python scripts/media/promo/render.py [--lang en|zh] [--bpm 120] [--music track.mp3 --music-offset 0.37] [--out DIR]
   python scripts/media/promo/render.py --stills 0,9.5,37.4 [--lang zh]
 
 Needs Playwright's Chromium, ffmpeg with libx264 on PATH, and `pnpm install` (the page loads the
@@ -48,6 +49,8 @@ def serve():
 def open_page(p, url):
     browser = p.chromium.launch(args=["--force-device-scale-factor=1", "--hide-scrollbars", "--font-render-hinting=none"])
     page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+    page.on("pageerror", lambda e: print("page error:", e, flush=True))
+    page.on("console", lambda m: m.type == "error" and print("console:", m.text, flush=True))
     page.goto(url)
     page.wait_for_function("window.PROMO && window.PROMO.ready", timeout=60000)
     cdp = page.context.new_cdp_session(page)
@@ -86,7 +89,8 @@ def main():
     ap.add_argument("--bpm", type=float, default=120)
     ap.add_argument("--fps", type=int, default=60)
     ap.add_argument("--music", type=Path)
-    ap.add_argument("--music-gain", type=float, default=-4.0, help="dB")
+    ap.add_argument("--music-gain", type=float, default=0.0, help="dB")
+    ap.add_argument("--music-offset", type=float, default=0.0, help="seconds to delay the music, or to skip into it when negative")
     ap.add_argument("--out", type=Path, default=ROOT / "scripts" / "media" / "promo" / "out")
     ap.add_argument("--stills", help="comma-separated times in seconds")
     ap.add_argument("--audio-only", action="store_true", help="write only the sound effects (and music) as WAV")
@@ -119,7 +123,7 @@ def main():
     stem = args.out / f"sfx-{args.lang}.wav"
     if args.audio_only:
         mixed = args.out / f"audio-{args.lang}.wav"
-        sfx.mix(info["cues"], info["duration"], mixed, music=args.music, music_gain=args.music_gain, stem=stem)
+        sfx.mix(info["cues"], info["duration"], mixed, music=args.music, music_gain=args.music_gain, music_offset=args.music_offset, stem=stem)
         print(stem)
         print(mixed)
         return
@@ -138,10 +142,11 @@ def main():
         subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(tmp / "list.txt"), "-c", "copy", str(video)], check=True)
 
         audio = tmp / "audio.wav"
-        sfx.mix(info["cues"], info["duration"], audio, music=args.music, music_gain=args.music_gain, stem=stem)
+        sfx.mix(info["cues"], info["duration"], audio, music=args.music, music_gain=args.music_gain, music_offset=args.music_offset, stem=stem)
         out = args.out / f"hatoba-promo-{args.lang}.mp4"
         subprocess.run(
-            ["ffmpeg", "-loglevel", "error", "-y", "-i", str(video), "-i", str(audio), "-c:v", "copy", "-c:a", "aac", "-b:a", "256k",
+            ["ffmpeg", "-loglevel", "error", "-y", "-i", str(video), "-i", str(audio), "-c:v", "copy",
+             "-af", "loudnorm=I=-14:TP=-1.5:LRA=11", "-ar", "48000", "-c:a", "aac", "-b:a", "256k",
              "-movflags", "+faststart", "-shortest", str(out)],
             check=True,
         )

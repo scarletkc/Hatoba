@@ -4,7 +4,7 @@ render.py calls mix() with the cues index.html exports (PROMO.cues). Every sound
 sines and filtered noise. The pitched ones sit on D major so they agree with each other.
 
 usage (standalone, from a cues file render.py wrote):
-  python scripts/media/promo/sfx.py out/cues-en.json out/sfx-en.wav [--music track.mp3]
+  python scripts/media/promo/sfx.py out/cues-en.json out/audio-en.wav --duration 70 [--music track.mp3 --music-offset 0.37]
 """
 import argparse
 import json
@@ -307,20 +307,21 @@ def reverb(x, seconds=1.4, wet=0.16):
     return x + w * wet
 
 
-def load_music(path, n):
-    raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(path), "-f", "f32le", "-ac", "2", "-ar", str(SR), "-"], capture_output=True, check=True).stdout
+def load_music(path, n, offset=0.0):
+    """The track as a (2, n) array: delayed by offset seconds (or started that far in when negative),
+    and faded out over the film's last seconds."""
+    seek = ["-ss", f"{-offset:.3f}"] if offset < 0 else []
+    raw = subprocess.run(["ffmpeg", "-loglevel", "error", *seek, "-i", str(path), "-f", "f32le", "-ac", "2", "-ar", str(SR), "-"], capture_output=True, check=True).stdout
     m = np.frombuffer(raw, dtype=np.float32).reshape(-1, 2).T.astype(np.float64)
     out = np.zeros((2, n))
-    k = min(n, m.shape[1])
-    out[:, :k] = m[:, :k]
-    fade = int(2.5 * SR)
-    end = min(k, n)
-    out[:, max(0, end - fade) : end] *= np.linspace(1, 0, min(fade, end))
+    i = int(max(0.0, offset) * SR)
+    k = min(n - i, m.shape[1])
+    out[:, i : i + k] = m[:, :k]
     return out
 
 
-def mix(cues, duration, path, music=None, music_gain=-4.0, stem=None):
-    n = int((duration + 1.5) * SR)
+def mix(cues, duration, path, music=None, music_gain=0.0, music_offset=0.0, sfx_gain=-4.0, stem=None):
+    n = int(duration * SR)
     bus = np.zeros((2, n))
     for c in cues:
         f = SOUNDS[c["name"]]
@@ -339,8 +340,11 @@ def mix(cues, duration, path, music=None, music_gain=-4.0, stem=None):
     if stem:
         wavfile.write(stem, SR, (bus.T * 32767).astype(np.int16))
     if music:
-        bus = bus + load_music(music, n) * 10 ** (music_gain / 20)
-        bus *= 0.89 / max(1e-9, np.abs(bus).max(), 0.89)
+        bus = bus * 10 ** (sfx_gain / 20) + load_music(music, n, music_offset) * 10 ** (music_gain / 20)
+    # Everything fades out over the last 3.5 seconds.
+    fade = min(n, int(3.5 * SR))
+    bus[:, n - fade :] *= np.linspace(1, 0, fade) ** 1.5
+    bus *= 0.89 / max(1e-9, np.abs(bus).max(), 0.89)
     wavfile.write(path, SR, (bus.T * 32767).astype(np.int16))
 
 
@@ -349,11 +353,12 @@ def main():
     ap.add_argument("cues", type=Path)
     ap.add_argument("out", type=Path)
     ap.add_argument("--music", type=Path)
-    ap.add_argument("--music-gain", type=float, default=-4.0)
+    ap.add_argument("--music-gain", type=float, default=0.0)
+    ap.add_argument("--music-offset", type=float, default=0.0)
+    ap.add_argument("--duration", type=float, required=True)
     args = ap.parse_args()
     cues = json.loads(args.cues.read_text())
-    duration = max(c["t"] for c in cues) + 3
-    mix(cues, duration, args.out, music=args.music, music_gain=args.music_gain)
+    mix(cues, args.duration, args.out, music=args.music, music_gain=args.music_gain, music_offset=args.music_offset)
     print(args.out)
 
 

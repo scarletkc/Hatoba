@@ -13,7 +13,7 @@ const RATE = (Number(Q.get('bpm')) || 120) / 120;
 const RENDER = Q.has('render');
 const W = 1920;
 const H = 1080;
-const END = 64;
+const END = 70;
 const ICON_SRC = '../../../apps/desktop/src-tauri/app-icon.svg';
 
 const COPY = {
@@ -23,44 +23,14 @@ const COPY = {
     tagline: 'Open-source SSH client with AI and encrypted sync',
     hosts: 'All your hosts in one place.',
     hostsSub: 'Import from ~/.ssh/config, PuTTY, Xshell, MobaXterm, and more.',
-    search: 'Search hosts, or type ssh user@host',
-    dashboard: 'Dashboard',
-    allHosts: 'All Hosts',
-    favorites: 'Favorites',
-    recent: 'Recent',
-    groups: 'Groups',
-    tags: 'Tags',
-    synced: 'Synced',
-    syncedVia: '2 min ago · Cloudflare D1',
     term: 'Terminal and files, side by side.',
     termSub: 'Tabs, truecolor, CJK input, SFTP, and port forwarding.',
-    connected: 'Connected',
-    memory: 'Memory',
     ai: 'An AI assistant beside every terminal.',
     aiSub1: 'It reads the screen, runs commands, and edits files.',
     aiSub2: 'Found, fixed, and verified.',
     prompt: 'nginx keeps returning 502. Find out why and fix it.',
-    placeholder: 'Ask about this terminal, or type / for commands',
-    newChat: 'New chat',
-    chatTitle: 'nginx 502 on prod-api-tokyo',
-    reasoning: 'Reasoning',
-    runCommand: 'Run command',
-    editFile: 'Edit file',
-    typeInTerminal: 'Type in terminal',
-    run: 'Run',
-    exit0: 'Exit 0',
-    done: 'Done',
-    found: ['Found it: nginx forwards to ', '127.0.0.1:8081', ', but the API listens on ', '8080', '.'],
-    fixed: 'Fixed.',
-    fixedRest: ' Requests get through again.',
     dash: 'Every server at a glance.',
     dashSub: 'Read over SSH, with nothing to install on the servers.',
-    hostsCount: '11 hosts',
-    cards: 'Cards',
-    table: 'Table',
-    disk: 'Disk',
-    up: 'Up',
-    days: 'days',
     sync: 'Sync through your own Cloudflare account.',
     syncSub1: 'End-to-end encrypted: your account only ever holds ciphertext.',
     syncSub2: 'Local first. Everything works offline.',
@@ -74,44 +44,14 @@ const COPY = {
     tagline: '内置 AI 与加密同步的开源 SSH 客户端',
     hosts: '所有主机，都在这里。',
     hostsSub: '可以从 ~/.ssh/config、PuTTY、Xshell、MobaXterm 等导入。',
-    search: '搜索主机，或输入 ssh user@host',
-    dashboard: '仪表盘',
-    allHosts: '所有主机',
-    favorites: '收藏',
-    recent: '最近',
-    groups: '分组',
-    tags: '标签',
-    synced: '已同步',
-    syncedVia: '2 分钟前 · Cloudflare D1',
     term: '终端和文件，并排在手边。',
     termSub: '多标签、真彩色、中日韩输入法、SFTP 和端口转发。',
-    connected: '已连接',
-    memory: '内存',
     ai: '每个终端旁，都有 AI 助手。',
     aiSub1: '它会读取屏幕、运行命令、编辑文件。',
     aiSub2: '找到原因，修好，再验证一遍。',
     prompt: 'nginx 一直返回 502，找出原因并修好它。',
-    placeholder: '问问这个终端，或输入 / 使用命令',
-    newChat: '新对话',
-    chatTitle: 'prod-api-tokyo 上的 nginx 502',
-    reasoning: '思考过程',
-    runCommand: '运行命令',
-    editFile: '编辑文件',
-    typeInTerminal: '向终端输入',
-    run: '运行',
-    exit0: '退出码 0',
-    done: '完成',
-    found: ['找到了：nginx 转发到 ', '127.0.0.1:8081', '，但 API 监听的是 ', '8080', '。'],
-    fixed: '修好了。',
-    fixedRest: '请求又能正常通过了。',
     dash: '每台服务器的状态，一眼看清。',
     dashSub: '通过 SSH 读取，服务器上什么都不用装。',
-    hostsCount: '11 台主机',
-    cards: '卡片',
-    table: '表格',
-    disk: '磁盘',
-    up: '运行',
-    days: '天',
     sync: '通过你自己的 Cloudflare 账户同步。',
     syncSub1: '端到端加密：你的账户里只有密文。',
     syncSub2: '本地优先，离线也能用。',
@@ -493,15 +433,15 @@ const sea = (() => {
     }
     if (t < 20) {
       const e = spring(t - 8, 0.62, 0.8);
-      return { s: lerp(1.2, 0.4, e), cx: 512, cy: 512, dx: LOCK_DX * spring(t - 10.4, 0.95, 0.75), frame: lerpRect(SEA_START, ICON_BOX, e), e };
+      return { s: lerp(1.2, 0.4, e), cx: 512, cy: 512, dx: LOCK_DX * spring(t - 10.0, 0.95, 0.75), frame: lerpRect(SEA_START, ICON_BOX, e), e };
     }
-    return { s: 1.1, cx: 512, cy: lerp(-40, 404, spring(t - 56.25, 0.55, 0.9)), dx: 0, frame: SEA_ALL, e: 0 };
+    return { s: 1.1, cx: 512, cy: lerp(-40, 404, spring(t - 58.25, 0.55, 0.9)), dx: 0, frame: SEA_ALL, e: 0 };
   }
 
   // Boats are servers: they bob on the waves, blink, and dock at the pier as it rises.
   const BOATS = [
-    { name: 'prod-api-tokyo', tag: '#e0654f', dir: -1, seed: 1, t0: 1.0, keys: [[1.0, 430], [4.5, 176, 1.2]], end: [[57.2, -620], [57.3, -60, 2.1]] },
-    { name: 'db-osaka-01', tag: '#8c66c9', dir: -1, seed: 2, t0: 1.45, keys: [[1.45, 1100], [4.7, 1230, 1.3]], end: [[57.2, 1700], [57.45, 1170, 2.1]] },
+    { name: 'prod-api-tokyo', tag: '#e0654f', dir: -1, seed: 1, t0: 1.0, keys: [[1.0, 430], [4.5, 176, 1.2]], end: [[59.0, -430], [59.1, -60, 2.8]] },
+    { name: 'db-osaka-01', tag: '#8c66c9', dir: -1, seed: 2, t0: 1.45, keys: [[1.45, 1100], [4.7, 1230, 1.3]], end: [[59.0, 1460], [59.25, 1170, 2.8]] },
     { name: 'homelab-pi', tag: '#9a9ca6', dir: 1, seed: 3, t0: 1.9, keys: [[1.9, -110], [4.4, -640, 2.0]] },
     { name: 'staging-web', tag: '#d7a43c', dir: 1, seed: 4, t0: 2.35, keys: [[2.35, 700], [4.6, 848, 1.2]] },
   ];
@@ -628,15 +568,15 @@ const sea = (() => {
       }
       s.e.setAttribute('opacity', tw.toFixed(3));
     }
-    const moonO = t < 20 ? clamp(1 - c.e * 2.5) : prog(t, 57.2, 1);
+    const moonO = t < 20 ? clamp(1 - c.e * 2.5) : prog(t, 59.2, 1);
     if (shown(moon, moonO > 0)) {
       moon.setAttribute('transform', `translate(1150 ${n2(170 + Math.sin(t * 0.8) * 6)}) rotate(-18)`);
       moon.setAttribute('opacity', moonO.toFixed(3));
     }
 
     for (const b of boats) {
-      const intro = t >= b.t0 && t < 10.6;
-      const outro = !!b.end && t >= 57.2;
+      const intro = t >= b.t0 && t < 10.3;
+      const outro = !!b.end && t >= 59.0;
       if (!shown(b.g, intro || outro)) continue;
       const keys = intro ? b.keys : b.end;
       const x = keyX(keys, t);
@@ -645,7 +585,7 @@ const sea = (() => {
       let open = blink(t, b.seed);
       if (intro) {
         y += (1 - spring(t - b.t0, 1.5, 0.42)) * 130;
-        y += ease.in(prog(t, 8.9 + b.seed * 0.08, 0.9)) * 110;
+        y += ease.in(prog(t, 8.8 + b.seed * 0.08, 0.9)) * 220;
         open = Math.min(open, lerp(1, 0.12, prog(t, 8.3, 0.25)));
       }
       const tilt = (Math.atan(slope(x, phi, A)) * 180) / Math.PI * 0.45 + Math.sin(t * 1.6 + b.seed * 2) * 2.5 - v * 0.012;
@@ -699,52 +639,87 @@ cue(9.3, 'thud', { gain: -8 });
   });
   onFrame((t) => {
     if (!shown(L.lock, t >= 10 && t < 14.2)) return;
-    mark.root.style.left = `${n2(960 + LOCK_DX + 179.2 + 66)}px`;
+    // The wordmark rides along as the icon makes room for it.
+    mark.root.style.left = `${n2(960 + LOCK_DX * spring(t - 10.0, 0.95, 0.75) + 179.2 + 66)}px`;
     mark.root.style.top = '540px';
     mark.root.style.transform = 'translateY(-54%)';
-    mark.update(t, 10.55, 13.4, { gap: 0.055, f: 2.0, z: 0.5, rise: 70, spin: -14, blur: 6 });
-    tag.update(t, 11.3, 13.35, { gap: 0.03 });
+    mark.update(t, 10.15, 13.4, { gap: 0.055, f: 2.0, z: 0.5, rise: 70, spin: -14, blur: 6 });
+    tag.update(t, 10.9, 13.35, { gap: 0.03 });
   });
-  cue(10.35, 'chime', { gain: -2 });
-  [0, 2, 4, 7, 9, 12].forEach((p, i) => cue(10.6 + i * 0.055, 'pop', { pitch: p + 5, gain: -14 }));
+  cue(10.0, 'chime', { gain: -2 });
+  [0, 2, 4, 7, 9, 12].forEach((p, i) => cue(10.2 + i * 0.055, 'pop', { pitch: p + 5, gain: -14 }));
   cue(13.35, 'swish', { gain: -10 });
 }
 
-/* ---------- the app window ---------- */
+/* ---------- the app window: snapshots of the real app, animated in place ---------- */
 
-const W1 = { x: 230, y: 262, w: 1460, h: 780, r: 30 };
-const W2 = { x: 120, y: 262, w: 1680, h: 780, r: 30 };
-const SIDE = 300;
-const AIW = 620;
+// capture.py saves each state the film shows from the app's mock frontend. Every snapshot loads into
+// its own iframe at the app's own size, zoomed by Z, and the film moves its real elements.
+const Z = 1.2;
+const W1 = { x: 216, y: 252, w: 1488, h: 792, r: 12 };
+const W2 = { x: 120, y: 252, w: 1680, h: 792, r: 12 };
 const T_MORPH = 13.6;
+const T_FILTER = 17.95;
+const T_PICK = 19.75;
 const T_TERM = 20.3;
+const T_SFTP = 23.6;
+const T_SFTP_OUT = 25.65;
 const T_AI = 28.7;
+const T_SEND = 31.0;
+const RUNS = [32.75, 33.55, 35.35, 36.55];
+const T_DONE = 37.5;
 const T_AI_OUT = 41.2;
-const T_DASH = 41.4;
+const T_DASH = 41.5;
 const T_WIPE = 47.5;
+const STAGES = [
+  ['ai-0', T_SEND],
+  ['ai-1', RUNS[0] + 0.05],
+  ['ai-2', RUNS[1] + 0.05],
+  ['ai-3', RUNS[2] + 0.05],
+  ['ai-done', T_DONE],
+];
+const SNAPS = ['hosts', 'term', 'sftp', 'ai-empty', ...STAGES.map((s) => s[0]), 'dash'];
+const RUN_LABEL = LANG === 'zh' ? '运行' : 'Run';
+const FIXED = LANG === 'zh' ? '修好了' : 'Fixed';
+const WORD_RATE = 40; // streamed words per second
+const SNAP_CSS = `html{zoom:${Z}}
+*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}
+::-webkit-scrollbar{display:none}
+.promo-term{position:absolute;left:18px;top:14px;right:0;bottom:0;z-index:5;pointer-events:none;font:13px/19px "Cascadia Mono",Consolas,monospace;color:#d5d8de;white-space:pre}
+.promo-term .l{position:absolute;left:0;height:19px;border-radius:3px}
+.promo-term .k{position:absolute;left:0;top:0;height:19px;background:#d5d8de}
+.promo-term .pu,.promo-term .g{color:#8bd49c}.promo-term .pp,.promo-term .b{color:#7ab7ff}.promo-term .y{color:#e5c07b}.promo-term .r{color:#f07178}.promo-term .dim{color:#6b717c}
+.pw{transition:none}`;
 
-const OS = {
-  ubuntu: ['#e95420', 'ph-linux-logo'],
-  debian: ['#a81d33', 'ph-linux-logo'],
-  raspbian: ['#a22846', 'ph-linux-logo'],
-  windows: ['#0078d4', 'ph-windows-logo'],
-};
-const TAGC = {
-  production: 'var(--tag-1)',
-  api: 'var(--tag-5)',
-  database: 'var(--tag-3)',
-  edge: 'var(--tag-4)',
-  staging: 'var(--tag-2)',
-  personal: 'var(--tag-7)',
-  ci: 'var(--tag-6)',
-};
-const osBadge = (os, cls = 'os') => `<div class="${cls}" style="background:${OS[os][0]}"><i class="ph-fill ${OS[os][1]}"></i><span class="dot"></span></div>`;
-const tagPills = (tags) => `<div class="tags">${tags.map((g) => `<span class="tag"><b style="background:${TAGC[g]}"></b>${g}</span>`).join('')}</div>`;
+// The terminal is xterm's canvas in the app, empty in a snapshot, so the film types its own lines
+// over it in the same font, size, and colors (features/terminal/theme.ts and schemes.ts).
+const PROMPT = '<span class="pu">deploy@prod-api-tokyo</span>:<span class="pp">/srv/api</span>$ ';
+const PROMPT_LEN = 'deploy@prod-api-tokyo:/srv/api$ '.length;
+const CURL = 'curl -sI http://localhost/v1/hosts';
+const TERM_LINES = [
+  { at: 20.9, html: 'Last login: Thu Oct  8 09:41:12 2026 from 10.0.0.4' },
+  { at: 21.2, html: '<span class="pu">deploy@prod-api-tokyo</span>:<span class="pp">~</span>$ ', type: 'cd /srv/api && git log --oneline -3', t0: 21.45, cps: 34, len: 25 },
+  { at: 22.6, html: '<span class="y">a3f91c2</span> (<span class="b">HEAD -&gt; main</span>, <span class="r">origin/main</span>) fix: retry D1 writes on 429' },
+  { at: 22.66, html: '<span class="y">7be0d14</span> chore: bump tokio to 1.41' },
+  { at: 22.72, html: '<span class="y">e02c5aa</span> feat: add /healthz latency histogram' },
+  { at: 22.8, html: PROMPT, type: CURL, t0: 26.2, cps: 32 },
+  { at: 27.35, html: 'HTTP/1.1 502 Bad Gateway', flash: 'bad' },
+  { at: 27.41, html: 'Server: nginx/1.24.0 (Ubuntu)' },
+  { at: 27.47, html: 'Content-Type: text/html' },
+  { at: 27.55, html: PROMPT, type: CURL, t0: RUNS[3] + 0.12, cps: 50, ai: true },
+  { at: RUNS[3] + 0.95, html: 'HTTP/1.1 200 OK', flash: 'good' },
+  { at: RUNS[3] + 1.01, html: 'Server: nginx/1.24.0 (Ubuntu)' },
+  { at: RUNS[3] + 1.07, html: 'Content-Type: application/json' },
+  { at: RUNS[3] + 1.15, html: PROMPT, type: '', t0: 99, cps: 1 },
+];
+TERM_LINES.forEach((l, i) => {
+  if (!l.type) return;
+  for (let k = 0; k < l.type.length; k++) cue(l.t0 + k / l.cps, 'key', { gain: -15 + rnd(i * 50 + k) * 4, pitch: (rnd(i * 70 + k) - 0.5) * 4 + (l.ai ? 3 : 0) });
+});
 
 const app = (() => {
   const iconRect = () => ({ x: 960 + LOCK_DX - 179.2, y: 540 - 179.2, w: 358.4, h: 358.4, r: 83.2 });
   const aiOpen = (t) => spring(t - T_AI, 1.0, 0.82) - spring(t - T_AI_OUT, 1.0, 0.9);
-  const sideOpen = (t) => 1 - spring(t - (T_TERM + 0.25), 1.1, 0.9) + spring(t - T_DASH, 1.1, 0.78);
   function winRect(t) {
     const r = lerpRect(iconRect(), W1, spring(t - T_MORPH, 0.95, 0.8));
     const a = aiOpen(t);
@@ -754,504 +729,434 @@ const app = (() => {
   }
 
   const win = el(L.app, 'win');
+  const S = {};
+  // A CSS-module class by its local name: `_row_nubwf_57` is part "row".
+  const one = (root, part) => root.querySelector(`[class*="_${part}_"]`);
+  const all = (root, part) => [...root.querySelectorAll(`[class*="_${part}_"]`)];
   const icon = el(win, 'win-icon', `<img src="${ICON_SRC}" alt="">`);
+  const expander = el(win, 'expander');
 
-  // sidebar
-  const side = el(win, 'side');
-  const sideIn = el(side, 'side-in');
-  sideIn.innerHTML = `<div class="side-top"><i class="ph ph-gear-six"></i><i class="ph ph-sidebar-simple"></i></div>
-    <div class="nav"><div class="sel"></div>
-      <div class="row"><i class="ph ph-gauge"></i>${C.dashboard}</div>
-      <div class="row"><i class="ph ph-hard-drives"></i>${C.allHosts}<span class="n">11</span></div>
-      <div class="row"><i class="ph ph-star"></i>${C.favorites}<span class="n">4</span></div>
-      <div class="row"><i class="ph ph-clock-counter-clockwise"></i>${C.recent}</div>
-      <div class="sec">${C.groups}</div>
-      <div class="row"><i class="ph ph-folder-simple"></i>Tokyo Prod<span class="n">3</span></div>
-      <div class="row"><i class="ph ph-folder-simple"></i>Osaka DB<span class="n">2</span></div>
-      <div class="row"><i class="ph ph-folder-simple"></i>Staging<span class="n">2</span></div>
-      <div class="row"><i class="ph ph-folder-simple"></i>Homelab<span class="n">2</span></div>
-      <div class="sec">${C.tags}</div>
-      <div class="row"><b style="background:var(--tag-1)"></b>production<span class="n">5</span></div>
-      <div class="row"><b style="background:var(--tag-5)"></b>api<span class="n">2</span></div>
-      <div class="row"><b style="background:var(--tag-3)"></b>database<span class="n">2</span></div>
-    </div>
-    <div class="side-foot"><i class="ph ph-cloud-check"></i><div><div>${C.synced}</div><small>${C.syncedVia}</small></div><i class="ph ph-lock-simple"></i></div>`;
-  const sel = sideIn.querySelector('.sel');
-  const sideItems = [...sideIn.querySelectorAll('.side-top,.row,.sec,.side-foot')];
+  /* the terminal overlay, one per snapshot that shows the terminal */
+  function termOverlay(doc) {
+    const term = one(doc, 'term');
+    if (!term) return null;
+    if (getComputedStyle(term).position === 'static') term.style.position = 'relative';
+    const box = doc.createElement('div');
+    box.className = 'promo-term';
+    term.appendChild(box);
+    const lines = TERM_LINES.map((l, i) => {
+      const e = doc.createElement('div');
+      e.className = 'l';
+      e.style.top = `${i * 19}px`;
+      e.innerHTML = `${l.html}<span class="t"></span>`;
+      box.appendChild(e);
+      return { e, typed: e.querySelector('.t') };
+    });
+    const caret = doc.createElement('div');
+    caret.className = 'k';
+    box.appendChild(caret);
+    return { box, lines, caret };
+  }
+  let charW = 7.8;
 
-  // main area
-  const main = el(win, 'main');
-  const tb = el(main, 'tb');
-  const TABS = [
-    { html: `<i class="ph ph-hard-drives"></i>${C.allHosts}`, t0: 14.05, t1: T_DASH + 0.1, on: (t) => t < T_TERM + 0.3 },
-    { html: `<span class="os-dot" style="background:${OS.ubuntu[0]}"><i class="ph-fill ph-linux-logo"></i></span>prod-api-tokyo`, t0: T_TERM + 0.3, t1: T_DASH + 0.1, on: () => true },
-    { html: `<i class="ph ph-gauge"></i>${C.dashboard}`, t0: T_DASH + 0.15, t1: 99, on: () => true },
-  ].map((d) => ({ ...d, e: el(tb, 'tab', d.html), w: 0 }));
-  const plus = el(tb, 'tab-plus', '<i class="ph ph-plus"></i>');
-  const tbRight = el(tb, 'tb-right', '<span class="ai-btn"><i class="ph ph-sparkle"></i></span><span class="cap"><i class="ph ph-minus"></i></span><span class="cap"><i class="ph ph-square"></i></span><span class="cap"><i class="ph ph-x"></i></span>');
-  const aiBtn = tbRight.querySelector('.ai-btn');
-  onMeasure(() => {
-    for (const tab of TABS) tab.w = tab.e.offsetWidth;
-  });
-  const content = el(main, 'content');
+  function drawTerm(o, t) {
+    let active = null;
+    TERM_LINES.forEach((l, i) => {
+      const { e, typed } = o.lines[i];
+      const a = prog(t, l.at, 0.1);
+      if (!shown(e, a > 0)) return;
+      e.style.opacity = a.toFixed(3);
+      let dx = 0;
+      let bg = 'transparent';
+      if (l.flash === 'bad' && t >= l.at) {
+        const dt = t - l.at;
+        dx = Math.sin(dt * 42) * 6 * Math.exp(-dt * 6);
+        bg = `rgba(240,113,120,${(0.26 * bump(t, l.at, 1.3)).toFixed(3)})`;
+      }
+      if (l.flash === 'good') bg = `rgba(139,212,156,${(0.24 * bump(t, l.at, 1.3)).toFixed(3)})`;
+      e.style.background = bg;
+      e.style.padding = l.flash ? '0 6px' : '';
+      e.style.marginLeft = l.flash ? '-6px' : '';
+      e.style.transform = `translateX(${n2(dx)}px)`;
+      if (l.type != null) {
+        const n = t < l.t0 ? 0 : Math.min(l.type.length, Math.floor((t - l.t0) * l.cps) + 1);
+        text(typed, l.type.slice(0, n));
+        active = { l, i, n };
+      }
+    });
+    if (shown(o.caret, !!active)) {
+      const len = active.l.len ?? PROMPT_LEN;
+      o.caret.style.width = `${n2(charW)}px`;
+      o.caret.style.transform = `translate(${n2((len + active.n) * charW)}px,${active.i * 19}px)`;
+    }
+  }
 
-  /* hosts */
-  const hostsV = el(content, 'view');
-  const search = el(hostsV, 'search', `<i class="ph ph-magnifying-glass"></i><span class="q"></span><span class="caret"></span><span class="ph-text">${C.search}</span>`);
-  const searchQ = search.querySelector('.q');
-  const searchCaret = search.querySelector('.caret');
-  const searchPh = search.querySelector('.ph-text');
-  const HOSTS = [
-    ['db-osaka-01', 'postgres@10.24.3.11', 'debian', ['production', 'database'], true],
-    ['prod-api-tokyo', 'deploy@43.206.118.27', 'ubuntu', ['production', 'api'], true],
-    ['homelab-pi', 'pi@192.168.1.20', 'raspbian', ['personal'], false],
-    ['staging-web-02', 'ubuntu@172.31.40.8', 'ubuntu', ['staging'], false],
-    ['bastion-tokyo', 'ops@bastion.tky.example.net', 'debian', ['production', 'edge'], true],
-    ['ci-runner-01', 'runner@192.168.50.21', 'windows', ['ci'], false],
-    ['edge-sg-cache', 'root@159.89.204.73', 'ubuntu', ['edge'], false],
-    ['prod-api-tokyo-02', 'deploy@43.206.118.31', 'ubuntu', ['production', 'api'], false],
-    ['db-osaka-02', 'postgres@10.24.3.12', 'debian', ['production', 'database'], false],
-  ];
-  const cards = HOSTS.map(([name, addr, os, tags, fav], i) => {
-    const nm = name.replace('tokyo', '<span class="hl">tokyo</span>');
-    const e = el(hostsV, 'card', `${osBadge(os)}<div class="name">${nm}${fav ? '<i class="ph-fill ph-star fav"></i>' : ''}</div><div class="addr">${addr}</div>${tagPills(tags)}`);
-    return { e, i, rank: ['prod-api-tokyo', 'bastion-tokyo', 'prod-api-tokyo-02'].indexOf(name), hl: e.querySelector('.hl') };
-  });
-  const slot = (i) => ({ x: 32 + (i % 3) * 373, y: 108 + Math.floor(i / 3) * 192 });
-  const expander = el(content, 'expander');
-
-  /* terminal */
-  const termV = el(content, 'view term');
-  el(
-    termV,
-    'status',
-    `<span class="ok"><b></b>${C.connected}</span><span class="mono">deploy@43.206.118.27:22</span><span class="dim">38 ms</span><span class="grow"></span><span class="dim"><i class="ph ph-gauge"></i> CPU <em>10%</em></span><span class="dim">${C.memory} <em>46%</em></span><i class="ph ph-magnifying-glass"></i><i class="ph ph-arrows-left-right"></i><span class="dim"><i class="ph ph-folder-simple"></i> SFTP</span><i class="ph ph-dots-three"></i>`,
-  );
-  const linesBox = el(termV, 'lines');
-  const PROMPT = '<span class="pu">deploy@prod-api-tokyo</span>:<span class="pp">/srv/api</span>$ ';
-  const PROMPT_LEN = 'deploy@prod-api-tokyo:/srv/api$ '.length;
-  const LINES = [
-    { at: 21.2, html: '<span class="dim">Last login: Thu Oct  8 09:41:12 2026 from 10.0.0.4</span>' },
-    { at: 21.45, type: 'cd /srv/api && git log --oneline -3', t0: 21.65, cps: 34 },
-    { at: 22.8, html: '<span class="y">a3f91c2</span> (<span class="c">HEAD -&gt; </span><span class="g">main</span>) fix: retry D1 writes on 429' },
-    { at: 22.86, html: '<span class="y">7be0d14</span> chore: bump tokio to 1.41' },
-    { at: 22.92, html: '<span class="y">e02c5aa</span> feat: add /healthz latency histogram' },
-    { at: 23.0, type: 'curl -sI localhost/v1/hosts', t0: 26.25, cps: 32 },
-    { at: 27.2, html: '<span class="r bold">HTTP/1.1 502 Bad Gateway</span>', flash: 'bad' },
-    { at: 27.26, html: 'Server: nginx/1.24.0 (Ubuntu)' },
-    { at: 27.32, html: 'Content-Type: text/html' },
-    { at: 27.4, type: 'curl -sI localhost/v1/hosts', t0: 35.95, cps: 40, ai: true },
-    { at: 36.75, html: '<span class="g bold">HTTP/1.1 200 OK</span>', flash: 'good' },
-    { at: 36.81, html: 'Server: nginx/1.24.0 (Ubuntu)' },
-    { at: 36.87, html: 'Content-Type: application/json' },
-    { at: 36.95, type: '', t0: 99, cps: 1 },
-  ].map((l, i) => {
-    const e = el(linesBox, 'line', l.type != null ? `${PROMPT}<span class="typed"></span>` : l.html);
-    e.style.top = `${i * 34}px`;
-    if (l.type) for (let k = 0; k < l.type.length; k++) cue(l.t0 + k / l.cps, 'key', { gain: -15 + rnd(i * 50 + k) * 4, pitch: (rnd(i * 70 + k) - 0.5) * 4 + (l.ai ? 3 : 0) });
-    return { ...l, i, e, typed: e.querySelector('.typed') };
-  });
-  const tcaret = el(linesBox, 'tcaret');
-  let charW = 12;
-  onMeasure(() => {
-    const probe = el(linesBox, 'line', 'MMMMMMMMMMMMMMMMMMMM');
-    charW = probe.offsetWidth / 20;
+  /* loading and measuring */
+  async function load() {
+    for (const name of SNAPS) {
+      const html = await (await fetch(`out/snapshots/${LANG}/${name}.html`)).text();
+      const f = el(win, 'snap', '', 'iframe');
+      const loaded = new Promise((r) => (f.onload = r));
+      f.srcdoc = html.replace('</head>', `<style>${SNAP_CSS}</style></head>`);
+      await loaded;
+      const doc = f.contentDocument;
+      f.style.width = `${(name.startsWith('ai') ? W2 : W1).w}px`;
+      f.style.height = `${W1.h}px`;
+      void doc.body.offsetHeight;
+      await doc.fonts.ready;
+      for (const e of doc.querySelectorAll('[data-value]')) e.value = e.getAttribute('data-value');
+      for (const e of doc.querySelectorAll('[data-scroll]')) {
+        const [x, y] = e.getAttribute('data-scroll').split(',').map(Number);
+        e.scrollLeft = x;
+        e.scrollTop = y;
+      }
+      S[name] = { f, doc, term: termOverlay(doc) };
+    }
+    const probe = S.term.doc.createElement('span');
+    probe.style.cssText = 'font:13px "Cascadia Mono",Consolas,monospace;position:absolute;white-space:pre';
+    probe.textContent = 'M'.repeat(40);
+    S.term.doc.body.appendChild(probe);
+    charW = probe.getBoundingClientRect().width / 40 / Z;
     probe.remove();
-  });
-  cue(27.2, 'boop', { gain: -5 });
-  cue(36.75, 'ding', { gain: -8, pitch: 7 });
-
-  // SFTP: a file dragged in from the desktop uploads beside the terminal.
-  const sftp = el(
-    termV,
-    'sftp',
-    '<div class="sftp-head"><i class="ph ph-folder-simple"></i><span>/srv/api</span><span class="grow"></span><i class="ph ph-arrow-up"></i><i class="ph ph-arrow-clockwise"></i></div>',
-  );
-  const upRow = el(sftp, 'frow up', '<i class="ph-fill ph-file-archive" style="color:var(--orange)"></i>release-0.5.0.tar.gz<span class="grow"></span><span class="sz pct"></span><i class="ph-fill ph-check-circle okc"></i><div class="bar"><b></b></div>');
-  const upPct = upRow.querySelector('.pct');
-  const upOk = upRow.querySelector('.okc');
-  const upBar = upRow.querySelector('.bar b');
-  const upBarBox = upRow.querySelector('.bar');
-  const fileRows = [
-    ['ph-fill ph-folder-simple fd', 'logs', '—'],
-    ['ph-fill ph-folder-simple fd', 'releases', '—'],
-    ['ph ph-file fl', 'Cargo.toml', '3.1 KB'],
-    ['ph ph-file fl', 'deploy.sh', '1.2 KB'],
-    ['ph ph-file fl', 'api.conf', '812 B'],
-    ['ph ph-file fl', 'README.md', '4.6 KB'],
-  ].map(([ic, name, size]) => el(sftp, 'frow', `<i class="${ic}"></i>${name}<span class="grow"></span><span class="sz">${size}</span>`));
-  const drag = el(L.fx, 'dragchip', '<i class="ph-fill ph-file-archive"></i>release-0.5.0.tar.gz');
-  cue(23.3, 'swish', { gain: -9 });
-  cue(24.45, 'bubble', { gain: -6, pitch: 5 });
-  cue(25.42, 'ding', { gain: -8 });
-  cue(25.95, 'swish', { gain: -11 });
-
-  /* ai panel */
-  const ai = el(win, 'ai');
-  const aiIn = el(ai, 'ai-in');
-  aiIn.innerHTML = `<div class="ai-head"><i class="ph-fill ph-sparkle"></i><span class="ai-title"></span><span class="grow"></span><i class="ph ph-clock-counter-clockwise"></i><i class="ph ph-note-pencil"></i><i class="ph ph-x"></i></div>
-    <div class="ai-msgs"></div>
-    <div class="ai-input"><div class="ai-text"><span class="ai-q"></span><span class="caret"></span><span class="ai-ph">${C.placeholder}</span></div><div class="ai-tools"><i class="ph ph-plus"></i><i class="ph ph-shield-check"></i><span class="grow"></span><span class="send"><i class="ph-bold ph-arrow-up"></i></span></div></div>`;
-  const aiTitle = aiIn.querySelector('.ai-title');
-  const msgs = aiIn.querySelector('.ai-msgs');
-  const aiQ = aiIn.querySelector('.ai-q');
-  const aiPh = aiIn.querySelector('.ai-ph');
-  const aiCaret = aiIn.querySelector('.ai-text .caret');
-  const send = aiIn.querySelector('.send');
-
-  const item = (cls, html) => el(msgs, `ai-item ${cls}`, html);
-  const toolCard = (icon, label, cmd, res, extra = '') =>
-    item('tool', `<div class="tool-row"><i class="ph ${icon} ti"></i><span class="tl">${label}</span><span class="tc">${cmd}</span><span class="run">${C.run}</span><span class="spin"></span><span class="res"><i class="ph-bold ph-check"></i>${res}</span></div>${extra}`);
-  const bubble = item('msg-user', C.prompt);
-  const reason = item('msg-reason', `<span class="dots"><b></b><b></b><b></b></span><span class="rl"><i class="ph ph-brain"></i>${C.reasoning}<i class="ph ph-caret-right"></i></span>`);
-  const cardA = toolCard('ph-terminal-window', C.runCommand, 'sudo tail -n 3 /var/log/nginx/error.log', C.exit0);
-  const found = item('msg-text', C.found.map((s, i) => (i % 2 ? `<code class="u">${s}</code>` : s.match(UNIT).map((u) => (/^\s+$/.test(u) ? u : `<span class="u">${u}</span>`)).join(''))).join(''));
-  const cardB = toolCard('ph-pencil-simple', C.editFile, '/etc/nginx/conf.d/api.conf', C.done, '<div class="diff"><div class="del">-  proxy_pass http://127.0.0.1:8081;</div><div class="add">+  proxy_pass http://127.0.0.1:8080;</div></div>');
-  const cardC = toolCard('ph-keyboard', C.typeInTerminal, 'curl -sI localhost/v1/hosts', C.done);
-  const final = item('msg-final', `<div><b>${C.fixed}</b>${C.fixedRest}</div><div class="flip"><span class="pill bad">502 Bad Gateway</span><i class="ph-bold ph-arrow-right"></i><span class="pill good">200 OK</span></div>`);
-  const foundUnits = [...found.querySelectorAll('.u')];
-  const diffDel = cardB.querySelector('.del');
-  const diffAdd = cardB.querySelector('.add');
-  const badPill = final.querySelector('.bad');
-  const goodPill = final.querySelector('.good');
-  const flipArrow = final.querySelector('.flip i');
-  const dots = [...reason.querySelectorAll('.dots b')];
-  const reasonLabel = reason.querySelector('.rl');
-
-  // y is in panel coordinates; the message list starts 60px down and scrolls as replies arrive.
-  const ITEMS = [
-    { e: bubble, y: 84, h: 92, t: 31.0 },
-    { e: reason, y: 196, h: 32, t: 31.15 },
-    { e: cardA, y: 240, h: 60, t: 32.0, click: 32.6, done: 33.0 },
-    { e: found, y: 316, h: 62, t: 33.15 },
-    { e: cardB, y: 394, h: 144, t: 34.0, click: 34.85, done: 35.1 },
-    { e: cardC, y: 554, h: 60, t: 35.25, click: 35.65, done: 36.8 },
-    { e: final, y: 630, h: 86, t: 37.0 },
-  ];
-  const LIMIT = 636;
-  let prevNeed = 0;
-  for (const it of ITEMS) {
-    const need = Math.max(0, it.y + it.h - LIMIT);
-    it.dScroll = need - prevNeed;
-    prevNeed = need;
+    setup();
   }
-  const scroll = (t) => ITEMS.reduce((s, it) => s + it.dScroll * spring(t - it.t, 1.3, 0.85), 0);
-  const PANEL_X = W2.x + W2.w - AIW;
-  let goodAt = { x: 1500, y: 900 };
-  onMeasure(() => {
-    const it = ITEMS[ITEMS.length - 1];
-    goodAt = { x: PANEL_X + 24 + goodPill.offsetLeft + goodPill.offsetWidth / 2, y: W2.y + it.y - scroll(37.35) + goodPill.offsetTop + goodPill.offsetHeight / 2 };
-  });
 
-  for (const it of ITEMS.filter((x) => x.click)) {
-    cue(it.t, 'pop', { gain: -9, pitch: 2 });
-    cue(it.done, 'tick', { gain: -8 });
+  // Stage coordinates of an element's center inside a snapshot shown at window rect w.
+  function at(snap, e, w, dx = 0.5, dy = 0.5) {
+    const r = e.getBoundingClientRect();
+    return { x: w.x + r.x + r.width * dx, y: w.y + r.y + r.height * dy };
   }
-  cue(31.0, 'send', { gain: -5 });
-  cue(33.15, 'pop', { gain: -12, pitch: 7 });
-  cue(37.0, 'pop', { gain: -10, pitch: 4 });
-  cue(37.35, 'success', { gain: -3 });
-  cue(37.38, 'sparkle', { gain: -7 });
+  function rectOf(snap, e, w) {
+    const r = e.getBoundingClientRect();
+    return { x: w.x + r.x, y: w.y + r.y, w: r.width, h: r.height };
+  }
+  const byText = (root, sel, txt) => [...root.querySelectorAll(sel)].find((e) => e.textContent.trim() === txt);
+
+  const H = {}; // handles found in the snapshots
+  function setup() {
+    /* hosts */
+    {
+      const doc = S.hosts.doc;
+      const rows = all(one(doc, 'rows'), 'row').filter((r) => r.parentElement === one(doc, 'rows'));
+      const selClass = [...rows[0].classList].find((c) => /^_rowSel_/.test(c));
+      const names = rows.map((r) => one(r, 'name').textContent.trim());
+      const count = one(doc, 'pageCount');
+      H.hosts = {
+        rows: rows.map((e, i) => ({ e, name: names[i], h: e.offsetHeight, match: names[i].includes('tokyo') })),
+        selClass,
+        input: doc.querySelector('input'),
+        count,
+        countText: count.textContent,
+        prod: rows[names.indexOf('prod-api-tokyo')],
+        first: rows[0],
+      };
+    }
+    /* terminal, SFTP */
+    H.tab = one(S.term.doc, 'tabActive');
+    H.termRect = rectOf(S.term, one(S.term.doc, 'term'), W1);
+    {
+      const doc = S.sftp.doc;
+      const panel = all(doc, 'panel').find((e) => one(e, 'pathBar'));
+      H.sftp = { panel, w: panel.offsetWidth, rows: [...one(panel, 'list').children] };
+      panel.style.flex = 'none';
+      panel.style.overflow = 'hidden';
+    }
+    /* AI */
+    const aiPanel = (doc) => all(doc, 'panel').find((e) => one(e, 'composer'));
+    for (const [name] of [['ai-empty'], ...STAGES]) {
+      const p = aiPanel(S[name].doc);
+      p.style.flex = 'none';
+      p.style.overflow = 'hidden';
+      S[name].panel = p;
+      S[name].list = one(p, 'list');
+    }
+    const blocksOf = (doc) => {
+      const list = S[doc].list;
+      const out = [];
+      for (const item of list.children) {
+        const a = one(item, 'assistant');
+        if (a) out.push(...a.children);
+        else out.push(item);
+      }
+      return out;
+    };
+    // When each block of the conversation first shows: blocks keep their position from one stage to
+    // the next, and only the new ones at the end of a stage appear.
+    H.appear = [];
+    const after = [];
+    let seen = 0;
+    STAGES.forEach(([name, t0], s) => {
+      const blocks = blocksOf(name);
+      S[name].blocks = blocks;
+      S[name].scroll = S[name].list.scrollTop;
+      // Streamed text: words revealed in turn.
+      for (const md of blocks.filter((b) => /_md_/.test(b.className))) {
+        if (md.words) continue;
+        const walker = S[name].doc.createTreeWalker(md, NodeFilter.SHOW_TEXT);
+        const nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+        md.words = [];
+        for (const node of nodes) {
+          const frag = S[name].doc.createDocumentFragment();
+          for (const w of node.textContent.match(UNIT) ?? []) {
+            const span = S[name].doc.createElement('span');
+            span.className = 'pw';
+            span.textContent = w;
+            frag.appendChild(span);
+            md.words.push(span);
+          }
+          node.replaceWith(frag);
+        }
+      }
+      // A new block shows once the one before it has finished streaming.
+      for (let i = seen; i < blocks.length; i++) {
+        H.appear[i] = Math.max(t0 + (s === 0 ? 0 : 0.15), i ? H.appear[i - 1] + after[i - 1] : 0);
+        after[i] = blocks[i].words ? 0.2 + blocks[i].words.length / WORD_RATE : i === 0 ? 0.35 : 0.3;
+      }
+      seen = Math.max(seen, blocks.length);
+    });
+    H.composer = one(S['ai-empty'].panel, 'composer');
+    H.textarea = H.composer.querySelector('textarea');
+    H.send = [...H.composer.querySelectorAll('button')].pop();
+    H.runs = STAGES.slice(0, 4).map(([name]) => byText(S[name].panel, 'button', RUN_LABEL));
+    const fixed = [...S['ai-done'].list.querySelectorAll('strong, b')].find((e) => e.textContent.trim().startsWith(FIXED));
+    H.fixedAt = fixed ? at(S['ai-done'], fixed, W2) : { x: 1500, y: 700 };
+
+    /* dashboard */
+    {
+      const doc = S.dash.doc;
+      H.dash = all(doc, 'card').map((card) => ({
+        card,
+        meters: all(card, 'meterRow').map((row) => {
+          const fill = one(row, 'meterFill');
+          const value = one(row, 'meterValue');
+          return { fill, value, w: fill ? parseFloat(fill.style.width) || 0 : 0, text: value ? value.textContent : '' };
+        }),
+      }));
+    }
+
+    /* cursor */
+    const c = cursor;
+    const search = at(S.hosts, H.hosts.input, W1, 0.3);
+    const prod = at(S.hosts, one(H.hosts.prod, 'name'), W1, 0.6);
+    c.show(16.2, T_TERM - 0.05);
+    c.at(16.2, 1330, 930);
+    c.to(16.3, search.x, search.y, 0.6);
+    c.click(16.95);
+    c.to(19.15, prod.x, prod.y, 0.6);
+    c.click(19.95);
+    c.click(20.1);
+
+    const sftpBtn = at(S.term, one(S.term.doc, 'sftp'), W1);
+    const aiBtn = at(S.term, one(S.term.doc, 'aiButton'), W1);
+    const ta = at(S['ai-empty'], H.textarea, W2, 0.3);
+    const send = at(S['ai-empty'], H.send, W2);
+    c.show(22.9, T_SEND + 0.2);
+    c.at(22.9, 1100, 900);
+    c.to(23.0, sftpBtn.x, sftpBtn.y, 0.45);
+    c.click(T_SFTP - 0.05);
+    c.to(24.2, sftpBtn.x - 40, sftpBtn.y + 260, 0.6);
+    c.to(25.0, sftpBtn.x, sftpBtn.y, 0.5);
+    c.click(T_SFTP_OUT - 0.05);
+    c.to(27.75, aiBtn.x, aiBtn.y, 0.6);
+    c.click(28.5);
+    c.to(28.9, ta.x, ta.y, 0.5);
+    c.click(29.45);
+    c.to(30.45, send.x, send.y, 0.4);
+    c.click(30.95);
+    c.show(RUNS[0] - 0.6, RUNS[3] + 0.5);
+    H.runs.forEach((b, k) => {
+      if (!b) return;
+      const p = at(S[STAGES[k][0]], b, W2);
+      if (k === 0) c.at(RUNS[0] - 0.6, p.x - 120, p.y + 160);
+      c.to(RUNS[k] - 0.5, p.x, p.y, 0.4);
+      c.click(RUNS[k]);
+    });
+    burst(T_DONE + 0.2, H.fixedAt.x, H.fixedAt.y, 26, 3);
+  }
+
+  // A docked panel at width w of its full width: its contents keep their size and slide in from the edge.
+  function slide(panel, w, full) {
+    for (const c of panel.children) {
+      c.style.width = `${full}px`;
+      c.style.flex = 'none';
+      c.style.transform = `translateX(${n2(w - full)}px)`;
+    }
+  }
+
+  /* timing of each snapshot */
+  function opacityOf(name, t) {
+    const fadeIn = (t0, d = 0.25) => prog(t, t0, d);
+    switch (name) {
+      case 'hosts':
+        return t >= T_MORPH && t < T_TERM + 0.6 ? 1 : 0;
+      case 'term':
+        return (t >= T_TERM + 0.15 && t < T_SFTP) || (t >= T_SFTP_OUT + 0.5 && t < T_AI) ? fadeIn(T_TERM + 0.15, 0.18) : 0;
+      case 'sftp':
+        return t >= T_SFTP && t < T_SFTP_OUT + 0.5 ? 1 : 0;
+      case 'ai-empty':
+        return t >= T_AI && t < T_SEND ? 1 : 0;
+      case 'dash':
+        return t >= T_DASH ? fadeIn(T_DASH, 0.3) : 0;
+      default: {
+        const k = STAGES.findIndex((s) => s[0] === name);
+        const end = k + 1 < STAGES.length ? STAGES[k + 1][1] : T_DASH + 0.3;
+        return t >= STAGES[k][1] && t < end ? 1 : 0;
+      }
+    }
+  }
+
+  cue(T_MORPH, 'whoosh', { gain: -6, dur: 1.0 });
+  for (let i = 0; i < 11; i++) cue(14.3 + i * 0.045, 'pop', { gain: -18, pitch: [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24][i] });
+  for (let k = 0; k < 5; k++) cue(17.15 + k * 0.13, 'key', { gain: -13, pitch: (rnd(300 + k) - 0.5) * 4 });
+  cue(T_FILTER, 'swish', { gain: -11 });
+  cue(T_TERM, 'whoosh', { gain: -7, dur: 0.9 });
+  cue(T_SFTP, 'swish', { gain: -9 });
+  cue(T_SFTP_OUT, 'swish', { gain: -11 });
+  cue(27.35, 'boop', { gain: -5 });
+  cue(T_AI, 'whoosh', { gain: -7, dur: 0.8 });
+  cue(T_SEND, 'send', { gain: -5 });
+  RUNS.forEach((r, k) => cue(r + 0.35, 'tick', { gain: -8, pitch: k * 2 }));
+  cue(RUNS[3] + 0.95, 'ding', { gain: -8, pitch: 7 });
+  cue(T_DONE + 0.15, 'success', { gain: -3 });
+  cue(T_DONE + 0.18, 'sparkle', { gain: -7 });
+  cue(T_AI_OUT, 'swish', { gain: -9 });
+  cue(T_DASH, 'whoosh', { gain: -9, dur: 0.8 });
+  for (let i = 0; i < 6; i++) cue(T_DASH + 0.3 + i * 0.06, 'pop', { gain: -17, pitch: [0, 2, 4, 7, 9, 12][i] });
   const promptChars = [...C.prompt];
-  const promptCps = promptChars.length / 1.15;
+  const promptCps = promptChars.length / 1.0;
   promptChars.forEach((_, k) => cue(29.6 + k / promptCps, 'key', { gain: -16 + rnd(900 + k) * 4, pitch: (rnd(950 + k) - 0.5) * 4 }));
 
-  /* dashboard */
-  const dashV = el(content, 'view');
-  const dashHead = el(dashV, 'dash-head', `<h2>${C.dashboard}</h2><span>${C.hostsCount}</span><div class="seg"><b class="on"><i class="ph ph-squares-four"></i>${C.cards}</b><b><i class="ph ph-rows"></i>${C.table}</b></div>`);
-  const DASH = [
-    ['bastion-tokyo', 'ops@bastion.tky.example.net', 'debian', ['production', 'edge'], true, [3, 30, 32], 154, 41, 97],
-    ['prod-api-tokyo', 'deploy@43.206.118.27', 'ubuntu', ['production', 'api'], true, [41, 58, 41], 155, 47, 41],
-    ['prod-api-tokyo-02', 'deploy@43.206.118.31', 'ubuntu', ['production', 'api'], false, [62, 70, 41], 258, 48, 41],
-    ['db-osaka-01', 'postgres@10.24.3.11', 'debian', ['production', 'database'], true, [19, 81, 38], 279, 48, 203],
-    ['db-osaka-02', 'postgres@10.24.3.12', 'debian', ['production', 'database'], false, [12, 44, 41], 96, 22, 2],
-    ['homelab-pi', 'pi@192.168.1.20', 'raspbian', ['personal'], false, [7, 36, 52], 31, 9, 64],
-  ];
-  const dcards = DASH.map(([name, addr, os, tags, fav, vals, rx, tx, up], i) => {
-    const e = el(
-      dashV,
-      'dcard',
-      `${osBadge(os)}<div class="nm">${name}${fav ? '<i class="ph-fill ph-star fav"></i>' : ''}</div><div class="addr">${addr}</div>${tagPills(tags)}${['CPU', C.memory, `${C.disk} /`]
-        .map((m, k) => `<div class="met" style="top:${146 + k * 32}px"><span>${m}</span><div class="trk"><b></b></div><em></em></div>`)
-        .join('')}<div class="foot"></div>`,
-    );
-    const mets = [...e.querySelectorAll('.met')].map((m) => ({ m, b: m.querySelector('b'), em: m.querySelector('em') }));
-    return { e, i, vals, rx, tx, up, mets, foot: e.querySelector('.foot') };
-  });
-  cue(43.6, 'boop', { gain: -12, pitch: 5 });
-
-  // Positions the cursor reaches, in stage coordinates.
-  const contentAt = (w, side, x, y) => ({ x: w.x + side + x, y: w.y + 64 + y });
-  const SEARCH_AT = contentAt(W1, SIDE, 220, 54);
-  const CARD_AT = contentAt(W1, SIDE, 32 + 174, 108 + 92);
-  const AI_BTN_AT = { x: W1.x + W1.w - 208, y: W1.y + 32 };
-  const INPUT_AT = { x: PANEL_X + 200, y: W2.y + 690 };
-  const SEND_AT = { x: PANEL_X + 24 + 572 - 14 - 22, y: W2.y + 652 + 104 - 12 - 22 };
-  const runAt = (it) => ({ x: PANEL_X + AIW - 24 - 14 - 36, y: W2.y + it.y + 30 - scroll(it.click) });
-
-  cursor.show(16.2, 20.25);
-  cursor.at(16.2, 1330, 930);
-  cursor.to(16.3, SEARCH_AT.x, SEARCH_AT.y, 0.6);
-  cursor.click(16.95);
-  cursor.to(19.15, CARD_AT.x, CARD_AT.y, 0.65);
-  cursor.click(19.95);
-  cursor.click(20.1);
-  for (let k = 0; k < 5; k++) cue(17.15 + k * 0.13, 'key', { gain: -13, pitch: (rnd(300 + k) - 0.5) * 4 });
-  cue(17.95, 'swish', { gain: -11 });
-  cue(T_TERM, 'whoosh', { gain: -7, dur: 0.9 });
-
-  cursor.show(23.55, 24.75);
-  cursor.at(23.55, 1790, 1010);
-  cursor.to(23.62, 1440, 524, 0.78);
-  cursor.click(24.45, false);
-
-  cursor.show(27.6, 36.0);
-  cursor.at(27.6, 1240, 760);
-  cursor.to(27.7, AI_BTN_AT.x, AI_BTN_AT.y, 0.6);
-  cursor.click(28.5);
-  cue(T_AI, 'whoosh', { gain: -7, dur: 0.8 });
-  cursor.to(28.9, INPUT_AT.x, INPUT_AT.y, 0.5);
-  cursor.click(29.45);
-  cursor.to(30.45, SEND_AT.x, SEND_AT.y, 0.4);
-  cursor.click(30.95);
-  for (const it of ITEMS.filter((x) => x.click)) {
-    const p = runAt(it);
-    cursor.to(it.click - 0.55, p.x, p.y, 0.45);
-    cursor.click(it.click);
-  }
-  cue(T_AI_OUT, 'swish', { gain: -9 });
-
-  /* per frame */
   onFrame((t) => {
     // A gentle push-in while the assistant works; the cursor and effects ride along.
-    const zoom = 1 + 0.1 * (spring(t - 30.9, 0.7, 0.9) - spring(t - 40.4, 0.7, 0.9));
+    const zoom = 1 + 0.08 * (spring(t - 30.9, 0.7, 0.9) - spring(t - 40.4, 0.7, 0.9));
     const cam = Math.abs(zoom - 1) < 1e-4 ? '' : `translate(960px,652px) scale(${zoom.toFixed(5)}) translate(-960px,-652px)`;
     for (const l of [L.app, L.fx, L.cursor]) {
       l.style.transformOrigin = '0 0';
       l.style.transform = cam;
     }
-    if (!shown(L.app, t >= T_MORPH && t < T_WIPE + 0.72)) return;
+    if (!shown(L.app, t >= T_MORPH && t < T_WIPE + 0.72) || !S.dash) return;
+
     const r = winRect(t);
     win.style.cssText = `left:${n2(r.x)}px;top:${n2(r.y)}px;width:${n2(r.w)}px;height:${n2(r.h)}px;border-radius:${n2(r.r)}px`;
+    const morphing = t < T_MORPH + 1.6;
     const iconO = 1 - prog(t, T_MORPH + 0.02, 0.24);
     if (shown(icon, iconO > 0)) {
       const s = (Math.max(r.w, r.h) * 1024) / 896;
       icon.style.cssText = `width:${n2(s)}px;height:${n2(s)}px;margin:${n2(-s / 2)}px 0 0 ${n2(-s / 2)}px;opacity:${iconO.toFixed(3)}`;
     }
 
-    const sw = SIDE * clamp(sideOpen(t));
-    const aw = AIW * clamp(aiOpen(t), 0, 1.06);
-    side.style.width = `${n2(sw)}px`;
-    sideIn.style.transform = `translateX(${n2(sw - SIDE)}px)`;
-    main.style.left = `${n2(sw)}px`;
-    main.style.width = `${n2(r.w - sw - aw)}px`;
-    if (shown(ai, aw > 0.5)) ai.style.width = `${n2(aw)}px`;
-    const mainW = r.w - sw - aw;
-
-    sideItems.forEach((e, i) => {
-      const a = spring(t - (13.95 + i * 0.03), 2.2, 0.75);
-      e.style.opacity = clamp(a * 1.5).toFixed(3);
-      e.style.transform = `translateX(${n2((1 - a) * -36)}px)`;
-    });
-    sel.style.transform = `translateY(${n2(8 + 42 * (1 - spring(t - (T_DASH + 0.2), 1.6, 0.7)))}px)`;
-
-    // tabs
-    let x = 14;
-    for (const tab of TABS) {
-      const v = spring(t - tab.t0, 2.2, 0.62) * (1 - ease.in(prog(t, tab.t1, 0.18)));
-      if (!shown(tab.e, v > 0.01)) continue;
-      tab.e.classList.toggle('on', tab.on(t));
-      put(tab.e, x, 0, 0.7 + 0.3 * v, clamp(v * 1.5));
-      x += (tab.w + 6) * clamp(v);
+    for (const name of SNAPS) {
+      const o = opacityOf(name, t);
+      const snap = S[name];
+      if (!shown(snap.f, o > 0)) continue;
+      snap.f.style.opacity = o.toFixed(3);
+      // While the window grows out of the icon, the app sits where it will end up and the window reveals it.
+      const w = morphing ? W1.w : r.w;
+      snap.f.style.width = `${n2(w)}px`;
+      snap.f.style.height = `${W1.h}px`;
+      snap.f.style.transform = morphing ? `translate(${n2(W1.x - r.x)}px,${n2(W1.y - r.y)}px)` : '';
+      if (snap.term) drawTerm(snap.term, t);
     }
-    put(plus, x, 0, 1, clamp((t - 14.1) * 3));
-    const aiv = aiOpen(t);
-    aiBtn.style.background = `rgba(10,132,255,${(0.22 * clamp(aiv) + 0.12 * bump(t, 27.95, 0.7)).toFixed(3)})`;
-    aiBtn.style.transform = `scale(${(1 - 0.12 * bump(t, 28.45, 0.2)).toFixed(4)})`;
-    tbRight.style.opacity = clamp((t - 14.0) * 3).toFixed(3);
 
-    // hosts
-    if (shown(hostsV, t < T_TERM + 0.9)) {
-      const sa = spring(t - 14.2, 2.0, 0.75);
-      const leave = prog(t, T_TERM, 0.25);
-      search.style.opacity = (clamp(sa * 1.5) * (1 - leave)).toFixed(3);
-      search.style.transform = `translateY(${n2((1 - sa) * 20)}px)`;
-      const focused = t >= 16.95;
-      search.style.boxShadow = focused ? `0 0 0 2px rgba(10,132,255,${(0.8 * prog(t, 16.95, 0.15)).toFixed(3)}) inset, 0 0 0 6px rgba(10,132,255,${(0.18 * prog(t, 16.95, 0.15)).toFixed(3)})` : '';
+    // hosts: rows fall into place, the search filters them, and a double-click opens one
+    if (S.hosts.f.style.display !== 'none') {
+      const h = H.hosts;
       const n = t < 17.15 ? 0 : Math.min(5, Math.floor((t - 17.15) / 0.13) + 1);
-      text(searchQ, 'tokyo'.slice(0, n));
-      shown(searchPh, n === 0);
-      shown(searchCaret, focused && (n > 0 || (t * 1.9) % 1 < 0.55));
-      const fOut = ease.out(prog(t, 17.95, 0.35));
-      for (const c of cards) {
-        const a = spring(t - (14.35 + c.i * 0.06), 2.0, 0.6);
-        let p = slot(c.i);
-        let s = 0.6 + 0.4 * a;
-        let o = clamp(a * 1.5);
-        if (c.rank >= 0) {
-          const f = spring(t - (18.0 + c.rank * 0.05), 1.5, 0.72);
-          const q = slot(c.rank);
-          p = { x: lerp(p.x, q.x, f), y: lerp(p.y, q.y, f) };
-          if (c.rank === 0) {
-            s *= 1 - 0.035 * (bump(t, 19.95, 0.16) + bump(t, 20.1, 0.16));
-            if (t >= T_TERM + 0.02) o = 0;
-          } else o *= 1 - leave;
-          c.hl.style.background = `rgba(10,132,255,${(0.38 * prog(t, 17.85, 0.2)).toFixed(3)})`;
-        } else {
-          s *= lerp(1, 0.82, fOut);
+      h.input.value = 'tokyo'.slice(0, n);
+      const focus = t >= 16.95;
+      if (focus && S.hosts.doc.activeElement !== h.input) h.input.focus();
+      if (!focus && S.hosts.doc.activeElement === h.input) h.input.blur();
+      text(h.count, t < T_FILTER ? h.countText : h.countText.replace(/\d+/, '3'));
+      const fOut = ease.inOut(prog(t, T_FILTER, 0.4));
+      h.rows.forEach((row, i) => {
+        const a = spring(t - (14.3 + i * 0.045), 2.0, 0.65);
+        let o = clamp(a * 1.6);
+        let height = row.h;
+        if (!row.match) {
           o *= 1 - fOut;
+          height = row.h * (1 - fOut);
         }
-        shown(c.e, o > 0.005);
-        put(c.e, p.x, p.y + (1 - a) * 40, s, o);
-      }
-      if (shown(expander, t >= T_TERM && t < T_TERM + 0.9)) {
-        const e = spring(t - T_TERM, 1.2, 0.85);
-        const from = { ...slot(0), w: 349, h: 170, r: 22 };
-        const q = lerpRect(from, { x: 0, y: 0, w: mainW, h: 716, r: 0 }, e);
-        const cg = Math.round(lerp(42, 23, clamp(e)));
-        expander.style.cssText = `left:${n2(q.x)}px;top:${n2(q.y)}px;width:${n2(q.w)}px;height:${n2(q.h)}px;border-radius:${n2(q.r)}px;background:rgb(${cg},${cg},${cg + 3});opacity:${(1 - prog(t, T_TERM + 0.6, 0.3)).toFixed(3)}`;
-      }
+        row.e.style.opacity = o.toFixed(3);
+        row.e.style.transform = `translateY(${n2((1 - a) * 18)}px)`;
+        row.e.style.height = `${n2(height)}px`;
+        row.e.style.minHeight = '0';
+        row.e.style.overflow = 'hidden';
+      });
+      const picked = t >= T_PICK;
+      h.first.classList.toggle(h.selClass, !picked);
+      h.prod.classList.toggle(h.selClass, picked);
+    }
+    if (shown(expander, t >= T_TERM && t < T_TERM + 0.6)) {
+      const e = spring(t - T_TERM, 1.3, 0.85);
+      const from = rectOf(S.hosts, H.hosts.prod, W1);
+      const q = lerpRect({ ...from, r: 6 }, { ...H.termRect, r: 0 }, e);
+      expander.style.cssText = `left:${n2(q.x - r.x)}px;top:${n2(q.y - r.y)}px;width:${n2(q.w)}px;height:${n2(q.h)}px;border-radius:${n2(q.r)}px;opacity:${(1 - prog(t, T_TERM + 0.3, 0.3)).toFixed(3)}`;
+    }
+    if (H.tab) {
+      const a = spring(t - (T_TERM + 0.15), 2.2, 0.55);
+      H.tab.style.transform = `scale(${(0.6 + 0.4 * a).toFixed(4)})`;
+      H.tab.style.opacity = clamp(a * 2).toFixed(3);
     }
 
-    // terminal
-    const termO = prog(t, T_TERM + 0.35, 0.3) * (1 - prog(t, T_DASH, 0.35));
-    if (shown(termV, termO > 0)) {
-      termV.style.opacity = termO.toFixed(3);
-      termV.style.transform = `scale(${(1 - 0.03 * prog(t, T_DASH, 0.35)).toFixed(4)})`;
-      let active = null;
-      for (const l of LINES) {
-        const a = prog(t, l.at, 0.12);
-        if (!shown(l.e, a > 0)) continue;
-        l.e.style.opacity = a.toFixed(3);
-        let dx = 0;
-        let bg = 'transparent';
-        if (l.flash === 'bad' && t >= l.at) {
-          const dt = t - l.at;
-          dx = Math.sin(dt * 42) * 9 * Math.exp(-dt * 6);
-          bg = `rgba(255,91,82,${(0.24 * bump(t, l.at, 1.2)).toFixed(3)})`;
-        }
-        if (l.flash === 'good') bg = `rgba(50,215,75,${(0.22 * bump(t, l.at, 1.2)).toFixed(3)})`;
-        l.e.style.background = bg;
-        l.e.style.padding = l.flash ? '0 8px' : '';
-        l.e.style.marginLeft = l.flash ? '-8px' : '';
-        l.e.style.transform = `translate(${n2(dx)}px,${n2((1 - a) * 6)}px)`;
-        if (l.type != null) {
-          active = l;
-          const n = t < l.t0 ? 0 : Math.min(l.type.length, Math.floor((t - l.t0) * l.cps) + 1);
-          text(l.typed, l.type.slice(0, n));
-          l.n = n;
-        }
-      }
-      if (shown(tcaret, !!active)) {
-        const typing = t >= active.t0 && t < active.t0 + active.type.length / active.cps + 0.25;
-        const aiTyping = active.ai && t >= active.t0 - 0.2 && t < 36.75;
-        tcaret.classList.toggle('ai', !!aiTyping);
-        tcaret.style.opacity = typing || aiTyping || (t * 1.9) % 1 < 0.55 ? '1' : '0';
-        tcaret.style.transform = `translate(${n2((PROMPT_LEN + active.n) * charW)}px,${active.i * 34 + 3}px)`;
-      }
-
-      const so = spring(t - 23.3, 1.3, 0.78) - spring(t - 25.95, 1.2, 0.9);
-      if (shown(sftp, t > 23.3 && t < 27)) {
-        sftp.style.transform = `translateX(${n2((1 - so) * 500)}px)`;
-        sftp.style.opacity = clamp(so * 2).toFixed(3);
-        const ins = spring(t - 24.45, 1.6, 0.7);
-        fileRows.forEach((e, i) => (e.style.transform = `translateY(${n2(70 + (i + ins) * 52)}px)`));
-        const up = spring(t - 24.45, 2.0, 0.55);
-        shown(upRow, t >= 24.45);
-        upRow.style.transform = `translateY(70px) scale(${(0.6 + 0.4 * up).toFixed(4)})`;
-        upRow.style.opacity = clamp(up * 2).toFixed(3);
-        const p = ease.inOut(prog(t, 24.55, 0.85));
-        upBar.style.transform = `scaleX(${p.toFixed(4)})`;
-        upBarBox.style.opacity = (1 - prog(t, 25.45, 0.2)).toFixed(3);
-        text(upPct, t < 25.42 ? `${Math.round(p * 100)}%` : '24.6 MB');
-        const ok = spring(t - 25.42, 2.2, 0.45);
-        shown(upOk, t >= 25.42);
-        upOk.style.transform = `scale(${ok.toFixed(4)})`;
-      }
-    }
-    if (shown(drag, t >= 23.6 && t < 24.6)) {
-      const c = cursor.pos(t);
-      const d = prog(t, 24.42, 0.15);
-      put(drag, c.x + 20, c.y + 24, (0.9 + 0.1 * spring(t - 23.6, 2, 0.6)) * (1 - 0.5 * d), clamp((t - 23.6) * 6) * (1 - d), -4 + Math.sin(t * 5) * 2);
+    // SFTP: the panel slides open beside the terminal and closes again
+    if (S.sftp.f.style.display !== 'none') {
+      const o = clamp(spring(t - T_SFTP, 1.4, 0.85) - spring(t - T_SFTP_OUT, 1.4, 0.95));
+      H.sftp.panel.style.width = `${n2(H.sftp.w * o)}px`;
+      slide(H.sftp.panel, H.sftp.w * o, H.sftp.w);
+      H.sftp.rows.forEach((row, i) => {
+        const a = spring(t - (T_SFTP + 0.15 + i * 0.03), 2.2, 0.7);
+        row.style.opacity = clamp(a * 1.6).toFixed(3);
+        row.style.transform = `translateX(${n2((1 - a) * 16)}px)`;
+      });
     }
 
-    // ai panel
-    if (aw > 0.5) {
-      text(aiTitle, t < 31.0 ? C.newChat : C.chatTitle);
+    // AI: the panel opens, the prompt is typed and sent, and the conversation plays out stage by stage
+    const aw = 440 * clamp(aiOpen(t), 0, 1.04);
+    for (const [name] of [['ai-empty'], ...STAGES]) {
+      const snap = S[name];
+      if (snap.f.style.display === 'none') continue;
+      snap.panel.style.width = `${n2(aw)}px`;
+      slide(snap.panel, aw, 440);
+    }
+    if (S['ai-empty'].f.style.display !== 'none') {
       const n = t < 29.6 ? 0 : Math.min(promptChars.length, Math.floor((t - 29.6) * promptCps) + 1);
-      text(aiQ, t < 31.0 ? promptChars.slice(0, n).join('') : '');
-      shown(aiPh, n === 0 || t >= 31.0);
-      shown(aiCaret, t >= 29.45 && t < 31.0 && (n > 0 || (t * 1.9) % 1 < 0.55));
-      const ready = n > 0 && t < 31.0;
-      send.style.background = ready ? 'var(--accent)' : '';
-      send.style.color = ready ? '#fff' : '';
-      send.style.transform = `scale(${(1 - 0.15 * bump(t, 30.9, 0.2)).toFixed(4)})`;
-      const sc = scroll(t);
-      for (const it of ITEMS) {
-        if (!shown(it.e, t >= it.t)) continue;
-        const a = spring(t - it.t, 2.0, 0.7);
-        let y = it.y - 60 - sc + (1 - a) * 24;
-        if (it.e === bubble) y = lerp(500, it.y - 60, spring(t - it.t, 1.4, 0.8)) - sc;
-        it.e.style.transform = `translateY(${n2(y)}px) scale(${(0.96 + 0.04 * a).toFixed(4)})`;
-        it.e.style.opacity = clamp(a * 2).toFixed(3);
-        if (it.click) {
-          const run = it.e.querySelector('.run');
-          const spin = it.e.querySelector('.spin');
-          const res = it.e.querySelector('.res');
-          shown(run, t < it.click + 0.08);
-          run.style.transform = `scale(${(1 - 0.12 * bump(t, it.click - 0.04, 0.2)).toFixed(4)})`;
-          if (shown(spin, t >= it.click + 0.08 && t < it.done)) spin.style.transform = `rotate(${((t * 720) % 360).toFixed(1)}deg)`;
-          if (shown(res, t >= it.done)) res.style.transform = `scale(${spring(t - it.done, 2.2, 0.5).toFixed(4)})`;
-        }
-      }
-      dots.forEach((d, j) => (d.style.transform = `translateY(${n2(-Math.abs(Math.sin((t - 31.15) * 7 + j * 0.7)) * 9)}px)`));
-      shown(reason.querySelector('.dots'), t < 31.95);
-      reasonLabel.style.opacity = prog(t, 31.95, 0.2).toFixed(3);
-      foundUnits.forEach((u, i) => (u.style.opacity = prog(t, 33.15 + i * 0.045, 0.12).toFixed(3)));
-      for (const [e, t0] of [
-        [diffDel, 34.15],
-        [diffAdd, 34.3],
-      ]) {
-        const a = spring(t - t0, 2.0, 0.7);
-        e.style.opacity = clamp(a * 2).toFixed(3);
-        e.style.transform = `translateX(${n2((1 - a) * 30)}px)`;
-      }
-      badPill.style.opacity = t < 37.35 ? '1' : '0.5';
-      badPill.style.textDecoration = t < 37.35 ? '' : 'line-through';
-      const g = spring(t - 37.35, 2.1, 0.45);
-      goodPill.style.transform = `scale(${g.toFixed(4)})`;
-      goodPill.style.opacity = clamp(g * 2).toFixed(3);
-      flipArrow.style.opacity = clamp(g * 2).toFixed(3);
+      H.textarea.value = promptChars.slice(0, n).join('');
+      H.send.style.transform = `scale(${(1 - 0.15 * bump(t, 30.9, 0.2)).toFixed(4)})`;
     }
+    STAGES.forEach(([name, t0], s) => {
+      const snap = S[name];
+      if (snap.f.style.display === 'none') return;
+      const prev = s ? S[STAGES[s - 1][0]].scroll : 0;
+      snap.list.scrollTop = lerp(prev, snap.scroll, spring(t - t0 - 0.1, 1.1, 0.95));
+      snap.blocks.forEach((b, i) => {
+        const t1 = H.appear[i];
+        const a = spring(t - t1, 2.0, 0.72);
+        b.style.opacity = clamp(a * 1.8).toFixed(3);
+        b.style.transform = i === 0 && s === 0 ? `translateY(${n2((1 - spring(t - t1, 1.4, 0.8)) * 260)}px)` : `translateY(${n2((1 - a) * 14)}px)`;
+        if (b.words) b.words.forEach((w, k) => (w.style.opacity = prog(t, t1 + 0.1 + k / WORD_RATE, 0.08).toFixed(3)));
+      });
+      const run = H.runs[s];
+      if (run && s < 4) run.style.transform = `scale(${(1 - 0.12 * bump(t, RUNS[s] - 0.04, 0.2)).toFixed(4)})`;
+    });
 
     // dashboard
-    const dashO = prog(t, T_DASH + 0.15, 0.3);
-    if (shown(dashV, dashO > 0)) {
-      dashV.style.opacity = dashO.toFixed(3);
-      const ha = spring(t - 41.7, 2, 0.75);
-      dashHead.style.opacity = clamp(ha * 1.5).toFixed(3);
-      dashHead.style.transform = `translateY(${n2((1 - ha) * 20)}px)`;
-      for (const d of dcards) {
-        const a = spring(t - (41.85 + d.i * 0.07), 1.9, 0.62);
-        put(d.e, 32 + (d.i % 3) * 373, 104 + Math.floor(d.i / 3) * 304 + (1 - a) * 40, 0.7 + 0.3 * a, clamp(a * 1.5));
-        d.mets.forEach((m, k) => {
-          const fill = spring(t - (42.2 + d.i * 0.07 + k * 0.05), 1.4, 0.7);
-          let v = d.vals[k];
-          if (d.i === 2 && k === 0) v = lerp(62, 95, spring(t - 43.5, 1.2, 0.8));
-          v = v * fill + (fill > 0.9 ? Math.sin(t * 1.3 + d.i + k * 2) * (k ? 0.6 : 2) : 0);
-          v = clamp(v, 0, 99);
-          m.b.style.transform = `scaleX(${(v / 100).toFixed(4)})`;
-          text(m.em, `${Math.round(v)}%`);
-          m.m.classList.toggle('hot', v >= 90);
-          if (d.i === 2 && k === 0) m.em.style.transform = `rotate(${n2(Math.sin(t * 30) * 6 * bump(t, 43.6, 0.6))}deg)`;
+    if (S.dash.f.style.display !== 'none') {
+      H.dash.forEach((d, i) => {
+        const a = spring(t - (T_DASH + 0.25 + i * 0.05), 1.9, 0.65);
+        d.card.style.opacity = clamp(a * 1.6).toFixed(3);
+        d.card.style.transform = `translateY(${n2((1 - a) * 26)}px) scale(${(0.94 + 0.06 * a).toFixed(4)})`;
+        d.meters.forEach((m, k) => {
+          if (!m.fill) return;
+          const f = spring(t - (T_DASH + 0.5 + i * 0.05 + k * 0.05), 1.3, 0.75);
+          m.fill.style.width = `${(m.w * f).toFixed(3)}%`;
+          if (m.value && /\d/.test(m.text)) text(m.value, m.text.replace(/\d+/, String(Math.round(parseInt(m.text.match(/\d+/)[0], 10) * clamp(f)))));
         });
-        const jitter = (k) => Math.round(k * (1 + 0.08 * Math.sin(t * 2.3 + d.i)));
-        text(d.foot, `↓ ${jitter(d.rx)} KB/s  ↑ ${jitter(d.tx)} KB/s · ${C.up} ${d.up} ${C.days}`);
-      }
+      });
     }
   });
 
-  return { goodAt: () => goodAt };
+  return { load };
 })();
 
 caption(C.hosts, 14.1, 20.2, 'headline', 82);
@@ -1259,14 +1164,10 @@ caption(C.hostsSub, 15.0, 20.15, 'sub', 168);
 caption(C.term, 21.0, 27.6, 'headline', 82);
 caption(C.termSub, 21.8, 27.55, 'sub', 168);
 caption(C.ai, 29.0, 41.0, 'headline', 82);
-caption(C.aiSub1, 33.2, 37.2, 'sub', 168);
-caption(C.aiSub2, 37.5, 40.95, 'sub', 168);
+caption(C.aiSub1, 33.2, 37.4, 'sub', 168);
+caption(C.aiSub2, 37.7, 40.95, 'sub', 168);
 caption(C.dash, 42.0, 47.1, 'headline', 82);
 caption(C.dashSub, 42.8, 47.05, 'sub', 168);
-cue(T_DASH, 'whoosh', { gain: -9, dur: 0.8 });
-for (let i = 0; i < 9; i++) cue(14.35 + i * 0.06, 'pop', { gain: -17, pitch: [0, 2, 4, 7, 9, 12, 14, 16, 19][i] });
-for (let i = 0; i < 6; i++) cue(41.85 + i * 0.07, 'pop', { gain: -17, pitch: [0, 2, 4, 7, 9, 12][i] });
-cue(13.62, 'whoosh', { gain: -6, dur: 1.0 });
 
 /* ---------- wave wipe into the night ---------- */
 
@@ -1354,10 +1255,10 @@ cue(13.62, 'whoosh', { gain: -6, dur: 1.0 });
       open: 50.1 + i * 0.15,
       lock: 50.3 + i * 0.15,
       go: 50.9 + i * 0.18,
-      back: 52.6 + i * 0.18,
-      unlock: 53.6 + i * 0.15,
-      home: 53.95 + i * 0.15,
-      drop: 54.1 + i * 0.12,
+      back: 53.6 + i * 0.18,
+      unlock: 54.6 + i * 0.15,
+      home: 54.95 + i * 0.15,
+      drop: 55.1 + i * 0.12,
     };
     cue(T.lock, 'lock', { gain: -6, pitch: i * 2 });
     cue(T.go + 0.7, 'bubble', { gain: -10, pitch: 7 + i * 2 });
@@ -1388,40 +1289,40 @@ cue(13.62, 'whoosh', { gain: -6, dur: 1.0 });
   cue(49.0, 'pop', { gain: -8, pitch: 7 });
   cue(49.7, 'swish', { gain: -10 });
   cue(52.0, 'sparkle', { gain: -12 });
-  cue(52.6, 'swish', { gain: -10 });
-  cue(56.3, 'swish', { gain: -9 });
+  cue(53.6, 'swish', { gain: -10 });
+  cue(58.3, 'swish', { gain: -9 });
 
   onFrame((t) => {
-    if (!shown(L.sync, t >= T_SYNC && t < 57.2)) return;
+    if (!shown(L.sync, t >= T_SYNC && t < 59.2)) return;
     const pop = (t0, out) => {
       const a = spring(t - t0, 1.6, 0.55);
       const b = ease.in(prog(t, out, 0.35));
       return { s: (0.3 + 0.7 * a) * (1 - 0.6 * b), o: clamp(a * 2) * (1 - b) };
     };
-    let p = pop(48.5, 56.4);
+    let p = pop(48.5, 58.4);
     let sq = 0;
     for (const c of CHIPS) sq += bump(t, c.T.go + 0.72, 0.3) + 0.5 * bump(t, c.T.back, 0.25);
     const cy = CLOUD.y + Math.sin(t * 1.6) * 7;
     cloud.style.transform = `translate(${CLOUD.x}px,${n2(cy)}px) scale(${n2(p.s * (1 + 0.07 * sq))},${n2(p.s * (1 - 0.07 * sq))})`;
     cloud.style.opacity = p.o.toFixed(3);
-    const happy = t >= 51.85 && t < 52.75;
+    const happy = t >= 51.85 && t < 53.5;
     cloudHappy.style.display = happy ? '' : 'none';
     cloudEyes.style.display = happy ? 'none' : '';
     const open = (t + 0.4) % 3.1 < 0.15 ? 0.15 : 1;
     cloudEyes.setAttribute('transform', `translate(0 30) scale(1 ${open}) translate(0 -30)`);
-    const lp = pop(48.9, 56.45);
+    const lp = pop(48.9, 58.45);
     label.style.transform = `translate(${n2(960 - labelW / 2)}px,${n2(510 + (1 - lp.s) * 20)}px)`;
     label.style.opacity = lp.o.toFixed(3);
-    p = pop(48.8, 56.3);
+    p = pop(48.8, 58.3);
     put(laptop, 440, 690 + Math.sin(t * 1.3) * 4, p.s, p.o);
-    p = pop(49.0, 56.35);
+    p = pop(49.0, 58.35);
     put(monitor, 1480, 680 + Math.sin(t * 1.3 + 1) * 4, p.s, p.o);
 
     for (const c of CHIPS) {
       const T = c.T;
       const p0 = { x: 471, y: 600 + c.i * 68 };
       const ha = spring(t - T.appear, 2, 0.7);
-      const hout = ease.in(prog(t, 56.3 + c.i * 0.05, 0.3));
+      const hout = ease.in(prog(t, 58.3 + c.i * 0.05, 0.3));
       if (shown(c.home, t >= T.appear)) put(c.home, p0.x, p0.y, (0.7 + 0.3 * ha) * (1 - 0.5 * hout), clamp(ha * 2) * (1 - hout));
       if (!shown(c.e, t >= T.lift)) continue;
       const p1 = { x: 560, y: 290 + c.i * 76 };
@@ -1447,7 +1348,7 @@ cue(13.62, 'whoosh', { gain: -6, dur: 1.0 });
         const d = spring(t - T.drop, 1.6, 0.7);
         q = { x: lerp(p3.x, p4.x, d), y: lerp(p3.y, p4.y, d) };
       }
-      const out = ease.in(prog(t, 56.3 + c.i * 0.05, 0.3));
+      const out = ease.in(prog(t, 58.3 + c.i * 0.05, 0.3));
       put(c.e, q.x, q.y, s * (1 - 0.5 * out), o * (1 - out));
 
       const locked = prog(t, T.lock, 0.18) * (1 - prog(t, T.unlock, 0.18));
@@ -1467,9 +1368,9 @@ cue(13.62, 'whoosh', { gain: -6, dur: 1.0 });
       }
     }
   });
-  caption(C.sync, 48.6, 56.2, 'headline night', 66);
-  caption(C.syncSub1, 51.6, 54.15, 'sub night', 152);
-  caption(C.syncSub2, 54.5, 56.15, 'sub night', 152);
+  caption(C.sync, 48.6, 58.2, 'headline night', 66);
+  caption(C.syncSub1, 51.6, 55.15, 'sub night', 152);
+  caption(C.syncSub2, 55.5, 58.15, 'sub night', 152);
 }
 
 /* ---------- end card ---------- */
@@ -1497,39 +1398,32 @@ cue(13.62, 'whoosh', { gain: -6, dur: 1.0 });
     box.style.top = `${672 + r * 72}px`;
     for (const [ic, label, cls] of row) pills.push(el(box, `epill ${cls ?? ''}`, `<i class="${ic}"></i>${label}`));
   });
-  cue(57.3, 'chime', { gain: -2, pitch: 5 });
-  cue(57.2, 'waves', { gain: -12, dur: 7 });
-  [0, 2, 4, 7, 9, 12].forEach((p, i) => cue(57.65 + i * 0.05, 'pop', { gain: -15, pitch: p + 5 }));
-  pills.forEach((_, i) => cue(58.55 + i * 0.08, 'pop', { gain: -14, pitch: [7, 9, 12, 14, 16][i] }));
+  cue(62.0, 'chime', { gain: -2, pitch: 5 });
+  cue(59.2, 'waves', { gain: -12, dur: 11 });
+  [0, 2, 4, 7, 9, 12].forEach((p, i) => cue(62.35 + i * 0.05, 'pop', { gain: -15, pitch: p + 5 }));
+  pills.forEach((_, i) => cue(63.25 + i * 0.08, 'pop', { gain: -14, pitch: [7, 9, 12, 14, 16][i] }));
   for (const [t0, x, y, s] of [
-    [58.0, 1110, 175, 1],
-    [58.9, 800, 360, 0.7],
-    [59.7, 1150, 400, 0.8],
-    [60.8, 790, 190, 0.9],
-    [61.6, 1140, 260, 0.6],
-    [62.4, 820, 300, 0.8],
+    [62.7, 1110, 175, 1],
+    [63.6, 800, 360, 0.7],
+    [64.4, 1150, 400, 0.8],
+    [65.5, 790, 190, 0.9],
+    [66.3, 1140, 260, 0.6],
+    [67.1, 820, 300, 0.8],
   ])
     twinkle(t0, x, y, s);
   onFrame((t) => {
-    if (!shown(L.end, t >= 57.1)) return;
-    const a = spring(t - 57.3, 1.5, 0.5);
-    put(icon, 960, 290 + (1 - a) * 60 + Math.sin(t * 1.5) * 6 * prog(t, 58, 1), 0.2 + 0.8 * a, clamp(a * 2), (1 - a) * -25);
-    mark.update(t, 57.65, null, { gap: 0.05, f: 2.0, z: 0.5, rise: 60, spin: -12, blur: 6 });
-    tag.update(t, 58.15, null, { gap: 0.03 });
+    if (!shown(L.end, t >= 61.8)) return;
+    const a = spring(t - 62.0, 1.5, 0.5);
+    put(icon, 960, 290 + (1 - a) * 60 + Math.sin(t * 1.5) * 6 * prog(t, 62.7, 1), 0.2 + 0.8 * a, clamp(a * 2), (1 - a) * -25);
+    mark.update(t, 62.35, null, { gap: 0.05, f: 2.0, z: 0.5, rise: 60, spin: -12, blur: 6 });
+    tag.update(t, 62.85, null, { gap: 0.03 });
     pills.forEach((p, i) => {
-      const b = spring(t - (58.55 + i * 0.08), 2, 0.55);
+      const b = spring(t - (63.25 + i * 0.08), 2, 0.55);
       p.style.opacity = clamp(b * 2).toFixed(3);
       p.style.transform = `translateY(${n2((1 - b) * 30)}px) scale(${(0.6 + 0.4 * b).toFixed(4)})`;
     });
   });
 }
-
-/* ---------- the AI fix's confetti, placed once the layout is measured ---------- */
-
-onMeasure(() => {
-  const at = app.goodAt();
-  burst(37.35, at.x, at.y, 26, 3);
-});
 
 /* ---------- playback ---------- */
 
@@ -1553,6 +1447,7 @@ async function init() {
   await document.fonts.ready;
   await Promise.all([...stage.querySelectorAll('img')].map((img) => (img.complete ? null : new Promise((r) => (img.onload = img.onerror = r)))));
   for (const fn of measures) fn();
+  await app.load();
   seek(0);
   window.PROMO = {
     ready: true,
