@@ -184,7 +184,7 @@ export const AREAS: Area[] = [
           "terminal.fwd.socks", "btn.edit", "btn.delete", "btn.save",
         ],
         "Start and stop": [
-          "terminal.fwd.start", "sidebar.forwards", "terminal.fwd.stop", "btn.retry", "terminal.fwd.manage",
+          "terminal.fwd.start", "sidebar.forwards", "terminal.fwd.starting", "terminal.fwd.stop", "btn.retry", "terminal.fwd.manage",
           "hosts.fwd.loadFailed",
         ],
         "Keep running in the background": [

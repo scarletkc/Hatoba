@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { errorMessage } from "@/app/errors";
 import { Icon, Spinner } from "@/components/controls";
 import { overlayStyles, toast, type MenuAnchor } from "@/components/overlay";
-import { hostPort } from "@/features/hosts/address";
+import { forwardDest, hostPort } from "@/features/hosts/address";
 import { forwardFailure, runningForward, useHostConnection } from "@/features/hosts/connections";
 import { startForward, stopForward, useHostForwardRules } from "@/features/hosts/forwards";
 import { useT } from "@/i18n";
@@ -146,7 +146,7 @@ function ForwardRow({
   // A remote forward listens on the server: nothing here connects to it, so it has nothing to copy.
   const remote = kind === "remote";
   const local = active?.address ?? hostPort(f.bind_address, f.bind_port || t("terminal.fwd.autoPort"));
-  const dest = active?.dest ?? hostPort(f.dest_host, f.dest_port);
+  const dest = forwardDest(t, f, active?.dest);
 
   return (
     <div className={s.row}>

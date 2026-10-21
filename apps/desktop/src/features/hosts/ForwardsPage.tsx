@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
-import { Button, Icon, IconButton, Switch } from "@/components/controls";
+import { Button, Icon, IconButton, Spinner, Switch } from "@/components/controls";
 import { EmptyState, Group, PageHeader, Section } from "@/components/layout";
 import { confirm, toast } from "@/components/overlay";
 import { writeClipboard } from "@/features/terminal/clipboard";
@@ -9,7 +9,7 @@ import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { ForwardInput, ForwardView, HostView, RunningForwardView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { forwardRule, hostPort } from "./address";
+import { forwardDest, forwardRule, hostPort } from "./address";
 import { ForwardDialog } from "./ForwardDialog";
 import { forwardFailure, runningForward, useConnections } from "./connections";
 import { dropForwardRule, putForwardRule, startForward, stopForward, useForwardRules } from "./forwards";
@@ -214,7 +214,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                               ) : (
                                 <>
                                   <span className={s.arrow}>→</span>
-                                  {hostPort(f.dest_host, f.dest_port)}
+                                  {forwardDest(t, f)}
                                 </>
                               )}
                             </span>
@@ -224,7 +224,13 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                                 <RunningAddress running={running} onCopy={(a) => void copy(a)} />
                               </span>
                             )}
-                            {failure && (
+                            {!running && starting.has(f.id) && (
+                              <span className={s.status}>
+                                <Spinner size={13} />
+                                {t("terminal.fwd.starting")}
+                              </span>
+                            )}
+                            {failure && !starting.has(f.id) && (
                               <span className={cx(s.status, s.failed)}>
                                 <Icon name="warning-circle" fill size={13} />
                                 <span className={s.failure}>{failure}</span>
@@ -243,8 +249,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                           <Button
                             size="xs"
                             className={s.toggle}
-                            busy={starting.has(f.id)}
-                            disabled={pending.has(f.id)}
+                            disabled={pending.has(f.id) || starting.has(f.id)}
                             onClick={() => void (address !== null ? stop(f) : start(f))}
                           >
                             {address !== null ? t("terminal.fwd.stop") : failure ? t("btn.retry") : t("terminal.fwd.start")}

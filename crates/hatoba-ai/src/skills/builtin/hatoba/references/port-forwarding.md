@@ -14,15 +14,15 @@ Forwards belong to a host. They are saved in the vault and sync like other items
 
 Other labels: **Edit Port Forward**, **Add**, **Delete**.
 
-- A local rule reads `local address:port → destination:port`, a remote one `address:port on the server → destination:port`, and a SOCKS one `local address:port` followed by "SOCKS proxy". An edited rule stays on its host, and can change its type. Use the pencil to edit and the bin to delete (with confirmation; with Cloud Sync on it is removed on other devices too). Deleting a running rule stops it, also when it is deleted on another device.
+- A local rule reads `local address:port → destination:port`, with a loopback destination such as `127.0.0.1` shown "on the server", a remote one `address:port on the server → destination:port`, and a SOCKS one `local address:port` followed by "SOCKS proxy". An edited rule stays on its host, and can change its type. Use the pencil to edit and the bin to delete (with confirmation; with Cloud Sync on it is removed on other devices too). Deleting a running rule stops it, also when it is deleted on another device.
 - **Local address** (local and SOCKS rules) is the address Hatoba listens on, and its port. `127.0.0.1` is reachable from this computer only. `0.0.0.0` exposes the port to the whole network, and the dialog warns about it. A port of 0 picks a free port automatically (shown as **auto**).
 - **Server address** (remote rules) is the address the server listens on, and its port. It starts as `localhost`, the server's own loopback, as with `ssh -R`. Whether another address such as `0.0.0.0` lets other machines reach the port is up to the server's `GatewayPorts` setting; OpenSSH's default keeps the port on loopback, and the dialog says so. A port of 0 lets the server pick one. Ports below 1024 usually need root on the server.
 - **Destination** is the host and port that the server connects to; `127.0.0.1` means the server itself, and it can be another machine the server can reach, such as an internal address. For a remote rule it is the host and port that this computer connects to, and `127.0.0.1` is this computer. A SOCKS rule has no destination: each app names its own.
-- **Start when this host connects** (the **Auto-start** switch in the list) starts the rule whenever Hatoba connects to the host: when a terminal tab, or a rule started on the page, opens the host's connection. Rules without it stay stopped until started by hand.
+- **Start when this host connects** (the **Start on connect** switch in the list) starts the rule whenever Hatoba connects to the host: when a terminal tab, or a rule started on the page, opens the host's connection. Rules without it stay stopped until started by hand.
 
 ## Start and stop
 
-**Start** on a rule on the **Port Forwarding** page starts it, **Stop** stops it, and **Retry** starts a failed one again.
+**Start** on a rule on the **Port Forwarding** page starts it (the rule shows "Starting…" until it runs or fails), **Stop** stops it, and **Retry** starts a failed one again.
 
 - With nothing open on the host, starting a rule connects to it without opening a terminal. Hatoba signs in as a terminal tab does and asks the same questions: an "ask every time" password, a key passphrase that is not saved, a new host key, or the server's two-factor prompts. With a tab or another forward already on the host, it asks nothing.
 - A running local or SOCKS rule shows its address, `localhost:<port>` (or the address it listens on when that is one network interface's); click it to copy it, for a browser or client on this computer, or as an app's SOCKS proxy. A running remote rule shows its address "on the server", with nothing to copy: programs on the server connect to it.

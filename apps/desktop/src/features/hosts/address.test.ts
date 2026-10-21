@@ -36,6 +36,10 @@ describe("a forward as one line", () => {
     expect(forwardRule(t, forward({ kind: "remote", bind_address: "localhost", bind_port: 8080, dest_host: "::1", dest_port: 3000 }))).toBe(
       "localhost:8080 on the server → [::1]:3000",
     );
+    // A local rule's loopback destination is the server's.
+    expect(forwardRule(t, forward({ bind_port: 8089, dest_host: "127.0.0.1", dest_port: 8089 }))).toBe(
+      "127.0.0.1:8089 → 127.0.0.1:8089 on the server",
+    );
     expect(forwardRule(t, forward({ kind: "dynamic", bind_port: 1080, dest_host: "", dest_port: 0 }))).toBe("127.0.0.1:1080 (SOCKS proxy)");
   });
 

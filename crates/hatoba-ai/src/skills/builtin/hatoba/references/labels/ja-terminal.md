@@ -178,7 +178,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Port | ポート |
 | Destination | 転送先 |
 | Start when this host connects | このホストに接続したときに開始 |
-| Auto-start | 自動起動 |
+| Start on connect | 接続時に開始 |
 | auto | 自動 |
 | {addr} on the server | サーバーの {addr} |
 | SOCKS proxy | SOCKS プロキシ |
@@ -192,6 +192,7 @@ The labels that these files name in English, as the interface shows them in Japa
 |---|---|
 | Start | 開始 |
 | Port Forwarding | ポートフォワーディング |
+| Starting… | 開始中… |
 | Stop | 停止 |
 | Retry | 再試行 |
 | Manage Port Forwarding… | ポートフォワーディングを管理… |

@@ -18,12 +18,29 @@ export function forwardRule(
   const bind = hostPort(f.bind_address, port ?? (f.bind_port || t("hosts.fwd.autoPort")));
   switch (f.kind) {
     case "local":
-      return `${bind} → ${hostPort(f.dest_host, f.dest_port)}`;
+      return `${bind} → ${forwardDest(t, f)}`;
     case "remote":
       return `${t("terminal.fwd.onServer", { addr: bind })} → ${hostPort(f.dest_host, f.dest_port)}`;
     case "dynamic":
       return `${bind} (${t("terminal.fwd.socks")})`;
   }
+}
+
+/**
+ * Where a forward leads. A local one's loopback destination is the server's own, named so beside the address it listens
+ * on here, which is often the same `127.0.0.1:port`. `dest` is where it leads while it runs.
+ */
+export function forwardDest(
+  t: (key: MessageKey, params?: Params) => string,
+  f: ForwardView,
+  dest = hostPort(f.dest_host, f.dest_port),
+): string {
+  return f.kind === "local" && isLoopback(f.dest_host) ? t("terminal.fwd.onServer", { addr: dest }) : dest;
+}
+
+function isLoopback(host: string): boolean {
+  const h = host.trim().toLowerCase();
+  return h === "localhost" || h === "::1" || /^127\./.test(h);
 }
 
 /**
