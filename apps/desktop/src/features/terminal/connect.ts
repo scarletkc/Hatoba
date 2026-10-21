@@ -3,30 +3,29 @@ import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
 import { toast } from "@/components/overlay";
+import { hostConnected } from "@/features/hosts/connections";
 import { formatTarget, savedHostFor } from "@/features/hosts/quickConnect";
 import { t } from "@/i18n";
 import type { HostView, LocalShellView, QuickTarget } from "@/ipc/types";
 import { startSessionListeners } from "./listeners";
 import { loadLocalShells, preferredShell, shellName } from "./localShells";
-import { askSecret, askUsername } from "./prompts";
+import { askPassword, askUsername } from "./prompts";
 import { ensureSession, getSession, type Credentials } from "./session";
 
 const NONE: Credentials = { password: null, passphrase: null };
 
 /**
  * Ask for whatever the host's auth mode needs before connecting. `null` means the user cancelled.
- * "Ask every time" hosts get a password prompt (SSH-03); key passphrases are asked lazily, only if
+ * "Ask every time" hosts get a password prompt (SSH-03), unless the host's connection is open, which
+ * a new tab or forward joins without signing in (SSH-16); key passphrases are asked lazily, only if
  * the backend reports it has none (see LiveSession.connect).
  */
 export async function collectCredentials(host: HostView): Promise<Credentials | null> {
-  if (host.auth_kind !== "ask") return NONE;
-  const password = await askSecret({
-    kind: "password",
-    hostName: host.name,
-    target: `${host.username}@${host.address}:${host.port}`,
-  });
+  if (host.auth_kind !== "ask" || hostConnected(host.id)) return NONE;
+  const password = await askPassword(host);
   return password === null ? null : { password, passphrase: null };
 }
+
 
 /** Open a new terminal tab for a host and connect (HOST-07, TERM-01: the same host may have several tabs). */
 export async function connectHost(hostId: string): Promise<void> {

@@ -100,12 +100,6 @@
   text-overflow: ellipsis;
 }
 
-/* FWD-05: running without a terminal, not on this session. */
-.where {
-  font-size: var(--text-xs);
-  color: var(--fg2);
-}
-
 .error {
   margin-top: 2px;
   font-size: 11.5px;

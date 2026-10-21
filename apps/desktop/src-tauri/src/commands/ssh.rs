@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use hatoba_core::model::{Host, HostProxy, Item};
-use hatoba_ssh::{AuthMethod, ConnectConfig, ShellEvent, ShellHandle, ShellOptions, SshSession};
+use hatoba_ssh::{AuthMethod, ConnectConfig, ShellEvent, ShellOptions};
 use tauri::ipc::{Channel, InvokeResponseBody, IpcResponse};
 use tauri::{AppHandle, State};
 use tauri_specta::Event;
@@ -15,13 +15,14 @@ use zeroize::Zeroizing;
 
 use crate::commands::hosts::host_from_input;
 use crate::commands::quick;
+use crate::connection;
 use crate::convert::stats_view;
 use crate::dto::{
     ConnectOptions, HostInput, QuickTarget, SessionState, SessionStateEvent, StatsEvent, TestResult,
 };
 use crate::error::{AppError, AppResult};
 use crate::ssh::{LiveSession, Overrides, build_config, connect_with, resolve_proxy};
-use crate::state::{AppState, now_ms};
+use crate::state::AppState;
 
 pub(crate) const FRAME_DATA: u8 = 0;
 pub(crate) const FRAME_CLOSED: u8 = 1;
@@ -100,37 +101,22 @@ pub async fn ssh_connect(
 ) -> AppResult<String> {
     let session_id = uuid::Uuid::now_v7().to_string();
     let _ = channel.send(TermFrame::new(FRAME_SESSION, session_id.as_bytes()));
-    let (target, env, version) = state.with_unlocked(|v| {
-        let host = v
-            .get(&host_id)
+    let env = state.with_unlocked(|v| {
+        v.get(&host_id)
             .and_then(Item::as_host)
-            .cloned()
-            .ok_or_else(|| AppError::not_found("host"))?;
-        // HOST-14: the dashboard's connection to the host becomes this tab's, so the tab signs
-        // in to nothing and asks nothing.
-        let version = crate::dashboard::config_version(v, &host);
-        let target = match state.dashboard.take_connection(&host_id, &version) {
-            Some(session) => Target::Connected(session),
-            None => Target::Connect(Box::new(build_config(
-                v,
-                &host,
-                Some(&host_id),
-                Some(&overrides(&options)),
-            )?)),
-        };
-        Ok((target, host_env(&host), version))
+            .map(host_env)
+            .ok_or_else(|| AppError::not_found("host"))
     })?;
     let (live, events) = open_terminal(
         &app,
         &state,
-        target,
+        Target::Host(&host_id, overrides(&options)),
         env,
         &session_id,
-        Some((&host_id, version)),
         &options,
     )
     .await?;
-    crate::commands::forwards::start_auto(&app, &session_id, &live, &host_id).await;
+    connection::record_connected(&state, &host_id, &live.session);
     pump(
         app,
         session_id.clone(),
@@ -170,10 +156,9 @@ pub async fn ssh_connect_target(
     let (live, events) = open_terminal(
         &app,
         &state,
-        Target::Connect(Box::new(cfg)),
+        Target::Own(Box::new(cfg)),
         Vec::new(),
         &session_id,
-        None,
         &options,
     )
     .await?;
@@ -194,26 +179,29 @@ fn host_env(host: &Host) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Where a terminal's shell opens: on a new connection, or on one the dashboard made (HOST-14).
-enum Target {
-    Connect(Box<ConnectConfig>),
-    Connected(SshSession),
+/// Where a terminal's shell opens.
+enum Target<'a> {
+    /// A quick connection's own connection.
+    Own(Box<ConnectConfig>),
+    /// SSH-16: the saved host's shared connection, which signs in with these credentials when
+    /// the tab opens it.
+    Host(&'a str, Overrides),
 }
 
-/// Connects, opens the shell with the host's environment variables after the defaults, and
-/// registers the session, reporting each step as an `ssh://state` event.
+/// Connects or joins the host's connection, opens the shell with the host's environment
+/// variables after the defaults, and registers the session, reporting each step as an
+/// `ssh://state` event.
 async fn open_terminal(
     app: &AppHandle,
     state: &AppState,
-    target: Target,
+    target: Target<'_>,
     env: Vec<(String, String)>,
     session_id: &str,
-    host: Option<(&str, String)>,
     options: &ConnectOptions,
 ) -> AppResult<(Arc<LiveSession>, mpsc::Receiver<ShellEvent>)> {
-    let (host_id, config) = match host {
-        Some((id, config)) => (Some(id), Some(config)),
-        None => (None, None),
+    let host_id = match &target {
+        Target::Host(id, _) => Some(*id),
+        Target::Own(_) => None,
     };
     emit_state(app, session_id, host_id, SessionState::Connecting, |_| {});
     let fail = |err: AppError| {
@@ -222,50 +210,56 @@ async fn open_terminal(
         });
         err
     };
-    let session = match target {
-        Target::Connect(cfg) => connect_with(app, *cfg, Some(session_id.to_owned()))
-            .await
-            .map_err(fail)?,
-        Target::Connected(session) => session,
-    };
     let shell_opts = ShellOptions {
         cols: options.cols.clamp(10, 1000),
         rows: options.rows.clamp(2, 500),
         ..ShellOptions::default()
     }
     .with_env(env);
-    let (shell, events) = match session.open_shell(shell_opts).await {
-        Ok(v) => v,
-        Err(e) => {
-            session.disconnect().await;
-            return Err(fail(e.into()));
+    let (live, events) = match target {
+        Target::Own(cfg) => {
+            let session = connect_with(app, *cfg, Some(session_id.to_owned()))
+                .await
+                .map_err(fail)?;
+            match session.open_shell(shell_opts).await {
+                Ok((shell, events)) => (LiveSession::own(session, shell), events),
+                Err(e) => {
+                    session.disconnect().await;
+                    return Err(fail(e.into()));
+                }
+            }
+        }
+        Target::Host(host_id, overrides) => {
+            let mut retried = false;
+            loop {
+                let tab = connection::join_tab(app, host_id, &overrides, session_id)
+                    .await
+                    .map_err(fail)?;
+                match tab
+                    .connection()
+                    .session
+                    .open_shell(shell_opts.clone())
+                    .await
+                {
+                    Ok((shell, events)) => break (LiveSession::shared(tab, shell), events),
+                    // The server allows no more sessions on the connection (`MaxSessions`): the
+                    // tab opens another, once.
+                    Err(e)
+                        if e.kind == hatoba_ssh::SshErrorKind::Channel
+                            && !retried
+                            && !tab.connection().session.is_closed() =>
+                    {
+                        tab.connection().mark_full();
+                        retried = true;
+                    }
+                    Err(e) => return Err(fail(e.into())),
+                }
+            }
         }
     };
-    let live = Arc::new(LiveSession::new(
-        session.clone(),
-        shell,
-        host_id.map(str::to_owned),
-        config,
-    ));
+    let live = Arc::new(live);
     state.ssh.insert(session_id.to_owned(), live.clone());
-    // HOST-14: the dashboard reads the host over this tab from now on.
-    if let Some(host_id) = host_id {
-        state.dashboard.wake(host_id);
-    }
-    // HOST-06, HOST-11: device-local, never synced. A quick connection has no host to record on.
-    if let Some(host_id) = host_id {
-        let os = session.server_os().map(hatoba_ssh::ServerOs::as_str);
-        if let Err(e) = state.with_unlocked(|v| {
-            v.set_last_connected(host_id, now_ms())?;
-            Ok(v.set_host_os(host_id, os)?)
-        }) {
-            tracing::debug!(
-                "last-connected time and server OS not recorded: {}",
-                e.detail
-            );
-        }
-    }
-    let latency = session.latency_ms();
+    let latency = live.session.latency_ms();
     emit_state(app, session_id, host_id, SessionState::Connected, |e| {
         e.latency_ms = Some(latency)
     });
@@ -355,7 +349,7 @@ async fn write_shell(state: &AppState, session_id: &str, data: Vec<u8>) -> AppRe
         return Err(AppError::locked());
     }
     let live = state.ssh.get(session_id)?;
-    terminal(&live)?.write(data).await?;
+    live.shell.write(data).await?;
     Ok(())
 }
 
@@ -368,17 +362,10 @@ pub async fn ssh_resize(
     rows: u32,
 ) -> AppResult<()> {
     let live = state.ssh.get(&session_id)?;
-    terminal(&live)?
+    live.shell
         .resize(cols.clamp(10, 1000), rows.clamp(2, 500))
         .await;
     Ok(())
-}
-
-/// The session's shell; a connection that only carries forwards (FWD-05) has none.
-fn terminal(live: &LiveSession) -> AppResult<&ShellHandle> {
-    live.shell
-        .as_ref()
-        .ok_or_else(|| AppError::not_found("session"))
 }
 
 /// Starts reading the server's resource usage for the terminal's status bar (TERM-12), in

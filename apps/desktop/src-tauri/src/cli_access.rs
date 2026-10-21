@@ -497,7 +497,7 @@ impl Ctx<'_> {
     /// dashboard takes it (HOST-14), or the pool's.
     async fn lease(&self, target: &Target) -> Result<pool::Lease, String> {
         let state = state(self.app);
-        if let Some(session) = state.ssh.connection_for_host(&target.id, &target.config) {
+        if let Some(session) = state.connections.session_for(&target.id, &target.config) {
             // The pool's own connection to the host goes once the commands on it are done.
             state.cli.pool.release(&target.id);
             return Ok(pool::Lease::borrowed(session));

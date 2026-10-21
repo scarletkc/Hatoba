@@ -181,14 +181,13 @@ export const AREAS: Area[] = [
           "hosts.fwd.dialog.add", "hosts.fwd.f.local", "hosts.f.port", "hosts.fwd.f.dest", "hosts.fwd.f.autoStart",
           "hosts.fwd.autoStart", "hosts.fwd.autoPort", "btn.edit", "btn.delete", "btn.save",
         ],
-        "Start and stop in a session": [
-          "terminal.fwd.start", "terminal.fwd.stop", "btn.retry", "terminal.fwd.manage", "terminal.fwd.none",
+        "Start and stop": [
+          "terminal.fwd.start", "sidebar.forwards", "terminal.fwd.stop", "btn.retry", "terminal.fwd.manage",
           "hosts.fwd.loadFailed",
         ],
-        "Run without a terminal": [
-          "terminal.fwd.start", "sidebar.forwards", "terminal.fwd.stop", "btn.retry", "hosts.fwd.inTab",
-          "settings.closeAction", "settings.sec.disconnect", "hosts.menu.copyAddress",
-          "terminal.fwd.inBackground", "hosts.fwd.f.autoStart", "hosts.fwd.lost",
+        "Keep running in the background": [
+          "settings.closeAction", "settings.sec.disconnect", "sidebar.forwards", "hosts.menu.copyAddress",
+          "terminal.fwd.stop", "hosts.fwd.lost",
         ],
       },
       "references/troubleshooting-connections.md": {

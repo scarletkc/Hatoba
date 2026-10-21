@@ -5,15 +5,14 @@ import { Button, Icon, IconButton, Switch } from "@/components/controls";
 import { EmptyState, Group, PageHeader, Section } from "@/components/layout";
 import { confirm, toast } from "@/components/overlay";
 import { writeClipboard } from "@/features/terminal/clipboard";
-import { markForwardStopped, useAllForwardRuns } from "@/features/terminal/forwards";
-import { hostSessionIds } from "@/features/terminal/session";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { ForwardInput, ForwardView, HostView, TunnelView } from "@/ipc/types";
+import type { ForwardInput, ForwardView, HostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { hostPort, reachableAddress } from "./address";
 import { ForwardDialog } from "./ForwardDialog";
-import { startTunnelForward, stopTunnelForward, tunnelPort, useTunnels } from "./tunnels";
+import { forwardFailure, forwardPort, useConnections } from "./connections";
+import { dropForwardRule, putForwardRule, startForward, stopForward, useForwardRules } from "./forwards";
 import s from "./ForwardsPage.module.css";
 
 const toInput = (f: ForwardView, patch: Partial<ForwardInput> = {}): ForwardInput => ({
@@ -27,9 +26,6 @@ const toInput = (f: ForwardView, patch: Partial<ForwardInput> = {}): ForwardInpu
   ...patch,
 });
 
-/** Where a forward runs on this device: without a terminal (FWD-05), or on one of the host's tabs. */
-type Run = { localPort: number; sessionId: string | null };
-
 const toggled = (set: ReadonlySet<string>, id: string, on: boolean): ReadonlySet<string> => {
   const next = new Set(set);
   if (on) next.add(id);
@@ -39,34 +35,20 @@ const toggled = (set: ReadonlySet<string>, id: string, on: boolean): ReadonlySet
 
 /**
  * The **Port Forwarding** page (FWD-01, FWD-02, FWD-05): every host's forwards, a section per host. Forwards are
- * separate vault items, saved the moment they change. **Start** runs one without a terminal, until it is stopped
- * or Hatoba quits. `hostId` is the host whose section comes into view, and that new forwards start on.
+ * separate vault items, saved the moment they change. **Start** runs one on the host's connection, which its terminal
+ * tabs share (SSH-16), until it is stopped, the connection ends or Hatoba quits. `hostId` is the host whose section
+ * comes into view, and that new forwards start on.
  */
 export function ForwardsPage({ hostId }: { hostId: string | null }) {
   const t = useT();
   const hosts = useVaultData((st) => st.hosts);
-  const [items, setItems] = useState<ForwardView[] | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const { rules: items, loadFailed } = useForwardRules();
   const [dialog, setDialog] = useState<{ forward: ForwardView | null } | null>(null);
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const [starting, setStarting] = useState<ReadonlySet<string>>(new Set());
   const [failures, setFailures] = useState<Readonly<Record<string, string>>>({});
-  const tunnels = useTunnels();
-  const bySession = useAllForwardRuns();
+  const connections = useConnections();
   const focused = useRef<HTMLDivElement>(null);
-
-  // Read again when the hosts are: a sync may have brought forwards from another device.
-  useEffect(() => {
-    let live = true;
-    setLoadFailed(false);
-    api
-      .forwards_list_all()
-      .then((list) => live && setItems(list))
-      .catch(() => live && setLoadFailed(true));
-    return () => {
-      live = false;
-    };
-  }, [hosts]);
 
   const sections = useMemo(() => {
     const byHost = new Map<string, ForwardView[]>();
@@ -91,29 +73,13 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
   const rule = (f: ForwardView) =>
     `${hostPort(f.bind_address, f.bind_port || t("hosts.fwd.autoPort"))} → ${hostPort(f.dest_host, f.dest_port)}`;
 
-  const upsert = (saved: ForwardView) =>
-    setItems((list) => {
-      const rest = list ?? [];
-      return rest.some((x) => x.id === saved.id) ? rest.map((x) => (x.id === saved.id ? saved : x)) : [...rest, saved];
-    });
-
-  const runOf = (f: ForwardView, tunnel: TunnelView | undefined): Run | null => {
-    const port = tunnelPort(tunnel, f.id);
-    if (port !== null) return { localPort: port, sessionId: null };
-    for (const sessionId of hostSessionIds(f.host_id)) {
-      const run = bySession[sessionId]?.[f.id];
-      if (run?.state === "running" && run.localPort !== null) return { localPort: run.localPort, sessionId };
-    }
-    return null;
-  };
-
   const setAutoStart = async (f: ForwardView, auto_start: boolean) => {
     markPending(f.id, true);
-    upsert({ ...f, auto_start }); // optimistic; rolled back below if the save fails
+    putForwardRule({ ...f, auto_start }); // optimistic; rolled back below if the save fails
     try {
-      upsert(await api.forward_save(toInput(f, { auto_start })));
+      putForwardRule(await api.forward_save(toInput(f, { auto_start })));
     } catch (err) {
-      upsert(f);
+      putForwardRule(f);
       toast(errorMessage(t, err), "error");
     } finally {
       markPending(f.id, false);
@@ -130,7 +96,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
     markPending(f.id, true);
     try {
       await api.forward_delete(f.id);
-      setItems((list) => (list ?? []).filter((x) => x.id !== f.id));
+      dropForwardRule(f.id);
     } catch (err) {
       toast(errorMessage(t, err), "error");
     } finally {
@@ -142,7 +108,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
     markStarting(f.id, true);
     setFailure(f.id, null);
     try {
-      await startTunnelForward(f.host_id, f.id);
+      await startForward(f.host_id, f.id);
     } catch (err) {
       setFailure(f.id, errorMessage(t, err));
     } finally {
@@ -150,14 +116,10 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
     }
   };
 
-  const stop = async (f: ForwardView, run: Run) => {
+  const stop = async (f: ForwardView) => {
     markStarting(f.id, true);
     try {
-      if (run.sessionId === null) await stopTunnelForward(f.host_id, f.id);
-      else {
-        await api.forward_stop(run.sessionId, f.id);
-        markForwardStopped(run.sessionId, f.id);
-      }
+      await stopForward(f.host_id, f.id);
     } catch (err) {
       toast(errorMessage(t, err), "error");
     } finally {
@@ -187,7 +149,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
       forward={dialog.forward}
       onClose={() => setDialog(null)}
       onSaved={(saved) => {
-        upsert(saved);
+        putForwardRule(saved);
         setDialog(null);
       }}
     />
@@ -219,16 +181,17 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
             </span>
           )}
           {sections.map(({ host, forwards }) => {
-            const tunnel = tunnels.find((x) => x.host_id === host.id);
+            const conn = connections.find((x) => x.host_id === host.id);
             return (
               <div key={host.id} ref={host.id === hostId ? focused : undefined} className={s.hostSection}>
                 <Section title={<HostTitle host={host} />}>
                   <Group>
                     {forwards.map((f) => {
                       const label = rule(f);
-                      const run = runOf(f, tunnel);
-                      const failure = run ? null : failures[f.id];
-                      const address = run && reachableAddress(f.bind_address, run.localPort);
+                      const port = forwardPort(conn, f.id);
+                      const failed = forwardFailure(conn, f.id);
+                      const failure = port === null ? (failures[f.id] ?? (failed && errorMessage(t, failed))) : null;
+                      const address = port !== null && reachableAddress(f.bind_address, port);
                       return (
                         <div key={f.id} className={s.row}>
                           <div className={s.body}>
@@ -248,7 +211,6 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                                 >
                                   {address}
                                 </button>
-                                {run.sessionId !== null && <span className={s.where}>{t("hosts.fwd.inTab")}</span>}
                               </span>
                             )}
                             {failure && (
@@ -272,9 +234,9 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                             className={s.toggle}
                             busy={starting.has(f.id)}
                             disabled={pending.has(f.id)}
-                            onClick={() => void (run ? stop(f, run) : start(f))}
+                            onClick={() => void (port !== null ? stop(f) : start(f))}
                           >
-                            {run ? t("terminal.fwd.stop") : failure ? t("btn.retry") : t("terminal.fwd.start")}
+                            {port !== null ? t("terminal.fwd.stop") : failure ? t("btn.retry") : t("terminal.fwd.start")}
                           </Button>
                           <span className={s.actions}>
                             <IconButton

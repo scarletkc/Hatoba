@@ -95,7 +95,7 @@
   text-overflow: ellipsis;
 }
 
-/* Running: the address to copy, and where it runs when that is a terminal tab. Failed: why. */
+/* Running: the address to copy. Failed: why. */
 .status {
   display: flex;
   align-items: center;
@@ -127,10 +127,6 @@
 .address:hover {
   color: var(--accent);
   text-decoration: underline;
-}
-
-.where {
-  flex: none;
 }
 
 .failed {

@@ -179,18 +179,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Delete | 削除 |
 | Save | 保存 |
 
-### Start and stop in a session
-
-| en | ja |
-|---|---|
-| Start | 開始 |
-| Stop | 停止 |
-| Retry | 再試行 |
-| Manage Port Forwarding… | ポートフォワーディングを管理… |
-| This host has no port forwards yet. | このホストにはポートフォワーディングがまだありません。 |
-| Can’t read the port forwards. | ポートフォワーディングを読み込めません。 |
-
-### Run without a terminal
+### Start and stop
 
 | en | ja |
 |---|---|
@@ -198,12 +187,18 @@ The labels that these files name in English, as the interface shows them in Japa
 | Port Forwarding | ポートフォワーディング |
 | Stop | 停止 |
 | Retry | 再試行 |
-| In a terminal tab | ターミナルタブで実行中 |
+| Manage Port Forwarding… | ポートフォワーディングを管理… |
+| Can’t read the port forwards. | ポートフォワーディングを読み込めません。 |
+
+### Keep running in the background
+
+| en | ja |
+|---|---|
 | Close Button | ウィンドウを閉じるとき |
 | Disconnect all sessions when locked | ロック時にすべてのセッションを切断 |
+| Port Forwarding | ポートフォワーディング |
 | Copy Address | アドレスをコピー |
-| In the background | バックグラウンドで実行中 |
-| Start when this host connects | このホストに接続したときに開始 |
+| Stop | 停止 |
 | Port forwarding stopped. {reason} | ポートフォワーディングが停止しました。{reason} |
 
 ## `references/troubleshooting-connections.md`

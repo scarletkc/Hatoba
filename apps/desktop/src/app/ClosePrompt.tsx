@@ -63,7 +63,7 @@ export function ClosePrompt() {
  * WIN-10: the tray menu speaks the app's language, and **Lock** works while the vault is unlocked.
  * While a check has found a newer release, **Update to vX.Y.Z** opens Settings → About and installs
  * it as **Download and Install** there does, unless a package manager installed Hatoba. The backend
- * lists the forwards running without a terminal (FWD-05) under these labels.
+ * lists the running forwards (FWD-05) under these labels.
  */
 export function useTrayMenu() {
   const locale = useT().locale;
