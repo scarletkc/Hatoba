@@ -73,7 +73,9 @@ where
     let port = stream.read_u16().await?;
     let mut ip = [0u8; 4];
     stream.read_exact(&mut ip).await?;
-    read_name(stream).await?; // the user id, which nothing checks
+    // The user id, which nothing checks: any bytes, as clients send the local user's name in its
+    // code page.
+    read_nul_terminated(stream).await?;
     // SOCKS 4a: 0.0.0.x with x > 0 means the host name follows.
     let host = if ip[..3] == [0, 0, 0] && ip[3] != 0 {
         read_name(stream).await?
@@ -98,20 +100,28 @@ where
     Ok(request)
 }
 
-/// A NUL-terminated string, read a byte at a time so that nothing after it is consumed.
+/// A NUL-terminated field, read a byte at a time so that nothing after it is consumed.
+async fn read_nul_terminated<S>(stream: &mut S) -> io::Result<Vec<u8>>
+where
+    S: AsyncRead + Unpin,
+{
+    let mut field = Vec::new();
+    loop {
+        match stream.read_u8().await? {
+            0 => return Ok(field),
+            _ if field.len() == MAX_NAME => return Err(invalid("SOCKS 4 name too long")),
+            b => field.push(b),
+        }
+    }
+}
+
+/// A NUL-terminated host name.
 async fn read_name<S>(stream: &mut S) -> io::Result<String>
 where
     S: AsyncRead + Unpin,
 {
-    let mut name = Vec::new();
-    loop {
-        match stream.read_u8().await? {
-            0 => break,
-            _ if name.len() == MAX_NAME => return Err(invalid("SOCKS 4 name too long")),
-            b => name.push(b),
-        }
-    }
-    String::from_utf8(name).map_err(|_| invalid("SOCKS 4 name is not UTF-8"))
+    String::from_utf8(read_nul_terminated(stream).await?)
+        .map_err(|_| invalid("SOCKS 4 name is not UTF-8"))
 }
 
 async fn accept_v5<S>(stream: &mut S) -> io::Result<Request>
@@ -303,6 +313,13 @@ mod tests {
         sent.extend_from_slice(b"db.internal\0");
         let r = run(&sent).await.0.unwrap();
         assert_eq!((r.host.as_str(), r.port), ("db.internal", 8080));
+
+        // A user name in a legacy code page is not UTF-8.
+        let r = run(&[4, 1, 0, 80, 192, 168, 1, 2, 0xc0, 0xee, 0])
+            .await
+            .0
+            .unwrap();
+        assert_eq!(r.host, "192.168.1.2");
     }
 
     #[tokio::test]

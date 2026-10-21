@@ -404,16 +404,35 @@ pub async fn start(
         .iter()
         .find_map(Connection::hold)
     {
-        let conn = &starting.0;
-        match tokio::time::timeout(JOIN_TIMEOUT, open_forward(&state, conn, forward_id)).await {
+        let conn = Arc::clone(&starting.0);
+        // In a task of its own: a server that takes the request late listens until it is told to
+        // stop, which the task does once it is answered.
+        let mut opening = tauri::async_runtime::spawn({
+            let (app, conn, id) = (app.clone(), Arc::clone(&conn), forward_id.to_owned());
+            async move { open_forward(&crate::state::state(&app), &conn, &id).await }
+        });
+        match tokio::time::timeout(JOIN_TIMEOUT, &mut opening).await {
             // One that closed meanwhile, or stopped answering, makes way for another.
-            Ok(started) if started.is_ok() || !conn.session.is_closed() => {
-                drop(starting);
-                changed(app);
-                return started;
+            Ok(started) => {
+                let started = started.unwrap_or_else(|e| Err(AppError::internal(e.to_string())));
+                if started.is_ok() || !conn.session.is_closed() {
+                    drop(starting);
+                    changed(app);
+                    return started;
+                }
             }
-            Ok(_) => {}
-            Err(_) => conn.mark_stale(),
+            Err(_) => {
+                conn.mark_stale();
+                let (app, id) = (app.clone(), forward_id.to_owned());
+                tauri::async_runtime::spawn(async move {
+                    if let Ok(Ok(_)) = opening.await
+                        && conn.stop_forward(&id)
+                    {
+                        changed(&app);
+                    }
+                    drop(starting);
+                });
+            }
         }
     }
     let starting = open(app, &state, host_id, overrides, None).await?;
