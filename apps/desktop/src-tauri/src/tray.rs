@@ -56,6 +56,8 @@ mod imp {
         heading: String,
         copy: String,
         stop: String,
+        /// Of the `tunnels` list (`TunnelsEvent::version`).
+        version: u64,
         tunnels: Vec<TunnelView>,
         /// In the menu, between the separator and **Quit**, while a forward runs.
         items: Vec<MenuItemKind<Wry>>,
@@ -152,6 +154,7 @@ mod imp {
                 heading: "Port Forwarding".to_owned(),
                 copy: "Copy Address".to_owned(),
                 stop: "Stop".to_owned(),
+                version: 0,
                 tunnels: Vec::new(),
                 items: Vec::new(),
             }),
@@ -186,25 +189,42 @@ mod imp {
             }
             None => {}
         }
-        let mut forwards = lock_forwards(&tray);
-        forwards.heading.clone_from(&menu.forwards);
-        forwards.copy.clone_from(&menu.copy_address);
-        forwards.stop.clone_from(&menu.stop_forward);
-        refresh_forwards(app, &tray, &mut forwards);
+        let (heading, copy, stop) = (
+            menu.forwards.clone(),
+            menu.copy_address.clone(),
+            menu.stop_forward.clone(),
+        );
+        on_forwards(app, move |forwards| {
+            forwards.heading = heading;
+            forwards.copy = copy;
+            forwards.stop = stop;
+        });
     }
 
-    /// FWD-05: the forwards running without a terminal changed.
-    pub fn set_tunnels(app: &AppHandle, tunnels: &[TunnelView]) {
-        let Some(tray) = app.try_state::<Tray>() else {
-            return;
-        };
-        let mut forwards = lock_forwards(&tray);
-        forwards.tunnels = tunnels.to_vec();
-        refresh_forwards(app, &tray, &mut forwards);
+    /// FWD-05: the forwards running without a terminal changed; a list older than the one shown
+    /// changes nothing.
+    pub fn set_tunnels(app: &AppHandle, version: u64, tunnels: &[TunnelView]) {
+        let tunnels = tunnels.to_vec();
+        on_forwards(app, move |forwards| {
+            if version >= forwards.version {
+                forwards.version = version;
+                forwards.tunnels = tunnels;
+            }
+        });
     }
 
-    fn lock_forwards(tray: &Tray) -> std::sync::MutexGuard<'_, Forwards> {
-        tray.forwards.lock().unwrap_or_else(|p| p.into_inner())
+    /// Changes what the menu shows of the forwards, and shows it, on the main thread. Elsewhere
+    /// each menu change waits for the main thread, which could be waiting for the lock.
+    fn on_forwards(app: &AppHandle, change: impl FnOnce(&mut Forwards) + Send + 'static) {
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            let Some(tray) = handle.try_state::<Tray>() else {
+                return;
+            };
+            let mut forwards = tray.forwards.lock().unwrap_or_else(|p| p.into_inner());
+            change(&mut forwards);
+            refresh_forwards(&handle, &tray, &mut forwards);
+        });
     }
 
     /// Puts the running forwards before **Quit**: the heading, a submenu for each, named by its
@@ -385,4 +405,4 @@ pub fn set_menu(_app: &tauri::AppHandle, _menu: &crate::dto::TrayMenuInput) {}
 pub fn hide_to_tray(_app: &tauri::AppHandle) {}
 
 #[cfg(target_os = "macos")]
-pub fn set_tunnels(_app: &tauri::AppHandle, _tunnels: &[crate::dto::TunnelView]) {}
+pub fn set_tunnels(_app: &tauri::AppHandle, _version: u64, _tunnels: &[crate::dto::TunnelView]) {}

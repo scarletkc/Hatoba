@@ -134,7 +134,7 @@ pub fn changed(app: &AppHandle) {
     let state = state(app);
     state.tunnels.version.fetch_add(1, Ordering::Relaxed);
     let event = list(&state);
-    crate::tray::set_tunnels(app, &event.tunnels);
+    crate::tray::set_tunnels(app, event.version, &event.tunnels);
     let _ = event.emit(app);
 }
 

@@ -8,6 +8,7 @@ import { DashboardPage } from "@/features/dashboard/DashboardPage";
 import { clearReadouts } from "@/features/dashboard/readings";
 import { HostEditPage } from "@/features/hosts/HostEditPage";
 import { HostsPage } from "@/features/hosts/HostsPage";
+import { startTunnelListeners } from "@/features/hosts/tunnels";
 import { KeysPage } from "@/features/keys/KeysPage";
 import { Onboarding } from "@/features/onboarding/Onboarding";
 import { SettingsWindow } from "@/features/settings/SettingsWindow";
@@ -48,6 +49,10 @@ export function App() {
   useAutoUpdateCheck(phase === "unlocked");
   useLaunches(phase === "unlocked");
   useTrayMenu();
+  // FWD-05: wired once unlocked, and kept, so a connection lost behind the lock screen still notifies.
+  useEffect(() => {
+    if (phase === "unlocked") startTunnelListeners();
+  }, [phase]);
 
   if (phase === "boot") return null;
   if (phase === "onboarding")

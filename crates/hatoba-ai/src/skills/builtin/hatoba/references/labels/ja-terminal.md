@@ -187,6 +187,22 @@ The labels that these files name in English, as the interface shows them in Japa
 | This host has no port forwards yet. | このホストにはポートフォワーディングがまだありません。 |
 | Can’t read the port forwards. | ポートフォワーディングを読み込めません。 |
 
+### Run without a terminal
+
+| en | ja |
+|---|---|
+| Start | 開始 |
+| Port Forwarding | ポートフォワーディング |
+| Stop | 停止 |
+| Retry | 再試行 |
+| In a terminal tab | ターミナルタブで実行中 |
+| Close Button | ウィンドウを閉じるとき |
+| Disconnect all sessions when locked | ロック時にすべてのセッションを切断 |
+| Copy Address | アドレスをコピー |
+| In the background | バックグラウンドで実行中 |
+| Start when this host connects | このホストに接続したときに開始 |
+| Port forwarding stopped. {reason} | ポートフォワーディングが停止しました。{reason} |
+
 ## `references/troubleshooting-connections.md`
 
 ### Reading a failure

@@ -2,7 +2,7 @@
 
 Hatoba supports local port forwarding only, the equivalent of `ssh -L`. A port on this computer is forwarded through the SSH connection to an address that the server can reach. Remote forwarding (-R) and SOCKS / dynamic forwarding (-D) are not supported.
 
-Forwards belong to a host. They are saved in the vault, sync like other items, and run only while a tab for that host is connected.
+Forwards belong to a host. They are saved in the vault and sync like other items. On this device a forward runs in a terminal tab connected to the host, or without a terminal once started from the host editor.
 
 ## Create or edit a rule
 
@@ -28,6 +28,18 @@ The popover can also say:
 - **Start** starts a rule, **Stop** stops it, and **Retry** starts a failed one again. A failed rule shows the reason, for example that the local port is already in use.
 - **Manage Port Forwarding…** goes to the host editor.
 - Closing the tab or disconnecting stops its forwards.
+
+## Run without a terminal
+
+**Start** on a rule in the host editor's **Port Forwarding** section runs it with no terminal tab open. Hatoba opens a connection of its own to the host, without a shell, which the host's other rules started this way share. It signs in as a terminal tab does and asks the same questions: an "ask every time" password, a key passphrase that is not saved, a new host key, or the server's two-factor prompts.
+
+- A running rule shows `localhost:<port>` under it; click it to copy the address. **Stop** stops it, and the connection closes with the host's last running rule. A rule that could not start shows why, with **Retry**.
+- A rule already running in a terminal tab shows "In a terminal tab", and **Stop** stops it in that tab.
+- These forwards keep running with the window minimized to the tray (Settings → General → **Close Button**) and behind the lock screen, until they are stopped or Hatoba quits. With **Disconnect all sessions when locked** (Settings → Security) they stop when the vault locks.
+- On Windows and Linux the tray menu lists them under **Port Forwarding**, each as the host's name with `localhost:<port> → destination`, and its submenu has **Copy Address** and **Stop**.
+- In a terminal tab on the same host, the **Port Forwarding** popover shows such a rule as running "In the background", and **Stop** there stops it. A rule with **Start when this host connects** that already runs this way is not started again by the tab.
+- When the connection is lost (the server or the network goes away), its forwards stop and Hatoba says so: a message in the window while Hatoba is the active window, otherwise a system notification titled with the host's name, "Port forwarding stopped." and the reason. Clicking the notification opens the host editor to start them again. Hatoba does not reconnect on its own.
+- Deleting a rule stops it wherever it runs.
 
 ## Typical use
 

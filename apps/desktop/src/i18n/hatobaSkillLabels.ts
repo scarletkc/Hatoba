@@ -184,6 +184,11 @@ export const AREAS: Area[] = [
           "terminal.fwd.start", "terminal.fwd.stop", "btn.retry", "terminal.fwd.manage", "terminal.fwd.none",
           "hosts.fwd.loadFailed",
         ],
+        "Run without a terminal": [
+          "terminal.fwd.start", "hosts.edit.sec.fwd", "terminal.fwd.stop", "btn.retry", "hosts.fwd.inTab",
+          "settings.closeAction", "settings.sec.disconnect", "hosts.menu.copyAddress",
+          "terminal.fwd.inBackground", "hosts.fwd.f.autoStart", "hosts.fwd.lost",
+        ],
       },
       "references/troubleshooting-connections.md": {
         "Reading a failure": [

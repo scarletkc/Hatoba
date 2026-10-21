@@ -24,7 +24,7 @@ function apply(list: TunnelsEvent) {
 
 let started = false;
 
-/** Wired once, like the terminal's listeners, so a connection lost behind the lock screen still notifies. */
+/** Wired once and never removed, like the terminal's listeners. */
 export function startTunnelListeners() {
   if (started) return;
   started = true;
@@ -56,6 +56,8 @@ async function notifyLost({ host_id, host_name, error }: TunnelLostEvent) {
     .catch(() => {});
 }
 
+export const getTunnels = (): TunnelView[] => useStore.getState().tunnels;
+
 export function useTunnels(): TunnelView[] {
   return useStore((s) => s.tunnels);
 }
@@ -76,7 +78,7 @@ export function tunnelPort(tunnel: TunnelView | undefined, forwardId: string): n
 export async function startTunnelForward(hostId: string, forwardId: string): Promise<number | null> {
   startTunnelListeners();
   const host = hostById(hostId);
-  const connected = useStore.getState().tunnels.some((x) => x.host_id === hostId);
+  const connected = getTunnels().some((x) => x.host_id === hostId);
   const creds = host && !connected ? await collectCredentials(host) : { password: null, passphrase: null };
   if (!creds) return null;
   let passphrase = creds.passphrase;
