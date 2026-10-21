@@ -169,12 +169,19 @@ The labels that these files name in English, as the interface shows them in Japa
 | Choose a host. | ホストを選択してください。 |
 | Edit Port Forward | ポートフォワーディングを編集 |
 | Add | 追加 |
+| Type | 種類 |
+| Local | ローカル |
+| Remote | リモート |
+| Dynamic (SOCKS) | ダイナミック（SOCKS） |
 | Local address | ローカルアドレス |
+| Server address | サーバーのアドレス |
 | Port | ポート |
 | Destination | 転送先 |
 | Start when this host connects | このホストに接続したときに開始 |
 | Auto-start | 自動起動 |
 | auto | 自動 |
+| {addr} on the server | サーバーの {addr} |
+| SOCKS proxy | SOCKS プロキシ |
 | Edit | 編集 |
 | Delete | 削除 |
 | Save | 保存 |

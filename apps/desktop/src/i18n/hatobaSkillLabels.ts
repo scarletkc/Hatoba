@@ -178,8 +178,10 @@ export const AREAS: Area[] = [
         "Create or edit a rule": [
           "sidebar.forwards", "hosts.fwd.empty", "hosts.fwd.add", "hosts.fwd.dialog.addTitle", "hosts.fwd.f.host",
           "hosts.fwd.err.hostRequired", "hosts.fwd.dialog.editTitle",
-          "hosts.fwd.dialog.add", "hosts.fwd.f.local", "hosts.f.port", "hosts.fwd.f.dest", "hosts.fwd.f.autoStart",
-          "hosts.fwd.autoStart", "hosts.fwd.autoPort", "btn.edit", "btn.delete", "btn.save",
+          "hosts.fwd.dialog.add", "hosts.fwd.f.kind", "hosts.fwd.kind.local", "hosts.fwd.kind.remote",
+          "hosts.fwd.kind.dynamic", "hosts.fwd.f.local", "hosts.fwd.f.server", "hosts.f.port", "hosts.fwd.f.dest",
+          "hosts.fwd.f.autoStart", "hosts.fwd.autoStart", "hosts.fwd.autoPort", "terminal.fwd.onServer",
+          "terminal.fwd.socks", "btn.edit", "btn.delete", "btn.save",
         ],
         "Start and stop in a session": [
           "terminal.fwd.start", "terminal.fwd.stop", "btn.retry", "terminal.fwd.manage", "terminal.fwd.none",

@@ -169,12 +169,19 @@ The labels that these files name in English, as the interface shows them in Simp
 | Choose a host. | 请选择主机。 |
 | Edit Port Forward | 编辑端口转发 |
 | Add | 添加 |
+| Type | 类型 |
+| Local | 本地 |
+| Remote | 远程 |
+| Dynamic (SOCKS) | 动态（SOCKS） |
 | Local address | 本地地址 |
+| Server address | 服务器地址 |
 | Port | 端口 |
 | Destination | 目标地址 |
 | Start when this host connects | 连接此主机时自动启动 |
 | Auto-start | 自动启动 |
 | auto | 自动 |
+| {addr} on the server | 服务器上的 {addr} |
+| SOCKS proxy | SOCKS 代理 |
 | Edit | 编辑 |
 | Delete | 删除 |
 | Save | 保存 |

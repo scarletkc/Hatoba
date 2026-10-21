@@ -5,7 +5,7 @@ description: "How Hatoba works: its windows, menus, settings and features, and w
 
 # Hatoba
 
-Hatoba is a desktop SSH client (Tauri 2: a Rust backend with a React interface). It keeps hosts, SSH keys and settings in an encrypted vault on the device, and offers terminal tabs for SSH sessions and for the shells of this computer, an SFTP file panel, local port forwarding, optional end-to-end encrypted sync, and an AI assistant panel. Windows is the first platform; macOS and Linux follow. The interface is available in Simplified Chinese (zh-CN), English (en) and Japanese (ja).
+Hatoba is a desktop SSH client (Tauri 2: a Rust backend with a React interface). It keeps hosts, SSH keys and settings in an encrypted vault on the device, and offers terminal tabs for SSH sessions and for the shells of this computer, an SFTP file panel, port forwarding (local, remote and SOCKS), optional end-to-end encrypted sync, and an AI assistant panel. Windows is the first platform; macOS and Linux follow. The interface is available in Simplified Chinese (zh-CN), English (en) and Japanese (ja).
 
 - Local first: everything works offline. Hatoba runs no server and collects no telemetry.
 - Sync is optional. It goes through a Worker and a D1 database in the user's own Cloudflare account, or straight to D1. The cloud holds only ciphertext.
@@ -35,7 +35,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/keys-vault-and-lock.md` | The master password, recovery code, locking and auto-lock, Windows Hello and Touch ID, the PIN, the encrypted backup, and the Keys page (import, generate, deploy) |
 | `references/terminal.md` | The terminal tab: local terminal tabs and their shells, status bar, copy and paste, search, links, context menus, and the Terminal settings (font, cursor, scrollback, local terminal shell) |
 | `references/sftp.md` | The SFTP file panel: browsing, upload, download, rename, delete, transfers |
-| `references/port-forwarding.md` | Local port forwarding: creating rules, starting them with the connection, starting and stopping them in a session or with no terminal |
+| `references/port-forwarding.md` | Port forwarding (local, remote and SOCKS): creating rules, starting them with the connection, starting and stopping them in a session or with no terminal |
 | `references/sync.md` | Cloud Sync: what syncs, the setup wizard, joining a cloud vault from a device that has its own, the status page, devices, conflicts, restoring on a new device, disconnecting |
 | `references/sync-worker.md` | The sync Worker: deploying it from Hatoba, connecting a Worker deployed by hand, direct D1 mode, upgrading the Worker |
 | `references/ai-panel.md` | Using the AI assistant: the panel, one conversation per tab, moving between hosts, `/` commands (`/btw`, `/clear`, `/compact`, `/mcp`, `/memory`, `/model`, skills, MCP prompts) and `@` mentions, the + menu (Slash Commands, Skills, MCP Tools), the MCP servers of a conversation |
@@ -100,4 +100,4 @@ The `main` branch can be ahead of the latest release and of the user's version, 
 
 ## Not in Hatoba (current version)
 
-Split panes in a terminal, session logs, snippets, remote (-R) and SOCKS (-D) port forwarding, editing remote files, uploading or downloading whole folders over SFTP, `ProxyCommand`, SOCKS4 and HTTPS proxies, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH (Telnet, serial, RDP, VNC).
+Split panes in a terminal, session logs, snippets, editing remote files, uploading or downloading whole folders over SFTP, `ProxyCommand`, SOCKS4 and HTTPS proxies, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH (Telnet, serial, RDP, VNC).
