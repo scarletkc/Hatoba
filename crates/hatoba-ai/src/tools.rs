@@ -1203,8 +1203,7 @@ const ATTACHMENTS: &str = "<attachments>\n\
      was added, each in an <entry name=\"…\" scope=\"…\" updated=\"…\"> block. The entry's scope \
      says whose memory it is: scope=\"global\" shows in every conversation, scope=\"host\" \
      host=\"…\" only on that host or computer. conversation_host is the host the conversation was \
-     on, not the scope of the entries: a note on a host can hold only global memories. updated is \
-     the day the memory was last saved. While memory is on and you have memories, a \
+     on. updated is the day the memory was last saved. While memory is on and you have memories, a \
      conversation's first message has one, so does the message that continues a compacted \
      conversation, and so does a message on a host whose memories no note showed yet, with just \
      those.\n\
@@ -2736,7 +2735,7 @@ A user message can start with blocks before the text the user typed. First come 
 - <terminal_change to="…">: with this message a terminal became attached (to="attached") or stopped being attached (to="detached"). Replies before it had the tools offered then, so what they said they could or could not do was true at the time.
 - <model_change from="…" to="…">: with this message the user switched models. Earlier replies came from the model in from.
 - <permission_mode mode="…">: the permission mode from this message on, manual, auto or bypass; the newest one applies. A conversation's first message has one, and so does the message that continues a compacted conversation.
-- <memory entries="…" conversation_host="…">: your memories as they were when the note was added, each in an <entry name="…" scope="…" updated="…"> block. The entry's scope says whose memory it is: scope="global" shows in every conversation, scope="host" host="…" only on that host or computer. conversation_host is the host the conversation was on, not the scope of the entries: a note on a host can hold only global memories. updated is the day the memory was last saved. While memory is on and you have memories, a conversation's first message has one, so does the message that continues a compacted conversation, and so does a message on a host whose memories no note showed yet, with just those.
+- <memory entries="…" conversation_host="…">: your memories as they were when the note was added, each in an <entry name="…" scope="…" updated="…"> block. The entry's scope says whose memory it is: scope="global" shows in every conversation, scope="host" host="…" only on that host or computer. conversation_host is the host the conversation was on. updated is the day the memory was last saved. While memory is on and you have memories, a conversation's first message has one, so does the message that continues a compacted conversation, and so does a message on a host whose memories no note showed yet, with just those.
 - <file_revert path="…" tool_call_id="…">: the user reverted the change that your call tool_call_id made to the file at path, one block for each reverted call. The file holds what it held before the call again, or was deleted if the call created it. Nothing else was undone: commands run since stay, and a service that loaded the change keeps it until it reloads. Read the file again before you change it.
 - <terminal_state host="…" alternate_screen="…" lines="…">: the attached terminal's screen when the user sent this message: its last lines, or the whole screen while a full-screen program such as vim or less runs (alternate_screen="true").
 - <mcp_tools servers="…" tools="…">: the MCP tools you can call with call_mcp_tool from this message on, by server, which replace any earlier list. search_tools returns a tool's description and input schema.
