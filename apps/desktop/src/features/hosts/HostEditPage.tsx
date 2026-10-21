@@ -15,7 +15,6 @@ import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { ENV_FOCUS_ID, EnvVarsSection } from "./EnvVarsSection";
 import { envInput, envRows, envTooLarge, validateEnvRows, type EnvRow } from "./envVars";
-import { ForwardsSection } from "./ForwardsSection";
 import { useHostsUi } from "./ui";
 import s from "./HostEditPage.module.css";
 
@@ -551,8 +550,6 @@ export function HostEditPage({
               </FormRow>
             </Group>
           </Section>
-
-          <ForwardsSection hostId={hostId} />
 
           <EnvVarsSection
             rows={form.env}

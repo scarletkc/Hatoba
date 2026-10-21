@@ -214,6 +214,11 @@ export const commands = {
 	hostkeyRespond: (requestId: string, accept: boolean) => __TAURI_INVOKE<void>("hostkey_respond", { requestId, accept }),
 	authPromptRespond: (requestId: string, answers: string[] | null) => __TAURI_INVOKE<void>("auth_prompt_respond", { requestId, answers }),
 	forwardsList: (hostId: string) => __TAURI_INVOKE<ForwardView[]>("forwards_list", { hostId }),
+	/**
+	 *  Every host's forwards, for the **Port Forwarding** page, by host and then as `forwards_list`
+	 *  sorts them.
+	 */
+	forwardsListAll: () => __TAURI_INVOKE<ForwardView[]>("forwards_list_all"),
 	forwardSave: (input: ForwardInput) => __TAURI_INVOKE<ForwardView>("forward_save", { input }),
 	/**  Deletes the rule, and stops it wherever it runs. */
 	forwardDelete: (id: string) => __TAURI_INVOKE<null>("forward_delete", { id }),
@@ -2532,10 +2537,11 @@ export type TunnelForwardView = {
 	 */
 	port: number,
 	/**
-	 *  `host:port` it listens on: `localhost:port` on this computer, or the bind address on the
-	 *  server for a remote forward.
+	 *  Where it is reached: from this computer, `localhost:<port>` or the address it listens on
+	 *  when that is one interface's; on the server for a remote forward, the address it listens
+	 *  on there.
 	 */
-	listen: string,
+	address: string,
 	/**
 	 *  `host:port` it leads to, as the server reaches it, or as this computer does for a remote
 	 *  forward; empty for a dynamic one.

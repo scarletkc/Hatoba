@@ -279,7 +279,7 @@ mod imp {
                 let entry = if forward.kind == ForwardKind::Remote {
                     Submenu::with_items(app, label, true, &[&stop])?
                 } else {
-                    let copy_id = format!("{FORWARD_COPY}{}", forward.listen);
+                    let copy_id = format!("{FORWARD_COPY}{}", forward.address);
                     let copy = MenuItem::with_id(app, copy_id, &forwards.copy, true, None::<&str>)?;
                     Submenu::with_items(app, label, true, &[&copy, &stop])?
                 };
@@ -295,13 +295,13 @@ mod imp {
     /// Where a running forward listens and where it leads.
     fn addresses(forwards: &Forwards, forward: &TunnelForwardView) -> String {
         match forward.kind {
-            ForwardKind::Local => format!("{} → {}", forward.listen, forward.dest),
+            ForwardKind::Local => format!("{} → {}", forward.address, forward.dest),
             ForwardKind::Remote => format!(
                 "{} → {}",
-                forwards.on_server.replace("{addr}", &forward.listen),
+                forwards.on_server.replace("{addr}", &forward.address),
                 forward.dest
             ),
-            ForwardKind::Dynamic => format!("{} ({})", forward.listen, forwards.socks),
+            ForwardKind::Dynamic => format!("{} ({})", forward.address, forwards.socks),
         }
     }
 

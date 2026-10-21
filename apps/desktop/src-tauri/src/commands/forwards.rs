@@ -43,6 +43,25 @@ pub fn forwards_list(state: State<'_, AppState>, host_id: String) -> AppResult<V
     })
 }
 
+/// Every host's forwards, for the **Port Forwarding** page, by host and then as `forwards_list`
+/// sorts them.
+#[tauri::command]
+#[specta::specta]
+pub fn forwards_list_all(state: State<'_, AppState>) -> AppResult<Vec<ForwardView>> {
+    state.with_unlocked(|v| {
+        let mut list: Vec<ForwardView> = v
+            .forwards()
+            .iter()
+            .filter(|(_, f)| f.kind == ForwardKind::Local)
+            .map(|(id, f)| view(id, f))
+            .collect();
+        list.sort_by(|a, b| {
+            (&a.host_id, a.bind_port, a.dest_port).cmp(&(&b.host_id, b.bind_port, b.dest_port))
+        });
+        Ok(list)
+    })
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn forward_save(
@@ -166,7 +185,7 @@ pub async fn open(live: &LiveSession, forward_id: &str, f: &PortForward) -> AppR
     let dest_host = f.dest_host.clone().unwrap_or_default();
     let dest_port = f.dest_port.unwrap_or_default();
     let dest = host_port(&dest_host, dest_port);
-    let (handle, listen, dest) = match f.kind {
+    let (handle, address, dest) = match f.kind {
         ForwardKind::Local => {
             let spec = LocalForward {
                 bind_address,
@@ -175,8 +194,11 @@ pub async fn open(live: &LiveSession, forward_id: &str, f: &PortForward) -> AppR
                 dest_port,
             };
             let handle = live.session.local_forward(spec).await?;
-            let listen = host_port("localhost", handle.port());
-            (handle, listen, dest)
+            let address = handle
+                .local_addr()
+                .map(tunnel::reachable)
+                .unwrap_or_default();
+            (handle, address, dest)
         }
         ForwardKind::Remote => {
             let spec = RemoteForward {
@@ -186,8 +208,8 @@ pub async fn open(live: &LiveSession, forward_id: &str, f: &PortForward) -> AppR
                 dest_port,
             };
             let handle = live.session.remote_forward(spec).await?;
-            let listen = host_port(&f.bind_address, handle.port());
-            (handle, listen, dest)
+            let address = host_port(&f.bind_address, handle.port());
+            (handle, address, dest)
         }
         ForwardKind::Dynamic => {
             let spec = DynamicForward {
@@ -195,8 +217,11 @@ pub async fn open(live: &LiveSession, forward_id: &str, f: &PortForward) -> AppR
                 bind_port: f.bind_port,
             };
             let handle = live.session.dynamic_forward(spec).await?;
-            let listen = host_port("localhost", handle.port());
-            (handle, listen, String::new())
+            let address = handle
+                .local_addr()
+                .map(tunnel::reachable)
+                .unwrap_or_default();
+            (handle, address, String::new())
         }
     };
     let port = handle.port();
@@ -205,7 +230,7 @@ pub async fn open(live: &LiveSession, forward_id: &str, f: &PortForward) -> AppR
         RunningForward {
             handle,
             kind: f.kind.into(),
-            listen,
+            address,
             dest,
         },
     );

@@ -20,6 +20,7 @@ import type {
 import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
 import { ENV_MAX_VARS, envRows, envTooLarge, validateEnvRows } from "@/features/hosts/envVars";
 import { formatTarget, sameTarget } from "@/features/hosts/quickConnect";
+import { hostPort, reachableAddress } from "@/features/hosts/address";
 import { defaultRightClick, defaultTerminalFont } from "@/lib/platform";
 import { FRAME_CLOSED, FRAME_DATA, FRAME_SESSION } from "../types";
 import { createAiMock } from "./ai";
@@ -925,6 +926,7 @@ export function createMockApi(): HatobaApi {
     },
 
     forwards_list: async (hostId) => forwards.filter((f) => f.host_id === hostId),
+    forwards_list_all: async () => [...forwards],
     forward_save: async (input) => {
       const f: ForwardView = {
         ...input,
@@ -983,11 +985,10 @@ export function createMockApi(): HatobaApi {
       const running = t.forwards.get(fid);
       if (running) return running.port;
       const port = f.bind_port || 49152 + Math.floor(Math.random() * 1000);
-      const hostPort = (host: string, p: number) => `${host.includes(":") ? `[${host}]` : host}:${p}`;
       t.forwards.set(fid, {
         kind: f.kind,
         port,
-        listen: hostPort(f.kind === "remote" ? f.bind_address : "localhost", port),
+        address: f.kind === "remote" ? hostPort(f.bind_address, port) : reachableAddress(f.bind_address, port),
         dest: f.kind === "dynamic" ? "" : hostPort(f.dest_host, f.dest_port),
       });
       tunnelsChanged();

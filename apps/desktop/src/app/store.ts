@@ -25,6 +25,8 @@ export type Page =
     }
   | { kind: "keys" }
   | { kind: "sync" }
+  /** Every host's port forwards (FWD-05), with the section of `hostId` in view. */
+  | { kind: "forwards"; hostId: string | null }
   /** The status and resource usage of the hosts a filter shows (HOST-14). */
   | { kind: "dashboard"; filter: HostFilter };
 

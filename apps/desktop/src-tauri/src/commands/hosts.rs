@@ -224,6 +224,8 @@ pub fn host_delete(app: AppHandle, state: State<'_, AppState>, id: String) -> Ap
         Ok(())
     })?;
     sync::local_change(&app);
+    // FWD-05: and stop, where they ran without a terminal.
+    tauri::async_runtime::spawn(async move { crate::tunnel::close_host(&app, &id).await });
     Ok(())
 }
 

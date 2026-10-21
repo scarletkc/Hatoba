@@ -4,6 +4,7 @@
 //! lists them, and a connection that ends on its own tells the WebView, which notifies.
 
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use hatoba_core::model::{Item, PortForward};
@@ -106,6 +107,31 @@ pub async fn stop(app: &AppHandle, host_id: &str, forward_id: &str) {
         live.close().await;
     }
     changed(app);
+}
+
+/// Closes the host's connection for forwards with every forward on it: the host was deleted, and
+/// its rules with it.
+pub async fn close_host(app: &AppHandle, host_id: &str) {
+    let state = state(app);
+    let gate = state.tunnels.host_gate(host_id);
+    let _held = gate.lock().await;
+    let Some((session_id, live)) = state.ssh.tunnel_for_host(host_id) else {
+        return;
+    };
+    if state.ssh.remove_if_same(&session_id, &live) {
+        live.close().await;
+    }
+    changed(app);
+}
+
+/// Where this computer reaches a forward listening on `addr`: `localhost` for a loopback or
+/// wildcard address, else that address.
+pub fn reachable(addr: SocketAddr) -> String {
+    if addr.ip().is_loopback() || addr.ip().is_unspecified() {
+        format!("localhost:{}", addr.port())
+    } else {
+        addr.to_string()
+    }
 }
 
 /// The forward's port while it runs without a terminal.
@@ -221,4 +247,20 @@ fn watch(app: AppHandle, session_id: String, live: Arc<LiveSession>) {
         }
         changed(&app);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_forward_is_reached_where_it_listens() {
+        let at = |s: &str| reachable(s.parse().unwrap());
+        assert_eq!(at("127.0.0.1:5433"), "localhost:5433");
+        assert_eq!(at("0.0.0.0:5433"), "localhost:5433");
+        assert_eq!(at("[::1]:5433"), "localhost:5433");
+        assert_eq!(at("[::]:5433"), "localhost:5433");
+        assert_eq!(at("192.168.1.10:5433"), "192.168.1.10:5433");
+        assert_eq!(at("[fd00::5]:5433"), "[fd00::5]:5433");
+    }
 }

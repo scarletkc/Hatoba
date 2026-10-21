@@ -10,7 +10,8 @@ const ipc = vi.hoisted(() => ({
 const ui = vi.hoisted(() => ({
   focused: true,
   toast: vi.fn(),
-  edit: vi.fn(),
+  navigate: vi.fn(),
+  activate: vi.fn(),
   credentials: vi.fn(),
   secret: vi.fn(),
   host: null as HostView | null,
@@ -35,8 +36,9 @@ vi.mock("@/app/data", () => ({
   hostById: () => ui.host,
   useVaultData: { getState: () => ({ reloadHosts: async () => {} }) },
 }));
-vi.mock("@/app/store", () => ({ useApp: { getState: () => ({ phase: "unlocked" }) } }));
-vi.mock("@/features/terminal/connect", () => ({ collectCredentials: ui.credentials, editSessionHost: ui.edit }));
+vi.mock("@/app/store", () => ({ useApp: { getState: () => ({ phase: "unlocked", navigate: ui.navigate }) } }));
+vi.mock("@/app/tabs", () => ({ useTabs: { getState: () => ({ activate: ui.activate }) } }));
+vi.mock("@/features/terminal/connect", () => ({ collectCredentials: ui.credentials }));
 vi.mock("@/features/terminal/prompts", () => ({ askSecret: ui.secret }));
 vi.mock("@/features/terminal/session", () => ({
   needsPassphrase: (err: AppError) => err.code === "key_parse",
@@ -55,7 +57,7 @@ let version = 0;
 const tunnels = (ports: number[], at = ++version): TunnelsEvent => ({
   version: at,
   tunnels: ports.length
-    ? [{ host_id: "h1", host_name: "db", forwards: ports.map((p) => ({ forward_id: `f${p}`, kind: "local", port: p, listen: `localhost:${p}`, dest: "127.0.0.1:5432" })) }]
+    ? [{ host_id: "h1", host_name: "db", forwards: ports.map((p) => ({ forward_id: `f${p}`, kind: "local", port: p, address: `localhost:${p}`, dest: "127.0.0.1:5432" })) }]
     : [],
 });
 const current = () => getTunnels().find((x) => x.host_id === "h1");
@@ -64,7 +66,8 @@ beforeEach(async () => {
   ipc.start.mockReset();
   ipc.notify.mockClear();
   ui.toast.mockClear();
-  ui.edit.mockClear();
+  ui.navigate.mockClear();
+  ui.activate.mockClear();
   ui.credentials.mockReset();
   ui.secret.mockReset();
   ui.focused = true;
@@ -133,7 +136,7 @@ describe("forwards running without a terminal (FWD-05)", () => {
     expect(ipc.notify).not.toHaveBeenCalled();
   });
 
-  it("notifies when the window is in the background, and the click opens the host", async () => {
+  it("notifies when the window is in the background, and the click opens the host's forwards", async () => {
     ui.focused = false;
     emit("ssh://tunnel-lost", lost);
     await flush();
@@ -144,11 +147,12 @@ describe("forwards running without a terminal (FWD-05)", () => {
       target: { tab: null, conversation_id: null, host_id: "h1" },
     });
     emit("app://notification-click", { tab: null, conversation_id: null, host_id: "h1" });
-    expect(ui.edit).toHaveBeenCalledWith("h1");
+    expect(ui.navigate).toHaveBeenCalledWith({ kind: "forwards", hostId: "h1" });
+    expect(ui.activate).toHaveBeenCalledWith("home");
   });
 
   it("leaves an AI notification's click to the assistant", () => {
     emit("app://notification-click", { tab: "home", conversation_id: "c1", host_id: null });
-    expect(ui.edit).not.toHaveBeenCalled();
+    expect(ui.navigate).not.toHaveBeenCalled();
   });
 });

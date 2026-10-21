@@ -564,8 +564,11 @@ export interface TunnelForwardView {
   kind: ForwardKind;
   /** Where it listens: on the server for a remote forward. */
   port: number;
-  /** `host:port` it listens on: `localhost:port` here, or the bind address on the server for a remote forward. */
-  listen: string;
+  /**
+   * Where it is reached: from this computer, `localhost:<port>` or the address it listens on when that is one
+   * interface's; for a remote forward, the address it listens on at the server.
+   */
+  address: string;
   /** `host:port` it leads to; empty for a dynamic forward. */
   dest: string;
 }

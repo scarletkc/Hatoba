@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { errorMessage } from "@/app/errors";
 import { Icon, Spinner } from "@/components/controls";
 import { overlayStyles, toast, type MenuAnchor } from "@/components/overlay";
+import { hostPort, reachableAddress } from "@/features/hosts/address";
 import { stopTunnelForward, tunnelPort, useHostTunnel } from "@/features/hosts/tunnels";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
@@ -19,7 +20,6 @@ import {
 import { useStatusPopover } from "./popover";
 import s from "./ForwardsPopover.module.css";
 
-const hostPort = (host: string, port: number | string) => `${host.includes(":") ? `[${host}]` : host}:${port}`;
 
 /**
  * The status bar's port forwarding popover (FWD-01/02): this host's saved forwards with their state
@@ -170,13 +170,13 @@ function ForwardRow({
 }) {
   const t = useT();
   const state = run?.state ?? "stopped";
-  const livePort = state === "running" ? (run?.port ?? null) : null;
-  const running = livePort !== null;
+  const port = state === "running" ? (run?.port ?? null) : null;
+  const running = port !== null;
   const failed = state === "failed";
-  const port = livePort ?? (f.bind_port || t("terminal.fwd.autoPort"));
   // A remote forward listens on the server: nothing here connects to it, so it has nothing to copy.
   const remote = f.kind === "remote";
-  const address = running && !remote ? `localhost:${port}` : hostPort(f.bind_address, port);
+  const address =
+    port !== null && !remote ? reachableAddress(f.bind_address, port) : hostPort(f.bind_address, port ?? (f.bind_port || t("terminal.fwd.autoPort")));
 
   return (
     <div className={s.row}>

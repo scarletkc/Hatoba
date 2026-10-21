@@ -51,7 +51,7 @@ pub struct LiveSession {
 pub struct RunningForward {
     pub handle: ForwardHandle,
     pub kind: ForwardKind,
-    pub listen: String,
+    pub address: String,
     pub dest: String,
 }
 
@@ -146,7 +146,7 @@ impl LiveSession {
                 forward_id: id.clone(),
                 kind: f.kind,
                 port: f.handle.port(),
-                listen: f.listen.clone(),
+                address: f.address.clone(),
                 dest: f.dest.clone(),
             })
             .collect();

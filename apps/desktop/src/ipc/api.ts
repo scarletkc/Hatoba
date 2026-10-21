@@ -246,6 +246,8 @@ export interface HatobaApi {
 
   // port forwarding (FWD-01..05)
   forwards_list(host_id: string): Promise<ForwardView[]>;
+  /** Every host's forwards, by host. */
+  forwards_list_all(): Promise<ForwardView[]>;
   forward_save(input: ForwardInput): Promise<ForwardView>;
   forward_delete(id: string): Promise<void>;
   /** Starts a saved forward on a live session; resolves to the port it listens on (on the server for a remote forward). */

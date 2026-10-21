@@ -1446,9 +1446,10 @@ pub struct TunnelForwardView {
     /// The port it actually listens on (differs from `bind_port` when that was 0), on the server
     /// for a remote forward.
     pub port: u16,
-    /// `host:port` it listens on: `localhost:port` on this computer, or the bind address on the
-    /// server for a remote forward.
-    pub listen: String,
+    /// Where it is reached: from this computer, `localhost:<port>` or the address it listens on
+    /// when that is one interface's; on the server for a remote forward, the address it listens
+    /// on there.
+    pub address: String,
     /// `host:port` it leads to, as the server reaches it, or as this computer does for a remote
     /// forward; empty for a dynamic one.
     pub dest: String,
