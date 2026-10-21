@@ -665,23 +665,25 @@ const T_TERM = 20.3;
 const T_SFTP = 23.6;
 const T_SFTP_OUT = 25.65;
 const T_AI = 28.7;
-const T_SEND = 31.0;
-const RUNS = [32.75, 33.55, 35.35, 36.55];
-const T_DONE = 37.5;
+const T_SEND = 30.8;
+const RUNS = [32.65, 33.7, 35.9, 37.45];
+const T_OK = RUNS[3] + 0.75; // the assistant's check in the terminal comes back 200
+const T_DONE = T_OK + 0.15;
 const T_AI_OUT = 41.2;
 const T_DASH = 41.75;
 const T_WIPE = 47.5;
 const STAGES = [
   ['ai-0', T_SEND],
-  ['ai-1', RUNS[0] + 0.05],
-  ['ai-2', RUNS[1] + 0.05],
-  ['ai-3', RUNS[2] + 0.05],
-  ['ai-done', T_DONE],
+  ['ai-1', RUNS[0] + 0.12],
+  ['ai-2', RUNS[1] + 0.12],
+  ['ai-3', RUNS[2] + 0.12],
+  ['ai-done', T_OK],
 ];
 const SNAPS = ['hosts', 'term', 'sftp', 'ai-empty', ...STAGES.map((s) => s[0]), 'dash'];
 const RUN_LABEL = LANG === 'zh' ? '运行' : 'Run';
 const FIXED = LANG === 'zh' ? '修好了' : 'Fixed';
-const WORD_RATE = 40; // streamed words per second
+const WORD_RATE = 40; // streamed words per second, or faster when a stage needs it
+const LEAD = 0.75; // how long an approval card is up before its Run is clicked
 const SNAP_CSS = `html{zoom:${Z}}
 *,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}
 ::-webkit-scrollbar{display:none}
@@ -706,11 +708,11 @@ const TERM_LINES = [
   { at: 27.35, html: 'HTTP/1.1 502 Bad Gateway', flash: 'bad' },
   { at: 27.41, html: 'Server: nginx/1.24.0 (Ubuntu)' },
   { at: 27.47, html: 'Content-Type: text/html' },
-  { at: 27.55, html: PROMPT, type: CURL, t0: RUNS[3] + 0.12, cps: 50, ai: true },
-  { at: RUNS[3] + 0.95, html: 'HTTP/1.1 200 OK', flash: 'good' },
-  { at: RUNS[3] + 1.01, html: 'Server: nginx/1.24.0 (Ubuntu)' },
-  { at: RUNS[3] + 1.07, html: 'Content-Type: application/json' },
-  { at: RUNS[3] + 1.15, html: PROMPT, type: '', t0: 99, cps: 1 },
+  { at: 27.55, html: PROMPT, type: CURL, t0: RUNS[3] + 0.12, cps: 60, ai: true },
+  { at: T_OK, html: 'HTTP/1.1 200 OK', flash: 'good' },
+  { at: T_OK + 0.06, html: 'Server: nginx/1.24.0 (Ubuntu)' },
+  { at: T_OK + 0.12, html: 'Content-Type: application/json' },
+  { at: T_OK + 0.2, html: PROMPT, type: '', t0: 99, cps: 1 },
 ];
 TERM_LINES.forEach((l, i) => {
   if (!l.type) return;
@@ -831,6 +833,8 @@ const app = (() => {
     return { x: w.x + r.x, y: w.y + r.y, w: r.width, h: r.height };
   }
   const byText = (root, sel, txt) => [...root.querySelectorAll(sel)].find((e) => e.textContent.trim() === txt);
+  // Where a stage's conversation is scrolled to at time t.
+  const scrollAt = (snap, t) => snap.moves.reduce((y, m) => y + m.d * spring(t - m.t + 0.05, 1.5, 0.92), snap.scroll0);
 
   const H = {}; // handles found in the snapshots
   function setup() {
@@ -865,8 +869,7 @@ const app = (() => {
     const aiPanel = (doc) => all(doc, 'panel').find((e) => one(e, 'composer'));
     for (const [name] of [['ai-empty'], ...STAGES]) {
       const p = aiPanel(S[name].doc);
-      p.style.flex = 'none';
-      p.style.overflow = 'hidden';
+      Object.assign(p.style, { flex: 'none', overflow: 'hidden', minWidth: '0', maxWidth: 'none' });
       S[name].panel = p;
       S[name].list = one(p, 'list');
     }
@@ -881,25 +884,27 @@ const app = (() => {
       return out;
     };
     // When each block of the conversation first shows: blocks keep their position from one stage to
-    // the next, and only the new ones at the end of a stage appear.
+    // the next, and only the new ones at the end of a stage appear, each once the one before it has
+    // finished streaming. A stage streams faster when it must, so that its approval card is up LEAD
+    // before the click, and the summary has finished a second before the panel closes.
     H.appear = [];
-    const after = [];
     let seen = 0;
+    let next = 0;
     STAGES.forEach(([name, t0], s) => {
+      const snap = S[name];
       const blocks = blocksOf(name);
-      S[name].blocks = blocks;
-      S[name].scroll = S[name].list.scrollTop;
-      // Streamed text: words revealed in turn.
+      snap.blocks = blocks;
+      snap.first = seen;
       for (const md of blocks.filter((b) => /_md_/.test(b.className))) {
         if (md.words) continue;
-        const walker = S[name].doc.createTreeWalker(md, NodeFilter.SHOW_TEXT);
+        const walker = snap.doc.createTreeWalker(md, NodeFilter.SHOW_TEXT);
         const nodes = [];
         while (walker.nextNode()) nodes.push(walker.currentNode);
         md.words = [];
         for (const node of nodes) {
-          const frag = S[name].doc.createDocumentFragment();
+          const frag = snap.doc.createDocumentFragment();
           for (const w of node.textContent.match(UNIT) ?? []) {
-            const span = S[name].doc.createElement('span');
+            const span = snap.doc.createElement('span');
             span.className = 'pw';
             span.textContent = w;
             frag.appendChild(span);
@@ -907,20 +912,72 @@ const app = (() => {
           }
           node.replaceWith(frag);
         }
+        // Code spans and tables show with their first word rather than as empty boxes ahead of it.
+        md.boxes = [...md.querySelectorAll('code, pre, table, tr, th, td')].map((e) => {
+          const k = md.words.findIndex((w) => e.compareDocumentPosition(w) & Node.DOCUMENT_POSITION_FOLLOWING);
+          return { e, k: k < 0 ? md.words.length : k };
+        });
       }
-      // A new block shows once the one before it has finished streaming.
-      for (let i = seen; i < blocks.length; i++) {
-        H.appear[i] = Math.max(t0 + (s === 0 ? 0 : 0.15), i ? H.appear[i - 1] + after[i - 1] : 0);
-        after[i] = blocks[i].words ? 0.2 + blocks[i].words.length / WORD_RATE : i === 0 ? 0.35 : 0.3;
+      const fresh = blocks.slice(seen);
+      const timed = s < 4 ? fresh.slice(0, -1) : fresh;
+      const deadline = s < 4 ? RUNS[s] - LEAD : T_AI_OUT - 1.0;
+      const start = Math.max(t0 + (s ? 0.15 : 0), next);
+      const gap = (i) => (i === 0 ? 0.3 : 0.25);
+      let fixed = 0;
+      let units = 0;
+      timed.forEach((b, j) => {
+        fixed += b.words ? 0.15 : gap(seen + j);
+        units += b.words ? b.words.length : 0;
+      });
+      const room = deadline - start - fixed;
+      if (room <= 0.05 && units) console.error(`promo: ${name} has no time to stream its text`);
+      const rate = units ? Math.max(WORD_RATE, units / Math.max(room, 0.05)) : WORD_RATE;
+      let when = start;
+      fresh.forEach((b, j) => {
+        const i = seen + j;
+        H.appear[i] = when;
+        b.rate = rate;
+        when += b.words ? 0.15 + b.words.length / rate : gap(i);
+      });
+      next = when;
+      seen = blocks.length;
+    });
+    // Each stage's list follows the conversation as the app's does: when a block appears, the list
+    // scrolls until the whole block shows, or the top of a tall one. A stage starts where the last
+    // one left off, and the card that was waiting for approval folds into its one-line summary.
+    let from = 0;
+    STAGES.forEach(([name], s) => {
+      const snap = S[name];
+      const list = snap.list;
+      list.scrollTop = 0;
+      const box = list.getBoundingClientRect();
+      const k = box.height / list.offsetHeight; // the snapshot's zoom
+      const pad = parseFloat(getComputedStyle(list).paddingBottom);
+      const max = list.scrollHeight - list.clientHeight;
+      let y = Math.min(from, max);
+      snap.scroll0 = y;
+      snap.moves = [];
+      snap.blocks.slice(snap.first).forEach((b, j) => {
+        const r = b.getBoundingClientRect();
+        const want = clamp(Math.min((r.bottom - box.top) / k + pad - list.clientHeight, (r.top - box.top) / k - 14), 0, max);
+        if (want > y + 0.5) snap.moves.push({ t: H.appear[snap.first + j], d: want - y });
+        y = Math.max(y, want);
+      });
+      from = y;
+      if (s) {
+        const card = snap.blocks[snap.first - 1];
+        snap.fold = { card, from: S[STAGES[s - 1][0]].blocks[snap.first - 1].offsetHeight, to: card.offsetHeight };
+        Object.assign(card.style, { boxSizing: 'border-box', overflow: 'hidden', flexShrink: '0' });
       }
-      seen = Math.max(seen, blocks.length);
     });
     H.composer = one(S['ai-empty'].panel, 'composer');
     H.textarea = H.composer.querySelector('textarea');
     H.send = [...H.composer.querySelectorAll('button')].pop();
     H.runs = STAGES.slice(0, 4).map(([name]) => byText(S[name].panel, 'button', RUN_LABEL));
-    const fixed = [...S['ai-done'].list.querySelectorAll('strong, b')].find((e) => e.textContent.trim().startsWith(FIXED));
-    H.fixedAt = fixed ? at(S['ai-done'], fixed, W2) : { x: 1500, y: 700 };
+    const done = S['ai-done'];
+    const fixed = [...done.list.querySelectorAll('strong, b')].find((e) => e.textContent.trim().startsWith(FIXED));
+    done.list.scrollTop = scrollAt(done, T_DONE + 0.3);
+    H.fixedAt = fixed ? at(done, fixed, W2) : { x: 1500, y: 700 };
 
     /* dashboard */
     {
@@ -961,25 +1018,28 @@ const app = (() => {
     c.to(27.75, aiBtn.x, aiBtn.y, 0.6);
     c.click(28.5);
     c.to(28.9, ta.x, ta.y, 0.5);
-    c.click(29.45);
-    c.to(30.45, send.x, send.y, 0.4);
-    c.click(30.95);
+    c.click(29.4);
+    c.to(T_SEND - 0.6, send.x, send.y, 0.4);
+    c.click(T_SEND - 0.05);
     c.show(RUNS[0] - 0.6, RUNS[3] + 0.5);
     H.runs.forEach((b, k) => {
       if (!b) return;
-      const p = at(S[STAGES[k][0]], b, W2);
+      // Measured where the button sits when it's clicked, with the list scrolled as it is then.
+      const snap = S[STAGES[k][0]];
+      snap.list.scrollTop = scrollAt(snap, RUNS[k]);
+      const p = at(snap, b, W2);
       if (k === 0) c.at(RUNS[0] - 0.6, p.x - 120, p.y + 160);
       c.to(RUNS[k] - 0.5, p.x, p.y, 0.4);
       c.click(RUNS[k]);
     });
-    burst(T_DONE + 0.2, H.fixedAt.x, H.fixedAt.y, 26, 3);
+    burst(T_DONE + 0.15, H.fixedAt.x, H.fixedAt.y, 26, 3);
   }
 
   // A docked panel at width w of its full width: its contents keep their size and slide in from the edge.
+  // (The panels are flex columns, so the children's heights stay as the app lays them out.)
   function slide(panel, w, full) {
     for (const c of panel.children) {
       c.style.width = `${full}px`;
-      c.style.flex = 'none';
       c.style.transform = `translateX(${n2(w - full)}px)`;
     }
   }
@@ -1017,20 +1077,23 @@ const app = (() => {
   cue(T_AI, 'whoosh', { gain: -7, dur: 0.8 });
   cue(T_SEND, 'send', { gain: -5 });
   RUNS.forEach((r, k) => cue(r + 0.35, 'tick', { gain: -8, pitch: k * 2 }));
-  cue(RUNS[3] + 0.95, 'ding', { gain: -8, pitch: 7 });
+  cue(T_OK, 'ding', { gain: -8, pitch: 7 });
   cue(T_DONE + 0.15, 'success', { gain: -3 });
   cue(T_DONE + 0.18, 'sparkle', { gain: -7 });
   cue(T_AI_OUT, 'swish', { gain: -9 });
   cue(T_DASH, 'whoosh', { gain: -9, dur: 0.8 });
   for (let i = 0; i < 6; i++) cue(T_DASH + 0.3 + i * 0.06, 'pop', { gain: -17, pitch: [0, 2, 4, 7, 9, 12][i] });
   const promptChars = [...C.prompt];
-  const promptCps = promptChars.length / 1.0;
-  promptChars.forEach((_, k) => cue(29.6 + k / promptCps, 'key', { gain: -16 + rnd(900 + k) * 4, pitch: (rnd(950 + k) - 0.5) * 4 }));
+  const T_TYPE = 29.5;
+  const promptCps = promptChars.length / 0.8;
+  promptChars.forEach((_, k) => cue(T_TYPE + k / promptCps, 'key', { gain: -16 + rnd(900 + k) * 4, pitch: (rnd(950 + k) - 0.5) * 4 }));
 
   onFrame((t) => {
-    // A gentle push-in while the assistant works; the cursor and effects ride along.
-    const zoom = 1 + 0.08 * (spring(t - 30.9, 0.7, 0.9) - spring(t - 40.4, 0.7, 0.9));
-    const cam = Math.abs(zoom - 1) < 1e-4 ? '' : `translate(960px,652px) scale(${zoom.toFixed(5)}) translate(-960px,-652px)`;
+    // A gentle push-in while the assistant works, held at the window's bottom edge so the whole window
+    // stays in frame; the cursor and effects ride along.
+    const zoom = 1 + 0.04 * (spring(t - T_SEND, 0.7, 0.9) - spring(t - 40.4, 0.7, 0.9));
+    const oy = W2.y + W2.h;
+    const cam = Math.abs(zoom - 1) < 1e-4 ? '' : `translate(960px,${oy}px) scale(${zoom.toFixed(5)}) translate(-960px,-${oy}px)`;
     for (const l of [L.app, L.fx, L.cursor]) {
       l.style.transformOrigin = '0 0';
       l.style.transform = cam;
@@ -1120,24 +1183,32 @@ const app = (() => {
       slide(snap.panel, aw, 440);
     }
     if (S['ai-empty'].f.style.display !== 'none') {
-      const n = t < 29.6 ? 0 : Math.min(promptChars.length, Math.floor((t - 29.6) * promptCps) + 1);
+      const n = t < T_TYPE ? 0 : Math.min(promptChars.length, Math.floor((t - T_TYPE) * promptCps) + 1);
       H.textarea.value = promptChars.slice(0, n).join('');
-      H.send.style.transform = `scale(${(1 - 0.15 * bump(t, 30.9, 0.2)).toFixed(4)})`;
+      H.send.style.transform = `scale(${(1 - 0.15 * bump(t, T_SEND - 0.1, 0.2)).toFixed(4)})`;
     }
     STAGES.forEach(([name, t0], s) => {
       const snap = S[name];
       if (snap.f.style.display === 'none') return;
-      const prev = s ? S[STAGES[s - 1][0]].scroll : 0;
-      snap.list.scrollTop = lerp(prev, snap.scroll, spring(t - t0 - 0.1, 1.1, 0.95));
+      if (snap.fold) snap.fold.card.style.height = `${n2(lerp(snap.fold.from, snap.fold.to, spring(t - t0, 2.4, 0.9)))}px`;
+      snap.list.scrollTop = scrollAt(snap, t);
       snap.blocks.forEach((b, i) => {
         const t1 = H.appear[i];
         const a = spring(t - t1, 2.0, 0.72);
         b.style.opacity = clamp(a * 1.8).toFixed(3);
         b.style.transform = i === 0 && s === 0 ? `translateY(${n2((1 - spring(t - t1, 1.4, 0.8)) * 260)}px)` : `translateY(${n2((1 - a) * 14)}px)`;
-        if (b.words) b.words.forEach((w, k) => (w.style.opacity = prog(t, t1 + 0.1 + k / WORD_RATE, 0.08).toFixed(3)));
+        if (b.words) {
+          const shows = (k) => prog(t, t1 + 0.1 + k / b.rate, 0.08).toFixed(3);
+          b.words.forEach((w, k) => (w.style.opacity = shows(k)));
+          b.boxes.forEach((x) => (x.e.style.opacity = shows(x.k)));
+        }
       });
       const run = H.runs[s];
-      if (run && s < 4) run.style.transform = `scale(${(1 - 0.12 * bump(t, RUNS[s] - 0.04, 0.2)).toFixed(4)})`;
+      if (run && s < 4) {
+        run.style.transform = `scale(${(1 - 0.12 * bump(t, RUNS[s] - 0.04, 0.2)).toFixed(4)})`;
+        // Approved: the card's buttons settle back while the command runs.
+        run.parentElement.style.opacity = (1 - 0.6 * prog(t, RUNS[s] + 0.12, 0.25)).toFixed(3);
+      }
     });
 
     // dashboard
@@ -1164,8 +1235,8 @@ caption(C.hostsSub, 15.0, 20.15, 'sub', 168);
 caption(C.term, 21.0, 27.6, 'headline', 82);
 caption(C.termSub, 21.8, 27.55, 'sub', 168);
 caption(C.ai, 29.0, 41.0, 'headline', 82);
-caption(C.aiSub1, 33.2, 37.4, 'sub', 168);
-caption(C.aiSub2, 37.7, 40.95, 'sub', 168);
+caption(C.aiSub1, 33.2, T_DONE - 0.45, 'sub', 168);
+caption(C.aiSub2, T_DONE - 0.15, 40.95, 'sub', 168);
 caption(C.dash, 42.0, 47.1, 'headline', 82);
 caption(C.dashSub, 42.8, 47.05, 'sub', 168);
 
