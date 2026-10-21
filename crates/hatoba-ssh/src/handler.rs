@@ -292,7 +292,7 @@ impl client::Handler for ClientHandler {
             .route_forwarded(connected_address, connected_port, forwarded)
         {
             tracing::debug!(
-                "refused a forwarded connection to {connected_address}:{connected_port}: no                  forward listens there"
+                "refused a connection to {connected_address}:{connected_port}: no forward there"
             );
         }
         Ok(())
