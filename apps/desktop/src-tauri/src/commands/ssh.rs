@@ -258,9 +258,7 @@ async fn open_terminal(
                     Ok(Err(e))
                         if joined && !retried && e.kind == hatoba_ssh::SshErrorKind::Channel =>
                     {
-                        // Its place goes first, as a tab that leaves clears the mark.
-                        drop(tab);
-                        conn.mark_full();
+                        tab.refused();
                     }
                     Ok(Err(e)) => return Err(fail(e.into())),
                 }

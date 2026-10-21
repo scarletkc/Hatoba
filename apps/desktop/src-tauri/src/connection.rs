@@ -88,19 +88,29 @@ struct RunningForward {
 
 /// A terminal tab's place on a connection. Dropping it leaves, which closes the connection when
 /// nothing else is left on it.
-pub struct Tab(Arc<Connection>);
+pub struct Tab {
+    conn: Arc<Connection>,
+    refused: bool,
+}
 
 impl Tab {
     pub fn connection(&self) -> &Arc<Connection> {
-        &self.0
+        &self.conn
+    }
+
+    /// The server refused the tab's shell: it leaves, and later tabs open another connection.
+    pub fn refused(mut self) {
+        self.refused = true;
     }
 }
 
 impl Drop for Tab {
     fn drop(&mut self) {
-        self.0.leave(|u| {
+        // In the one lock, so that no other tab leaving meanwhile undoes the mark.
+        let refused = self.refused;
+        self.conn.leave(|u| {
             u.tabs -= 1;
-            u.full = false;
+            u.full = refused;
         });
     }
 }
@@ -135,7 +145,10 @@ impl Connection {
             return None;
         }
         users.tabs += 1;
-        Some(Tab(Arc::clone(self)))
+        Some(Tab {
+            conn: Arc::clone(self),
+            refused: false,
+        })
     }
 
     fn hold(self: &Arc<Self>) -> Option<Starting> {
@@ -145,11 +158,6 @@ impl Connection {
         }
         users.starting += 1;
         Some(Starting(Arc::clone(self)))
-    }
-
-    /// The server refused a shell on it: later tabs open another connection.
-    pub fn mark_full(&self) {
-        self.users().full = true;
     }
 
     /// It stopped answering: later tabs and forwards open another connection.
