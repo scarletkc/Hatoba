@@ -4,10 +4,9 @@
 //! lists them, and a connection that ends on its own tells the WebView, which notifies.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
-use hatoba_core::model::{ForwardKind, Item};
+use hatoba_core::model::{ForwardKind, Item, PortForward};
 use hatoba_ssh::{ConnectConfig, SshSession};
 use tauri::AppHandle;
 use tauri_specta::Event;
@@ -21,7 +20,8 @@ use crate::state::{AppState, now_ms, state};
 pub struct Tunnels {
     /// One start or stop at a time per host, so that two starts never open two connections.
     hosts: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
-    version: AtomicU64,
+    /// The list's version, held while the list is read and sent, so that a version names one list.
+    version: Mutex<u64>,
 }
 
 impl Tunnels {
@@ -29,6 +29,21 @@ impl Tunnels {
         let mut hosts = self.hosts.lock().unwrap_or_else(|p| p.into_inner());
         Arc::clone(hosts.entry(host_id.to_owned()).or_default())
     }
+
+    fn version(&self) -> MutexGuard<'_, u64> {
+        self.version.lock().unwrap_or_else(|p| p.into_inner())
+    }
+}
+
+/// The host's saved local forward.
+fn saved_forward(state: &AppState, host_id: &str, forward_id: &str) -> AppResult<PortForward> {
+    state.with_unlocked(|v| {
+        v.get(forward_id)
+            .and_then(Item::as_forward)
+            .filter(|f| f.host_id == host_id && f.kind == ForwardKind::Local)
+            .cloned()
+            .ok_or_else(|| AppError::not_found("forward"))
+    })
 }
 
 /// Where the host's connection for forwards comes from.
@@ -49,13 +64,7 @@ pub async fn start(
     let state = state(app);
     let gate = state.tunnels.host_gate(host_id);
     let _held = gate.lock().await;
-    let forward = state.with_unlocked(|v| {
-        v.get(forward_id)
-            .and_then(Item::as_forward)
-            .filter(|f| f.host_id == host_id && f.kind == ForwardKind::Local)
-            .cloned()
-            .ok_or_else(|| AppError::not_found("forward"))
-    })?;
+    saved_forward(&state, host_id, forward_id)?;
     let (session_id, live) = match state.ssh.tunnel_for_host(host_id) {
         Some(open) => open,
         None => open(app, &state, host_id, overrides).await?,
@@ -63,7 +72,12 @@ pub async fn start(
     if let Some(port) = live.forward_port(forward_id) {
         return Ok(port);
     }
-    let started = crate::commands::forwards::open(&live, forward_id, &forward).await;
+    // Read again: signing in may have waited on the user while the rule changed or went, and a
+    // stop finds no connection to wait for until one is registered.
+    let started = match saved_forward(&state, host_id, forward_id) {
+        Ok(forward) => crate::commands::forwards::open(&live, forward_id, &forward).await,
+        Err(e) => Err(e),
+    };
     // A connection opened for this forward alone goes with it.
     if started.is_err() && live.forward_count() == 0 && state.ssh.remove_if_same(&session_id, &live)
     {
@@ -102,6 +116,11 @@ pub fn running_port(state: &AppState, host_id: &str, forward_id: &str) -> Option
 
 /// Every forward running without a terminal, by host as the connections were made.
 pub fn list(state: &AppState) -> TunnelsEvent {
+    let version = state.tunnels.version();
+    snapshot(state, *version)
+}
+
+fn snapshot(state: &AppState, version: u64) -> TunnelsEvent {
     let tunnels = state
         .ssh
         .tunnels()
@@ -123,17 +142,15 @@ pub fn list(state: &AppState) -> TunnelsEvent {
             })
         })
         .collect();
-    TunnelsEvent {
-        version: state.tunnels.version.load(Ordering::Relaxed),
-        tunnels,
-    }
+    TunnelsEvent { version, tunnels }
 }
 
-/// Tells the WebView and the tray menu what runs now.
+/// Tells the WebView and the tray menu what runs now, in the order the changes happened.
 pub fn changed(app: &AppHandle) {
     let state = state(app);
-    state.tunnels.version.fetch_add(1, Ordering::Relaxed);
-    let event = list(&state);
+    let mut version = state.tunnels.version();
+    *version += 1;
+    let event = snapshot(&state, *version);
     crate::tray::set_tunnels(app, event.version, &event.tunnels);
     let _ = event.emit(app);
 }
