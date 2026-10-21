@@ -2461,6 +2461,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hatoba-telnet"
+version = "0.5.0"
+dependencies = [
+ "bytes",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "zeroize",
+]
+
+[[package]]
 name = "heck"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

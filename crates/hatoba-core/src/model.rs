@@ -262,6 +262,90 @@ impl Default for Host {
     }
 }
 
+/// A Telnet host (TELNET-01): a switch, router or embedded device that offers Telnet. It is an
+/// item type of its own rather than a [`Host`] with a protocol, so an app without Telnet skips it
+/// instead of reading it as an SSH host and dropping the protocol when it saves it. The password
+/// is wiped on drop and never printed.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+pub struct TelnetHost {
+    /// Display name, e.g. `core-switch-1`.
+    pub name: String,
+    /// Domain name or IP address.
+    pub address: String,
+    /// TCP port, default 23.
+    pub port: u16,
+    /// The user name typed at the server's login prompt (TELNET-03); empty to type it by hand.
+    pub username: String,
+    /// The password typed at the server's password prompt (secret); empty to type it by hand.
+    /// Never sent to the front-end. Absent while empty.
+    #[serde(skip_serializing_if = "zeroizing_is_empty")]
+    pub password: Zeroizing<String>,
+    /// Containing [`Group`], if any.
+    pub group_id: Option<String>,
+    /// Free-form tags.
+    pub tags: Vec<String>,
+    /// Favourite flag.
+    pub favorite: bool,
+    /// SOCKS5 or HTTP proxy for the TCP connection, as for SSH hosts (SSH-13). Absent while it is
+    /// the device's default.
+    #[serde(skip_serializing_if = "HostProxy::is_device_default")]
+    pub proxy: HostProxy,
+    /// Free-form note.
+    pub note: String,
+    /// What the AI assistant is told about this host (AI-37), at most
+    /// [`MAX_HOST_AI_NOTES_BYTES`] bytes of UTF-8. Absent while empty.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub ai_notes: String,
+    /// Last modification, Unix ms.
+    pub updated_at: i64,
+}
+
+/// The Telnet port.
+pub const TELNET_PORT: u16 = 23;
+
+fn zeroizing_is_empty(s: &Zeroizing<String>) -> bool {
+    s.is_empty()
+}
+
+impl Default for TelnetHost {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            address: String::new(),
+            port: TELNET_PORT,
+            username: String::new(),
+            password: Zeroizing::default(),
+            group_id: None,
+            tags: Vec::new(),
+            favorite: false,
+            proxy: HostProxy::DeviceDefault,
+            note: String::new(),
+            ai_notes: String::new(),
+            updated_at: 0,
+        }
+    }
+}
+
+impl fmt::Debug for TelnetHost {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TelnetHost")
+            .field("name", &self.name)
+            .field("address", &self.address)
+            .field("port", &self.port)
+            .field("username", &self.username)
+            .field("password", &"<redacted>")
+            .field("group_id", &self.group_id)
+            .field("tags", &self.tags)
+            .field("favorite", &self.favorite)
+            .field("proxy", &self.proxy)
+            .field("note", &self.note)
+            .field("ai_notes", &self.ai_notes)
+            .field("updated_at", &self.updated_at)
+            .finish()
+    }
+}
+
 /// Which proxy a host's connection goes through (SSH-13).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -1311,7 +1395,7 @@ pub struct Settings {
     pub updated_at: i64,
 }
 
-/// Any syncable item. Serialises with `"type": "host" | "group" | "key" | "known_host" |
+/// Any syncable item. Serialises with `"type": "host" | "telnet_host" | "group" | "key" | "known_host" |
 /// "forward" | "snippet" | "proxy" | "ai_provider" | "search_provider" | "ai_conversation" |
 /// "ai_message" | "skill" | "skill_file" | "mcp_server" | "ai_memory" | "settings"`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
@@ -1319,6 +1403,8 @@ pub struct Settings {
 pub enum Item {
     /// An SSH host.
     Host(Host),
+    /// A Telnet host.
+    TelnetHost(TelnetHost),
     /// A host group.
     Group(Group),
     /// A private key.
@@ -1357,6 +1443,7 @@ impl Item {
     pub fn kind_str(&self) -> &'static str {
         match self {
             Self::Host(_) => "host",
+            Self::TelnetHost(_) => "telnet_host",
             Self::Group(_) => "group",
             Self::Key(_) => "key",
             Self::KnownHost(_) => "known_host",
@@ -1380,6 +1467,7 @@ impl Item {
     pub fn updated_at(&self) -> i64 {
         match self {
             Self::Host(i) => i.updated_at,
+            Self::TelnetHost(i) => i.updated_at,
             Self::Group(i) => i.updated_at,
             Self::Key(i) => i.updated_at,
             Self::KnownHost(i) => i.updated_at,
@@ -1402,6 +1490,7 @@ impl Item {
     pub fn set_updated_at(&mut self, at: i64) {
         match self {
             Self::Host(i) => i.updated_at = at,
+            Self::TelnetHost(i) => i.updated_at = at,
             Self::Group(i) => i.updated_at = at,
             Self::Key(i) => i.updated_at = at,
             Self::KnownHost(i) => i.updated_at = at,
@@ -1425,6 +1514,7 @@ impl Item {
     pub fn display_name(&self) -> String {
         match self {
             Self::Host(i) => i.name.clone(),
+            Self::TelnetHost(i) => i.name.clone(),
             Self::Group(i) => i.name.clone(),
             Self::Key(i) => i.name.clone(),
             Self::KnownHost(i) => format!("{}:{}", i.host, i.port),
@@ -1453,6 +1543,16 @@ impl Item {
     #[must_use]
     pub fn as_host(&self) -> Option<&Host> {
         if let Self::Host(h) = self {
+            Some(h)
+        } else {
+            None
+        }
+    }
+
+    /// The Telnet host, if this is one.
+    #[must_use]
+    pub fn as_telnet_host(&self) -> Option<&TelnetHost> {
+        if let Self::TelnetHost(h) = self {
             Some(h)
         } else {
             None
@@ -1606,6 +1706,7 @@ impl Item {
         let mut copy = self.clone();
         match &mut copy {
             Self::Host(i) => i.name.push_str(suffix),
+            Self::TelnetHost(i) => i.name.push_str(suffix),
             Self::Group(i) => i.name.push_str(suffix),
             Self::Key(i) => i.name.push_str(suffix),
             Self::Snippet(i) => i.name.push_str(suffix),
@@ -1955,9 +2056,35 @@ mod tests {
     }
 
     #[test]
+    fn telnet_hosts_keep_their_password_out_of_debug_and_empty_fields_out_of_json() {
+        let host = TelnetHost {
+            name: "core-switch".into(),
+            address: "10.0.0.2".into(),
+            password: Zeroizing::new("hunter2".into()),
+            ..TelnetHost::default()
+        };
+        assert!(!format!("{host:?}").contains("hunter2"));
+        let value = serde_json::to_value(Item::TelnetHost(host.clone())).unwrap();
+        assert_eq!(value["port"], 23);
+        assert_eq!(value["password"], "hunter2");
+        assert!(value.get("proxy").is_none());
+        assert!(value.get("ai_notes").is_none());
+        let bare = TelnetHost {
+            password: Zeroizing::default(),
+            ..host
+        };
+        let value = serde_json::to_value(Item::TelnetHost(bare)).unwrap();
+        assert!(value.get("password").is_none());
+        // Missing fields take their defaults.
+        let read = Item::from_plaintext(br#"{"type":"telnet_host","address":"r1"}"#).unwrap();
+        assert_eq!(read.as_telnet_host().unwrap().port, 23);
+    }
+
+    #[test]
     fn every_type_tag_round_trips() {
         let items = [
             (Item::Host(Host::default()), "host"),
+            (Item::TelnetHost(TelnetHost::default()), "telnet_host"),
             (Item::Group(Group::default()), "group"),
             (Item::Key(SshKey::default()), "key"),
             (Item::KnownHost(KnownHost::default()), "known_host"),

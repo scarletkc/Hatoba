@@ -24,7 +24,7 @@ use crate::crypto::{
 use crate::error::{Error, Result};
 use crate::model::{
     Group, Host, Item, KnownHost, PortForward, Proxy, RightClick, SETTINGS_ID, Settings, SshKey,
-    new_id,
+    TelnetHost, new_id,
 };
 use crate::recovery::RecoveryCode;
 use crate::store::{ConflictRow, ItemRow, Store, StoreOps, meta};
@@ -946,6 +946,12 @@ impl Vault {
     #[must_use]
     pub fn hosts(&self) -> Vec<(String, Host)> {
         self.collect(Item::as_host)
+    }
+
+    /// All Telnet hosts (TELNET-01).
+    #[must_use]
+    pub fn telnet_hosts(&self) -> Vec<(String, TelnetHost)> {
+        self.collect(Item::as_telnet_host)
     }
 
     /// All keys.
@@ -2195,6 +2201,34 @@ mod tests {
         vault.unlock(PW).unwrap();
         assert!(vault.get(&id).is_some());
         assert!(vault.get("garbage").is_none());
+    }
+
+    #[test]
+    fn items_of_a_type_this_version_lacks_are_skipped_and_kept() {
+        let (mut vault, _clock, _code) = created();
+        let id = new_id();
+        let key = &vault.unlocked.as_ref().unwrap().vault_key;
+        let plain = br#"{"type":"serial_host","name":"x"}"#;
+        let envelope = seal(key, item_aad(&id).as_bytes(), plain)
+            .unwrap()
+            .to_json();
+        vault
+            .store
+            .upsert_item_row(&ItemRow {
+                id: id.clone(),
+                envelope: Some(envelope.clone()),
+                revision: 1,
+                deleted: false,
+                dirty: false,
+                updated_at: 1,
+            })
+            .unwrap();
+        vault.lock();
+        vault.unlock(PW).unwrap();
+        assert!(vault.get(&id).is_none());
+        let row = vault.store.item_row(&id).unwrap().unwrap();
+        assert_eq!(row.envelope.as_deref(), Some(envelope.as_str()));
+        assert!(!row.deleted && !row.dirty);
     }
 
     #[test]
