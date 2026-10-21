@@ -369,12 +369,15 @@ pub(crate) fn rejects_summary(err: &AiError) -> bool {
 
 /// Whether an Anthropic error is a 4xx about `display: "updates"` or its beta header, which a
 /// vendor or gateway that does not pass the header on returns. The request is then retried with
-/// summarized display, keeping the level.
+/// summarized display, keeping the level. Authentication, timeout and rate-limit statuses never
+/// count, since the base URL is then remembered as refusing it.
 pub(crate) fn rejects_updates(err: &AiError) -> bool {
     match err {
-        AiError::Http { status, message } if (400..500).contains(status) => {
+        AiError::Http { status, message }
+            if (400..500).contains(status) && !matches!(status, 401 | 403 | 408 | 429) =>
+        {
             let message = message.to_ascii_lowercase();
-            ["display", "beta", "updates"]
+            ["display", "beta"]
                 .iter()
                 .any(|word| message.contains(word))
         }

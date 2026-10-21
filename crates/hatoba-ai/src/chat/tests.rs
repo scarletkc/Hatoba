@@ -3044,3 +3044,38 @@ async fn anthropic_falls_back_to_summarized_when_updates_are_refused() {
     assert_eq!(requests.len(), 3);
     assert!(requests[2].headers.get("anthropic-beta").is_none());
 }
+
+#[test]
+fn updates_retry_conditions() {
+    let http = |status, message: &str| AiError::Http {
+        status,
+        message: message.into(),
+    };
+    for (status, message) in [
+        (
+            400,
+            "thinking.display: Input should be 'summarized' or 'omitted'",
+        ),
+        (
+            400,
+            "Unexpected value(s) `thinking-display-updates-2026-08-18` for the `anthropic-beta` \
+             header",
+        ),
+        (422, "invalid beta flag"),
+    ] {
+        assert!(rejects_updates(&http(status, message)), "{message}");
+    }
+    for (status, message) in [
+        // The base URL would be remembered as refusing progress updates for the whole run.
+        (429, "Rate limit reached for the beta"),
+        (401, "invalid x-api-key"),
+        (403, "beta access denied"),
+        (
+            400,
+            "messages.1: tool_use ids must be unique; check for updates",
+        ),
+        (500, "thinking.display failed"),
+    ] {
+        assert!(!rejects_updates(&http(status, message)), "{message}");
+    }
+}
