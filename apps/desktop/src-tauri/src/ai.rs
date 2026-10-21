@@ -5085,9 +5085,13 @@ const ATTACHMENTS: &[AttachmentKind] = &[
         note: true,
         title: |_| String::new(),
         placeholder: |_| String::new(),
-        attributes: |attrs| {
-            matches!(attrs, [("entries", entries)] | [("entries", entries), ("host", _)]
-                if is_count(entries))
+        attributes: |attrs| match attrs {
+            [("entries", entries)] => is_count(entries),
+            // Notes stored before the attribute had its own name call it `host`.
+            [("entries", entries), (host, _)] => {
+                is_count(entries) && (*host == tools::MEMORY_NOTE_HOST || *host == "host")
+            }
+            _ => false,
         },
     },
     AttachmentKind {
@@ -5723,18 +5727,21 @@ fn with_place_memories(
 /// AI-53: whether a `memory` note since the context's start (AI-21) showed the memories of the
 /// host or computer named `name`, which it names as its host. `earlier` is the conversation's
 /// entries, oldest first; the model sees nothing before a summary, so the summary's note is the
-/// last one that counts.
+/// last one that counts. Notes stored before [`tools::MEMORY_NOTE_HOST`] name it in `host`.
 fn memories_shown(earlier: &[AiEntry], name: &str) -> bool {
+    let shows = |text: &str| {
+        note_attr(text, MEMORY, tools::MEMORY_NOTE_HOST)
+            .or_else(|| note_attr(text, MEMORY, "host"))
+            .is_some_and(|host| host == name)
+    };
     for entry in earlier.iter().rev() {
         match &entry.body {
             EntryBody::User { text, .. } => {
-                if note_attr(text, MEMORY, "host").is_some_and(|host| host == name) {
+                if shows(text) {
                     return true;
                 }
             }
-            EntryBody::Summary { text } => {
-                return note_attr(text, MEMORY, "host").is_some_and(|host| host == name);
-            }
+            EntryBody::Summary { text } => return shows(text),
             EntryBody::Assistant(_) | EntryBody::Tool { .. } => {}
         }
     }

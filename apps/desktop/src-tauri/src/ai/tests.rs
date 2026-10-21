@@ -1859,7 +1859,8 @@ async fn memories_start_the_first_message_and_each_summary() {
     let before = super::memory::note(&lock(&f.vault), Some(&place));
     assert!(
         before.starts_with(
-            "<memory entries=\"1\" host=\"web-1\">\n<entry name=\"Replies\" updated=\"20"
+            "<memory entries=\"1\" conversation_host=\"web-1\">\n<entry name=\"Replies\" \
+             scope=\"global\" updated=\"20"
         ),
         "{before}"
     );
@@ -1897,7 +1898,7 @@ async fn memories_start_the_first_message_and_each_summary() {
     };
     let after = super::memory::note(&lock(&f.vault), Some(&place));
     assert!(
-        after.contains("<entry name=\"sudo\" host=\"web-1\" updated=\"20"),
+        after.contains("<entry name=\"sudo\" scope=\"host\" host=\"web-1\" updated=\"20"),
         "{after}"
     );
     assert_eq!(text, &manual(&format!("{after}SUMMARY: noted doas.")));
@@ -2004,7 +2005,7 @@ async fn a_message_on_another_host_shows_its_memories() {
             place_note(&v, &on_local),
         )
     };
-    assert!(db_note.starts_with("<memory entries=\"1\" host=\"db-1\">"));
+    assert!(db_note.starts_with("<memory entries=\"1\" conversation_host=\"db-1\">"));
     assert_eq!(
         f.user_texts(&conv),
         [
@@ -2045,7 +2046,8 @@ fn a_message_after_a_compaction_brings_the_memories_of_its_host() {
         .unwrap();
     let shown = |host: &str| {
         format!(
-            "<memory entries=\"1\" host=\"{host}\">\n<entry name=\"x\">\ny\n</entry>\n</memory>\n\n"
+            "<memory entries=\"1\" conversation_host=\"{host}\">\n<entry name=\"x\" \
+             scope=\"global\">\ny\n</entry>\n</memory>\n\n"
         )
     };
     let permission = permission_mode_block(PermissionMode::Manual);
@@ -2072,6 +2074,20 @@ fn a_message_after_a_compaction_brings_the_memories_of_its_host() {
             AiEntry::user(2, format!("{}more", shown("web-1"))),
         ],
         vec![summary("web-1")],
+    ] {
+        assert_eq!(
+            super::with_place_memories(&v, &earlier, &notes, Some(&web)),
+            notes
+        );
+    }
+    // Notes stored before conversation_host name the conversation's host in host.
+    let old = |host: &str| shown(host).replacen("conversation_host=", "host=", 1);
+    for earlier in [
+        vec![AiEntry::summary(1, format!("{}SUMMARY", old("web-1")))],
+        vec![
+            summary("db-1"),
+            AiEntry::user(2, format!("{}more", old("web-1"))),
+        ],
     ] {
         assert_eq!(
             super::with_place_memories(&v, &earlier, &notes, Some(&web)),

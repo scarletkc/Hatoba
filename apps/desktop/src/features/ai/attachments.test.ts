@@ -459,7 +459,7 @@ describe("the permission mode notes (AI-16)", () => {
   });
 
   it("reads the memories a first message and a summary start with (AI-53)", () => {
-    const body = '<entry name="web-1 sudo">\nweb-1 uses doas.\n</entry>';
+    const body = '<entry name="web-1 sudo" scope="global">\nweb-1 uses doas.\n</entry>';
     const memory = noteBlock({ kind: "memory", entries: 1, body });
     expect(memory).toBe(`<memory entries="1">\n${body}\n</memory>`);
     expect(parseMessage(`${manual}\n\n${memory}\n\nhello`)).toMatchObject({
@@ -470,14 +470,18 @@ describe("the permission mode notes (AI-16)", () => {
     expect(splitPermissionNote(`${memory}\n\nWe restarted nginx.`)).toEqual({ mode: null, summary: "We restarted nginx." });
     expect(notedPermission([summary(`${auto}\n\n${memory}\n\nWe restarted nginx.`)])).toBe("auto");
     // A conversation on a host names it, and so do its host memories.
-    const hostBody = '<entry name="sudo" host="web-1">\nUses doas.\n</entry>';
+    const hostBody = '<entry name="sudo" scope="host" host="web-1">\nUses doas.\n</entry>';
     const onHost = noteBlock({ kind: "memory", entries: 1, host: "web-1", body: hostBody });
-    expect(onHost).toBe(`<memory entries="1" host="web-1">\n${hostBody}\n</memory>`);
+    expect(onHost).toBe(`<memory entries="1" conversation_host="web-1">\n${hostBody}\n</memory>`);
     expect(parseMessage(`${onHost}\n\nhello`)).toMatchObject({
       notes: [{ kind: "memory", entries: 1, host: "web-1", body: hostBody }],
       typed: "hello",
     });
     expect(splitPermissionNote(`${auto}\n\n${onHost}\n\nWe restarted nginx.`)).toEqual({ mode: "auto", summary: "We restarted nginx." });
+    // Notes stored before conversation_host named the conversation's host in host.
+    const old = `<memory entries="1" host="web-1">\n${body}\n</memory>`;
+    expect(parseMessage(`${old}\n\nhello`)).toMatchObject({ notes: [{ kind: "memory", entries: 1, host: "web-1", body }], typed: "hello" });
+    expect(splitPermissionNote(`${auto}\n\n${old}\n\nWe restarted nginx.`)).toEqual({ mode: "auto", summary: "We restarted nginx." });
   });
 });
 

@@ -416,7 +416,7 @@ const INTERRUPTED_BODY =
 export function noteBlock(n: Note): string {
   if (n.kind === "mcp_tools") return writeBlock(n.kind, [["servers", String(n.servers)], ["tools", String(n.tools)]], n.body);
   if (n.kind === "memory")
-    return writeBlock(n.kind, [["entries", String(n.entries)], ...(n.host === undefined ? [] : [["host", noteText(n.host)] as [string, string]])], n.body);
+    return writeBlock(n.kind, [["entries", String(n.entries)], ...(n.host === undefined ? [] : [["conversation_host", noteText(n.host)] as [string, string]])], n.body);
   if (n.kind === "terminal_state")
     return writeBlock(n.kind, [["host", noteText(n.host)], ["alternate_screen", String(n.alternate)], ["lines", String(n.lines)]], n.body);
   if (n.kind === "interrupted") return writeBlock(n.kind, [], INTERRUPTED_BODY);
@@ -521,7 +521,9 @@ function blockOf(tag: string, attrs: [string, string][], body: string): Block | 
       return mode === "manual" || mode === "auto" || mode === "bypass" ? { kind: "note", note: { kind: tag, mode } } : null;
     }
     case "memory":
-      if (names === "entries,host" && DIGITS.test(value(0))) return { kind: "note", note: { kind: tag, entries: Number(value(0)), host: value(1), body } };
+      // Notes stored before the conversation's host had its own attribute name it `host`.
+      if ((names === "entries,conversation_host" || names === "entries,host") && DIGITS.test(value(0)))
+        return { kind: "note", note: { kind: tag, entries: Number(value(0)), host: value(1), body } };
       return names === "entries" && DIGITS.test(value(0)) ? { kind: "note", note: { kind: tag, entries: Number(value(0)), body } } : null;
     case "file_revert":
       return names === "path,tool_call_id" ? { kind: "note", note: { kind: tag, path: value(0), toolCallId: value(1), body } } : null;

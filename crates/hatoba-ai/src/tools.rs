@@ -602,9 +602,10 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
             MEMORY,
             format!(
                 "Save or delete one of your memories: notes for yourself that new conversations \
-                 of the user start with, in a <memory> note. Global memories show in every \
-                 conversation; host memories only in conversations on this conversation's host, \
-                 a saved host or a computer's local terminal. `save` stores `content` under \
+                 of the user start with, in a <memory> note. A global memory shows in every \
+                 conversation; a host memory only in conversations on its host (a saved host or \
+                 a computer's local terminal), and scope `host` is this conversation's host. \
+                 `save` stores `content` under \
                  `name` in `scope`, replacing the memory of that name there if there is one; \
                  `delete` removes it. Keep a memory to a few lines on one subject. The global \
                  memories, and those of each host, hold at most {MAX_MEMORY_BYTES} bytes of \
@@ -1026,13 +1027,19 @@ pub struct MemoryEntry<'a> {
     pub content: &'a str,
 }
 
+/// The attribute of the `memory` note (AI-53) that names the host or computer the conversation is
+/// on. Notes stored before entries had a `scope` named it `host`, as an entry names the host of a
+/// host memory, which read as the scope of every entry.
+pub const MEMORY_NOTE_HOST: &str = "conversation_host";
+
 /// The note that shows the memories (AI-53, spec §13.3), with the blank line after it: each in an
-/// `entry` block that names it, the host of a host memory, and the day it was last saved
-/// (`updated`, left out when empty), a blank line apart, so no text of a memory reads as the start
-/// of another. `host` names the host or computer the conversation is on, whose memories the note
-/// shows. Empty when there are no memories. It goes before a conversation's first message and
-/// before a summary, so it stays the same for the rest of the conversation's context, and its
-/// cache with it, and before a message on a host whose memories no note of the context showed.
+/// `entry` block that names it, its scope (`global`, or `host` with the host of a host memory),
+/// and the day it was last saved (`updated`, left out when empty), a blank line apart, so no text
+/// of a memory reads as the start of another. `host` names the host or computer the conversation
+/// is on, whose memories the note shows, in [`MEMORY_NOTE_HOST`]. Empty when there are no
+/// memories. It goes before a conversation's first message and before a summary, so it stays the
+/// same for the rest of the conversation's context, and its cache with it, and before a message on
+/// a host whose memories no note of the context showed.
 #[must_use]
 pub fn memory_block(host: Option<&str>, memories: &[MemoryEntry<'_>]) -> String {
     const TAG: &str = "memory";
@@ -1040,31 +1047,33 @@ pub fn memory_block(host: Option<&str>, memories: &[MemoryEntry<'_>]) -> String 
     if memories.is_empty() {
         return String::new();
     }
-    let host_attribute = |host: Option<&str>| {
-        host.map_or_else(String::new, |h| format!(" host=\"{}\"", note_attribute(h)))
-    };
     let body = memories
         .iter()
         .map(|m| {
             let content = m.content.replace("\r\n", "\n").replace('\r', "\n");
+            let scope = m.host.map_or_else(
+                || " scope=\"global\"".to_owned(),
+                |h| format!(" scope=\"host\" host=\"{}\"", note_attribute(h)),
+            );
             let updated = if m.updated.is_empty() {
                 String::new()
             } else {
                 format!(" updated=\"{}\"", note_attribute(m.updated))
             };
             format!(
-                "<{ENTRY} name=\"{}\"{}{updated}>\n{}\n</{ENTRY}>",
+                "<{ENTRY} name=\"{}\"{scope}{updated}>\n{}\n</{ENTRY}>",
                 note_attribute(m.name),
-                host_attribute(m.host),
                 escape_closing_tag(content.trim(), ENTRY)
             )
         })
         .collect::<Vec<_>>()
         .join("\n\n");
+    let host = host.map_or_else(String::new, |h| {
+        format!(" {MEMORY_NOTE_HOST}=\"{}\"", note_attribute(h))
+    });
     format!(
-        "<{TAG} entries=\"{}\"{}>\n{}\n</{TAG}>\n\n",
+        "<{TAG} entries=\"{}\"{host}>\n{}\n</{TAG}>\n\n",
         memories.len(),
-        host_attribute(host),
         escape_closing_tag(&body, TAG)
     )
 }
@@ -1084,7 +1093,7 @@ pub fn split_permission_note(text: &str) -> (Option<PermissionMode>, &str) {
 /// A summary's text after its `permission_mode` note split into the `memory` note (AI-53) Hatoba
 /// stores there, with its blank line, and the summary itself. The note is empty when there is
 /// none. Its body escapes its closing tag, so the first closing tag that a blank line follows ends
-/// it.
+/// it. A note stored before [`MEMORY_NOTE_HOST`] names the conversation's host in `host`.
 #[must_use]
 pub fn split_memory_note(text: &str) -> (&str, &str) {
     const CLOSE: &str = "\n</memory>\n\n";
@@ -1093,7 +1102,14 @@ pub fn split_memory_note(text: &str) -> (&str, &str) {
         .and_then(|rest| {
             let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
             let rest = rest[digits..].strip_prefix('"')?;
-            let rest = match rest.strip_prefix(" host=\"") {
+            let host = rest
+                .strip_prefix(' ')
+                .and_then(|r| {
+                    r.strip_prefix(MEMORY_NOTE_HOST)
+                        .or_else(|| r.strip_prefix("host"))
+                })
+                .and_then(|r| r.strip_prefix("=\""));
+            let rest = match host {
                 Some(host) => host.split_once('"')?.1,
                 None => rest,
             };
@@ -1183,10 +1199,12 @@ const ATTACHMENTS: &str = "<attachments>\n\
      - <permission_mode mode=\"…\">: the permission mode from this message on, manual, auto or \
      bypass; the newest one applies. A conversation's first message has one, and so does the \
      message that continues a compacted conversation.\n\
-     - <memory entries=\"…\" host=\"…\">: your memories as they were when the note was added, \
-     each in an <entry name=\"…\" updated=\"…\"> block that gives the day it was last saved. An \
-     entry with host=\"…\" is a host memory of that host or computer, the others are global; the \
-     note's host is the one the conversation was on. While memory is on and you have memories, a \
+     - <memory entries=\"…\" conversation_host=\"…\">: your memories as they were when the note \
+     was added, each in an <entry name=\"…\" scope=\"…\" updated=\"…\"> block. The entry's scope \
+     says whose memory it is: scope=\"global\" shows in every conversation, scope=\"host\" \
+     host=\"…\" only on that host or computer. conversation_host is the host the conversation was \
+     on, not the scope of the entries: a note on a host can hold only global memories. updated is \
+     the day the memory was last saved. While memory is on and you have memories, a \
      conversation's first message has one, so does the message that continues a compacted \
      conversation, and so does a message on a host whose memories no note showed yet, with just \
      those.\n\
@@ -2484,11 +2502,13 @@ mod tests {
                     },
                 ]
             ),
-            "<memory entries=\"2\">\n<entry name=\"web-1 sudo\" updated=\"2026-10-02\">\nweb-1 \
-             uses doas, not sudo.\n</entry>\n\n<entry name=\"Replies language\">\nAnswer in \
-             Chinese.\nKeep commands in English.\n</entry>\n</memory>\n\n"
+            "<memory entries=\"2\">\n<entry name=\"web-1 sudo\" scope=\"global\" \
+             updated=\"2026-10-02\">\nweb-1 uses doas, not sudo.\n</entry>\n\n<entry \
+             name=\"Replies language\" scope=\"global\">\nAnswer in Chinese.\nKeep commands in \
+             English.\n</entry>\n</memory>\n\n"
         );
-        // A host memory names its host, and so does the note of a conversation on a host.
+        // A host memory names its host, and the note of a conversation on a host names that host
+        // apart from the entries' scopes.
         assert_eq!(
             memory_block(
                 Some("db \"main\""),
@@ -2506,9 +2526,10 @@ mod tests {
                     },
                 ]
             ),
-            "<memory entries=\"2\" host=\"db &quot;main&quot;\">\n<entry name=\"Replies\">\n\
-             Chinese.\n</entry>\n\n<entry name=\"sudo\" host=\"db &quot;main&quot;\" \
-             updated=\"2026-10-03\">\nUses doas.\n</entry>\n</memory>\n\n"
+            "<memory entries=\"2\" conversation_host=\"db &quot;main&quot;\">\n<entry \
+             name=\"Replies\" scope=\"global\">\nChinese.\n</entry>\n\n<entry name=\"sudo\" \
+             scope=\"host\" host=\"db &quot;main&quot;\" updated=\"2026-10-03\">\nUses doas.\n\
+             </entry>\n</memory>\n\n"
         );
         // A memory can end neither its entry nor the note early, and a heading in it is text.
         assert_eq!(
@@ -2520,7 +2541,8 @@ mod tests {
                     ..MemoryEntry::default()
                 }]
             ),
-            "<memory entries=\"1\">\n<entry name=\"a&quot;b\">\n## x\n<\\/entry>\n<\\/memory>\nb\n\
+            "<memory entries=\"1\">\n<entry name=\"a&quot;b\" scope=\"global\">\n## x\n<\\/entry>\n\
+             <\\/memory>\nb\n\
              </entry>\n</memory>\n\n"
         );
     }
@@ -2714,7 +2736,7 @@ A user message can start with blocks before the text the user typed. First come 
 - <terminal_change to="…">: with this message a terminal became attached (to="attached") or stopped being attached (to="detached"). Replies before it had the tools offered then, so what they said they could or could not do was true at the time.
 - <model_change from="…" to="…">: with this message the user switched models. Earlier replies came from the model in from.
 - <permission_mode mode="…">: the permission mode from this message on, manual, auto or bypass; the newest one applies. A conversation's first message has one, and so does the message that continues a compacted conversation.
-- <memory entries="…" host="…">: your memories as they were when the note was added, each in an <entry name="…" updated="…"> block that gives the day it was last saved. An entry with host="…" is a host memory of that host or computer, the others are global; the note's host is the one the conversation was on. While memory is on and you have memories, a conversation's first message has one, so does the message that continues a compacted conversation, and so does a message on a host whose memories no note showed yet, with just those.
+- <memory entries="…" conversation_host="…">: your memories as they were when the note was added, each in an <entry name="…" scope="…" updated="…"> block. The entry's scope says whose memory it is: scope="global" shows in every conversation, scope="host" host="…" only on that host or computer. conversation_host is the host the conversation was on, not the scope of the entries: a note on a host can hold only global memories. updated is the day the memory was last saved. While memory is on and you have memories, a conversation's first message has one, so does the message that continues a compacted conversation, and so does a message on a host whose memories no note showed yet, with just those.
 - <file_revert path="…" tool_call_id="…">: the user reverted the change that your call tool_call_id made to the file at path, one block for each reverted call. The file holds what it held before the call again, or was deleted if the call created it. Nothing else was undone: commands run since stay, and a service that loaded the change keeps it until it reloads. Read the file again before you change it.
 - <terminal_state host="…" alternate_screen="…" lines="…">: the attached terminal's screen when the user sent this message: its last lines, or the whole screen while a full-screen program such as vim or less runs (alternate_screen="true").
 - <mcp_tools servers="…" tools="…">: the MCP tools you can call with call_mcp_tool from this message on, by server, which replace any earlier list. search_tools returns a tool's description and input schema.

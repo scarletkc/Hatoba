@@ -672,8 +672,9 @@ mod tests {
         assert_eq!(
             note(&v, None),
             format!(
-                "<memory entries=\"2\">\n<entry name=\"one\" updated=\"{}\">\nfirst\n</entry>\n\n\
-                 <entry name=\"two\" updated=\"{}\">\nsecond\n</entry>\n</memory>\n\n",
+                "<memory entries=\"2\">\n<entry name=\"one\" scope=\"global\" updated=\"{}\">\n\
+                 first\n</entry>\n\n<entry name=\"two\" scope=\"global\" updated=\"{}\">\n\
+                 second\n</entry>\n</memory>\n\n",
                 days[0], days[2]
             )
         );
@@ -681,17 +682,18 @@ mod tests {
         assert_eq!(
             note(&v, Some(&web)),
             format!(
-                "<memory entries=\"3\" host=\"web-1\">\n<entry name=\"one\" updated=\"{}\">\n\
-                 first\n</entry>\n\n<entry name=\"two\" updated=\"{}\">\nsecond\n</entry>\n\n\
-                 <entry name=\"sudo\" host=\"web-1\" updated=\"{}\">\ndoas\n</entry>\n</memory>\n\n",
+                "<memory entries=\"3\" conversation_host=\"web-1\">\n<entry name=\"one\" \
+                 scope=\"global\" updated=\"{}\">\nfirst\n</entry>\n\n<entry name=\"two\" \
+                 scope=\"global\" updated=\"{}\">\nsecond\n</entry>\n\n<entry name=\"sudo\" \
+                 scope=\"host\" host=\"web-1\" updated=\"{}\">\ndoas\n</entry>\n</memory>\n\n",
                 days[0], days[2], days[1]
             )
         );
         assert_eq!(
             place_note(&v, &web),
             format!(
-                "<memory entries=\"1\" host=\"web-1\">\n<entry name=\"sudo\" host=\"web-1\" \
-                 updated=\"{}\">\ndoas\n</entry>\n</memory>\n\n",
+                "<memory entries=\"1\" conversation_host=\"web-1\">\n<entry name=\"sudo\" \
+                 scope=\"host\" host=\"web-1\" updated=\"{}\">\ndoas\n</entry>\n</memory>\n\n",
                 days[1]
             )
         );
@@ -700,8 +702,10 @@ mod tests {
             name: "LAPTOP (local terminal)".into(),
         };
         assert_eq!(place_note(&v, &empty), "");
+        // On one with no memories of its own, the note names it and its entries stay global.
         assert!(note(&v, Some(&empty)).starts_with(
-            "<memory entries=\"2\" host=\"LAPTOP (local terminal)\">\n<entry name=\"one\""
+            "<memory entries=\"2\" conversation_host=\"LAPTOP (local terminal)\">\n<entry \
+             name=\"one\" scope=\"global\""
         ));
 
         // Memories saved on several devices at once can go past the limit: the note keeps the
@@ -709,7 +713,9 @@ mod tests {
         synced(&mut v, &global, "big", &"x".repeat(MAX_MEMORY_BYTES));
         synced(&mut v, &web.scope, "big", &"x".repeat(MAX_MEMORY_BYTES));
         assert!(note(&v, None).starts_with("<memory entries=\"2\">"));
-        assert!(note(&v, Some(&web)).starts_with("<memory entries=\"3\" host=\"web-1\">"));
+        assert!(
+            note(&v, Some(&web)).starts_with("<memory entries=\"3\" conversation_host=\"web-1\">")
+        );
 
         let mut settings = v.settings();
         settings.ai.memory = false;
