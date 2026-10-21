@@ -13,6 +13,7 @@ import type {
   SshErrorKind,
   StarPrompt,
   SyncStatus,
+  TunnelsEvent,
   VaultStatus,
 } from "../types";
 import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
@@ -131,6 +132,35 @@ export function createMockApi(): HatobaApi {
   const activeForwards = new Map<string, number>();
   const dropSessionForwards = (sid: string) => {
     for (const key of [...activeForwards.keys()]) if (key.startsWith(`${sid}/`)) activeForwards.delete(key);
+  };
+  /**
+   * FWD-05: forwards running without a terminal, by host. `?tunnel=lost` drops a host's connection 5 s after it
+   * opens, as a network failure would.
+   */
+  const tunnelDemo = q.get("tunnel");
+  const tunnels = new Map<string, { name: string; forwards: Map<string, { port: number; dest: string }> }>();
+  let tunnelVersion = 0;
+  const tunnelList = (): TunnelsEvent => ({
+    version: tunnelVersion,
+    tunnels: [...tunnels.entries()]
+      .filter(([, t]) => t.forwards.size > 0)
+      .map(([host_id, t]) => ({
+        host_id,
+        host_name: t.name,
+        forwards: [...t.forwards.entries()]
+          .map(([forward_id, f]) => ({ forward_id, local_port: f.port, dest: f.dest }))
+          .sort((a, b) => a.local_port - b.local_port),
+      })),
+  });
+  const tunnelsChanged = () => {
+    tunnelVersion++;
+    emit("ssh://tunnels", tunnelList());
+  };
+  const stopTunnelForward = (hostId: string, forwardId: string) => {
+    const t = tunnels.get(hostId);
+    if (!t?.forwards.delete(forwardId)) return;
+    if (t.forwards.size === 0) tunnels.delete(hostId);
+    tunnelsChanged();
   };
   let vaultState: VaultStatus["state"] =
     demo === "onboarding" ? "uninitialized" : demo === "locked" ? "locked" : "unlocked";
@@ -728,7 +758,7 @@ export function createMockApi(): HatobaApi {
       };
       // FWD-02: like the real backend, auto-start forwards come up with the connection and are announced
       // by events that can fire before the UI has the session id.
-      for (const f of forwards.filter((x) => x.host_id === hostId && x.auto_start)) {
+      for (const f of forwards.filter((x) => x.host_id === hostId && x.auto_start && !tunnels.get(hostId)?.forwards.has(x.id))) {
         const port = f.bind_port || 49152 + Math.floor(Math.random() * 1000);
         activeForwards.set(`${sid}/${f.id}`, port);
         emit("ssh://forward", { session_id: sid, forward_id: f.id, state: "running", local_port: port, error: null });
@@ -901,8 +931,10 @@ export function createMockApi(): HatobaApi {
       return f;
     },
     forward_delete: async (fid) => {
-      forwards = forwards.filter((f) => f.id !== fid);
+      const f = forwards.find((x) => x.id === fid);
+      forwards = forwards.filter((x) => x.id !== fid);
       touch();
+      if (f) stopTunnelForward(f.host_id, fid);
     },
     forward_start: async (sid, fid) => {
       const f = forwards.find((x) => x.id === fid) ?? fail("not_found");
@@ -917,6 +949,41 @@ export function createMockApi(): HatobaApi {
     },
     forwards_active: async (sid) =>
       [...activeForwards.entries()].filter(([k]) => k.startsWith(`${sid}/`)).map(([k, port]) => [k.split("/")[1], port] as [string, number]),
+    tunnel_forward_start: async (hostId, fid, options) => {
+      needUnlocked();
+      const h = hosts.find((x) => x.id === hostId) ?? fail("not_found", "host not found");
+      const f = forwards.find((x) => x.id === fid && x.host_id === hostId) ?? fail("not_found", "forward not found");
+      let t = tunnels.get(hostId);
+      if (!t) {
+        if (h.auth_kind === "ask" && !options.password) fail("invalid_input", "a password is required for this host", { field: "password" });
+        await delay(600);
+        t = { name: h.name, forwards: new Map() };
+        tunnels.set(hostId, t);
+        hosts = hosts.map((x) => (x.id === hostId ? { ...x, last_connected_at: Date.now() } : x));
+        if (tunnelDemo === "lost") {
+          const opened = t;
+          setTimeout(() => {
+            if (tunnels.get(hostId) !== opened) return;
+            tunnels.delete(hostId);
+            emit("ssh://tunnel-lost", {
+              host_id: hostId,
+              host_name: opened.name,
+              error: { code: "ssh", ssh_kind: "disconnected", detail: "keepalive timeout: no reply from the server" },
+            });
+            tunnelsChanged();
+          }, 5000);
+        }
+      }
+      const running = t.forwards.get(fid);
+      if (running) return running.port;
+      const port = f.bind_port || 49152 + Math.floor(Math.random() * 1000);
+      const dest = `${f.dest_host.includes(":") ? `[${f.dest_host}]` : f.dest_host}:${f.dest_port}`;
+      t.forwards.set(fid, { port, dest });
+      tunnelsChanged();
+      return port;
+    },
+    tunnel_forward_stop: async (hostId, fid) => stopTunnelForward(hostId, fid),
+    tunnels_list: async () => tunnelList(),
     sftp_home: async () => "/srv/api",
     sftp_list: async (_sid, path) => {
       await delay(120);

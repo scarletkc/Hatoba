@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, Icon, TextField } from "@/components/controls";
 import { Modal } from "@/components/overlay";
+import { startTunnelListeners } from "@/features/hosts/tunnels";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { startSessionListeners } from "./listeners";
@@ -18,7 +19,10 @@ import s from "./SessionDialogs.module.css";
 export function SessionDialogs() {
   const item = usePrompts((st) => st.items[0]);
   // Backend events are wired once, after boot, and stay wired while the vault is locked.
-  useEffect(() => startSessionListeners(), []);
+  useEffect(() => {
+    startSessionListeners();
+    startTunnelListeners();
+  }, []);
   if (!item) return null;
   switch (item.kind) {
     case "hostkey":

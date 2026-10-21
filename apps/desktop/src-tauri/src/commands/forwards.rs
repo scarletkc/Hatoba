@@ -1,15 +1,19 @@
-//! Local port forwarding (FWD-01) and auto-start with the connection (FWD-02).
+//! Local port forwarding (FWD-01), auto-start with the connection (FWD-02), and forwards that run
+//! without a terminal (FWD-05).
 
 use hatoba_core::model::{ForwardKind, Item, PortForward};
 use hatoba_ssh::LocalForward;
 use tauri::{AppHandle, State};
 use tauri_specta::Event;
+use zeroize::Zeroizing;
 
-use crate::dto::{ForwardInput, ForwardState, ForwardStatusEvent, ForwardView};
+use crate::dto::{
+    ForwardInput, ForwardState, ForwardStatusEvent, ForwardView, TunnelOptions, TunnelsEvent,
+};
 use crate::error::{AppError, AppResult};
-use crate::ssh::LiveSession;
+use crate::ssh::{LiveSession, Overrides};
 use crate::state::{AppState, state as app_state};
-use crate::sync;
+use crate::{sync, tunnel};
 
 fn view(id: &str, f: &PortForward) -> ForwardView {
     ForwardView {
@@ -91,17 +95,30 @@ pub fn forward_save(
     Ok(saved)
 }
 
+/// Deletes the rule, and stops it wherever it runs.
 #[tauri::command]
 #[specta::specta]
-pub fn forward_delete(app: AppHandle, state: State<'_, AppState>, id: String) -> AppResult<()> {
-    state.with_unlocked(|v| {
-        v.get(&id)
+pub async fn forward_delete(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> AppResult<()> {
+    let host_id = state.with_unlocked(|v| {
+        let host_id = v
+            .get(&id)
             .and_then(Item::as_forward)
+            .map(|f| f.host_id.clone())
             .ok_or_else(|| AppError::not_found("forward"))?;
         v.delete(&id)?;
-        Ok(())
+        Ok(host_id)
     })?;
     sync::local_change(&app);
+    for (session_id, live) in state.ssh.terminals_for_host(&host_id) {
+        if live.stop_forward(&id) {
+            emit(&app, &session_id, &id, ForwardState::Stopped, None, None);
+        }
+    }
+    tunnel::stop(&app, &host_id, &id).await;
     Ok(())
 }
 
@@ -123,7 +140,31 @@ fn emit(
     .emit(app);
 }
 
-/// Starts one saved forward on a live session and reports its state.
+/// `host:port`, with an IPv6 address in brackets.
+fn host_port(host: &str, port: u16) -> String {
+    if host.contains(':') {
+        format!("[{host}]:{port}")
+    } else {
+        format!("{host}:{port}")
+    }
+}
+
+/// Starts one saved forward on a live session and returns its local port.
+pub async fn open(live: &LiveSession, forward_id: &str, f: &PortForward) -> AppResult<u16> {
+    let spec = LocalForward {
+        bind_address: f.bind_address.clone(),
+        bind_port: f.bind_port,
+        dest_host: f.dest_host.clone().unwrap_or_default(),
+        dest_port: f.dest_port.unwrap_or_default(),
+    };
+    let dest = host_port(&spec.dest_host, spec.dest_port);
+    let handle = live.session.local_forward(spec).await?;
+    let port = handle.local_port();
+    live.add_forward(forward_id, handle, dest);
+    Ok(port)
+}
+
+/// Starts one saved forward on a terminal's session and reports its state.
 pub async fn start(
     app: &AppHandle,
     session_id: &str,
@@ -131,16 +172,8 @@ pub async fn start(
     forward_id: &str,
     f: &PortForward,
 ) -> AppResult<u16> {
-    let spec = LocalForward {
-        bind_address: f.bind_address.clone(),
-        bind_port: f.bind_port,
-        dest_host: f.dest_host.clone().unwrap_or_default(),
-        dest_port: f.dest_port.unwrap_or_default(),
-    };
-    match live.session.local_forward(spec).await {
-        Ok(handle) => {
-            let port = handle.local_port();
-            live.add_forward(forward_id, handle);
+    match open(live, forward_id, f).await {
+        Ok(port) => {
             emit(
                 app,
                 session_id,
@@ -158,21 +191,26 @@ pub async fn start(
                 forward_id,
                 ForwardState::Failed,
                 None,
-                Some(e.message.clone()),
+                Some(e.detail.clone()),
             );
-            Err(e.into())
+            Err(e)
         }
     }
 }
 
-/// FWD-02: called after a session connects.
+/// FWD-02: called after a session connects. A forward already running without a terminal
+/// (FWD-05) stays there.
 pub async fn start_auto(app: &AppHandle, session_id: &str, live: &LiveSession, host_id: &str) {
-    let auto: Vec<(String, PortForward)> = app_state(app)
+    let state = app_state(app);
+    let auto: Vec<(String, PortForward)> = state
         .with_unlocked(|v| {
             Ok(v.forwards()
                 .into_iter()
-                .filter(|(_, f)| {
-                    f.host_id == host_id && f.auto_start && f.kind == ForwardKind::Local
+                .filter(|(id, f)| {
+                    f.host_id == host_id
+                        && f.auto_start
+                        && f.kind == ForwardKind::Local
+                        && tunnel::running_port(&state, host_id, id).is_none()
                 })
                 .collect())
         })
@@ -234,4 +272,43 @@ pub fn forwards_active(
     session_id: String,
 ) -> AppResult<Vec<(String, u16)>> {
     Ok(state.ssh.get(&session_id)?.active_forwards())
+}
+
+/// FWD-05: starts the saved forward without a terminal, on the host's connection for forwards,
+/// and returns the local port.
+#[tauri::command]
+#[specta::specta]
+pub async fn tunnel_forward_start(
+    app: AppHandle,
+    host_id: String,
+    forward_id: String,
+    options: TunnelOptions,
+) -> AppResult<u16> {
+    let overrides = Overrides {
+        password: options
+            .password
+            .filter(|p| !p.is_empty())
+            .map(Zeroizing::new),
+        passphrase: options
+            .passphrase
+            .filter(|p| !p.is_empty())
+            .map(Zeroizing::new),
+        ask_password: false,
+    };
+    tunnel::start(&app, &host_id, &forward_id, &overrides).await
+}
+
+/// FWD-05: stops a forward running without a terminal; the host's connection for forwards closes
+/// with its last one.
+#[tauri::command]
+#[specta::specta]
+pub async fn tunnel_forward_stop(app: AppHandle, host_id: String, forward_id: String) {
+    tunnel::stop(&app, &host_id, &forward_id).await;
+}
+
+/// FWD-05: every forward running without a terminal.
+#[tauri::command]
+#[specta::specta]
+pub fn tunnels_list(state: State<'_, AppState>) -> TunnelsEvent {
+    tunnel::list(&state)
 }

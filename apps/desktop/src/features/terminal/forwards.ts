@@ -93,4 +93,9 @@ export function useForwardRuns(sessionId: string | null): ForwardRuns {
   return useStore((s) => (sessionId ? s.bySession[sessionId] : undefined) ?? NONE);
 }
 
+/** Every session's forwards, for a view that looks across a host's tabs. */
+export function useAllForwardRuns(): Readonly<Record<string, ForwardRuns>> {
+  return useStore((s) => s.bySession);
+}
+
 export const countRunning = (runs: ForwardRuns): number => Object.values(runs).filter((r) => r.state === "running").length;

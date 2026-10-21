@@ -5,8 +5,9 @@
 //! default), hides or quits; without a tray it always quits. The tray menu opens the window,
 //! locks the vault and quits, and a left click opens the window (Linux shows the menu instead).
 //! While a check has found a newer release, it also offers **Update to vX.Y.Z**, which opens the
-//! window to install it from Settings → About. The WebView sets the menu's labels, so they follow
-//! the app's language.
+//! window to install it from Settings → About. The forwards running without a terminal (FWD-05)
+//! follow under **Port Forwarding**, each with its address to copy and **Stop**. The WebView sets
+//! the menu's labels, so they follow the app's language.
 //!
 //! macOS keeps its own close button, which hides the window (MAC-06), and the Dock, so it has no
 //! tray.
@@ -16,16 +17,19 @@ pub use imp::*;
 
 #[cfg(not(target_os = "macos"))]
 mod imp {
+    use std::sync::Mutex;
     use std::sync::atomic::{AtomicU8, Ordering};
 
     use tauri::image::Image;
-    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+    use tauri::menu::{IsMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
     use tauri::{AppHandle, CloseRequestApi, Manager, Window, Wry};
+    use tauri_plugin_clipboard_manager::ClipboardExt;
     use tauri_specta::Event;
 
     use crate::dto::{
         CloseAction, ClosePromptEvent, LocalPrefs, LockReason, TrayMenuInput, TrayUpdateEvent,
+        TunnelView,
     };
     use crate::state::AppState;
     use crate::{lock, platform};
@@ -44,10 +48,25 @@ mod imp {
         /// In the menu, after **Lock**, only while the WebView names a newer release.
         update: MenuItem<Wry>,
         quit: MenuItem<Wry>,
+        forwards: Mutex<Forwards>,
+    }
+
+    /// FWD-05: what the menu shows of the forwards running without a terminal.
+    struct Forwards {
+        heading: String,
+        copy: String,
+        stop: String,
+        tunnels: Vec<TunnelView>,
+        /// In the menu, between the separator and **Quit**, while a forward runs.
+        items: Vec<MenuItemKind<Wry>>,
     }
 
     const UPDATE: &str = "update";
     const UPDATE_POSITION: usize = 2;
+    /// Followed by the address to copy.
+    const FORWARD_COPY: &str = "forward-copy:";
+    /// Followed by `host_id:forward_id`.
+    const FORWARD_STOP: &str = "forward-stop:";
 
     /// The pref, copied out of the device-local prefs so that the close button reads it without
     /// the vault's mutex.
@@ -110,7 +129,7 @@ mod imp {
                     let _ = TrayUpdateEvent.emit(app);
                 }
                 "quit" => app.exit(0),
-                _ => {}
+                id => forward_action(app, id),
             })
             .on_tray_icon_event(|tray, event| {
                 if let TrayIconEvent::Click {
@@ -129,6 +148,13 @@ mod imp {
             lock,
             update,
             quit,
+            forwards: Mutex::new(Forwards {
+                heading: "Port Forwarding".to_owned(),
+                copy: "Copy Address".to_owned(),
+                stop: "Stop".to_owned(),
+                tunnels: Vec::new(),
+                items: Vec::new(),
+            }),
         });
         #[cfg(target_os = "linux")]
         refresh_host();
@@ -159,6 +185,94 @@ mod imp {
                 let _ = tray.menu.remove(&tray.update);
             }
             None => {}
+        }
+        let mut forwards = lock_forwards(&tray);
+        forwards.heading.clone_from(&menu.forwards);
+        forwards.copy.clone_from(&menu.copy_address);
+        forwards.stop.clone_from(&menu.stop_forward);
+        refresh_forwards(app, &tray, &mut forwards);
+    }
+
+    /// FWD-05: the forwards running without a terminal changed.
+    pub fn set_tunnels(app: &AppHandle, tunnels: &[TunnelView]) {
+        let Some(tray) = app.try_state::<Tray>() else {
+            return;
+        };
+        let mut forwards = lock_forwards(&tray);
+        forwards.tunnels = tunnels.to_vec();
+        refresh_forwards(app, &tray, &mut forwards);
+    }
+
+    fn lock_forwards(tray: &Tray) -> std::sync::MutexGuard<'_, Forwards> {
+        tray.forwards.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// Puts the running forwards before **Quit**: the heading, a submenu for each, named by its
+    /// host and addresses, and a separator.
+    fn refresh_forwards(app: &AppHandle, tray: &Tray, forwards: &mut Forwards) {
+        for item in forwards.items.drain(..) {
+            let _ = tray.menu.remove(&item);
+        }
+        if forwards.tunnels.is_empty() {
+            return;
+        }
+        let items = match forward_items(app, forwards) {
+            Ok(items) => items,
+            Err(e) => {
+                tracing::warn!("forwards not shown in the tray menu: {e}");
+                return;
+            }
+        };
+        let quit = tray
+            .menu
+            .items()
+            .map_or(0, |list| list.len().saturating_sub(1));
+        let refs: Vec<&dyn IsMenuItem<Wry>> =
+            items.iter().map(|i| i as &dyn IsMenuItem<Wry>).collect();
+        if tray.menu.insert_items(&refs, quit).is_ok() {
+            forwards.items = items;
+        }
+    }
+
+    fn forward_items(
+        app: &AppHandle,
+        forwards: &Forwards,
+    ) -> tauri::Result<Vec<MenuItemKind<Wry>>> {
+        let heading = MenuItem::new(app, &forwards.heading, false, None::<&str>)?;
+        let mut items = vec![MenuItemKind::MenuItem(heading)];
+        for tunnel in &forwards.tunnels {
+            for forward in &tunnel.forwards {
+                let address = format!("localhost:{}", forward.local_port);
+                let copy_id = format!("{FORWARD_COPY}{address}");
+                let copy = MenuItem::with_id(app, copy_id, &forwards.copy, true, None::<&str>)?;
+                let stop_id = format!("{FORWARD_STOP}{}:{}", tunnel.host_id, forward.forward_id);
+                let stop = MenuItem::with_id(app, stop_id, &forwards.stop, true, None::<&str>)?;
+                let label = format!("{}  {address} → {}", tunnel.host_name, forward.dest);
+                let entry = Submenu::with_items(app, label, true, &[&copy, &stop])?;
+                items.push(MenuItemKind::Submenu(entry));
+            }
+        }
+        items.push(MenuItemKind::Predefined(PredefinedMenuItem::separator(
+            app,
+        )?));
+        Ok(items)
+    }
+
+    /// A running forward's **Copy Address** or **Stop**.
+    fn forward_action(app: &AppHandle, id: &str) {
+        if let Some(address) = id.strip_prefix(FORWARD_COPY) {
+            if let Err(e) = app.clipboard().write_text(address) {
+                tracing::warn!("forward address not copied: {e}");
+            }
+        } else if let Some((host_id, forward_id)) = id
+            .strip_prefix(FORWARD_STOP)
+            .and_then(|ids| ids.split_once(':'))
+        {
+            let (app, host_id, forward_id) =
+                (app.clone(), host_id.to_owned(), forward_id.to_owned());
+            tauri::async_runtime::spawn(async move {
+                crate::tunnel::stop(&app, &host_id, &forward_id).await;
+            });
         }
     }
 
@@ -269,3 +383,6 @@ pub fn set_menu(_app: &tauri::AppHandle, _menu: &crate::dto::TrayMenuInput) {}
 
 #[cfg(target_os = "macos")]
 pub fn hide_to_tray(_app: &tauri::AppHandle) {}
+
+#[cfg(target_os = "macos")]
+pub fn set_tunnels(_app: &tauri::AppHandle, _tunnels: &[crate::dto::TunnelView]) {}

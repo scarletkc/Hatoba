@@ -29,17 +29,26 @@ const PROMPT_TIMEOUT: Duration = Duration::from_secs(600);
 
 pub struct LiveSession {
     pub session: SshSession,
-    pub shell: ShellHandle,
+    /// The terminal's shell; `None` on a connection that only carries forwards (FWD-05).
+    pub shell: Option<ShellHandle>,
     /// The saved host the terminal connected to; `None` for a quick connection (HOST-12).
     pub host_id: Option<String>,
     /// What the connection was made from (`dashboard::config_version`), so that the dashboard
     /// reads a host over it only while the host still connects the same way (HOST-14).
     pub config: Option<String>,
+    /// FWD-05: the host's name when the connection was made, on a connection without a terminal.
+    pub tunnel: Option<String>,
     pub sftp: OnceCell<SftpClient>,
     /// Running local port forwards by forward item id (FWD-01).
-    pub forwards: Mutex<HashMap<String, ForwardHandle>>,
+    forwards: Mutex<HashMap<String, RunningForward>>,
     /// Resource usage sampling while the terminal shows it (TERM-12), with the id of its start.
     stats: Mutex<Option<(u64, StatsHandle)>>,
+}
+
+/// A forward listening on this computer, and the `host:port` it reaches from the server.
+struct RunningForward {
+    handle: ForwardHandle,
+    dest: String,
 }
 
 impl LiveSession {
@@ -51,9 +60,24 @@ impl LiveSession {
     ) -> Self {
         Self {
             session,
-            shell,
+            shell: Some(shell),
             host_id,
             config,
+            tunnel: None,
+            sftp: OnceCell::new(),
+            forwards: Mutex::new(HashMap::new()),
+            stats: Mutex::new(None),
+        }
+    }
+
+    /// FWD-05: a connection to the saved host `host_id`, named `host_name`, for forwards only.
+    pub fn tunnel(session: SshSession, host_id: String, config: String, host_name: String) -> Self {
+        Self {
+            session,
+            shell: None,
+            host_id: Some(host_id),
+            config: Some(config),
+            tunnel: Some(host_name),
             sftp: OnceCell::new(),
             forwards: Mutex::new(HashMap::new()),
             stats: Mutex::new(None),
@@ -77,40 +101,64 @@ impl LiveSession {
         }
     }
 
-    pub fn add_forward(&self, id: &str, handle: ForwardHandle) {
-        if let Some(old) = lock(&self.forwards).insert(id.to_owned(), handle) {
-            old.stop();
+    pub fn add_forward(&self, id: &str, handle: ForwardHandle, dest: String) {
+        if let Some(old) =
+            lock(&self.forwards).insert(id.to_owned(), RunningForward { handle, dest })
+        {
+            old.handle.stop();
         }
     }
 
-    pub fn stop_forward(&self, id: &str) {
-        if let Some(handle) = lock(&self.forwards).remove(id) {
-            handle.stop();
+    /// Stops the forward; `false` when it was not running here.
+    pub fn stop_forward(&self, id: &str) -> bool {
+        match lock(&self.forwards).remove(id) {
+            Some(running) => {
+                running.handle.stop();
+                true
+            }
+            None => false,
         }
     }
 
     pub fn forward_port(&self, id: &str) -> Option<u16> {
         lock(&self.forwards)
             .get(id)
-            .filter(|h| h.is_running())
-            .map(ForwardHandle::local_port)
+            .filter(|f| f.handle.is_running())
+            .map(|f| f.handle.local_port())
     }
 
     pub fn active_forwards(&self) -> Vec<(String, u16)> {
-        lock(&self.forwards)
-            .iter()
-            .filter(|(_, h)| h.is_running())
-            .map(|(id, h)| (id.clone(), h.local_port()))
+        self.running_forwards()
+            .into_iter()
+            .map(|(id, port, _)| (id, port))
             .collect()
+    }
+
+    /// The forwards running: `(forward_id, local_port, dest)`, by local port.
+    pub fn running_forwards(&self) -> Vec<(String, u16, String)> {
+        let mut list: Vec<_> = lock(&self.forwards)
+            .iter()
+            .filter(|(_, f)| f.handle.is_running())
+            .map(|(id, f)| (id.clone(), f.handle.local_port(), f.dest.clone()))
+            .collect();
+        list.sort_by_key(|(_, port, _)| *port);
+        list
+    }
+
+    /// The forwards started here and not stopped, including those the connection's end stopped.
+    pub fn forward_count(&self) -> usize {
+        lock(&self.forwards).len()
     }
 
     /// Stops forwards and sampling, and closes the shell and connection.
     pub async fn close(&self) {
-        for (_, handle) in lock(&self.forwards).drain() {
-            handle.stop();
+        for (_, running) in lock(&self.forwards).drain() {
+            running.handle.stop();
         }
         lock(&self.stats).take();
-        self.shell.close().await;
+        if let Some(shell) = &self.shell {
+            shell.close().await;
+        }
         self.session.disconnect().await;
     }
 }
@@ -140,12 +188,48 @@ impl SshManager {
     }
 
     /// Removes the session only if it is still the given instance (a reconnect may have replaced
-    /// it).
-    pub fn remove_if_same(&self, id: &str, live: &Arc<LiveSession>) {
+    /// it). `false` when something else removed it first.
+    pub fn remove_if_same(&self, id: &str, live: &Arc<LiveSession>) -> bool {
         let mut sessions = lock(&self.sessions);
         if sessions.get(id).is_some_and(|s| Arc::ptr_eq(s, live)) {
             sessions.remove(id);
+            true
+        } else {
+            false
         }
+    }
+
+    /// FWD-05: the saved host's connection for forwards without a terminal, while it is open.
+    pub fn tunnel_for_host(&self, host_id: &str) -> Option<(String, Arc<LiveSession>)> {
+        lock(&self.sessions)
+            .iter()
+            .find(|(_, live)| {
+                live.tunnel.is_some()
+                    && live.host_id.as_deref() == Some(host_id)
+                    && !live.session.is_closed()
+            })
+            .map(|(id, live)| (id.clone(), Arc::clone(live)))
+    }
+
+    /// FWD-05: every connection for forwards without a terminal, oldest first.
+    pub fn tunnels(&self) -> Vec<(String, Arc<LiveSession>)> {
+        let mut list: Vec<_> = lock(&self.sessions)
+            .iter()
+            .filter(|(_, live)| live.tunnel.is_some())
+            .map(|(id, live)| (id.clone(), Arc::clone(live)))
+            .collect();
+        // Session ids are UUIDv7, so they sort by age.
+        list.sort_by(|(a, _), (b, _)| a.cmp(b));
+        list
+    }
+
+    /// The terminals' sessions on the saved host, for a forward that runs on one of them.
+    pub fn terminals_for_host(&self, host_id: &str) -> Vec<(String, Arc<LiveSession>)> {
+        lock(&self.sessions)
+            .iter()
+            .filter(|(_, live)| live.tunnel.is_none() && live.host_id.as_deref() == Some(host_id))
+            .map(|(id, live)| (id.clone(), Arc::clone(live)))
+            .collect()
     }
 
     /// The connection of a terminal open on the saved host and made the way the host connects

@@ -648,7 +648,7 @@ describe("system notifications (AI-07)", () => {
     expect(ipc.notify).toHaveBeenCalledWith({
       title: "root@10.0.0.8",
       body: "Waiting for your approval: nginx 502",
-      target: { tab: TAB, conversation_id: nginx.id },
+      target: { tab: TAB, conversation_id: nginx.id, host_id: null },
     });
 
     decideCall(held()!, { kind: "run", edited: null });
@@ -665,7 +665,7 @@ describe("system notifications (AI-07)", () => {
     sent[0].emit({ kind: "error", status: 529, message: "overloaded" });
     sent[0].emit({ kind: "turn_ended", reason: "error" });
     await until(() => ipc.notify.mock.calls.length === 1);
-    expect(ipc.notify).toHaveBeenCalledWith({ title: "AI Assistant", body: "Stopped on an error: nginx 502", target: { tab: "home", conversation_id: nginx.id } });
+    expect(ipc.notify).toHaveBeenCalledWith({ title: "AI Assistant", body: "Stopped on an error: nginx 502", target: { tab: "home", conversation_id: nginx.id, host_id: null } });
   });
 
   it("send nothing while the window has the focus, or with the setting off", async () => {
@@ -726,9 +726,9 @@ describe("system notifications (AI-07)", () => {
 
     // A conversation no tab holds any more: its tab, while open, comes to the front.
     useTabs.setState({ active: TAB });
-    openNotified({ tab: OTHER, conversation_id: "gone" });
+    openNotified({ tab: OTHER, conversation_id: "gone", host_id: null });
     expect(useTabs.getState().active).toBe(OTHER);
-    openNotified({ tab: "tab-closed", conversation_id: null });
+    openNotified({ tab: "tab-closed", conversation_id: null, host_id: null });
     expect(useTabs.getState().active).toBe(OTHER);
   });
 });

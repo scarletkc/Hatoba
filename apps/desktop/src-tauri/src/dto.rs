@@ -1211,6 +1211,10 @@ pub struct TrayMenuInput {
     /// such item.
     pub update: Option<String>,
     pub can_update: bool,
+    /// FWD-05: the heading over the forwards running without a terminal, and each one's items.
+    pub forwards: String,
+    pub copy_address: String,
+    pub stop_forward: String,
 }
 
 /// A system notification (AI-07). The WebView sends one only while the window is not focused.
@@ -1222,12 +1226,14 @@ pub struct NotificationInput {
 }
 
 /// What a notification is about, which a click on it shows: a tab, and in it a conversation
-/// (AI-07). The click brings the window back and sends this to the WebView.
+/// (AI-07), or a saved host whose forwards stopped (FWD-05). The click brings the window back and
+/// sends this to the WebView.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Type, tauri_specta::Event)]
 #[tauri_specta(event_name = "app://notification-click")]
 pub struct NotificationTarget {
     pub tab: Option<String>,
     pub conversation_id: Option<String>,
+    pub host_id: Option<String>,
 }
 
 /// A second launch handed its arguments to this window (HOST-13); `launch_take` returns them.
@@ -1378,6 +1384,53 @@ pub struct ForwardStatusEvent {
     /// The actually bound local port (differs from `bind_port` when it was 0).
     pub local_port: Option<u16>,
     pub error: Option<String>,
+}
+
+/// FWD-05: one-off credentials for the connection that a forward started without a terminal
+/// opens (SSH-03): used once, never stored.
+#[derive(Clone, Default, Deserialize, Type)]
+pub struct TunnelOptions {
+    pub password: Option<String>,
+    pub passphrase: Option<String>,
+}
+
+/// FWD-05: a forward running without a terminal.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct TunnelForwardView {
+    pub forward_id: String,
+    /// The actually bound local port (differs from `bind_port` when it was 0).
+    pub local_port: u16,
+    /// `host:port`, as the server reaches it.
+    pub dest: String,
+}
+
+/// FWD-05: a saved host's connection for forwards without a terminal, and what runs on it.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct TunnelView {
+    pub host_id: String,
+    /// The host's name when the connection was made.
+    pub host_name: String,
+    /// By local port.
+    pub forwards: Vec<TunnelForwardView>,
+}
+
+/// FWD-05: every forward running without a terminal, sent whenever that changes. `version` grows
+/// with each change, so a list read earlier never replaces a newer one.
+#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "ssh://tunnels")]
+pub struct TunnelsEvent {
+    pub version: u64,
+    pub tunnels: Vec<TunnelView>,
+}
+
+/// FWD-05: a connection for forwards without a terminal ended on its own, and its forwards with
+/// it. Stopping the last forward, the lock (SEC-03) and quitting send nothing.
+#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "ssh://tunnel-lost")]
+pub struct TunnelLostEvent {
+    pub host_id: String,
+    pub host_name: String,
+    pub error: crate::error::AppError,
 }
 
 // ───────────────────────── AI assistant (§13) ─────────────────────────

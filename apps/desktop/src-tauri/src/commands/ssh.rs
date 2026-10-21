@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use hatoba_core::model::{Host, HostProxy, Item};
-use hatoba_ssh::{AuthMethod, ConnectConfig, ShellEvent, ShellOptions, SshSession};
+use hatoba_ssh::{AuthMethod, ConnectConfig, ShellEvent, ShellHandle, ShellOptions, SshSession};
 use tauri::ipc::{Channel, InvokeResponseBody, IpcResponse};
 use tauri::{AppHandle, State};
 use tauri_specta::Event;
@@ -355,7 +355,7 @@ async fn write_shell(state: &AppState, session_id: &str, data: Vec<u8>) -> AppRe
         return Err(AppError::locked());
     }
     let live = state.ssh.get(session_id)?;
-    live.shell.write(data).await?;
+    terminal(&live)?.write(data).await?;
     Ok(())
 }
 
@@ -368,10 +368,17 @@ pub async fn ssh_resize(
     rows: u32,
 ) -> AppResult<()> {
     let live = state.ssh.get(&session_id)?;
-    live.shell
+    terminal(&live)?
         .resize(cols.clamp(10, 1000), rows.clamp(2, 500))
         .await;
     Ok(())
+}
+
+/// The session's shell; a connection that only carries forwards (FWD-05) has none.
+fn terminal(live: &LiveSession) -> AppResult<&ShellHandle> {
+    live.shell
+        .as_ref()
+        .ok_or_else(|| AppError::not_found("session"))
 }
 
 /// Starts reading the server's resource usage for the terminal's status bar (TERM-12), in

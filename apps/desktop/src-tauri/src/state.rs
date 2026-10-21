@@ -19,6 +19,7 @@ use crate::mcp::McpManager;
 use crate::platform::secrets::KeyringStore;
 use crate::ssh::SshManager;
 use crate::sync::SyncController;
+use crate::tunnel::Tunnels;
 use crate::update::Updates;
 
 pub use hatoba_core::sync::SharedVault;
@@ -27,6 +28,8 @@ pub struct AppState {
     pub vault: SharedVault,
     pub secrets: Arc<KeyringStore>,
     pub ssh: SshManager,
+    /// Starts and stops of the forwards that run without a terminal (FWD-05).
+    pub tunnels: Tunnels,
     /// Local terminal tabs (§7.5).
     pub local: LocalManager,
     /// The dashboard's background connections and readers (HOST-14).
@@ -59,6 +62,7 @@ impl AppState {
             vault,
             secrets: Arc::new(KeyringStore),
             ssh: SshManager::default(),
+            tunnels: Tunnels::default(),
             local: LocalManager::default(),
             dashboard: Dashboard::default(),
             sync: SyncController::default(),

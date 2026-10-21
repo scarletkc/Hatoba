@@ -23,6 +23,7 @@ mod ssh_agent;
 mod state;
 mod sync;
 mod tray;
+mod tunnel;
 mod update;
 
 use commands::{
@@ -135,6 +136,9 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             forwards::forward_start,
             forwards::forward_stop,
             forwards::forwards_active,
+            forwards::tunnel_forward_start,
+            forwards::tunnel_forward_stop,
+            forwards::tunnels_list,
             sftp::sftp_home,
             sftp::sftp_list,
             sftp::sftp_download,
@@ -257,6 +261,8 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             dto::SessionStateEvent,
             dto::TransferProgressEvent,
             dto::ForwardStatusEvent,
+            dto::TunnelsEvent,
+            dto::TunnelLostEvent,
             dto::McpServerStatus,
             dto::WindowChromeEvent,
             dto::LaunchEvent,

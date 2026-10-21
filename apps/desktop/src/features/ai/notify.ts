@@ -37,7 +37,7 @@ export function aiNotification(notice: AiNotice, ctx: NoticeContext, tr: (key: M
   return {
     title: ctx.tabTitle ?? tr("ai.title"),
     body: tr(BODIES[notice], { title: ctx.conversationTitle || tr("ai.untitled") }),
-    target: { tab: ctx.tab, conversation_id: ctx.conversationId },
+    target: { tab: ctx.tab, conversation_id: ctx.conversationId, host_id: null },
   };
 }
 

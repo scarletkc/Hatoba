@@ -68,6 +68,11 @@ export function ensureSession(tabId: string): LiveSession | null {
   return session;
 }
 
+/** The backend sessions of the tabs connected to a saved host. */
+export function hostSessionIds(hostId: string): string[] {
+  return [...byTab.values()].flatMap((x) => (x.hostId === hostId && x.sessionId ? [x.sessionId] : []));
+}
+
 /** Route an `ssh://state` event to the tab that owns the session. */
 export function routeStateEvent(ev: SessionStateEvent) {
   const session = bySession.get(ev.session_id);
@@ -105,7 +110,7 @@ const LOCAL_IO: SessionIo = {
   close: (sid) => api.local_close(sid),
 };
 
-function needsPassphrase(err: AppError): boolean {
+export function needsPassphrase(err: AppError): boolean {
   return err.code === "key_parse" && (err.key_kind === "passphrase_required" || err.key_kind === "wrong_passphrase");
 }
 

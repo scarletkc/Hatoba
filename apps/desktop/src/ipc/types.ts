@@ -545,6 +545,42 @@ export interface ForwardStatusEvent {
   error: string | null;
 }
 
+/** FWD-05: one-off credentials for the connection a forward started without a terminal opens (SSH-03). */
+export interface TunnelOptions {
+  password: string | null;
+  passphrase: string | null;
+}
+
+/** FWD-05: a forward running without a terminal. */
+export interface TunnelForwardView {
+  forward_id: string;
+  local_port: number;
+  /** `host:port`, as the server reaches it. */
+  dest: string;
+}
+
+/** FWD-05: a saved host's connection for forwards without a terminal, and what runs on it. */
+export interface TunnelView {
+  host_id: string;
+  /** The host's name when the connection was made. */
+  host_name: string;
+  /** By local port. */
+  forwards: TunnelForwardView[];
+}
+
+/** FWD-05: every forward running without a terminal; `version` grows with each change. */
+export interface TunnelsEvent {
+  version: number;
+  tunnels: TunnelView[];
+}
+
+/** FWD-05: a connection for forwards without a terminal ended on its own, and its forwards with it. */
+export interface TunnelLostEvent {
+  host_id: string;
+  host_name: string;
+  error: AppError;
+}
+
 // ───────────────────────── SFTP ─────────────────────────
 
 export interface FileEntry {
@@ -867,6 +903,10 @@ export interface TrayMenuInput {
   /** **Update to vX.Y.Z** while a check has found a newer release; null leaves the item out. */
   update: string | null;
   can_update: boolean;
+  /** FWD-05: the heading over the forwards running without a terminal, and each one's items. */
+  forwards: string;
+  copy_address: string;
+  stop_forward: string;
 }
 
 /** AI-07: a system notification, sent only while the window is not focused. */
@@ -876,10 +916,14 @@ export interface NotificationInput {
   target: NotificationTarget;
 }
 
-/** AI-07: what a notification is about, which a click on it shows: a tab, and in it a conversation. */
+/**
+ * What a notification is about, which a click on it shows: a tab, and in it a conversation (AI-07), or a saved
+ * host whose forwards stopped (FWD-05).
+ */
 export interface NotificationTarget {
   tab: string | null;
   conversation_id: string | null;
+  host_id: string | null;
 }
 
 /** Device-local state of the sidebar's GitHub star prompt (spec §9). */
@@ -1689,6 +1733,9 @@ export interface EventMap {
   "ssh://state": SessionStateEvent;
   "transfer://progress": TransferProgressEvent;
   "ssh://forward": ForwardStatusEvent;
+  /** FWD-05: the forwards running without a terminal changed. */
+  "ssh://tunnels": TunnelsEvent;
+  "ssh://tunnel-lost": TunnelLostEvent;
   /** An MCP server started, stopped, failed or relisted its tools (AI-32). */
   "ai://mcp-status": McpServerStatus;
   "window://chrome": WindowChromeEvent;

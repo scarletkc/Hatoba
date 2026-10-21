@@ -215,11 +215,24 @@ export const commands = {
 	authPromptRespond: (requestId: string, answers: string[] | null) => __TAURI_INVOKE<void>("auth_prompt_respond", { requestId, answers }),
 	forwardsList: (hostId: string) => __TAURI_INVOKE<ForwardView[]>("forwards_list", { hostId }),
 	forwardSave: (input: ForwardInput) => __TAURI_INVOKE<ForwardView>("forward_save", { input }),
+	/**  Deletes the rule, and stops it wherever it runs. */
 	forwardDelete: (id: string) => __TAURI_INVOKE<null>("forward_delete", { id }),
 	forwardStart: (sessionId: string, forwardId: string) => __TAURI_INVOKE<number>("forward_start", { sessionId, forwardId }),
 	forwardStop: (sessionId: string, forwardId: string) => __TAURI_INVOKE<null>("forward_stop", { sessionId, forwardId }),
 	/**  Forwards currently running on a session: `(forward_id, local_port)`. */
 	forwardsActive: (sessionId: string) => __TAURI_INVOKE<([string, number])[]>("forwards_active", { sessionId }),
+	/**
+	 *  FWD-05: starts the saved forward without a terminal, on the host's connection for forwards,
+	 *  and returns the local port.
+	 */
+	tunnelForwardStart: (hostId: string, forwardId: string, options: TunnelOptions) => __TAURI_INVOKE<number>("tunnel_forward_start", { hostId, forwardId, options }),
+	/**
+	 *  FWD-05: stops a forward running without a terminal; the host's connection for forwards closes
+	 *  with its last one.
+	 */
+	tunnelForwardStop: (hostId: string, forwardId: string) => __TAURI_INVOKE<void>("tunnel_forward_stop", { hostId, forwardId }),
+	/**  FWD-05: every forward running without a terminal. */
+	tunnelsList: () => __TAURI_INVOKE<TunnelsEvent>("tunnels_list"),
 	sftpHome: (sessionId: string) => __TAURI_INVOKE<string>("sftp_home", { sessionId }),
 	sftpList: (sessionId: string, path: string) => __TAURI_INVOKE<FileEntry[]>("sftp_list", { sessionId, path }),
 	/**  SFTP-02 download. `local_path` comes from the native save dialog. */
@@ -574,6 +587,8 @@ export const events = {
 	sshForward: makeEvent<ForwardStatusEvent>("ssh://forward"),
 	sshHostkeyPrompt: makeEvent<HostKeyPrompt>("ssh://hostkey-prompt"),
 	sshState: makeEvent<SessionStateEvent>("ssh://state"),
+	sshTunnelLost: makeEvent<TunnelLostEvent>("ssh://tunnel-lost"),
+	sshTunnels: makeEvent<TunnelsEvent>("ssh://tunnels"),
 	syncStatus: makeEvent<SyncStatus>("sync://status"),
 	transferProgress: makeEvent<TransferProgressEvent>("transfer://progress"),
 	trayUpdate: makeEvent<TrayUpdateEvent>("tray://update"),
@@ -2101,11 +2116,13 @@ export type NotificationInput = {
 
 /**
  *  What a notification is about, which a click on it shows: a tab, and in it a conversation
- *  (AI-07). The click brings the window back and sends this to the WebView.
+ *  (AI-07), or a saved host whose forwards stopped (FWD-05). The click brings the window back and
+ *  sends this to the WebView.
  */
 export type NotificationTarget = {
 	tab: string | null,
 	conversation_id: string | null,
+	host_id: string | null,
 };
 
 /**  A package manager that installs Hatoba from the GitHub release and updates it itself. */
@@ -2470,10 +2487,60 @@ export type TrayMenuInput = {
 	 */
 	update: string | null,
 	can_update: boolean,
+	/**  FWD-05: the heading over the forwards running without a terminal, and each one's items. */
+	forwards: string,
+	copy_address: string,
+	stop_forward: string,
 };
 
 /**  WIN-10: the tray menu's **Update to vX.Y.Z** was clicked. */
 export type TrayUpdateEvent = null;
+
+/**  FWD-05: a forward running without a terminal. */
+export type TunnelForwardView = {
+	forward_id: string,
+	/**  The actually bound local port (differs from `bind_port` when it was 0). */
+	local_port: number,
+	/**  `host:port`, as the server reaches it. */
+	dest: string,
+};
+
+/**
+ *  FWD-05: a connection for forwards without a terminal ended on its own, and its forwards with
+ *  it. Stopping the last forward, the lock (SEC-03) and quitting send nothing.
+ */
+export type TunnelLostEvent = {
+	host_id: string,
+	host_name: string,
+	error: AppError,
+};
+
+/**
+ *  FWD-05: one-off credentials for the connection that a forward started without a terminal
+ *  opens (SSH-03): used once, never stored.
+ */
+export type TunnelOptions = {
+	password: string | null,
+	passphrase: string | null,
+};
+
+/**  FWD-05: a saved host's connection for forwards without a terminal, and what runs on it. */
+export type TunnelView = {
+	host_id: string,
+	/**  The host's name when the connection was made. */
+	host_name: string,
+	/**  By local port. */
+	forwards: TunnelForwardView[],
+};
+
+/**
+ *  FWD-05: every forward running without a terminal, sent whenever that changes. `version` grows
+ *  with each change, so a list read earlier never replaces a newer one.
+ */
+export type TunnelsEvent = {
+	version: number,
+	tunnels: TunnelView[],
+};
 
 /**  What the update check found (spec §11). */
 export type UpdateCheck = {

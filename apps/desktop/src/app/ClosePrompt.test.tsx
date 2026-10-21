@@ -142,7 +142,17 @@ describe("useTrayMenu", () => {
     app.phase = "locked";
     await render(<Menu />);
     expect(backend.menus).toEqual([
-      { open: "Open Hatoba", lock: "Lock", quit: "Quit Hatoba", can_lock: false, update: null, can_update: false },
+      {
+        open: "Open Hatoba",
+        lock: "Lock",
+        quit: "Quit Hatoba",
+        can_lock: false,
+        update: null,
+        can_update: false,
+        forwards: "Port Forwarding",
+        copy_address: "Copy Address",
+        stop_forward: "Stop",
+      },
     ]);
   });
 

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { errorMessage } from "@/app/errors";
 import { Icon, Spinner } from "@/components/controls";
 import { overlayStyles, toast, type MenuAnchor } from "@/components/overlay";
+import { stopTunnelForward, tunnelPort, useHostTunnel } from "@/features/hosts/tunnels";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { ForwardView } from "@/ipc/types";
@@ -22,7 +23,8 @@ const hostPort = (host: string, port: number | string) => `${host.includes(":") 
 
 /**
  * The status bar's port forwarding popover (FWD-01/02): this host's saved forwards with their state
- * on this session, and start / stop / retry for each.
+ * on this session, and start / stop / retry for each. One running without a terminal (FWD-05) shows
+ * as running, and stops there.
  */
 export function ForwardsPopover({
   anchor,
@@ -41,11 +43,12 @@ export function ForwardsPopover({
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
   const runs = useForwardRuns(sessionId);
+  const tunnel = useHostTunnel(hostId);
   const [saved, setSaved] = useState<ForwardView[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   // Re-measured as rows appear.
-  const { pos, locked } = useStatusPopover(ref, anchor, onClose, "[data-forwards-trigger]", [saved, loadFailed, runs]);
+  const { pos, locked } = useStatusPopover(ref, anchor, onClose, "[data-forwards-trigger]", [saved, loadFailed, runs, tunnel]);
 
   // Always read the list fresh: forwards are edited in the host editor, not here.
   useEffect(() => {
@@ -78,11 +81,14 @@ export function ForwardsPopover({
     }
   };
 
-  const stop = async (f: ForwardView) => {
+  const stop = async (f: ForwardView, background: boolean) => {
     setBusyFor(f.id, true);
     try {
-      await api.forward_stop(sessionId, f.id);
-      markForwardStopped(sessionId, f.id);
+      if (background) await stopTunnelForward(hostId, f.id);
+      else {
+        await api.forward_stop(sessionId, f.id);
+        markForwardStopped(sessionId, f.id);
+      }
     } catch (err) {
       toast(errorMessage(t, err), "error");
     } finally {
@@ -110,17 +116,23 @@ export function ForwardsPopover({
       )}
       {loadFailed && <div className={cx(s.note, s.noteError)}>{t("terminal.fwd.loadFailed")}</div>}
       {saved?.length === 0 && <div className={s.note}>{t("terminal.fwd.none")}</div>}
-      {saved?.map((f) => (
-        <ForwardRow
-          key={f.id}
-          forward={f}
-          run={runs[f.id]}
-          busy={busy.has(f.id)}
-          onStart={() => void start(f)}
-          onStop={() => void stop(f)}
-          onCopy={(address) => void copy(address)}
-        />
-      ))}
+      {saved?.map((f) => {
+        const own = runs[f.id];
+        const port = own?.state === "running" ? null : tunnelPort(tunnel, f.id);
+        const run: ForwardRun | undefined = port === null ? own : { state: "running", localPort: port, error: null, seq: 0 };
+        return (
+          <ForwardRow
+            key={f.id}
+            forward={f}
+            run={run}
+            background={port !== null}
+            busy={busy.has(f.id)}
+            onStart={() => void start(f)}
+            onStop={() => void stop(f, port !== null)}
+            onCopy={(address) => void copy(address)}
+          />
+        );
+      })}
       <div className={s.separator} />
       <button
         type="button"
@@ -141,6 +153,7 @@ export function ForwardsPopover({
 function ForwardRow({
   forward: f,
   run,
+  background,
   busy,
   onStart,
   onStop,
@@ -148,6 +161,8 @@ function ForwardRow({
 }: {
   forward: ForwardView;
   run: ForwardRun | undefined;
+  /** It runs without a terminal (FWD-05), not on this session. */
+  background: boolean;
   busy: boolean;
   onStart(): void;
   onStop(): void;
@@ -173,6 +188,7 @@ function ForwardRow({
           <span className={s.address}>{local}</span>
         )}
         <span className={s.dest}>→ {hostPort(f.dest_host, f.dest_port)}</span>
+        {background && <span className={s.where}>{t("terminal.fwd.inBackground")}</span>}
         {failed && run?.error && <span className={s.error}>{run.error}</span>}
       </div>
       <button type="button" className={s.action} disabled={busy} onClick={running ? onStop : onStart}>

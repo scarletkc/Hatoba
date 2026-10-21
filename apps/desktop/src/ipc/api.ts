@@ -89,6 +89,8 @@ import type {
   TagCount,
   TestResult,
   TrayMenuInput,
+  TunnelOptions,
+  TunnelsEvent,
   UpdateCheck,
   UpdateProgress,
   UpgradeDefaults,
@@ -251,6 +253,11 @@ export interface HatobaApi {
   forward_stop(session_id: string, forward_id: string): Promise<void>;
   /** `[forward_id, local_port]` pairs running on a session. */
   forwards_active(session_id: string): Promise<[string, number][]>;
+  /** FWD-05: starts a saved forward without a terminal, on the host's own connection; resolves to the local port. */
+  tunnel_forward_start(host_id: string, forward_id: string, options: TunnelOptions): Promise<number>;
+  /** FWD-05: the host's connection for forwards closes with its last one. */
+  tunnel_forward_stop(host_id: string, forward_id: string): Promise<void>;
+  tunnels_list(): Promise<TunnelsEvent>;
 
   // sftp
   sftp_home(session_id: string): Promise<string>;
