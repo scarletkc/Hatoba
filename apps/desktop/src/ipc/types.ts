@@ -526,7 +526,7 @@ export interface ForwardView {
   /** Empty and 0 for a dynamic forward. */
   dest_host: string;
   dest_port: number;
-  /** FWD-02: start whenever the host connects. */
+  /** FWD-02: start whenever Hatoba connects to the host. */
   auto_start: boolean;
 }
 
@@ -541,25 +541,14 @@ export interface ForwardInput {
   auto_start: boolean;
 }
 
-export type ForwardState = "running" | "stopped" | "failed";
-
-export interface ForwardStatusEvent {
-  session_id: string;
-  forward_id: string;
-  state: ForwardState;
-  /** Where it listens: on the server for a remote forward. */
-  port: number | null;
-  error: string | null;
-}
-
-/** FWD-05: one-off credentials for the connection a forward started without a terminal opens (SSH-03). */
-export interface TunnelOptions {
+/** One-off credentials for the connection a forward's start opens (SSH-03). */
+export interface ForwardOptions {
   password: string | null;
   passphrase: string | null;
 }
 
-/** FWD-05: a forward running without a terminal. */
-export interface TunnelForwardView {
+/** A forward running on its host's connection. */
+export interface RunningForwardView {
   forward_id: string;
   kind: ForwardKind;
   /** Where it listens: on the server for a remote forward. */
@@ -573,23 +562,30 @@ export interface TunnelForwardView {
   dest: string;
 }
 
-/** FWD-05: a saved host's connection for forwards without a terminal, and what runs on it. */
-export interface TunnelView {
+/** A forward that failed to start on its host's connection, until it starts or stops. */
+export interface FailedForwardView {
+  forward_id: string;
+  error: AppError;
+}
+
+/** SSH-16: a saved host's open connection, which its terminal tabs and forwards share. */
+export interface HostConnectionView {
   host_id: string;
-  /** The host's name when the connection was made. */
+  /** The host's name when it connected. */
   host_name: string;
   /** By port. */
-  forwards: TunnelForwardView[];
+  forwards: RunningForwardView[];
+  failed: FailedForwardView[];
 }
 
-/** FWD-05: every forward running without a terminal; `version` grows with each change. */
-export interface TunnelsEvent {
+/** SSH-16: every saved host's open connection; `version` grows with each change. */
+export interface ConnectionsEvent {
   version: number;
-  tunnels: TunnelView[];
+  connections: HostConnectionView[];
 }
 
-/** FWD-05: a connection for forwards without a terminal ended on its own, and its forwards with it. */
-export interface TunnelLostEvent {
+/** FWD-05: a host's connection ended on its own with forwards on it, which stopped with it. */
+export interface ForwardsLostEvent {
   host_id: string;
   host_name: string;
   error: AppError;
@@ -917,7 +913,7 @@ export interface TrayMenuInput {
   /** **Update to vX.Y.Z** while a check has found a newer release; null leaves the item out. */
   update: string | null;
   can_update: boolean;
-  /** FWD-05: the heading over the forwards running without a terminal, and each one's items. */
+  /** FWD-05: the heading over the running forwards, and each one's items. */
   forwards: string;
   copy_address: string;
   stop_forward: string;
@@ -1750,10 +1746,9 @@ export interface EventMap {
   "ssh://auth-prompt": AuthPrompt;
   "ssh://state": SessionStateEvent;
   "transfer://progress": TransferProgressEvent;
-  "ssh://forward": ForwardStatusEvent;
-  /** FWD-05: the forwards running without a terminal changed. */
-  "ssh://tunnels": TunnelsEvent;
-  "ssh://tunnel-lost": TunnelLostEvent;
+  /** SSH-16: a host's connection opened or closed, or its forwards changed. */
+  "ssh://connections": ConnectionsEvent;
+  "ssh://forwards-lost": ForwardsLostEvent;
   /** An MCP server started, stopped, failed or relisted its tools (AI-32). */
   "ai://mcp-status": McpServerStatus;
   "window://chrome": WindowChromeEvent;

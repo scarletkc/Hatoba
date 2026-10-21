@@ -5,10 +5,9 @@
 //! default), hides or quits; without a tray it always quits. The tray menu opens the window,
 //! locks the vault and quits, and a left click opens the window (Linux shows the menu instead).
 //! While a check has found a newer release, it also offers **Update to vX.Y.Z**, which opens the
-//! window to install it from Settings → About. The forwards running without a terminal (FWD-05)
-//! follow under **Port Forwarding**, each with **Stop**, and with its address to copy when it
-//! listens on this computer. The WebView sets the menu's labels, so they follow the app's
-//! language.
+//! window to install it from Settings → About. The running forwards (FWD-05) follow under
+//! **Port Forwarding**, each with **Stop**, and with its address to copy when it listens on this
+//! computer. The WebView sets the menu's labels, so they follow the app's language.
 //!
 //! macOS keeps its own close button, which hides the window (MAC-06), and the Dock, so it has no
 //! tray.
@@ -29,8 +28,8 @@ mod imp {
     use tauri_specta::Event;
 
     use crate::dto::{
-        CloseAction, ClosePromptEvent, ForwardKind, LocalPrefs, LockReason, TrayMenuInput,
-        TrayUpdateEvent, TunnelForwardView, TunnelView,
+        CloseAction, ClosePromptEvent, ForwardKind, HostConnectionView, LocalPrefs, LockReason,
+        RunningForwardView, TrayMenuInput, TrayUpdateEvent,
     };
     use crate::state::AppState;
     use crate::{lock, platform};
@@ -52,7 +51,7 @@ mod imp {
         forwards: Mutex<Forwards>,
     }
 
-    /// FWD-05: what the menu shows of the forwards running without a terminal.
+    /// FWD-05: what the menu shows of the running forwards.
     struct Forwards {
         heading: String,
         copy: String,
@@ -60,9 +59,9 @@ mod imp {
         /// With `{addr}` for where a remote forward listens on the server.
         on_server: String,
         socks: String,
-        /// Of the `tunnels` list (`TunnelsEvent::version`).
+        /// Of the `hosts` list (`ConnectionsEvent::version`).
         version: u64,
-        tunnels: Vec<TunnelView>,
+        hosts: Vec<HostConnectionView>,
         /// In the menu, between the separator and **Quit**, while a forward runs.
         items: Vec<MenuItemKind<Wry>>,
     }
@@ -161,7 +160,7 @@ mod imp {
                 on_server: "{addr} on the server".to_owned(),
                 socks: "SOCKS proxy".to_owned(),
                 version: 0,
-                tunnels: Vec::new(),
+                hosts: Vec::new(),
                 items: Vec::new(),
             }),
         });
@@ -211,14 +210,13 @@ mod imp {
         });
     }
 
-    /// FWD-05: the forwards running without a terminal changed; a list older than the one shown
-    /// changes nothing.
-    pub fn set_tunnels(app: &AppHandle, version: u64, tunnels: &[TunnelView]) {
-        let tunnels = tunnels.to_vec();
+    /// FWD-05: the hosts' connections changed; a list older than the one shown changes nothing.
+    pub fn set_forwards(app: &AppHandle, version: u64, hosts: &[HostConnectionView]) {
+        let hosts = hosts.to_vec();
         on_forwards(app, move |forwards| {
             if version >= forwards.version {
                 forwards.version = version;
-                forwards.tunnels = tunnels;
+                forwards.hosts = hosts;
             }
         });
     }
@@ -243,7 +241,7 @@ mod imp {
         for item in forwards.items.drain(..) {
             let _ = tray.menu.remove(&item);
         }
-        if forwards.tunnels.is_empty() {
+        if forwards.hosts.iter().all(|h| h.forwards.is_empty()) {
             return;
         }
         let items = match forward_items(app, forwards) {
@@ -270,11 +268,11 @@ mod imp {
     ) -> tauri::Result<Vec<MenuItemKind<Wry>>> {
         let heading = MenuItem::new(app, &forwards.heading, false, None::<&str>)?;
         let mut items = vec![MenuItemKind::MenuItem(heading)];
-        for tunnel in &forwards.tunnels {
-            for forward in &tunnel.forwards {
-                let stop_id = format!("{FORWARD_STOP}{}:{}", tunnel.host_id, forward.forward_id);
+        for host in &forwards.hosts {
+            for forward in &host.forwards {
+                let stop_id = format!("{FORWARD_STOP}{}:{}", host.host_id, forward.forward_id);
                 let stop = MenuItem::with_id(app, stop_id, &forwards.stop, true, None::<&str>)?;
-                let label = format!("{}  {}", tunnel.host_name, addresses(forwards, forward));
+                let label = format!("{}  {}", host.host_name, addresses(forwards, forward));
                 // A remote forward's address is on the server: nothing here connects to it.
                 let entry = if forward.kind == ForwardKind::Remote {
                     Submenu::with_items(app, label, true, &[&stop])?
@@ -293,7 +291,7 @@ mod imp {
     }
 
     /// Where a running forward listens and where it leads.
-    fn addresses(forwards: &Forwards, forward: &TunnelForwardView) -> String {
+    fn addresses(forwards: &Forwards, forward: &RunningForwardView) -> String {
         match forward.kind {
             ForwardKind::Local => format!("{} → {}", forward.address, forward.dest),
             ForwardKind::Remote => format!(
@@ -315,11 +313,7 @@ mod imp {
             .strip_prefix(FORWARD_STOP)
             .and_then(|ids| ids.split_once(':'))
         {
-            let (app, host_id, forward_id) =
-                (app.clone(), host_id.to_owned(), forward_id.to_owned());
-            tauri::async_runtime::spawn(async move {
-                crate::tunnel::stop(&app, &host_id, &forward_id).await;
-            });
+            crate::connection::stop(app, host_id, forward_id);
         }
     }
 
@@ -432,4 +426,9 @@ pub fn set_menu(_app: &tauri::AppHandle, _menu: &crate::dto::TrayMenuInput) {}
 pub fn hide_to_tray(_app: &tauri::AppHandle) {}
 
 #[cfg(target_os = "macos")]
-pub fn set_tunnels(_app: &tauri::AppHandle, _version: u64, _tunnels: &[crate::dto::TunnelView]) {}
+pub fn set_forwards(
+    _app: &tauri::AppHandle,
+    _version: u64,
+    _hosts: &[crate::dto::HostConnectionView],
+) {
+}

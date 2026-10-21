@@ -9,9 +9,8 @@ use async_trait::async_trait;
 use hatoba_core::model::{Host, HostAuth, HostProxy, Item, KnownHost, ProxyKind as CoreProxyKind};
 use hatoba_core::vault::Vault;
 use hatoba_ssh::{
-    AuthMethod, ConnectConfig, ForwardHandle, HostKeyInfo, HostKeyVerifier, JumpHop,
-    KeyboardInteractive, PromptRequest, ProxyConfig, ProxyKind, SftpClient, ShellHandle,
-    SshSession, StatsHandle,
+    AuthMethod, ConnectConfig, HostKeyInfo, HostKeyVerifier, JumpHop, KeyboardInteractive,
+    PromptRequest, ProxyConfig, ProxyKind, SftpClient, ShellHandle, SshSession, StatsHandle,
 };
 use tauri::AppHandle;
 use tauri_specta::Event;
@@ -19,71 +18,50 @@ use tokio::sync::{OnceCell, oneshot};
 use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
-use crate::dto::{
-    AuthPrompt, AuthPromptField, ForwardKind, HostKeyPrompt, HostKeyPromptKind, TunnelForwardView,
-};
+use crate::dto::{AuthPrompt, AuthPromptField, HostKeyPrompt, HostKeyPromptKind};
 use crate::error::{AppError, AppResult, SshErrorKind};
 use crate::state::{AppState, now_ms, state};
-use crate::sync;
+use crate::{connection, sync};
 
 /// How long a host-key or 2FA prompt may stay unanswered before the connection gives up.
 const PROMPT_TIMEOUT: Duration = Duration::from_secs(600);
 
 pub struct LiveSession {
     pub session: SshSession,
-    /// The terminal's shell; `None` on a connection that only carries forwards (FWD-05).
-    pub shell: Option<ShellHandle>,
-    /// The saved host the terminal connected to; `None` for a quick connection (HOST-12).
-    pub host_id: Option<String>,
-    /// What the connection was made from (`dashboard::config_version`), so that the dashboard
-    /// reads a host over it only while the host still connects the same way (HOST-14).
-    pub config: Option<String>,
-    /// FWD-05: the host's name when the connection was made, on a connection without a terminal.
-    pub tunnel: Option<String>,
+    pub shell: ShellHandle,
+    link: Link,
     pub sftp: OnceCell<SftpClient>,
-    /// Running port forwards by forward item id (FWD-01, FWD-03, FWD-04).
-    forwards: Mutex<HashMap<String, RunningForward>>,
     /// Resource usage sampling while the terminal shows it (TERM-12), with the id of its start.
     stats: Mutex<Option<(u64, StatsHandle)>>,
 }
 
-/// A running forward, and the addresses that name it (see [`TunnelForwardView`]).
-pub struct RunningForward {
-    pub handle: ForwardHandle,
-    pub kind: ForwardKind,
-    pub address: String,
-    pub dest: String,
+/// What a terminal's shell runs on.
+enum Link {
+    /// A quick connection's own connection (HOST-12), which closes with the tab.
+    Own,
+    /// SSH-16: the saved host's connection, shared with its other tabs and its forwards, until the
+    /// tab leaves it.
+    Shared(Mutex<Option<connection::Tab>>),
 }
 
 impl LiveSession {
-    pub fn new(
-        session: SshSession,
-        shell: ShellHandle,
-        host_id: Option<String>,
-        config: Option<String>,
-    ) -> Self {
-        Self {
-            session,
-            shell: Some(shell),
-            host_id,
-            config,
-            tunnel: None,
-            sftp: OnceCell::new(),
-            forwards: Mutex::new(HashMap::new()),
-            stats: Mutex::new(None),
-        }
+    /// A terminal on its own connection.
+    pub fn own(session: SshSession, shell: ShellHandle) -> Self {
+        Self::with(session, shell, Link::Own)
     }
 
-    /// FWD-05: a connection to the saved host `host_id`, named `host_name`, for forwards only.
-    pub fn tunnel(session: SshSession, host_id: String, config: String, host_name: String) -> Self {
+    /// A terminal on the saved host's shared connection.
+    pub fn shared(tab: connection::Tab, shell: ShellHandle) -> Self {
+        let session = tab.connection().session.clone();
+        Self::with(session, shell, Link::Shared(Mutex::new(Some(tab))))
+    }
+
+    fn with(session: SshSession, shell: ShellHandle, link: Link) -> Self {
         Self {
             session,
-            shell: None,
-            host_id: Some(host_id),
-            config: Some(config),
-            tunnel: Some(host_name),
+            shell,
+            link,
             sftp: OnceCell::new(),
-            forwards: Mutex::new(HashMap::new()),
             stats: Mutex::new(None),
         }
     }
@@ -105,70 +83,15 @@ impl LiveSession {
         }
     }
 
-    pub fn add_forward(&self, id: &str, running: RunningForward) {
-        if let Some(old) = lock(&self.forwards).insert(id.to_owned(), running) {
-            old.handle.stop();
-        }
-    }
-
-    /// Stops the forward; `false` when it was not running here.
-    pub fn stop_forward(&self, id: &str) -> bool {
-        match lock(&self.forwards).remove(id) {
-            Some(running) => {
-                running.handle.stop();
-                true
-            }
-            None => false,
-        }
-    }
-
-    pub fn forward_port(&self, id: &str) -> Option<u16> {
-        lock(&self.forwards)
-            .get(id)
-            .filter(|f| f.handle.is_running())
-            .map(|f| f.handle.port())
-    }
-
-    /// The forwards running: `(forward_id, port)`.
-    pub fn active_forwards(&self) -> Vec<(String, u16)> {
-        self.running_forwards()
-            .into_iter()
-            .map(|f| (f.forward_id, f.port))
-            .collect()
-    }
-
-    /// The forwards running, by port.
-    pub fn running_forwards(&self) -> Vec<TunnelForwardView> {
-        let mut list: Vec<_> = lock(&self.forwards)
-            .iter()
-            .filter(|(_, f)| f.handle.is_running())
-            .map(|(id, f)| TunnelForwardView {
-                forward_id: id.clone(),
-                kind: f.kind,
-                port: f.handle.port(),
-                address: f.address.clone(),
-                dest: f.dest.clone(),
-            })
-            .collect();
-        list.sort_by_key(|f| f.port);
-        list
-    }
-
-    /// The forwards started here and not stopped, including those the connection's end stopped.
-    pub fn forward_count(&self) -> usize {
-        lock(&self.forwards).len()
-    }
-
-    /// Stops forwards and sampling, and closes the shell and connection.
+    /// Stops sampling and closes the shell. Its own connection closes too; a shared one closes
+    /// once nothing else is left on it.
     pub async fn close(&self) {
-        for (_, running) in lock(&self.forwards).drain() {
-            running.handle.stop();
-        }
         lock(&self.stats).take();
-        if let Some(shell) = &self.shell {
-            shell.close().await;
+        self.shell.close().await;
+        match &self.link {
+            Link::Own => self.session.disconnect().await,
+            Link::Shared(tab) => drop(lock(tab).take()),
         }
-        self.session.disconnect().await;
     }
 }
 
@@ -206,55 +129,6 @@ impl SshManager {
         } else {
             false
         }
-    }
-
-    /// FWD-05: the saved host's connection for forwards without a terminal, while it is open.
-    pub fn tunnel_for_host(&self, host_id: &str) -> Option<(String, Arc<LiveSession>)> {
-        lock(&self.sessions)
-            .iter()
-            .find(|(_, live)| {
-                live.tunnel.is_some()
-                    && live.host_id.as_deref() == Some(host_id)
-                    && !live.session.is_closed()
-            })
-            .map(|(id, live)| (id.clone(), Arc::clone(live)))
-    }
-
-    /// FWD-05: every connection for forwards without a terminal, oldest first.
-    pub fn tunnels(&self) -> Vec<(String, Arc<LiveSession>)> {
-        let mut list: Vec<_> = lock(&self.sessions)
-            .iter()
-            .filter(|(_, live)| live.tunnel.is_some())
-            .map(|(id, live)| (id.clone(), Arc::clone(live)))
-            .collect();
-        // Session ids are UUIDv7, so they sort by age.
-        list.sort_by(|(a, _), (b, _)| a.cmp(b));
-        list
-    }
-
-    /// The terminals' sessions on the saved host, for a forward that runs on one of them.
-    pub fn terminals_for_host(&self, host_id: &str) -> Vec<(String, Arc<LiveSession>)> {
-        lock(&self.sessions)
-            .iter()
-            .filter(|(_, live)| live.tunnel.is_none() && live.host_id.as_deref() == Some(host_id))
-            .map(|(id, live)| (id.clone(), Arc::clone(live)))
-            .collect()
-    }
-
-    /// The connection of a terminal open on the saved host and made the way the host connects
-    /// now (`config`), which the dashboard reads over (HOST-14). The newest tab's, when several
-    /// are open; a tab still connected to the address the host had before an edit is not one.
-    pub fn connection_for_host(&self, host_id: &str, config: &str) -> Option<SshSession> {
-        lock(&self.sessions)
-            .iter()
-            .filter(|(_, live)| {
-                live.host_id.as_deref() == Some(host_id)
-                    && live.config.as_deref() == Some(config)
-                    && !live.session.is_closed()
-            })
-            // Session ids are UUIDv7, so the largest is the newest.
-            .max_by(|(a, _), (b, _)| a.cmp(b))
-            .map(|(_, live)| live.session.clone())
     }
 
     pub fn take(&self, id: &str) -> Option<Arc<LiveSession>> {

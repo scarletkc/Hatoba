@@ -35,7 +35,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/keys-vault-and-lock.md` | The master password, recovery code, locking and auto-lock, Windows Hello and Touch ID, the PIN, the encrypted backup, and the Keys page (import, generate, deploy) |
 | `references/terminal.md` | The terminal tab: local terminal tabs and their shells, status bar, copy and paste, search, links, context menus, and the Terminal settings (font, cursor, scrollback, local terminal shell) |
 | `references/sftp.md` | The SFTP file panel: browsing, upload, download, rename, delete, transfers |
-| `references/port-forwarding.md` | Port forwarding (local, remote and SOCKS): creating rules, starting them with the connection, starting and stopping them in a session or with no terminal |
+| `references/port-forwarding.md` | Port forwarding (local, remote and SOCKS): creating rules, auto-start, starting and stopping them on the host's shared connection |
 | `references/sync.md` | Cloud Sync: what syncs, the setup wizard, joining a cloud vault from a device that has its own, the status page, devices, conflicts, restoring on a new device, disconnecting |
 | `references/sync-worker.md` | The sync Worker: deploying it from Hatoba, connecting a Worker deployed by hand, direct D1 mode, upgrading the Worker |
 | `references/ai-panel.md` | Using the AI assistant: the panel, one conversation per tab, moving between hosts, `/` commands (`/btw`, `/clear`, `/compact`, `/mcp`, `/memory`, `/model`, skills, MCP prompts) and `@` mentions, the + menu (Slash Commands, Skills, MCP Tools), the MCP servers of a conversation |

@@ -9,7 +9,7 @@ import { clearReadouts } from "@/features/dashboard/readings";
 import { ForwardsPage } from "@/features/hosts/ForwardsPage";
 import { HostEditPage } from "@/features/hosts/HostEditPage";
 import { HostsPage } from "@/features/hosts/HostsPage";
-import { startTunnelListeners } from "@/features/hosts/tunnels";
+import { startForwardListeners } from "@/features/hosts/forwards";
 import { KeysPage } from "@/features/keys/KeysPage";
 import { Onboarding } from "@/features/onboarding/Onboarding";
 import { SettingsWindow } from "@/features/settings/SettingsWindow";
@@ -52,7 +52,7 @@ export function App() {
   useTrayMenu();
   // FWD-05: wired once unlocked, and kept, so a connection lost behind the lock screen still notifies.
   useEffect(() => {
-    if (phase === "unlocked") startTunnelListeners();
+    if (phase === "unlocked") startForwardListeners();
   }, [phase]);
 
   if (phase === "boot") return null;

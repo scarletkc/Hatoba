@@ -104,7 +104,7 @@ A connection opens a new terminal tab (orange dot while connecting). The connect
 
 - First connection to a server: compare the shown fingerprint with the administrator's, then **Trust and Connect** (saved to the vault and synced) or **Cancel**.
 - **New host key for …** appears when a hop offers none of the key types saved for it, and **Host key has changed** blocks a saved type's changed key (**Disconnect** is the default). See `references/troubleshooting-connections.md` for both.
-- **Ask Each Time** hosts show a password prompt; **Connect** continues. A wrong key passphrase asks again.
+- **Ask Each Time** hosts show a password prompt once for their tabs and forwards, which share a connection; **Connect** continues. A wrong key passphrase asks again.
 
 Other labels: **Fingerprint**, **Trusted fingerprint**, **Fingerprint received now**, **Update Fingerprint and Connect**, **Key passphrase**.
 

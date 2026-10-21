@@ -7,14 +7,14 @@ import type { SessionTab } from "@/app/tabs";
 import { Menu, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { askAi as askAiAbout, askAiAboutConnection } from "@/features/ai/actions";
 import { formatTarget, savedHostFor } from "@/features/hosts/quickConnect";
-import { openForwards, useHostTunnel } from "@/features/hosts/tunnels";
+import { useHostConnection } from "@/features/hosts/connections";
+import { openForwards, useHostForwardRules } from "@/features/hosts/forwards";
 import { SftpPanel } from "@/features/sftp/SftpPanel";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import { shortcutLabel } from "@/lib/platform";
 import { cx } from "@/lib/cx";
 import { editSessionHost, reconnectSession, saveTargetAsHost } from "./connect";
-import { countRunning, useForwardRuns } from "./forwards";
 import { ForwardsPopover } from "./ForwardsPopover";
 import { FindBar } from "./FindBar";
 import { patchInfo, useSessionInfo } from "./info";
@@ -51,10 +51,9 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
   const menu = useMenu();
   const [menuEntries, setMenuEntries] = useState<MenuEntry[]>([]);
   const forwardsMenu = useMenu();
-  const forwardRuns = useForwardRuns(tab.sessionId);
-  // FWD-05: the popover shows the host's forwards running without a terminal as running too.
-  const tunnel = useHostTunnel(tab.hostId);
-  const backgroundForwards = tunnel?.forwards.filter((f) => forwardRuns[f.forward_id]?.state !== "running").length ?? 0;
+  // The host's forwards run on its connection, which the tab shares (SSH-16).
+  const forwardRules = useHostForwardRules(tab.hostId);
+  const hostConnection = useHostConnection(tab.hostId);
   const statsMenu = useMenu();
   const stats = useSessionStats(tab.sessionId);
 
@@ -234,8 +233,8 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
         latencyMs={info.latencyMs}
         findOpen={findOpen}
         sftpOpen={info.sftpOpen}
-        forwards={!!tab.hostId}
-        forwardCount={countRunning(forwardRuns) + backgroundForwards}
+        forwards={!!forwardRules?.length}
+        forwardCount={hostConnection?.forwards.length ?? 0}
         forwardsOpen={!!forwardsMenu.anchor}
         moreOpen={!!menu.anchor?.trigger}
         statsOn={statsOn}
@@ -287,10 +286,9 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
           <SftpPanel key={tab.sessionId} sessionId={tab.sessionId} hostName={host?.name ?? tab.title} active={active} />
         )}
       </div>
-      {forwardsMenu.anchor && tab.sessionId && tab.hostId && connected && (
+      {forwardsMenu.anchor && tab.hostId && connected && (
         <ForwardsPopover
           anchor={forwardsMenu.anchor}
-          sessionId={tab.sessionId}
           hostId={tab.hostId}
           onClose={(restoreFocus) => {
             forwardsMenu.close();

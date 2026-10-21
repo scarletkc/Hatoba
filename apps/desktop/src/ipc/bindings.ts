@@ -213,31 +213,21 @@ export const commands = {
 	localClose: (sessionId: string) => __TAURI_INVOKE<null>("local_close", { sessionId }),
 	hostkeyRespond: (requestId: string, accept: boolean) => __TAURI_INVOKE<void>("hostkey_respond", { requestId, accept }),
 	authPromptRespond: (requestId: string, answers: string[] | null) => __TAURI_INVOKE<void>("auth_prompt_respond", { requestId, answers }),
-	forwardsList: (hostId: string) => __TAURI_INVOKE<ForwardView[]>("forwards_list", { hostId }),
-	/**
-	 *  Every host's forwards, for the **Port Forwarding** page, by host and then as `forwards_list`
-	 *  sorts them.
-	 */
+	/**  Every host's forwards, by host and then by bind and destination port. */
 	forwardsListAll: () => __TAURI_INVOKE<ForwardView[]>("forwards_list_all"),
 	forwardSave: (input: ForwardInput) => __TAURI_INVOKE<ForwardView>("forward_save", { input }),
-	/**  Deletes the rule, and stops it wherever it runs. */
+	/**  Deletes the rule, and stops it where it runs. */
 	forwardDelete: (id: string) => __TAURI_INVOKE<null>("forward_delete", { id }),
-	forwardStart: (sessionId: string, forwardId: string) => __TAURI_INVOKE<number>("forward_start", { sessionId, forwardId }),
-	forwardStop: (sessionId: string, forwardId: string) => __TAURI_INVOKE<null>("forward_stop", { sessionId, forwardId }),
-	/**  Forwards currently running on a session: `(forward_id, port)`. */
-	forwardsActive: (sessionId: string) => __TAURI_INVOKE<([string, number])[]>("forwards_active", { sessionId }),
 	/**
-	 *  FWD-05: starts the saved forward without a terminal, on the host's connection for forwards,
-	 *  and returns the port it listens on.
+	 *  Starts the saved forward on the host's connection (SSH-16), which signs in with `options`
+	 *  when no tab or forward has it open, and returns the port it listens on (on the server for a
+	 *  remote forward).
 	 */
-	tunnelForwardStart: (hostId: string, forwardId: string, options: TunnelOptions) => __TAURI_INVOKE<number>("tunnel_forward_start", { hostId, forwardId, options }),
-	/**
-	 *  FWD-05: stops a forward running without a terminal; the host's connection for forwards closes
-	 *  with its last one.
-	 */
-	tunnelForwardStop: (hostId: string, forwardId: string) => __TAURI_INVOKE<void>("tunnel_forward_stop", { hostId, forwardId }),
-	/**  FWD-05: every forward running without a terminal. */
-	tunnelsList: () => __TAURI_INVOKE<TunnelsEvent>("tunnels_list"),
+	forwardStart: (hostId: string, forwardId: string, options: ForwardOptions) => __TAURI_INVOKE<number>("forward_start", { hostId, forwardId, options }),
+	/**  Stops the forward; the host's connection closes when no tab or forward is left on it. */
+	forwardStop: (hostId: string, forwardId: string) => __TAURI_INVOKE<void>("forward_stop", { hostId, forwardId }),
+	/**  Every saved host's open connection, with the forwards on it. */
+	connectionsList: () => __TAURI_INVOKE<ConnectionsEvent>("connections_list"),
 	sftpHome: (sessionId: string) => __TAURI_INVOKE<string>("sftp_home", { sessionId }),
 	sftpList: (sessionId: string, path: string) => __TAURI_INVOKE<FileEntry[]>("sftp_list", { sessionId, path }),
 	/**  SFTP-02 download. `local_path` comes from the native save dialog. */
@@ -589,11 +579,10 @@ export const events = {
 	appNotificationClick: makeEvent<NotificationTarget>("app://notification-click"),
 	cliActivity: makeEvent<CliActivityEvent>("cli://activity"),
 	sshAuthPrompt: makeEvent<AuthPrompt>("ssh://auth-prompt"),
-	sshForward: makeEvent<ForwardStatusEvent>("ssh://forward"),
+	sshConnections: makeEvent<ConnectionsEvent>("ssh://connections"),
+	sshForwardsLost: makeEvent<ForwardsLostEvent>("ssh://forwards-lost"),
 	sshHostkeyPrompt: makeEvent<HostKeyPrompt>("ssh://hostkey-prompt"),
 	sshState: makeEvent<SessionStateEvent>("ssh://state"),
-	sshTunnelLost: makeEvent<TunnelLostEvent>("ssh://tunnel-lost"),
-	sshTunnels: makeEvent<TunnelsEvent>("ssh://tunnels"),
 	syncStatus: makeEvent<SyncStatus>("sync://status"),
 	transferProgress: makeEvent<TransferProgressEvent>("transfer://progress"),
 	trayUpdate: makeEvent<TrayUpdateEvent>("tray://update"),
@@ -1445,6 +1434,15 @@ export type ConnectOptions = {
 	passphrase: string | null,
 };
 
+/**
+ *  SSH-16: every saved host's open connection, sent whenever one opens or closes or its forwards
+ *  change. `version` grows with each change, so a list read earlier never replaces a newer one.
+ */
+export type ConnectionsEvent = {
+	version: number,
+	connections: HostConnectionView[],
+};
+
 export type CursorChoice = "block" | "bar" | "underline";
 
 export type D1Database = {
@@ -1631,6 +1629,15 @@ export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "
 /**  A downloaded update does not carry a valid signature from the release key (spec §11). */
 "update_signature" | "cancelled" | "io" | "internal";
 
+/**
+ *  A forward that failed to start on its host's connection, until it starts or stops: a port in
+ *  use, say.
+ */
+export type FailedForwardView = {
+	forward_id: string,
+	error: AppError,
+};
+
 export type FileEntry = {
 	name: string,
 	path: string,
@@ -1662,19 +1669,13 @@ export type ForwardKind =
 /**  `ssh -D`: a SOCKS proxy on this computer, whose connections the server opens. */
 "dynamic";
 
-export type ForwardState = "running" | "stopped" | "failed";
-
-/**  A forward's state on one live session. */
-export type ForwardStatusEvent = {
-	session_id: string,
-	forward_id: string,
-	state: ForwardState,
-	/**
-	 *  The port it actually listens on (differs from `bind_port` when that was 0), on the server
-	 *  for a remote forward.
-	 */
-	port: number | null,
-	error: string | null,
+/**
+ *  One-off credentials for the connection a forward's start opens (SSH-03): used once, never
+ *  stored.
+ */
+export type ForwardOptions = {
+	password: string | null,
+	passphrase: string | null,
 };
 
 /**
@@ -1696,6 +1697,16 @@ export type ForwardView = {
 	auto_start: boolean,
 };
 
+/**
+ *  FWD-05: a host's connection ended on its own with forwards on it, which stopped with it.
+ *  Closing it with nothing left on it, the lock (SEC-03) and quitting send nothing.
+ */
+export type ForwardsLostEvent = {
+	host_id: string,
+	host_name: string,
+	error: AppError,
+};
+
 export type GenerateAlgorithm = "ed25519" | "rsa";
 
 export type GroupInput = {
@@ -1715,6 +1726,16 @@ export type GroupView = {
 	 *  until turned off.
 	 */
 	dashboard: boolean,
+};
+
+/**  SSH-16: a saved host's open connection, which its terminal tabs and forwards share. */
+export type HostConnectionView = {
+	host_id: string,
+	/**  The host's name when it connected. */
+	host_name: string,
+	/**  By port. */
+	forwards: RunningForwardView[],
+	failed: FailedForwardView[],
 };
 
 /**  One of a host's environment variables (SSH-14). */
@@ -2216,6 +2237,28 @@ export type QuickTarget = {
 
 export type RightClick = "copy_paste" | "menu";
 
+/**  A forward running on its host's connection. */
+export type RunningForwardView = {
+	forward_id: string,
+	kind: ForwardKind,
+	/**
+	 *  The port it actually listens on (differs from `bind_port` when that was 0), on the server
+	 *  for a remote forward.
+	 */
+	port: number,
+	/**
+	 *  Where it is reached: from this computer, `localhost:<port>` or the address it listens on
+	 *  when that is one interface's; on the server for a remote forward, the address it listens
+	 *  on there.
+	 */
+	address: string,
+	/**
+	 *  `host:port` it leads to, as the server reaches it, or as this computer does for a remote
+	 *  forward; empty for a dynamic one.
+	 */
+	dest: string,
+};
+
 export type SearchKind = "brave" | "tavily" | "searxng";
 
 export type SearchProviderInput = {
@@ -2514,7 +2557,7 @@ export type TrayMenuInput = {
 	 */
 	update: string | null,
 	can_update: boolean,
-	/**  FWD-05: the heading over the forwards running without a terminal, and each one's items. */
+	/**  FWD-05: the heading over the running forwards, and each one's items. */
 	forwards: string,
 	copy_address: string,
 	stop_forward: string,
@@ -2526,65 +2569,6 @@ export type TrayMenuInput = {
 
 /**  WIN-10: the tray menu's **Update to vX.Y.Z** was clicked. */
 export type TrayUpdateEvent = null;
-
-/**  FWD-05: a forward running without a terminal. */
-export type TunnelForwardView = {
-	forward_id: string,
-	kind: ForwardKind,
-	/**
-	 *  The port it actually listens on (differs from `bind_port` when that was 0), on the server
-	 *  for a remote forward.
-	 */
-	port: number,
-	/**
-	 *  Where it is reached: from this computer, `localhost:<port>` or the address it listens on
-	 *  when that is one interface's; on the server for a remote forward, the address it listens
-	 *  on there.
-	 */
-	address: string,
-	/**
-	 *  `host:port` it leads to, as the server reaches it, or as this computer does for a remote
-	 *  forward; empty for a dynamic one.
-	 */
-	dest: string,
-};
-
-/**
- *  FWD-05: a connection for forwards without a terminal ended on its own, and its forwards with
- *  it. Stopping the last forward, the lock (SEC-03) and quitting send nothing.
- */
-export type TunnelLostEvent = {
-	host_id: string,
-	host_name: string,
-	error: AppError,
-};
-
-/**
- *  FWD-05: one-off credentials for the connection that a forward started without a terminal
- *  opens (SSH-03): used once, never stored.
- */
-export type TunnelOptions = {
-	password: string | null,
-	passphrase: string | null,
-};
-
-/**  FWD-05: a saved host's connection for forwards without a terminal, and what runs on it. */
-export type TunnelView = {
-	host_id: string,
-	/**  The host's name when the connection was made. */
-	host_name: string,
-	/**  By port. */
-	forwards: TunnelForwardView[],
-};
-
-/**
- *  FWD-05: every forward running without a terminal, sent whenever that changes. `version` grows
- *  with each change, so a list read earlier never replaces a newer one.
- */
-export type TunnelsEvent = {
-	version: number,
-	tunnels: TunnelView[],
-};
 
 /**  What the update check found (spec §11). */
 export type UpdateCheck = {

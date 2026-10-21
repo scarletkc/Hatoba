@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { api } from "@/ipc/api";
-import type { AuthPrompt, HostKeyPrompt } from "@/ipc/types";
+import type { AuthPrompt, HostKeyPrompt, HostView } from "@/ipc/types";
 
 /** A request for a one-off secret (SSH-03): never stored anywhere, only handed to `ssh_connect`. */
 export interface SecretRequest {
@@ -75,6 +75,15 @@ export function cancelSessionPrompts(sessionId: string) {
 /** Resolves with the typed secret, or `null` when the user cancels. */
 export function askSecret(request: SecretRequest): Promise<string | null> {
   return new Promise((resolve) => push({ kind: "secret", request, resolve }));
+}
+
+/** SSH-03: the password of an "ask every time" host, for this connection only; `null` when cancelled. */
+export function askPassword(host: HostView): Promise<string | null> {
+  return askSecret({
+    kind: "password",
+    hostName: host.name,
+    target: `${host.username}@${host.address}:${host.port}`,
+  });
 }
 
 /** Resolves with the user name to log in with, or `null` when the user cancels (HOST-12). */

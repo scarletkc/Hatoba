@@ -1211,7 +1211,7 @@ pub struct TrayMenuInput {
     /// such item.
     pub update: Option<String>,
     pub can_update: bool,
-    /// FWD-05: the heading over the forwards running without a terminal, and each one's items.
+    /// FWD-05: the heading over the running forwards, and each one's items.
     pub forwards: String,
     pub copy_address: String,
     pub stop_forward: String,
@@ -1409,38 +1409,17 @@ pub struct ForwardInput {
     pub auto_start: bool,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ForwardState {
-    Running,
-    Stopped,
-    Failed,
-}
-
-/// A forward's state on one live session.
-#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
-#[tauri_specta(event_name = "ssh://forward")]
-pub struct ForwardStatusEvent {
-    pub session_id: String,
-    pub forward_id: String,
-    pub state: ForwardState,
-    /// The port it actually listens on (differs from `bind_port` when that was 0), on the server
-    /// for a remote forward.
-    pub port: Option<u16>,
-    pub error: Option<String>,
-}
-
-/// FWD-05: one-off credentials for the connection that a forward started without a terminal
-/// opens (SSH-03): used once, never stored.
+/// One-off credentials for the connection a forward's start opens (SSH-03): used once, never
+/// stored.
 #[derive(Clone, Default, Deserialize, Type)]
-pub struct TunnelOptions {
+pub struct ForwardOptions {
     pub password: Option<String>,
     pub passphrase: Option<String>,
 }
 
-/// FWD-05: a forward running without a terminal.
+/// A forward running on its host's connection.
 #[derive(Debug, Clone, Serialize, Type)]
-pub struct TunnelForwardView {
+pub struct RunningForwardView {
     pub forward_id: String,
     pub kind: ForwardKind,
     /// The port it actually listens on (differs from `bind_port` when that was 0), on the server
@@ -1455,30 +1434,39 @@ pub struct TunnelForwardView {
     pub dest: String,
 }
 
-/// FWD-05: a saved host's connection for forwards without a terminal, and what runs on it.
+/// A forward that failed to start on its host's connection, until it starts or stops: a port in
+/// use, say.
 #[derive(Debug, Clone, Serialize, Type)]
-pub struct TunnelView {
+pub struct FailedForwardView {
+    pub forward_id: String,
+    pub error: crate::error::AppError,
+}
+
+/// SSH-16: a saved host's open connection, which its terminal tabs and forwards share.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct HostConnectionView {
     pub host_id: String,
-    /// The host's name when the connection was made.
+    /// The host's name when it connected.
     pub host_name: String,
     /// By port.
-    pub forwards: Vec<TunnelForwardView>,
+    pub forwards: Vec<RunningForwardView>,
+    pub failed: Vec<FailedForwardView>,
 }
 
-/// FWD-05: every forward running without a terminal, sent whenever that changes. `version` grows
-/// with each change, so a list read earlier never replaces a newer one.
+/// SSH-16: every saved host's open connection, sent whenever one opens or closes or its forwards
+/// change. `version` grows with each change, so a list read earlier never replaces a newer one.
 #[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
-#[tauri_specta(event_name = "ssh://tunnels")]
-pub struct TunnelsEvent {
+#[tauri_specta(event_name = "ssh://connections")]
+pub struct ConnectionsEvent {
     pub version: u64,
-    pub tunnels: Vec<TunnelView>,
+    pub connections: Vec<HostConnectionView>,
 }
 
-/// FWD-05: a connection for forwards without a terminal ended on its own, and its forwards with
-/// it. Stopping the last forward, the lock (SEC-03) and quitting send nothing.
+/// FWD-05: a host's connection ended on its own with forwards on it, which stopped with it.
+/// Closing it with nothing left on it, the lock (SEC-03) and quitting send nothing.
 #[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
-#[tauri_specta(event_name = "ssh://tunnel-lost")]
-pub struct TunnelLostEvent {
+#[tauri_specta(event_name = "ssh://forwards-lost")]
+pub struct ForwardsLostEvent {
     pub host_id: String,
     pub host_name: String,
     pub error: crate::error::AppError,

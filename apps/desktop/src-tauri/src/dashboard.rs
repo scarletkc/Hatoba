@@ -1010,8 +1010,8 @@ async fn connect_step(
         });
     }
     let tab = state
-        .ssh
-        .connection_for_host(host_id, &plan.versions.config);
+        .connections
+        .session_for(host_id, &plan.versions.config);
     // Known only from a connection made for the host as it is now: the system HOST-11 recorded
     // may be that of a server the host no longer names, or one since replaced.
     if let Some(system) = dash.unsupported(host_id, &plan.versions.config) {
@@ -1163,8 +1163,8 @@ async fn connect_step(
     drop(gates);
     // A tab may have connected while this one did.
     if let Some(tab) = state
-        .ssh
-        .connection_for_host(host_id, &plan.versions.config)
+        .connections
+        .session_for(host_id, &plan.versions.config)
     {
         close(session);
         return Next::Read {

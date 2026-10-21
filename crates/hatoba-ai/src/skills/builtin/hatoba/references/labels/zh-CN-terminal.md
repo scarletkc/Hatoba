@@ -186,18 +186,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Delete | 删除 |
 | Save | 保存 |
 
-### Start and stop in a session
-
-| en | zh-CN |
-|---|---|
-| Start | 启动 |
-| Stop | 停止 |
-| Retry | 重试 |
-| Manage Port Forwarding… | 管理端口转发… |
-| This host has no port forwards yet. | 这台主机还没有端口转发。 |
-| Can’t read the port forwards. | 无法读取端口转发。 |
-
-### Run without a terminal
+### Start and stop
 
 | en | zh-CN |
 |---|---|
@@ -205,12 +194,18 @@ The labels that these files name in English, as the interface shows them in Simp
 | Port Forwarding | 端口转发 |
 | Stop | 停止 |
 | Retry | 重试 |
-| In a terminal tab | 在终端标签页中 |
+| Manage Port Forwarding… | 管理端口转发… |
+| Can’t read the port forwards. | 无法读取端口转发。 |
+
+### Keep running in the background
+
+| en | zh-CN |
+|---|---|
 | Close Button | 关闭窗口时 |
 | Disconnect all sessions when locked | 锁定时断开所有会话 |
+| Port Forwarding | 端口转发 |
 | Copy Address | 复制地址 |
-| In the background | 在后台运行 |
-| Start when this host connects | 连接此主机时自动启动 |
+| Stop | 停止 |
 | Port forwarding stopped. {reason} | 端口转发已停止。{reason} |
 
 ## `references/troubleshooting-connections.md`

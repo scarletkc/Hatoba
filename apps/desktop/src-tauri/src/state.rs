@@ -9,6 +9,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::ai::AiManager;
 use crate::cli_access::CliAccess;
+use crate::connection::Connections;
 use crate::dashboard::Dashboard;
 use crate::deploy::Deployments;
 use crate::dropped::DroppedPaths;
@@ -19,7 +20,6 @@ use crate::mcp::McpManager;
 use crate::platform::secrets::KeyringStore;
 use crate::ssh::SshManager;
 use crate::sync::SyncController;
-use crate::tunnel::Tunnels;
 use crate::update::Updates;
 
 pub use hatoba_core::sync::SharedVault;
@@ -28,8 +28,8 @@ pub struct AppState {
     pub vault: SharedVault,
     pub secrets: Arc<KeyringStore>,
     pub ssh: SshManager,
-    /// Starts and stops of the forwards that run without a terminal (FWD-05).
-    pub tunnels: Tunnels,
+    /// Each saved host's connection, which its terminal tabs and forwards share (SSH-16).
+    pub connections: Connections,
     /// Local terminal tabs (§7.5).
     pub local: LocalManager,
     /// The dashboard's background connections and readers (HOST-14).
@@ -62,7 +62,7 @@ impl AppState {
             vault,
             secrets: Arc::new(KeyringStore),
             ssh: SshManager::default(),
-            tunnels: Tunnels::default(),
+            connections: Connections::default(),
             local: LocalManager::default(),
             dashboard: Dashboard::default(),
             sync: SyncController::default(),
