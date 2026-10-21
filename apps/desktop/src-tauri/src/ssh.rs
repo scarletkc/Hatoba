@@ -83,10 +83,13 @@ impl LiveSession {
         }
     }
 
-    /// Stops sampling and closes the shell. Its own connection closes too; a shared one closes
-    /// once nothing else is left on it.
+    /// Stops sampling and closes the shell and SFTP, which ends the tab's transfers. Its own
+    /// connection closes too; a shared one closes once nothing else is left on it.
     pub async fn close(&self) {
         lock(&self.stats).take();
+        if let Some(sftp) = self.sftp.get() {
+            sftp.close().await;
+        }
         self.shell.close().await;
         match &self.link {
             Link::Own => self.session.disconnect().await,

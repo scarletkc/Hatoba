@@ -87,6 +87,13 @@ fn after_unlock(app: &AppHandle, state: &AppState) {
     keep_pin_for_restart(state);
     lock::refresh_policy(state);
     state.touch_activity();
+    // SSH-16: before a sync pull can change a host.
+    if let Err(e) = state.with_unlocked(|v| {
+        state.connections.restamp(v);
+        Ok(())
+    }) {
+        tracing::debug!("connections not stamped again: {}", e.detail);
+    }
     sync::on_unlock(app);
 }
 

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { api } from "@/ipc/api";
-import type { AppError, ConnectionsEvent, HostConnectionView } from "@/ipc/types";
+import type { AppError, ConnectionsEvent, HostConnectionView, RunningForwardView } from "@/ipc/types";
 
 /**
  * SSH-16: each saved host's open connection, which its terminal tabs and port forwards share, and the forwards on
@@ -39,9 +39,9 @@ export function useHostConnection(hostId: string | null): HostConnectionView | u
 /** Whether the host has a connection open, which a new tab or forward joins without signing in. */
 export const hostConnected = (hostId: string): boolean => getConnections().some((x) => x.host_id === hostId);
 
-/** The forward's port while it runs: on the server for a remote forward. */
-export function forwardPort(conn: HostConnectionView | undefined, forwardId: string): number | null {
-  return conn?.forwards.find((f) => f.forward_id === forwardId)?.port ?? null;
+/** The forward while it runs, and the address it listens on: an edit to its rule applies at its next start. */
+export function runningForward(conn: HostConnectionView | undefined, forwardId: string): RunningForwardView | null {
+  return conn?.forwards.find((f) => f.forward_id === forwardId) ?? null;
 }
 
 /** Why the forward failed to start on the host's connection, until it starts or stops. */

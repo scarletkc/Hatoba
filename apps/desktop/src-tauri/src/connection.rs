@@ -8,9 +8,11 @@
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use hatoba_core::model::{ForwardKind, Item, PortForward};
+use hatoba_core::vault::Vault;
 use hatoba_ssh::{
     ConnectConfig, DynamicForward, ForwardHandle, LocalForward, RemoteForward, SshSession,
 };
@@ -37,8 +39,11 @@ pub struct Connection {
     pub session: SshSession,
     pub host_id: String,
     /// `dashboard::config_version` when it connected: tabs and forwards join it only while the
-    /// host connects that way.
-    pub config: String,
+    /// host connects that way. The lock starts the version's hashes over, so the unlock stamps it
+    /// again ([`Connections::restamp`]).
+    config: Mutex<String>,
+    /// Made the way its host connected when the vault last locked.
+    current_at_lock: AtomicBool,
     /// The host's name when it connected, for the tray menu and the notification.
     pub host_name: String,
     users: Mutex<Users>,
@@ -225,14 +230,47 @@ impl Connections {
         Arc::clone(lock(&self.gates).entry(host_id.to_owned()).or_default())
     }
 
+    /// The registered connections, oldest first. Copied out, so that the list's lock is never held
+    /// while another is taken.
+    fn all(&self) -> Vec<Arc<Connection>> {
+        lock(&self.list).clone()
+    }
+
     /// The host's open connections, oldest first; with `config`, only those made the way the host
     /// connects now.
     fn of_host(&self, host_id: &str, config: Option<&str>) -> Vec<Arc<Connection>> {
-        lock(&self.list)
-            .iter()
-            .filter(|c| c.host_id == host_id && config.is_none_or(|v| c.config == v) && c.open())
-            .cloned()
+        self.all()
+            .into_iter()
+            .filter(|c| {
+                c.host_id == host_id && config.is_none_or(|v| *lock(&c.config) == v) && c.open()
+            })
             .collect()
+    }
+
+    /// SEC-03: as the vault locks, with the connections kept open behind the lock screen, notes
+    /// which are made the way their host connects then.
+    pub fn note_current(&self, vault: &Vault) {
+        for conn in self.all() {
+            let current = vault
+                .get(&conn.host_id)
+                .and_then(Item::as_host)
+                .is_some_and(|h| crate::dashboard::config_version(vault, h) == *lock(&conn.config));
+            conn.current_at_lock.store(current, Ordering::Relaxed);
+        }
+    }
+
+    /// After the unlock: a version's hashes start over at the lock, so each connection noted then
+    /// takes its host's version made now, and tabs and forwards join it again. Nothing changes a
+    /// host while the vault is locked.
+    pub fn restamp(&self, vault: &Vault) {
+        for conn in self.all() {
+            if !conn.current_at_lock.swap(false, Ordering::Relaxed) {
+                continue;
+            }
+            if let Some(host) = vault.get(&conn.host_id).and_then(Item::as_host) {
+                *lock(&conn.config) = crate::dashboard::config_version(vault, host);
+            }
+        }
     }
 
     /// A connection of the saved host made the way it connects now (`config`), which the
@@ -510,7 +548,7 @@ pub fn list(state: &AppState) -> ConnectionsEvent {
 
 fn snapshot(state: &AppState, version: u64) -> ConnectionsEvent {
     let mut connections: Vec<HostConnectionView> = Vec::new();
-    for conn in lock(&state.connections.list).iter().filter(|c| c.open()) {
+    for conn in state.connections.all().iter().filter(|c| c.open()) {
         let at = match connections.iter().position(|v| v.host_id == conn.host_id) {
             Some(at) => at,
             None => {
@@ -608,7 +646,8 @@ async fn open(
     let conn = Arc::new(Connection {
         session,
         host_id: host_id.to_owned(),
-        config,
+        config: Mutex::new(config),
+        current_at_lock: AtomicBool::new(false),
         host_name: name,
         users: Mutex::new(Users {
             starting: 1,

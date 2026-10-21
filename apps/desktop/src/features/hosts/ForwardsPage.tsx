@@ -9,9 +9,9 @@ import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { ForwardInput, ForwardView, HostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { forwardRule, hostPort, reachableAddress } from "./address";
+import { forwardRule, hostPort } from "./address";
 import { ForwardDialog } from "./ForwardDialog";
-import { forwardFailure, forwardPort, useConnections } from "./connections";
+import { forwardFailure, runningForward, useConnections } from "./connections";
 import { dropForwardRule, putForwardRule, startForward, stopForward, useForwardRules } from "./forwards";
 import s from "./ForwardsPage.module.css";
 
@@ -188,9 +188,9 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                   <Group>
                     {forwards.map((f) => {
                       const label = rule(f);
-                      const port = forwardPort(conn, f.id);
+                      const address = runningForward(conn, f.id)?.address ?? null;
                       const failed = forwardFailure(conn, f.id);
-                      const failure = port === null ? (failures[f.id] ?? (failed && errorMessage(t, failed))) : null;
+                      const failure = address === null ? (failures[f.id] ?? (failed && errorMessage(t, failed))) : null;
                       const bind = hostPort(f.bind_address, f.bind_port || t("hosts.fwd.autoPort"));
                       return (
                         <div key={f.id} className={s.row}>
@@ -206,10 +206,10 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                                 </>
                               )}
                             </span>
-                            {port !== null && (
+                            {address !== null && (
                               <span className={s.status}>
                                 <Icon name="check-circle" fill size={13} className={s.running} />
-                                <RunningAddress forward={f} port={port} onCopy={(address) => void copy(address)} />
+                                <RunningAddress forward={f} address={address} onCopy={(a) => void copy(a)} />
                               </span>
                             )}
                             {failure && (
@@ -233,9 +233,9 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                             className={s.toggle}
                             busy={starting.has(f.id)}
                             disabled={pending.has(f.id)}
-                            onClick={() => void (port !== null ? stop(f) : start(f))}
+                            onClick={() => void (address !== null ? stop(f) : start(f))}
                           >
-                            {port !== null ? t("terminal.fwd.stop") : failure ? t("btn.retry") : t("terminal.fwd.start")}
+                            {address !== null ? t("terminal.fwd.stop") : failure ? t("btn.retry") : t("terminal.fwd.start")}
                           </Button>
                           <span className={s.actions}>
                             <IconButton
@@ -271,10 +271,9 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
  * Where a running forward listens. This computer's address copies; a remote forward's is on the server, where nothing
  * here connects to it.
  */
-function RunningAddress({ forward: f, port, onCopy }: { forward: ForwardView; port: number; onCopy(address: string): void }) {
+function RunningAddress({ forward: f, address, onCopy }: { forward: ForwardView; address: string; onCopy(address: string): void }) {
   const t = useT();
-  if (f.kind === "remote") return <span className={s.serverAddress}>{t("terminal.fwd.onServer", { addr: hostPort(f.bind_address, port) })}</span>;
-  const address = reachableAddress(f.bind_address, port);
+  if (f.kind === "remote") return <span className={s.serverAddress}>{t("terminal.fwd.onServer", { addr: address })}</span>;
   return (
     <button type="button" className={s.address} title={t("terminal.fwd.copy", { addr: address })} onClick={() => onCopy(address)}>
       {address}

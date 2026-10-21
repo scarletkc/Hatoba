@@ -48,7 +48,7 @@ vi.mock("@/features/terminal/session", () => ({
   needsPassword: (err: AppError) => err.code === "invalid_input" && err.field === "password",
 }));
 
-import { forwardFailure, forwardPort, getConnections, hostConnected } from "./connections";
+import { forwardFailure, getConnections, hostConnected, runningForward } from "./connections";
 import { getForwardRules, loadForwardRules, putForwardRule, startForward, startForwardListeners } from "./forwards";
 
 const emit = <T>(event: string, payload: T) => ipc.handlers.get(event)?.(payload as never);
@@ -109,7 +109,7 @@ describe("the hosts' shared connections (SSH-16)", () => {
     const older = ++version;
     emit("ssh://connections", connected([15432]));
     emit("ssh://connections", connected(null, older));
-    expect(forwardPort(current(), "f15432")).toBe(15432);
+    expect(runningForward(current(), "f15432")?.address).toBe("localhost:15432");
     emit("ssh://connections", connected(null));
     expect(current()).toBeUndefined();
   });
@@ -118,7 +118,7 @@ describe("the hosts' shared connections (SSH-16)", () => {
     expect(hostConnected("h1")).toBe(false);
     emit("ssh://connections", connected([]));
     expect(hostConnected("h1")).toBe(true);
-    expect(forwardPort(current(), "f15432")).toBeNull();
+    expect(runningForward(current(), "f15432")).toBeNull();
   });
 
   it("keeps why a forward failed to start on the connection", () => {

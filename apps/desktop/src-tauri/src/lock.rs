@@ -78,6 +78,10 @@ pub async fn lock_vault(app: &AppHandle, reason: LockReason) {
         // Under the same guard: calls without a result get their cancelled result while the
         // vault can still store it, and nothing writes between the stop and the lock.
         state.ai.stop_all(&mut vault);
+        // SSH-16: the hosts' connections stay reusable after the unlock.
+        if was {
+            state.connections.note_current(&vault);
+        }
         vault.lock();
         was
     };
