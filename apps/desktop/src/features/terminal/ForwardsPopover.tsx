@@ -3,8 +3,8 @@ import { createPortal } from "react-dom";
 import { errorMessage } from "@/app/errors";
 import { Icon, Spinner } from "@/components/controls";
 import { overlayStyles, toast, type MenuAnchor } from "@/components/overlay";
-import { hostPort, reachableAddress } from "@/features/hosts/address";
-import { forwardFailure, forwardPort, useHostConnection } from "@/features/hosts/connections";
+import { hostPort } from "@/features/hosts/address";
+import { forwardFailure, runningForward, useHostConnection } from "@/features/hosts/connections";
 import { startForward, stopForward, useForwardRules, useHostForwardRules } from "@/features/hosts/forwards";
 import { useT } from "@/i18n";
 import type { ForwardView } from "@/ipc/types";
@@ -94,14 +94,14 @@ export function ForwardsPopover({
       {!saved && loadFailed && <div className={cx(s.note, s.noteError)}>{t("terminal.fwd.loadFailed")}</div>}
       {saved?.length === 0 && <div className={s.note}>{t("terminal.fwd.none")}</div>}
       {saved?.map((f) => {
-        const port = forwardPort(conn, f.id);
+        const address = runningForward(conn, f.id)?.address ?? null;
         const failure = forwardFailure(conn, f.id);
-        const error = port === null ? (errors[f.id] ?? (failure && errorMessage(t, failure))) : null;
+        const error = address === null ? (errors[f.id] ?? (failure && errorMessage(t, failure))) : null;
         return (
           <ForwardRow
             key={f.id}
             forward={f}
-            port={port}
+            address={address}
             error={error}
             busy={busy.has(f.id)}
             onStart={() => void start(f)}
@@ -129,7 +129,7 @@ export function ForwardsPopover({
 
 function ForwardRow({
   forward: f,
-  port,
+  address,
   error,
   busy,
   onStart,
@@ -137,8 +137,8 @@ function ForwardRow({
   onCopy,
 }: {
   forward: ForwardView;
-  /** The local port while it runs. */
-  port: number | null;
+  /** Where it listens while it runs. */
+  address: string | null;
   /** Why it failed to start. */
   error: string | null;
   busy: boolean;
@@ -147,9 +147,9 @@ function ForwardRow({
   onCopy(address: string): void;
 }) {
   const t = useT();
-  const running = port !== null;
+  const running = address !== null;
   const failed = error !== null;
-  const local = running ? reachableAddress(f.bind_address, port) : hostPort(f.bind_address, f.bind_port || t("terminal.fwd.autoPort"));
+  const local = address ?? hostPort(f.bind_address, f.bind_port || t("terminal.fwd.autoPort"));
 
   return (
     <div className={s.row}>

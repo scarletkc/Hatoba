@@ -9,9 +9,9 @@ import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { ForwardInput, ForwardView, HostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { hostPort, reachableAddress } from "./address";
+import { hostPort } from "./address";
 import { ForwardDialog } from "./ForwardDialog";
-import { forwardFailure, forwardPort, useConnections } from "./connections";
+import { forwardFailure, runningForward, useConnections } from "./connections";
 import { dropForwardRule, putForwardRule, startForward, stopForward, useForwardRules } from "./forwards";
 import s from "./ForwardsPage.module.css";
 
@@ -188,10 +188,9 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                   <Group>
                     {forwards.map((f) => {
                       const label = rule(f);
-                      const port = forwardPort(conn, f.id);
+                      const address = runningForward(conn, f.id)?.address ?? null;
                       const failed = forwardFailure(conn, f.id);
-                      const failure = port === null ? (failures[f.id] ?? (failed && errorMessage(t, failed))) : null;
-                      const address = port !== null && reachableAddress(f.bind_address, port);
+                      const failure = address === null ? (failures[f.id] ?? (failed && errorMessage(t, failed))) : null;
                       return (
                         <div key={f.id} className={s.row}>
                           <div className={s.body}>
@@ -234,9 +233,9 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                             className={s.toggle}
                             busy={starting.has(f.id)}
                             disabled={pending.has(f.id)}
-                            onClick={() => void (port !== null ? stop(f) : start(f))}
+                            onClick={() => void (address !== null ? stop(f) : start(f))}
                           >
-                            {port !== null ? t("terminal.fwd.stop") : failure ? t("btn.retry") : t("terminal.fwd.start")}
+                            {address !== null ? t("terminal.fwd.stop") : failure ? t("btn.retry") : t("terminal.fwd.start")}
                           </Button>
                           <span className={s.actions}>
                             <IconButton
