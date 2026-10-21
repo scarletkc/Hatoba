@@ -20,4 +20,5 @@ pub mod sftp;
 pub mod skills;
 pub mod ssh;
 pub mod sync;
+pub mod telnet;
 pub mod vault;

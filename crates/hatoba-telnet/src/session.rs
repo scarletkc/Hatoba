@@ -26,7 +26,8 @@ const EVENT_CAPACITY: usize = 128;
 pub enum TelnetEvent {
     /// Output, in order.
     Data(Bytes),
-    /// The connection ended: by the server when `error` is `None`. Always the last event.
+    /// The connection ended, closed by either side when `error` is `None`. Always the last
+    /// event.
     Closed { error: Option<String> },
 }
 
@@ -143,10 +144,7 @@ async fn run<S>(
                         let _ = out.send(naws);
                     }
                 }
-                Some(Command::Close) | None => {
-                    write_task.abort();
-                    return;
-                }
+                Some(Command::Close) | None => break None,
             },
             written = &mut write_task => {
                 break match written {
@@ -259,6 +257,20 @@ mod tests {
                 None => panic!("the session ended without Closed"),
             }
         }
+    }
+
+    #[tokio::test]
+    async fn closing_the_session_ends_it_with_closed() {
+        let (client, mut server) = duplex(4096);
+        let (session, mut events) =
+            TelnetSession::start(client, 80, 24, AutoLogin::new(None, None));
+        read_some(&mut server).await;
+        session.close();
+        match tokio::time::timeout(Duration::from_secs(5), events.recv()).await {
+            Ok(Some(TelnetEvent::Closed { error: None })) => {}
+            other => panic!("expected Closed, got {other:?}"),
+        }
+        assert!(session.write(b"x".to_vec()).is_err());
     }
 
     #[tokio::test]

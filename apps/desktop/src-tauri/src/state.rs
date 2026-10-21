@@ -20,6 +20,7 @@ use crate::mcp::McpManager;
 use crate::platform::secrets::KeyringStore;
 use crate::ssh::SshManager;
 use crate::sync::SyncController;
+use crate::telnet::TelnetManager;
 use crate::update::Updates;
 
 pub use hatoba_core::sync::SharedVault;
@@ -32,6 +33,8 @@ pub struct AppState {
     pub connections: Connections,
     /// Local terminal tabs (§7.5).
     pub local: LocalManager,
+    /// Telnet terminal tabs (§7.6).
+    pub telnet: TelnetManager,
     /// The dashboard's background connections and readers (HOST-14).
     pub dashboard: Dashboard,
     pub sync: SyncController,
@@ -64,6 +67,7 @@ impl AppState {
             ssh: SshManager::default(),
             connections: Connections::default(),
             local: LocalManager::default(),
+            telnet: TelnetManager::default(),
             dashboard: Dashboard::default(),
             sync: SyncController::default(),
             deploy: Deployments::default(),

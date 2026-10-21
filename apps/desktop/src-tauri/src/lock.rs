@@ -106,6 +106,10 @@ pub async fn lock_vault(app: &AppHandle, reason: LockReason) {
             // SSH-16: and the hosts' connections, which close once the tabs on them did.
             let connections = state.connections.take_all();
             let locals = state.local.take_all();
+            // Telnet tabs have no tool writes of the assistant to wait for.
+            for live in state.telnet.take_all() {
+                live.close();
+            }
             let ssh = futures::future::join_all(sessions.into_iter().map(|(id, live)| {
                 let ai = &state.ai;
                 async move {

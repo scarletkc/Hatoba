@@ -25,6 +25,7 @@ hatoba-ai.workspace = true
 hatoba-cli.workspace = true
 hatoba-core.workspace = true
 hatoba-local.workspace = true
+hatoba-telnet.workspace = true
 hatoba-ssh.workspace = true
 # WIN-10: the system tray on Windows and Linux.
 tauri = { version = "2.12", features = ["tray-icon"] }

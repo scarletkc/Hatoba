@@ -388,6 +388,7 @@ pub async fn sync_revoke_device(
 pub(crate) fn item_type(item: Option<&Item>) -> ItemType {
     match item {
         Some(Item::Host(_)) | None => ItemType::Host,
+        Some(Item::TelnetHost(_)) => ItemType::TelnetHost,
         Some(Item::Group(_)) => ItemType::Group,
         Some(Item::Key(_)) => ItemType::Key,
         Some(Item::KnownHost(_)) => ItemType::KnownHost,
@@ -444,6 +445,25 @@ fn summary(item: &Item, hosts: &dyn Fn(&str) -> Option<String>) -> Vec<(&'static
             ("note", h.note.clone()),
             ("ai_notes", h.ai_notes.clone()),
             ("env", env_summary(&h.env)),
+        ],
+        // Never the password.
+        Item::TelnetHost(h) => vec![
+            ("name", h.name.clone()),
+            ("address", h.address.clone()),
+            ("port", h.port.to_string()),
+            ("username", h.username.clone()),
+            (
+                "proxy",
+                match &h.proxy {
+                    HostProxy::DeviceDefault => "device_default".to_owned(),
+                    HostProxy::Direct => "direct".to_owned(),
+                    HostProxy::Proxy { proxy_id } => hosts(proxy_id)
+                        .map_or_else(|| "deleted".to_owned(), |name| format!("proxy:{name}")),
+                },
+            ),
+            ("tags", h.tags.join(", ")),
+            ("note", h.note.clone()),
+            ("ai_notes", h.ai_notes.clone()),
         ],
         Item::Group(g) => vec![("name", g.name.clone())],
         Item::Key(k) => vec![
@@ -595,6 +615,7 @@ pub fn sync_conflicts(state: State<'_, AppState>) -> AppResult<Vec<ConflictView>
             .into_iter()
             .map(|(id, h)| (id, h.name))
             .chain(v.proxies().into_iter().map(|(id, p)| (id, p.name)))
+            .chain(v.telnet_hosts().into_iter().map(|(id, h)| (id, h.name)))
             .collect();
         let lookup = |id: &str| names.get(id).cloned();
         Ok(v.conflicts(true)?

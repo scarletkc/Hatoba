@@ -48,6 +48,7 @@ pub use keys::{
     GenerateKind, KeyAlgorithm, KeyError, ParsedKey, fingerprint_sha256, generate_key,
     parse_private_key, try_fingerprint_sha256,
 };
+pub use net::dial;
 pub use probe::{tcp_probe, tcp_probe_via};
 pub use proxy::{ProxyConfig, ProxyKind};
 pub use server_os::{ServerOs, server_os};

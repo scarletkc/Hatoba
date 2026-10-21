@@ -2374,6 +2374,7 @@ dependencies = [
  "hatoba-core",
  "hatoba-local",
  "hatoba-ssh",
+ "hatoba-telnet",
  "keyring",
  "libc",
  "objc2-foundation",
