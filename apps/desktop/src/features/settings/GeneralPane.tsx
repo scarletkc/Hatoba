@@ -169,7 +169,14 @@ function CliCommandRows() {
       const err = toAppError(e);
       // macOS: the administrator password prompt was closed.
       if (err.code === "cancelled") return;
-      toast(err.field === "command" ? t("settings.cli.taken", { location: cli.location }) : errorMessage(t, e), "error");
+      // `console`: on Windows, the console program is not beside the app.
+      const message =
+        err.field === "command"
+          ? t("settings.cli.taken", { location: cli.location })
+          : err.field === "console"
+            ? t("settings.cli.missing", { path: err.detail })
+            : errorMessage(t, e);
+      toast(message, "error");
     } finally {
       setBusy(false);
     }
@@ -178,6 +185,13 @@ function CliCommandRows() {
   const hint = (
     <>
       {t("settings.cli.hint")}
+      {/* HOST-15's switch shows only while the command is on, so say what it adds. */}
+      {cli && !cli.enabled && (
+        <>
+          <br />
+          {t("settings.cli.agents")}
+        </>
+      )}
       {cli?.enabled && (
         <>
           <br />
