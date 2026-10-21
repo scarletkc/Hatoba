@@ -669,7 +669,7 @@ const T_SEND = 31.0;
 const RUNS = [32.75, 33.55, 35.35, 36.55];
 const T_DONE = 37.5;
 const T_AI_OUT = 41.2;
-const T_DASH = 41.5;
+const T_DASH = 41.75;
 const T_WIPE = 47.5;
 const STAGES = [
   ['ai-0', T_SEND],
@@ -997,7 +997,7 @@ const app = (() => {
       case 'ai-empty':
         return t >= T_AI && t < T_SEND ? 1 : 0;
       case 'dash':
-        return t >= T_DASH ? fadeIn(T_DASH, 0.3) : 0;
+        return t >= T_DASH ? fadeIn(T_DASH, 0.15) : 0;
       default: {
         const k = STAGES.findIndex((s) => s[0] === name);
         const end = k + 1 < STAGES.length ? STAGES[k + 1][1] : T_DASH + 0.3;
