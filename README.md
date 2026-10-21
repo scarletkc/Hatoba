@@ -59,7 +59,8 @@ account.
   download with progress and cancel, rename, delete, and new folder.
 - **Key vault**: import OpenSSH, PEM, and PuTTY `.ppk` keys, generate Ed25519
   or RSA 4096 keys, and copy or deploy public keys.
-- **Port forwarding**: local forwards that can start with the connection.
+- **Port forwarding**: local, remote, and SOCKS forwards that can start with
+  the connection or run without a terminal.
 - **Cloud sync**: through your Worker or directly to D1, with incremental
   sync, automatic conflict resolution you can review item by item, and a
   device list with revocation.

@@ -73,7 +73,7 @@ export const en = {
         text: "Tabs, truecolor, CJK input methods, search, clickable links, and a confirmation before a multi-line paste.",
       },
       { term: "SFTP", text: "A file panel beside the terminal, with drag-and-drop upload and downloads that you can cancel." },
-      { term: "Port forwarding", text: "Local forwards that can start with the connection." },
+      { term: "Port forwarding", text: "Local, remote and SOCKS forwards that can start with the connection or run without a terminal." },
       {
         term: "Keys",
         text: "Passwords, Ed25519, ECDSA, and RSA keys, ssh-agent, and keyboard-interactive 2FA. Import OpenSSH, PEM, and PuTTY keys, or generate new ones.",

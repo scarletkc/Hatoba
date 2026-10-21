@@ -69,7 +69,7 @@ export const zh: Messages = {
         text: "多标签、真彩色、中日韩输入法、搜索和可点击的链接，粘贴多行内容前会先确认。",
       },
       { term: "SFTP", text: "终端旁的文件面板，支持拖放上传，下载可以随时取消。" },
-      { term: "端口转发", text: "本地转发，可以随连接一起启动。" },
+      { term: "端口转发", text: "本地、远程和 SOCKS 转发，可以随连接一起启动，也可以不开终端在后台运行。" },
       {
         term: "密钥",
         text: "支持密码、Ed25519、ECDSA 和 RSA 密钥、ssh-agent 以及键盘交互式双重验证。可以导入 OpenSSH、PEM 和 PuTTY 密钥，也可以生成新密钥。",
