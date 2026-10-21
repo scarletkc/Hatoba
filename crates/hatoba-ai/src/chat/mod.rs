@@ -11,7 +11,7 @@
 //!   `output_config.effort` and, where the model supports it, adaptive thinking with summarized
 //!   display (see `request` for the rule at Default). A model that writes progress updates
 //!   between tool calls gets `display: "updates"` instead, with its beta header, and its
-//!   progress updates stream as answer text; a 4xx about that display or header sends the
+//!   progress updates stream as answer text; a 400 or 422 about that display or header sends the
 //!   request again with summarized display, and requests to that base URL keep the summarized
 //!   display until the app restarts. No `temperature`, other beta headers or
 //!   `eager_input_streaming`, so any Anthropic-compatible vendor accepts the request. When a
@@ -367,19 +367,25 @@ pub(crate) fn rejects_summary(err: &AiError) -> bool {
     }
 }
 
-/// Whether an Anthropic error is a 4xx about `display: "updates"` or its beta header, which a
+/// Whether an Anthropic error is a 400 or 422 about `display: "updates"` or its beta header, which a
 /// vendor or gateway that does not pass the header on returns. The request is then retried with
-/// summarized display, keeping the level. Authentication, timeout and rate-limit statuses never
-/// count, since the base URL is then remembered as refusing it.
+/// summarized display, keeping the level. Only a validation error (400 or 422) that names the
+/// display or the header counts, since the base URL is then remembered as refusing it.
 pub(crate) fn rejects_updates(err: &AiError) -> bool {
     match err {
-        AiError::Http { status, message }
-            if (400..500).contains(status) && !matches!(status, 401 | 403 | 408 | 429) =>
-        {
+        AiError::Http {
+            status: 400 | 422,
+            message,
+        } => {
             let message = message.to_ascii_lowercase();
-            ["display", "beta"]
-                .iter()
-                .any(|word| message.contains(word))
+            [
+                "display",
+                "anthropic-beta",
+                "beta flag",
+                request::UPDATES_BETA,
+            ]
+            .iter()
+            .any(|word| message.contains(word))
         }
         _ => false,
     }

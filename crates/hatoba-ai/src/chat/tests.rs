@@ -3075,6 +3075,9 @@ fn updates_retry_conditions() {
             "messages.1: tool_use ids must be unique; check for updates",
         ),
         (500, "thinking.display failed"),
+        // A model the gateway does not know, whatever its name.
+        (404, "model claude-opus-5-5-beta not found"),
+        (400, "model claude-opus-5-5-beta is in a closed beta"),
     ] {
         assert!(!rejects_updates(&http(status, message)), "{message}");
     }
