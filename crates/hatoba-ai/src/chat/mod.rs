@@ -11,9 +11,10 @@
 //!   `output_config.effort` and, where the model supports it, adaptive thinking with summarized
 //!   display (see `request` for the rule at Default). A model that writes progress updates
 //!   between tool calls gets `display: "updates"` instead, with its beta header, and its
-//!   progress updates stream as answer text; a 400 or 422 about that display or header sends the
-//!   request again with summarized display, and requests to that base URL keep the summarized
-//!   display until the app restarts. No `temperature`, other beta headers or
+//!   progress updates stream as answer text. A 4xx that may refuse them (not one about the key,
+//!   the URL, the size or the rate) sends the request once more with summarized display; when
+//!   that one succeeds, requests to that base URL keep the summarized display until the app
+//!   restarts. No `temperature`, other beta headers or
 //!   `eager_input_streaming`, so any Anthropic-compatible vendor accepts the request. When a
 //!   request that replayed `raw` is refused with a 400 about thinking, signatures or blocks
 //!   (newer Claude models bind signed thinking to the exact prefix), it is sent once more with
@@ -233,15 +234,27 @@ pub async fn stream_chat(
             let mut allow_raw = true;
             let mut with_effort = true;
             let mut with_updates = !refuses_updates(&provider.base_url);
+            let mut updates_retried = false;
+            // This request is the retry without progress updates, so its answer says whether
+            // they were what the provider refused.
+            let mut confirming = false;
             loop {
                 let built = request::anthropic(req, allow_raw, with_effort, with_updates);
                 let (response, request_chars) = post(http, provider, &url, &built, cancel).await?;
                 if !response.status().is_success() {
                     let err = provider.error(response, cancel).await;
-                    // Before the effort check, which the word `display` also matches.
-                    if built.beta.is_some() && rejects_updates(&err) {
+                    if std::mem::take(&mut confirming) {
+                        if built.sent_effort && rejects_effort(&err) {
+                            // No thinking fields at all, so no progress updates either.
+                            remember_refused_updates(&provider.base_url);
+                        } else {
+                            with_updates = true;
+                        }
+                    }
+                    if built.beta.is_some() && !updates_retried && may_refuse_updates(&err) {
                         with_updates = false;
-                        remember_refused_updates(&provider.base_url);
+                        updates_retried = true;
+                        confirming = true;
                         continue;
                     }
                     if built.sent_effort && rejects_effort(&err) {
@@ -256,6 +269,9 @@ pub async fn stream_chat(
                         continue;
                     }
                     return Err(err);
+                }
+                if confirming {
+                    remember_refused_updates(&provider.base_url);
                 }
                 let stream = AnthropicStream::new(built.beta.is_some());
                 let assembled = consume(response, stream, cancel, on_event).await?;
@@ -367,28 +383,17 @@ pub(crate) fn rejects_summary(err: &AiError) -> bool {
     }
 }
 
-/// Whether an Anthropic error is a 400 or 422 about `display: "updates"` or its beta header,
-/// which a vendor or gateway that does not pass the header on returns. The request is then
-/// retried with summarized display, keeping the level. Only a validation error that names the
-/// display or the header counts, since the base URL is then remembered as refusing it.
-pub(crate) fn rejects_updates(err: &AiError) -> bool {
-    match err {
-        AiError::Http {
-            status: 400 | 422,
-            message,
-        } => {
-            let message = message.to_ascii_lowercase();
-            [
-                "display",
-                "anthropic-beta",
-                "beta flag",
-                request::UPDATES_BETA,
-            ]
-            .iter()
-            .any(|word| message.contains(word))
-        }
-        _ => false,
-    }
+/// Whether an Anthropic error may be a refusal of `display: "updates"` or its beta header: any
+/// 4xx but those about the key, the URL, the size or the rate. Vendors and gateways word that
+/// refusal in many ways, so the request is sent once more with summarized display at the same
+/// level, and the base URL is remembered as refusing progress updates only when that one
+/// succeeds.
+pub(crate) fn may_refuse_updates(err: &AiError) -> bool {
+    matches!(
+        err,
+        AiError::Http { status, .. }
+            if (400..500).contains(status) && !matches!(status, 401 | 404 | 408 | 413 | 429)
+    )
 }
 
 /// Base URLs that refused `display: "updates"` since the app started, so their requests do not

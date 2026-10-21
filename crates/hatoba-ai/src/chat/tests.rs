@@ -3051,34 +3051,61 @@ fn updates_retry_conditions() {
         status,
         message: message.into(),
     };
+    // Vendors word the refusal in many ways, so the status decides whether to try once more.
     for (status, message) in [
         (
             400,
             "thinking.display: Input should be 'summarized' or 'omitted'",
         ),
-        (
-            400,
-            "Unexpected value(s) `thinking-display-updates-2026-08-18` for the `anthropic-beta` \
-             header",
-        ),
+        (400, "thinking updates are unsupported"),
+        (403, "beta access denied"),
         (422, "invalid beta flag"),
     ] {
-        assert!(rejects_updates(&http(status, message)), "{message}");
+        assert!(may_refuse_updates(&http(status, message)), "{message}");
     }
     for (status, message) in [
-        // The base URL would be remembered as refusing progress updates for the whole run.
-        (429, "Rate limit reached for the beta"),
         (401, "invalid x-api-key"),
-        (403, "beta access denied"),
-        (
-            400,
-            "messages.1: tool_use ids must be unique; check for updates",
-        ),
-        (500, "thinking.display failed"),
-        // A model the gateway does not know, whatever its name.
         (404, "model claude-opus-5-5-beta not found"),
-        (400, "model claude-opus-5-5-beta is in a closed beta"),
+        (408, "request timeout"),
+        (413, "request too large"),
+        (429, "Rate limit reached for the beta"),
+        (500, "thinking.display failed"),
     ] {
-        assert!(!rejects_updates(&http(status, message)), "{message}");
+        assert!(!may_refuse_updates(&http(status, message)), "{message}");
     }
+    assert!(!may_refuse_updates(&AiError::Network("reset".into())));
+}
+
+#[tokio::test]
+async fn an_unrelated_refusal_keeps_progress_updates() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "type": "error",
+            "error": {"type": "invalid_request_error",
+                      "message": "messages.0.content: text content blocks must be non-empty"}
+        })))
+        .mount(&server)
+        .await;
+    let p = provider(&server, Protocol::Anthropic);
+    let model = ModelSpec::new("claude-opus-5-5");
+    let tools = builtin_tools(&ToolSet {
+        terminal: true,
+        ..ToolSet::default()
+    });
+    let entries = vec![AiEntry::user(1, "hi")];
+    let req = request(&model, &entries, &tools);
+    // Refused without progress updates too: the error is the provider's, after one retry.
+    let (result, _) = run(&p, &req).await;
+    assert_eq!(result.unwrap_err().status(), Some(400));
+    let requests = server.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 2);
+    assert!(requests[0].headers.get("anthropic-beta").is_some());
+    assert!(requests[1].headers.get("anthropic-beta").is_none());
+    // So the base URL still gets progress updates.
+    let (result, _) = run(&p, &req).await;
+    result.unwrap_err();
+    let requests = server.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 4);
+    assert!(requests[2].headers.get("anthropic-beta").is_some());
 }
