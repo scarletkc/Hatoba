@@ -131,6 +131,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             ssh_cmd::hostkey_respond,
             ssh_cmd::auth_prompt_respond,
             forwards::forwards_list,
+            forwards::forwards_list_all,
             forwards::forward_save,
             forwards::forward_delete,
             forwards::forward_start,

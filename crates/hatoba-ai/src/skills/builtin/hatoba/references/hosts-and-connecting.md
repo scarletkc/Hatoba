@@ -61,7 +61,7 @@ Other labels: **Username**, **Organization & Network**.
 - **Test Connection** connects with the current form values (saved or not), authenticates, checks the host key (you may be asked to trust it), shows the latency, and disconnects. It does not save the host.
 - **Delete Host** is at the bottom of the editor for an existing host.
 - **Notes** are for you only. **AI Notes** go to the AI assistant in every request of a conversation on the host; see `references/ai-instructions.md`.
-- **Port Forwarding** in the editor lists the host's forwards; see `references/port-forwarding.md`. A new host must be saved before forwards can be added.
+- A host's port forwards are on the **Port Forwarding** page in the sidebar, not in the editor; see `references/port-forwarding.md`.
 - **Environment Variables** are sent to the server when a terminal opens; see Environment variables below.
 
 ## Authentication methods

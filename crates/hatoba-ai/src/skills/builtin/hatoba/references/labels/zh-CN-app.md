@@ -132,11 +132,11 @@ The labels that these files name in English, as the interface shows them in Simp
 | Group | 分组 |
 | Jump Host | 跳板机 |
 | Proxy | 代理 |
-| Port Forwarding | 端口转发 |
 | Environment Variables | 环境变量 |
 | Notes | 备注 |
 | AI Notes | AI 备注 |
 | Test Connection | 测试连接 |
+| Port Forwarding | 端口转发 |
 | Delete Host | 删除主机 |
 | Save | 保存 |
 | Cancel | 取消 |

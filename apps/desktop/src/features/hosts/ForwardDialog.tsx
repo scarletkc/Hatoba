@@ -1,17 +1,18 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { Button, Checkbox, Icon, TextField } from "@/components/controls";
 import { FormRow, Group } from "@/components/layout";
-import { FooterSpacer, Sheet, SheetHeader } from "@/components/overlay";
+import { FooterSpacer, PopupSelect, Sheet, SheetHeader, type SelectOption } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { ForwardView } from "@/ipc/types";
 import s from "./ForwardDialog.module.css";
 
-type FieldKey = "bind_address" | "bind_port" | "dest_host" | "dest_port";
+type FieldKey = "host_id" | "bind_address" | "bind_port" | "dest_host" | "dest_port";
 type Errors = Partial<Record<FieldKey, string>>;
 
-const FIELDS: readonly string[] = ["bind_address", "bind_port", "dest_host", "dest_port"];
+const FIELDS: readonly string[] = ["host_id", "bind_address", "bind_port", "dest_host", "dest_port"];
 const LABEL_COLUMN = "120px minmax(0,1fr)";
 
 /** A whole number in [min, 65535]. */
@@ -26,21 +27,37 @@ const exposesPort = (address: string) => {
   return a !== "" && a !== "localhost" && a !== "::1" && !a.startsWith("127.");
 };
 
-/** Add / edit one local forward (FWD-01, FWD-02). Saved straight to the backend, not with the host form. */
+/**
+ * Add / edit one local forward (FWD-01, FWD-02), saved straight to the backend. A new one chooses its host, at
+ * first `defaultHostId`; an edited one stays on `hostId`.
+ */
 export function ForwardDialog({
   hostId,
+  defaultHostId = null,
   forward,
   onClose,
   onSaved,
 }: {
-  hostId: string;
+  hostId: string | null;
+  defaultHostId?: string | null;
   forward: ForwardView | null;
   onClose: () => void;
   onSaved: (saved: ForwardView) => void;
 }) {
   const t = useT();
+  const hosts = useVaultData((st) => st.hosts);
   const ids = { form: useId(), bind: useId(), bindPort: useId(), dest: useId(), destPort: useId() };
   const bindPortRef = useRef<HTMLInputElement>(null);
+  const [chosenHost, setChosenHost] = useState<string | null>(
+    hostId ?? (hosts.some((h) => h.id === defaultHostId) ? defaultHostId : null),
+  );
+  const hostOptions: SelectOption<string | null>[] = useMemo(
+    () =>
+      [...hosts]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((h) => ({ value: h.id, label: h.name, hint: `${h.username ? `${h.username}@` : ""}${h.address}:${h.port}` })),
+    [hosts],
+  );
   const [bindAddress, setBindAddress] = useState(forward?.bind_address ?? "127.0.0.1");
   const [bindPort, setBindPort] = useState(forward ? String(forward.bind_port) : "");
   const [destHost, setDestHost] = useState(forward?.dest_host ?? "127.0.0.1");
@@ -62,6 +79,7 @@ export function ForwardDialog({
 
   const validate = (): Errors => {
     const e: Errors = {};
+    if (!chosenHost) e.host_id = t("hosts.fwd.err.hostRequired");
     if (!bindAddress.trim()) e.bind_address = t("hosts.fwd.err.bindRequired");
     if (!validPort(bindPort, 0)) e.bind_port = t("hosts.fwd.err.localPort");
     if (!destHost.trim()) e.dest_host = t("hosts.fwd.err.destRequired");
@@ -69,7 +87,7 @@ export function ForwardDialog({
     return e;
   };
 
-  const fieldIds: Record<FieldKey, string> = {
+  const fieldIds: Partial<Record<FieldKey, string>> = {
     bind_address: ids.bind,
     bind_port: ids.bindPort,
     dest_host: ids.dest,
@@ -77,7 +95,7 @@ export function ForwardDialog({
   };
   const focusFirst = (e: Errors) => {
     const first = (Object.keys(fieldIds) as FieldKey[]).find((k) => e[k]);
-    if (first) document.getElementById(fieldIds[first])?.focus();
+    if (first) document.getElementById(fieldIds[first]!)?.focus();
   };
 
   const submit = async () => {
@@ -93,7 +111,7 @@ export function ForwardDialog({
     try {
       const saved = await api.forward_save({
         id: forward?.id ?? null,
-        host_id: hostId,
+        host_id: chosenHost!,
         bind_address: bindAddress.trim(),
         bind_port: Number(bindPort),
         dest_host: destHost.trim(),
@@ -139,7 +157,7 @@ export function ForwardDialog({
         title={forward ? t("hosts.fwd.dialog.editTitle") : t("hosts.fwd.dialog.addTitle")}
         subtitle={t("hosts.fwd.dialog.subtitle")}
       />
-      {/* Keys stay inside the dialog: the host editor behind it saves on Enter (React events bubble through portals). */}
+      {/* Keys stay inside the dialog: React events bubble through portals to the page behind it. */}
       <form
         id={ids.form}
         className={s.form}
@@ -157,6 +175,22 @@ export function ForwardDialog({
           </div>
         )}
         <Group>
+          {hostId === null && (
+            <FormRow label={t("hosts.fwd.f.host")} columns={LABEL_COLUMN} error={errors.host_id}>
+              <PopupSelect<string | null>
+                ariaLabel={t("hosts.fwd.f.host")}
+                icon="hard-drives"
+                value={chosenHost}
+                options={hostOptions}
+                placeholder={t("hosts.fwd.f.hostPick")}
+                minWidth={320}
+                onChange={(id) => {
+                  setChosenHost(id);
+                  clear("host_id");
+                }}
+              />
+            </FormRow>
+          )}
           <FormRow label={t("hosts.fwd.f.local")} htmlFor={ids.bind} columns={LABEL_COLUMN} top>
             <div className={s.stack}>
               <div className={s.addrRow}>

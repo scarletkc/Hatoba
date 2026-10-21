@@ -7,6 +7,7 @@ import type { SessionTab } from "@/app/tabs";
 import { Menu, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { askAi as askAiAbout, askAiAboutConnection } from "@/features/ai/actions";
 import { formatTarget, savedHostFor } from "@/features/hosts/quickConnect";
+import { openForwards } from "@/features/hosts/tunnels";
 import { SftpPanel } from "@/features/sftp/SftpPanel";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
@@ -292,7 +293,7 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
             forwardsMenu.close();
             if (restoreFocus) session.focus();
           }}
-          onManage={() => editSessionHost(tab.hostId)}
+          onManage={() => openForwards(tab.hostId)}
         />
       )}
       {statsMenu.anchor && statsOn && connected && (

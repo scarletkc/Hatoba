@@ -6,6 +6,7 @@ import { EditFilesHost } from "@/features/ai/EditFiles";
 import { useAiLifecycle } from "@/features/ai/lifecycle";
 import { DashboardPage } from "@/features/dashboard/DashboardPage";
 import { clearReadouts } from "@/features/dashboard/readings";
+import { ForwardsPage } from "@/features/hosts/ForwardsPage";
 import { HostEditPage } from "@/features/hosts/HostEditPage";
 import { HostsPage } from "@/features/hosts/HostsPage";
 import { startTunnelListeners } from "@/features/hosts/tunnels";
@@ -188,6 +189,8 @@ function HomePage({ page }: { page: Page }) {
       return <KeysPage />;
     case "sync":
       return <SyncPage />;
+    case "forwards":
+      return <ForwardsPage hostId={page.hostId} />;
     case "dashboard":
       return <DashboardPage filter={page.filter} />;
   }
@@ -218,6 +221,8 @@ function homeTab(page: Page, t: (k: MessageKey) => string, groupName: (id: strin
       return { label: t("sidebar.keys"), icon: "key" };
     case "sync":
       return { label: t("sidebar.sync"), icon: "cloud" };
+    case "forwards":
+      return { label: t("sidebar.forwards"), icon: "arrows-left-right" };
     case "dashboard":
       return { label: t("dashboard.title"), icon: "gauge" };
   }

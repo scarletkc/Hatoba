@@ -924,6 +924,7 @@ export function createMockApi(): HatobaApi {
     },
 
     forwards_list: async (hostId) => forwards.filter((f) => f.host_id === hostId),
+    forwards_list_all: async () => [...forwards],
     forward_save: async (input) => {
       const f: ForwardView = { ...input, id: input.id ?? id("f"), bind_address: input.bind_address || "127.0.0.1" };
       forwards = input.id ? forwards.map((x) => (x.id === f.id ? f : x)) : [...forwards, f];

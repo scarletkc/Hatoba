@@ -132,11 +132,11 @@ The labels that these files name in English, as the interface shows them in Japa
 | Group | グループ |
 | Jump Host | 踏み台 |
 | Proxy | プロキシ |
-| Port Forwarding | ポートフォワーディング |
 | Environment Variables | 環境変数 |
 | Notes | メモ |
 | AI Notes | AI 向けメモ |
 | Test Connection | 接続テスト |
+| Port Forwarding | ポートフォワーディング |
 | Delete Host | ホストを削除 |
 | Save | 保存 |
 | Cancel | キャンセル |

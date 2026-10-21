@@ -1,4 +1,71 @@
-/* Port forwarding rows of the host editor: mono rule over its state · auto-start switch · start / stop · edit / delete. */
+/* The Port Forwarding page: a section per host, the host editor's column width. */
+
+.page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.emptyWrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  border-top: 0.5px solid var(--line);
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  padding: 20px 24px;
+  border-top: 0.5px solid var(--line);
+}
+
+.column {
+  width: 100%;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-bottom: 8px;
+  align-self: flex-start;
+}
+
+/* Scrolled to from a terminal's popover or a notification, below the page's own padding. */
+.hostSection {
+  scroll-margin-top: 20px;
+}
+
+.hostTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hostName {
+  flex: none;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hostTarget {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: var(--text-xs);
+  color: var(--fg3);
+}
+
+/* Rows: mono rule over its state · auto-start switch · start / stop · edit / delete. */
 
 /* A narrow row puts the switch and the buttons under a rule that would be narrower than 160px. */
 .row {
@@ -110,29 +177,6 @@
 
 .remove:hover:not(:disabled) {
   color: var(--red);
-}
-
-.footRow {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 38px;
-  padding: 0 14px;
-}
-
-/* The add link keeps its text on one line; the hint beside it wraps instead. */
-.footRow > button {
-  flex: none;
-}
-
-/* No forwards yet: the hint sits left, the add link right. */
-.footSplit {
-  justify-content: space-between;
-}
-
-.muted {
-  font-size: var(--text-sm);
-  color: var(--fg2);
 }
 
 .error {

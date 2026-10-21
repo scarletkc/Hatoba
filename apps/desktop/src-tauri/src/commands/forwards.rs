@@ -42,6 +42,25 @@ pub fn forwards_list(state: State<'_, AppState>, host_id: String) -> AppResult<V
     })
 }
 
+/// Every host's forwards, for the **Port Forwarding** page, by host and then as `forwards_list`
+/// sorts them.
+#[tauri::command]
+#[specta::specta]
+pub fn forwards_list_all(state: State<'_, AppState>) -> AppResult<Vec<ForwardView>> {
+    state.with_unlocked(|v| {
+        let mut list: Vec<ForwardView> = v
+            .forwards()
+            .iter()
+            .filter(|(_, f)| f.kind == ForwardKind::Local)
+            .map(|(id, f)| view(id, f))
+            .collect();
+        list.sort_by(|a, b| {
+            (&a.host_id, a.bind_port, a.dest_port).cmp(&(&b.host_id, b.bind_port, b.dest_port))
+        });
+        Ok(list)
+    })
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn forward_save(

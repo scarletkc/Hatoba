@@ -2,8 +2,9 @@ import { create } from "zustand";
 import { hostById, useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
+import { useTabs } from "@/app/tabs";
 import { toast } from "@/components/overlay";
-import { collectCredentials, editSessionHost } from "@/features/terminal/connect";
+import { collectCredentials } from "@/features/terminal/connect";
 import { askSecret } from "@/features/terminal/prompts";
 import { needsPassphrase } from "@/features/terminal/session";
 import { t } from "@/i18n";
@@ -30,9 +31,9 @@ export function startTunnelListeners() {
   started = true;
   void api.listen("ssh://tunnels", apply);
   void api.listen("ssh://tunnel-lost", (ev) => void notifyLost(ev));
-  // The click brought the window back; the host editor starts the forwards again.
+  // The click brought the window back; the forwards start again on the Port Forwarding page.
   void api.listen("app://notification-click", ({ host_id }) => {
-    if (host_id && useApp.getState().phase === "unlocked") editSessionHost(host_id);
+    if (host_id && useApp.getState().phase === "unlocked") openForwards(host_id);
   });
   void api
     .tunnels_list()
@@ -40,7 +41,13 @@ export function startTunnelListeners() {
     .catch(() => {});
 }
 
-/** A toast while the window has the focus, else a system notification, which opens the host editor. */
+/** The Port Forwarding page in the home tab, with the host's section in view. */
+export function openForwards(hostId: string | null) {
+  useApp.getState().navigate({ kind: "forwards", hostId });
+  useTabs.getState().activate("home");
+}
+
+/** A toast while the window has the focus, else a system notification, which opens the host's forwards. */
 async function notifyLost({ host_id, host_name, error }: TunnelLostEvent) {
   const reason = errorMessage(t, error);
   if (await windowFocused()) {

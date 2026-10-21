@@ -162,8 +162,11 @@ The labels that these files name in English, as the interface shows them in Japa
 | en | ja |
 |---|---|
 | Port Forwarding | ポートフォワーディング |
+| No port forwards yet | ポートフォワーディングがまだありません |
 | Add Forward… | 転送を追加… |
 | Add Port Forward | ポートフォワーディングを追加 |
+| Host | ホスト |
+| Choose a host. | ホストを選択してください。 |
 | Edit Port Forward | ポートフォワーディングを編集 |
 | Add | 追加 |
 | Local address | ローカルアドレス |

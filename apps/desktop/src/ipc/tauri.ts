@@ -118,6 +118,7 @@ export function createTauriApi(): HatobaApi {
     auth_prompt_respond: (requestId, answers) => commands.authPromptRespond(requestId, answers),
 
     forwards_list: (hostId) => commands.forwardsList(hostId),
+    forwards_list_all: () => commands.forwardsListAll(),
     forward_save: (input) => commands.forwardSave(input),
     forward_delete: (id) => done(commands.forwardDelete(id)),
     forward_start: (sessionId, forwardId) => commands.forwardStart(sessionId, forwardId),

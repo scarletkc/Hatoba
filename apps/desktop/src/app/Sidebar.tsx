@@ -17,7 +17,7 @@ import { TitlebarDrag } from "./TitleBar";
 import { useOfferedUpdate } from "./update";
 import st from "./Sidebar.module.css";
 
-type Key = "dashboard" | "all" | "favorites" | "recent" | `group:${string}` | `tag:${string}` | "keys" | "sync";
+type Key = "dashboard" | "all" | "favorites" | "recent" | "forwards" | `group:${string}` | `tag:${string}` | "keys" | "sync";
 
 function pageKey(page: Page): Key | null {
   switch (page.kind) {
@@ -33,6 +33,8 @@ function pageKey(page: Page): Key | null {
       return "keys";
     case "sync":
       return "sync";
+    case "forwards":
+      return "forwards";
     case "dashboard":
       return "dashboard";
   }
@@ -111,6 +113,7 @@ export function Sidebar() {
         {item("all", "hard-drives", t("sidebar.all"), hosts.length, () => hostsWith({ kind: "all" }))}
         {item("favorites", "star", t("sidebar.favorites"), favorites, () => hostsWith({ kind: "favorites" }))}
         {item("recent", "clock-counter-clockwise", t("sidebar.recent"), null, () => hostsWith({ kind: "recent" }))}
+        {item("forwards", "arrows-left-right", t("sidebar.forwards"), null, () => go({ kind: "forwards", hostId: null }))}
 
         <div className={st.heading}>
           <span>{t("sidebar.groups")}</span>

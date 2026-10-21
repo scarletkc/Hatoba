@@ -162,8 +162,11 @@ The labels that these files name in English, as the interface shows them in Simp
 | en | zh-CN |
 |---|---|
 | Port Forwarding | 端口转发 |
+| No port forwards yet | 还没有端口转发 |
 | Add Forward… | 添加转发… |
 | Add Port Forward | 添加端口转发 |
+| Host | 主机 |
+| Choose a host. | 请选择主机。 |
 | Edit Port Forward | 编辑端口转发 |
 | Add | 添加 |
 | Local address | 本地地址 |
