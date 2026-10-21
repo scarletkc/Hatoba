@@ -1131,7 +1131,7 @@ function RevertChange({ slotId, change, busy, revert }: { slotId: string; change
     <div className={s.revert}>
       <div className={s.revertRow}>
         <Button size="sm" icon="arrow-counter-clockwise" busy={running === "revert"} disabled={busy || !!running} title={busy ? t("ai.revert.busy") : undefined} onClick={() => void run(false)}>
-          {t(running === "revert" ? "ai.revert.reverting" : "ai.revert.action")}
+          {t("ai.revert.action")}
         </Button>
       </div>
       {change.state === "unfinished" && (

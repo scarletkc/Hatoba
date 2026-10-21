@@ -39,6 +39,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  font-variant-numeric: tabular-nums;
 }
 
 .status i {

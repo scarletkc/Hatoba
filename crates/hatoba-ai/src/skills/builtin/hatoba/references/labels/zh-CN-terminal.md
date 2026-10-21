@@ -192,6 +192,7 @@ The labels that these files name in English, as the interface shows them in Simp
 |---|---|
 | Start | 启动 |
 | Port Forwarding | 端口转发 |
+| Starting… | 启动中… |
 | Stop | 停止 |
 | Retry | 重试 |
 | Manage Port Forwarding… | 管理端口转发… |

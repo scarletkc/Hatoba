@@ -58,8 +58,9 @@ export function RecoveryCodeSection({ code, onConfirmedChange }: { code: string;
       <div className={s.block}>
         <div className={s.head}>
           <span className={s.title}>{t("vault.code.label")}</span>
-          <LinkButton icon="copy" onClick={() => void copy()}>
-            {copied ? t("btn.copied") : t("btn.copy")}
+          {/* A check rather than "Copied", which would push the links after it along. */}
+          <LinkButton icon={copied ? "check" : "copy"} aria-label={copied ? t("btn.copied") : undefined} onClick={() => void copy()}>
+            {t("btn.copy")}
           </LinkButton>
           <LinkButton icon="download-simple" onClick={() => void saveText()}>
             {t("vault.code.save")}

@@ -28,6 +28,7 @@
 
 .ago {
   font-weight: 400;
+  font-variant-numeric: tabular-nums;
 }
 
 .section {
@@ -65,16 +66,19 @@
   font-size: var(--text-sm);
   color: var(--fg2);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .value {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-width: 38px;
+  /* "100%" and the warning icon a filling meter adds, so neither moves the amount beside it. */
+  min-width: calc(4.6ch + 17px);
   justify-content: flex-end;
   font-weight: 600;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .value i {
@@ -90,8 +94,11 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  /* The key and room for a rate like "↓ 12 KB/s", so the download figure doesn't push the upload one. */
+  min-width: calc(14px + 9ch);
   font-size: var(--text-sm);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 /* The series key: a short stroke in the line's color beside its value. */

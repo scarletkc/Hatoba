@@ -192,6 +192,7 @@ The labels that these files name in English, as the interface shows them in Japa
 |---|---|
 | Start | 開始 |
 | Port Forwarding | ポートフォワーディング |
+| Starting… | 開始中… |
 | Stop | 停止 |
 | Retry | 再試行 |
 | Manage Port Forwarding… | ポートフォワーディングを管理… |

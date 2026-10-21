@@ -1,9 +1,10 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { errorMessage } from "@/app/errors";
 import { Button, Icon, LinkButton, StatusDot, TextField } from "@/components/controls";
 import { useT, type MessageKey } from "@/i18n";
 import { toAppError } from "@/ipc/api";
 import type { AiTestResult } from "@/ipc/types";
+import { cx } from "@/lib/cx";
 import { failureOf, type KeyDraft } from "./aiLogic";
 import s from "./aiShared.module.css";
 
@@ -150,20 +151,24 @@ export function TestConnection({
 }) {
   const t = useT();
   const running = state.state === "running";
+  // A new test keeps the last result on screen, dimmed, so the sheet doesn't shrink and grow again.
+  const [shown, setShown] = useState(state);
+  if (!running && state !== shown) setShown(state);
+  const result = running ? shown : state;
 
   let line: string | null = null;
   let ok = false;
   let status: string | null = null;
   let detail: string | null = null;
-  if (state.state === "done") {
-    const r = state.result;
+  if (result.state === "done") {
+    const r = result.result;
     ok = r.ok;
     if (r.ok) {
       line =
         scope === "search"
           ? t("aiSettings.search.test.ok")
-          : state.model
-            ? t("aiSettings.test.okModel", { model: state.model })
+          : result.model
+            ? t("aiSettings.test.okModel", { model: result.model })
             : t("aiSettings.test.okList");
     } else {
       const failure = failureOf(r.failure);
@@ -173,15 +178,15 @@ export function TestConnection({
       } else if (chatgpt && failure === "auth") {
         line = t("aiSettings.chatgpt.test.auth");
       } else {
-        line = t(`aiSettings.test.fail.${failure}` as MessageKey, { model: state.model ?? "" });
+        line = t(`aiSettings.test.fail.${failure}` as MessageKey, { model: result.model ?? "" });
       }
       status = r.status ? t("aiSettings.err.status", { status: r.status }) : null;
       detail = r.message?.trim() || null;
     }
-  } else if (state.state === "error") {
+  } else if (result.state === "error") {
     line = t("aiSettings.err.provider");
-    status = state.status;
-    detail = state.detail;
+    status = result.status;
+    detail = result.detail;
   }
 
   return (
@@ -192,7 +197,7 @@ export function TestConnection({
         </Button>
       </div>
       {line && (
-        <div className={s.testResult} role="status">
+        <div className={cx(s.testResult, running && s.testStale)} role="status" aria-busy={running}>
           <StatusDot color={ok ? "var(--green)" : "var(--red)"} />
           <div className={s.testText}>
             <span className={ok ? undefined : s.testFail}>

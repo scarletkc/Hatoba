@@ -160,8 +160,8 @@ export function AboutPane() {
             )
           }
         >
-          {update && !install && !manager && (
-            <Button variant="primary" onClick={() => void confirmInstall(t, update)}>
+          {update && !manager && (
+            <Button variant="primary" disabled={install !== null} onClick={() => void confirmInstall(t, update)}>
               {t("settings.about.install")}
             </Button>
           )}

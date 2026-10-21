@@ -52,6 +52,10 @@
   line-height: 1.5;
 }
 
+.testStale {
+  opacity: 0.5;
+}
+
 .testResult > :first-child {
   margin-top: 5px;
 }

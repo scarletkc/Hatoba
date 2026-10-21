@@ -142,6 +142,7 @@ function ForwardRow({
   const t = useT();
   const running = active !== null;
   const failed = error !== null;
+  const starting = busy && !running;
   const kind = active?.kind ?? f.kind;
   // A remote forward listens on the server: nothing here connects to it, so it has nothing to copy.
   const remote = kind === "remote";
@@ -162,10 +163,17 @@ function ForwardRow({
           <span className={s.address}>{remote ? t("terminal.fwd.onServer", { addr: local }) : local}</span>
         )}
         <span className={s.dest}>{kind === "dynamic" ? t("terminal.fwd.socks") : `→ ${dest}`}</span>
-        {failed && <span className={s.error}>{error}</span>}
+        {starting ? (
+          <span className={s.starting}>
+            <Spinner size={11} />
+            {t("terminal.fwd.starting")}
+          </span>
+        ) : (
+          failed && <span className={s.error}>{error}</span>
+        )}
       </div>
       <button type="button" className={s.action} disabled={busy} onClick={running ? onStop : onStart}>
-        {busy ? <Spinner size={12} /> : running ? t("terminal.fwd.stop") : failed ? t("btn.retry") : t("terminal.fwd.start")}
+        {running ? t("terminal.fwd.stop") : failed ? t("btn.retry") : t("terminal.fwd.start")}
       </button>
     </div>
   );
