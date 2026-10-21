@@ -7,7 +7,7 @@
 //! on it tells the WebView, which notifies (FWD-05).
 
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -617,10 +617,11 @@ fn host_port(host: &str, port: u16) -> String {
     }
 }
 
-/// Where this computer reaches a forward listening on `addr`: `localhost` for a loopback or
-/// wildcard address, else that address.
+/// Where this computer reaches a forward listening on `addr`: `localhost` for the address it
+/// names or a wildcard one, else that address, as one on `127.0.1.1` takes nothing on `127.0.0.1`.
 fn reachable(addr: SocketAddr) -> String {
-    if addr.ip().is_loopback() || addr.ip().is_unspecified() {
+    let ip = addr.ip().to_canonical();
+    if ip == Ipv4Addr::LOCALHOST || ip == Ipv6Addr::LOCALHOST || ip.is_unspecified() {
         format!("localhost:{}", addr.port())
     } else {
         addr.to_string()
@@ -792,6 +793,7 @@ mod tests {
         assert_eq!(at("0.0.0.0:5433"), "localhost:5433");
         assert_eq!(at("[::1]:5433"), "localhost:5433");
         assert_eq!(at("[::]:5433"), "localhost:5433");
+        assert_eq!(at("127.0.1.1:5433"), "127.0.1.1:5433");
         assert_eq!(at("192.168.1.10:5433"), "192.168.1.10:5433");
         assert_eq!(at("[fd00::5]:5433"), "[fd00::5]:5433");
     }

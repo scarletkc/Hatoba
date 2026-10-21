@@ -27,11 +27,11 @@ export function forwardRule(
 }
 
 /**
- * Where this computer reaches a forward listening on `bindAddress`: `localhost` for a loopback or wildcard address,
- * else that address, which is one interface's.
+ * Where this computer reaches a forward listening on `bindAddress`: `localhost` for the address it names or a wildcard
+ * one, else that address, as one on `127.0.1.1` takes nothing on `127.0.0.1`.
  */
 export function reachableAddress(bindAddress: string, port: number): string {
   const a = bindAddress.trim().toLowerCase();
-  const local = a === "" || a === "localhost" || a === "0.0.0.0" || a === "::" || a === "::1" || a.startsWith("127.");
+  const local = a === "" || a === "localhost" || a === "0.0.0.0" || a === "::" || a === "::1" || a === "127.0.0.1";
   return local ? `localhost:${port}` : hostPort(bindAddress.trim(), port);
 }

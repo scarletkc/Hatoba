@@ -4,13 +4,14 @@ import type { ForwardView } from "@/ipc/types";
 import { forwardRule, reachableAddress } from "./address";
 
 describe("where a forward is reached on this computer", () => {
-  it("is localhost for loopback and wildcard addresses", () => {
-    for (const bind of ["127.0.0.1", "127.0.1.1", "localhost", "0.0.0.0", "::", "::1", ""]) {
+  it("is localhost for the addresses localhost names and wildcard ones", () => {
+    for (const bind of ["127.0.0.1", "localhost", "0.0.0.0", "::", "::1", ""]) {
       expect(reachableAddress(bind, 5433)).toBe("localhost:5433");
     }
   });
 
   it("is the address an interface listens on", () => {
+    expect(reachableAddress("127.0.1.1", 5433)).toBe("127.0.1.1:5433");
     expect(reachableAddress("192.168.1.10", 5433)).toBe("192.168.1.10:5433");
     expect(reachableAddress("fd00::5", 5433)).toBe("[fd00::5]:5433");
   });
