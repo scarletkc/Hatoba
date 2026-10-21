@@ -604,9 +604,8 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                 "Save or delete one of your memories: notes for yourself that new conversations \
                  of the user start with, in a <memory> note. A global memory shows in every \
                  conversation; a host memory only in conversations on its host (a saved host or \
-                 a computer's local terminal), and scope `host` is this conversation's host. \
-                 `save` stores `content` under \
-                 `name` in `scope`, replacing the memory of that name there if there is one; \
+                 a computer's local terminal). `save` stores `content` under `name` in `scope`, \
+                 replacing the memory of that name there if there is one; \
                  `delete` removes it. Keep a memory to a few lines on one subject. The global \
                  memories, and those of each host, hold at most {MAX_MEMORY_BYTES} bytes of \
                  UTF-8, names included. A change shows in new conversations, and in this one \
