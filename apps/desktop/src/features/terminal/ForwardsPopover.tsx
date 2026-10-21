@@ -7,7 +7,7 @@ import { hostPort } from "@/features/hosts/address";
 import { forwardFailure, runningForward, useHostConnection } from "@/features/hosts/connections";
 import { startForward, stopForward, useForwardRules, useHostForwardRules } from "@/features/hosts/forwards";
 import { useT } from "@/i18n";
-import type { ForwardView } from "@/ipc/types";
+import type { ForwardView, RunningForwardView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { writeClipboard } from "./clipboard";
 import { useStatusPopover } from "./popover";
@@ -94,14 +94,14 @@ export function ForwardsPopover({
       {!saved && loadFailed && <div className={cx(s.note, s.noteError)}>{t("terminal.fwd.loadFailed")}</div>}
       {saved?.length === 0 && <div className={s.note}>{t("terminal.fwd.none")}</div>}
       {saved?.map((f) => {
-        const address = runningForward(conn, f.id)?.address ?? null;
+        const running = runningForward(conn, f.id);
         const failure = forwardFailure(conn, f.id);
-        const error = address === null ? (errors[f.id] ?? (failure && errorMessage(t, failure))) : null;
+        const error = running === null ? (errors[f.id] ?? (failure && errorMessage(t, failure))) : null;
         return (
           <ForwardRow
             key={f.id}
             forward={f}
-            address={address}
+            running={running}
             error={error}
             busy={busy.has(f.id)}
             onStart={() => void start(f)}
@@ -129,7 +129,7 @@ export function ForwardsPopover({
 
 function ForwardRow({
   forward: f,
-  address,
+  running: active,
   error,
   busy,
   onStart,
@@ -137,8 +137,8 @@ function ForwardRow({
   onCopy,
 }: {
   forward: ForwardView;
-  /** Where it listens while it runs. */
-  address: string | null;
+  /** The forward while it runs, as it started: an edit to its rule applies at its next start. */
+  running: RunningForwardView | null;
   /** Why it failed to start. */
   error: string | null;
   busy: boolean;
@@ -147,11 +147,13 @@ function ForwardRow({
   onCopy(address: string): void;
 }) {
   const t = useT();
-  const running = address !== null;
+  const running = active !== null;
   const failed = error !== null;
+  const kind = active?.kind ?? f.kind;
   // A remote forward listens on the server: nothing here connects to it, so it has nothing to copy.
-  const remote = f.kind === "remote";
-  const local = address ?? hostPort(f.bind_address, f.bind_port || t("terminal.fwd.autoPort"));
+  const remote = kind === "remote";
+  const local = active?.address ?? hostPort(f.bind_address, f.bind_port || t("terminal.fwd.autoPort"));
+  const dest = active?.dest ?? hostPort(f.dest_host, f.dest_port);
 
   return (
     <div className={s.row}>
@@ -166,7 +168,7 @@ function ForwardRow({
         ) : (
           <span className={s.address}>{remote ? t("terminal.fwd.onServer", { addr: local }) : local}</span>
         )}
-        <span className={s.dest}>{f.kind === "dynamic" ? t("terminal.fwd.socks") : `→ ${hostPort(f.dest_host, f.dest_port)}`}</span>
+        <span className={s.dest}>{kind === "dynamic" ? t("terminal.fwd.socks") : `→ ${dest}`}</span>
         {failed && <span className={s.error}>{error}</span>}
       </div>
       <button type="button" className={s.action} disabled={busy} onClick={running ? onStop : onStart}>

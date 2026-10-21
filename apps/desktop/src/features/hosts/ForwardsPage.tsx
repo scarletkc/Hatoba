@@ -7,7 +7,7 @@ import { confirm, toast } from "@/components/overlay";
 import { writeClipboard } from "@/features/terminal/clipboard";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { ForwardInput, ForwardView, HostView } from "@/ipc/types";
+import type { ForwardInput, ForwardView, HostView, RunningForwardView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { forwardRule, hostPort } from "./address";
 import { ForwardDialog } from "./ForwardDialog";
@@ -188,7 +188,8 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                   <Group>
                     {forwards.map((f) => {
                       const label = rule(f);
-                      const address = runningForward(conn, f.id)?.address ?? null;
+                      const running = runningForward(conn, f.id);
+                      const address = running?.address ?? null;
                       const failed = forwardFailure(conn, f.id);
                       const failure = address === null ? (failures[f.id] ?? (failed && errorMessage(t, failed))) : null;
                       const bind = hostPort(f.bind_address, f.bind_port || t("hosts.fwd.autoPort"));
@@ -206,10 +207,10 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                                 </>
                               )}
                             </span>
-                            {address !== null && (
+                            {running && (
                               <span className={s.status}>
                                 <Icon name="check-circle" fill size={13} className={s.running} />
-                                <RunningAddress forward={f} address={address} onCopy={(a) => void copy(a)} />
+                                <RunningAddress running={running} onCopy={(a) => void copy(a)} />
                               </span>
                             )}
                             {failure && (
@@ -268,12 +269,12 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
 }
 
 /**
- * Where a running forward listens. This computer's address copies; a remote forward's is on the server, where nothing
- * here connects to it.
+ * Where a running forward listens, as it started: an edit to its rule applies at its next start. This computer's
+ * address copies; a remote forward's is on the server, where nothing here connects to it.
  */
-function RunningAddress({ forward: f, address, onCopy }: { forward: ForwardView; address: string; onCopy(address: string): void }) {
+function RunningAddress({ running: { kind, address }, onCopy }: { running: RunningForwardView; onCopy(address: string): void }) {
   const t = useT();
-  if (f.kind === "remote") return <span className={s.serverAddress}>{t("terminal.fwd.onServer", { addr: address })}</span>;
+  if (kind === "remote") return <span className={s.serverAddress}>{t("terminal.fwd.onServer", { addr: address })}</span>;
   return (
     <button type="button" className={s.address} title={t("terminal.fwd.copy", { addr: address })} onClick={() => onCopy(address)}>
       {address}
