@@ -333,6 +333,9 @@
         "reasoning": true,
         "reasoning_options": [
           {
+            "type": "toggle"
+          },
+          {
             "type": "budget_tokens"
           }
         ]
@@ -1477,6 +1480,23 @@
         "reasoning": true,
         "reasoning_options": []
       },
+      "gemini-pro-latest": {
+        "limit": {
+          "context": 1048576,
+          "output": 65536
+        },
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ]
+      },
       "gemma-4-26b-a4b-it": {
         "limit": {
           "context": 262144,
@@ -1806,31 +1826,10 @@
           }
         ]
       },
-      "open-mistral-7b": {
-        "limit": {
-          "context": 8000,
-          "output": 8000
-        },
-        "reasoning": false
-      },
       "open-mistral-nemo": {
         "limit": {
           "context": 128000,
           "output": 128000
-        },
-        "reasoning": false
-      },
-      "open-mixtral-8x22b": {
-        "limit": {
-          "context": 64000,
-          "output": 64000
-        },
-        "reasoning": false
-      },
-      "open-mixtral-8x7b": {
-        "limit": {
-          "context": 32000,
-          "output": 32000
         },
         "reasoning": false
       },
