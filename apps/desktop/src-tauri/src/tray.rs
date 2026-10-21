@@ -64,6 +64,9 @@ mod imp {
         /// Of the `hosts` list (`ConnectionsEvent::version`).
         version: u64,
         hosts: Vec<HostConnectionView>,
+        /// What the menu was last built from: a change to tabs or failed forwards alone does not
+        /// build it again.
+        built: Option<Vec<String>>,
     }
 
     const TRAY: &str = "main";
@@ -161,6 +164,7 @@ mod imp {
                 socks: "SOCKS proxy".to_owned(),
                 version: 0,
                 hosts: Vec::new(),
+                built: None,
             }),
         });
         #[cfg(target_os = "linux")]
@@ -222,7 +226,7 @@ mod imp {
             };
             let mut shown = tray.shown.lock().unwrap_or_else(|p| p.into_inner());
             change(&mut shown);
-            if let Err(e) = refresh(&handle, &tray, &shown) {
+            if let Err(e) = refresh(&handle, &tray, &mut shown) {
                 tracing::warn!("tray menu not updated: {e}");
             }
         });
@@ -230,10 +234,14 @@ mod imp {
 
     /// Builds the menu: **Open**, **Lock**, **Update to vX.Y.Z** while there is one, a separator,
     /// the running forwards, and **Quit**.
-    fn refresh(app: &AppHandle, tray: &Tray, shown: &Shown) -> tauri::Result<()> {
+    fn refresh(app: &AppHandle, tray: &Tray, shown: &mut Shown) -> tauri::Result<()> {
         let Some(icon) = app.tray_by_id(TRAY) else {
             return Ok(());
         };
+        let entries = entries(shown);
+        if shown.built.as_ref() == Some(&entries) {
+            return Ok(());
+        }
         let separator = PredefinedMenuItem::separator(app)?;
         let forwards = forward_items(app, shown)?;
         let mut items: Vec<&dyn IsMenuItem<Wry>> = vec![&tray.open, &tray.lock];
@@ -243,7 +251,32 @@ mod imp {
         items.push(&separator);
         items.extend(forwards.iter().map(|i| i as &dyn IsMenuItem<Wry>));
         items.push(&tray.quit);
-        icon.set_menu(Some(Menu::with_items(app, &items)?))
+        icon.set_menu(Some(Menu::with_items(app, &items)?))?;
+        shown.built = Some(entries);
+        Ok(())
+    }
+
+    /// Everything the built menu shows besides the labels the WebView sets on the fixed items.
+    fn entries(shown: &Shown) -> Vec<String> {
+        let mut entries = vec![
+            shown.update.to_string(),
+            shown.heading.clone(),
+            shown.copy.clone(),
+            shown.stop.clone(),
+        ];
+        for host in &shown.hosts {
+            for forward in &host.forwards {
+                entries.push(format!(
+                    "{}:{} {} {}  {}",
+                    host.host_id,
+                    forward.forward_id,
+                    forward.address,
+                    host.host_name,
+                    addresses(shown, forward)
+                ));
+            }
+        }
+        entries
     }
 
     /// The heading, a submenu for each running forward, named by its host and addresses, and a

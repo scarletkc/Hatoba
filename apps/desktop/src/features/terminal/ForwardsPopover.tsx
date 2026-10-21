@@ -146,7 +146,7 @@ function ForwardRow({
   // A remote forward listens on the server: nothing here connects to it, so it has nothing to copy.
   const remote = kind === "remote";
   const local = active?.address ?? hostPort(f.bind_address, f.bind_port || t("terminal.fwd.autoPort"));
-  const dest = forwardDest(t, f, active?.dest);
+  const dest = forwardDest(t, f, active);
 
   return (
     <div className={s.row}>

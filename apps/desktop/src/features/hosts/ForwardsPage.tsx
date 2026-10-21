@@ -47,6 +47,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
   const [dialog, setDialog] = useState<{ forward: ForwardView | null } | null>(null);
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const [starting, setStarting] = useState<ReadonlySet<string>>(new Set());
+  const [stopping, setStopping] = useState<ReadonlySet<string>>(new Set());
   const [failures, setFailures] = useState<Readonly<Record<string, string>>>({});
   const connections = useConnections();
   const focused = useRef<HTMLDivElement>(null);
@@ -79,6 +80,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
 
   const markPending = (id: string, on: boolean) => setPending((p) => toggled(p, id, on));
   const markStarting = (id: string, on: boolean) => setStarting((p) => toggled(p, id, on));
+  const markStopping = (id: string, on: boolean) => setStopping((p) => toggled(p, id, on));
   const setFailure = (id: string, message: string | null) =>
     setFailures(({ [id]: _old, ...rest }) => (message === null ? rest : { ...rest, [id]: message }));
 
@@ -128,13 +130,13 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
   };
 
   const stop = async (f: ForwardView) => {
-    markStarting(f.id, true);
+    markStopping(f.id, true);
     try {
       await stopForward(f.host_id, f.id);
     } catch (err) {
       toast(errorMessage(t, err), "error");
     } finally {
-      markStarting(f.id, false);
+      markStopping(f.id, false);
     }
   };
 
@@ -249,7 +251,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                           <Button
                             size="xs"
                             className={s.toggle}
-                            disabled={pending.has(f.id) || starting.has(f.id)}
+                            disabled={pending.has(f.id) || starting.has(f.id) || stopping.has(f.id)}
                             onClick={() => void (address !== null ? stop(f) : start(f))}
                           >
                             {address !== null ? t("terminal.fwd.stop") : failure ? t("btn.retry") : t("terminal.fwd.start")}

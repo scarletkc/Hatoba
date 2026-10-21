@@ -1,5 +1,5 @@
 import type { MessageKey, Params } from "@/i18n";
-import type { ForwardView } from "@/ipc/types";
+import type { ForwardView, RunningForwardView } from "@/ipc/types";
 
 /** `host:port`, with IPv6 literals bracketed. */
 export function hostPort(host: string, port: number | string): string {
@@ -28,14 +28,18 @@ export function forwardRule(
 
 /**
  * Where a forward leads. A local one's loopback destination is the server's own, named so beside the address it listens
- * on here, which is often the same `127.0.0.1:port`. `dest` is where it leads while it runs.
+ * on here, which is often the same `127.0.0.1:port`. A running forward is named as it started, before any edit to its
+ * rule.
  */
 export function forwardDest(
   t: (key: MessageKey, params?: Params) => string,
   f: ForwardView,
-  dest = hostPort(f.dest_host, f.dest_port),
+  running: RunningForwardView | null = null,
 ): string {
-  return f.kind === "local" && isLoopback(f.dest_host) ? t("terminal.fwd.onServer", { addr: dest }) : dest;
+  const kind = running?.kind ?? f.kind;
+  const dest = running?.dest ?? hostPort(f.dest_host, f.dest_port);
+  const host = running ? running.dest.replace(/:\d+$/, "").replace(/^\[(.*)\]$/, "$1") : f.dest_host;
+  return kind === "local" && isLoopback(host) ? t("terminal.fwd.onServer", { addr: dest }) : dest;
 }
 
 function isLoopback(host: string): boolean {

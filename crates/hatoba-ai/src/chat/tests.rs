@@ -3029,7 +3029,10 @@ async fn anthropic_falls_back_to_summarized_when_updates_are_refused() {
         .mount(&server)
         .await;
     let p = provider(&server, Protocol::Anthropic);
-    let model = ModelSpec::new("claude-opus-5-5");
+    // Refusals are remembered per base URL and model for the life of the process, and Windows
+    // hands a dropped mock server's port to the next one: a Vertex-style `@` suffix keeps these
+    // refusal tests' models apart from every other test's.
+    let model = ModelSpec::new("claude-opus-5-5@falls-back");
     let tools = builtin_tools(&ToolSet {
         terminal: true,
         ..ToolSet::default()
@@ -3066,7 +3069,7 @@ async fn anthropic_falls_back_to_summarized_when_updates_are_refused() {
     assert_eq!(requests.len(), 5);
     assert!(!sent_beta(&server, 4).await);
     // Another model behind the same gateway may reach another upstream, so it still tries.
-    let sonnet = ModelSpec::new("claude-sonnet-5-5");
+    let sonnet = ModelSpec::new("claude-sonnet-5-5@falls-back");
     let (result, _) = run(
         &p,
         &with_effort(request(&sonnet, &entries, &tools), Some(High)),
@@ -3094,7 +3097,7 @@ async fn an_accepted_request_clears_earlier_refusals_of_progress_updates() {
         .mount(&server)
         .await;
     let p = provider(&server, Protocol::Anthropic);
-    let model = ModelSpec::new("claude-opus-5-5");
+    let model = ModelSpec::new("claude-opus-5-5@clears");
     let entries = vec![AiEntry::user(1, "hi")];
     let req = request(&model, &entries, &[]);
     // A passing refusal, confirmed by the summarized retry: one strike.
@@ -3162,7 +3165,7 @@ async fn an_unrelated_refusal_keeps_progress_updates() {
         .mount(&server)
         .await;
     let p = provider(&server, Protocol::Anthropic);
-    let model = ModelSpec::new("claude-opus-5-5");
+    let model = ModelSpec::new("claude-opus-5-5@unrelated");
     let tools = builtin_tools(&ToolSet {
         terminal: true,
         ..ToolSet::default()
@@ -3212,7 +3215,7 @@ async fn an_effort_refusal_is_not_a_refusal_of_progress_updates() {
         .mount(&server)
         .await;
     let p = provider(&server, Protocol::Anthropic);
-    let model = ModelSpec::new("claude-opus-5-5");
+    let model = ModelSpec::new("claude-opus-5-5@effort");
     let entries = vec![AiEntry::user(1, "hi")];
     let req = with_effort(request(&model, &entries, &[]), Some(High));
     // Progress updates, then the summarized display, then neither with the effort dropped.
@@ -3244,7 +3247,7 @@ async fn a_failed_stream_is_not_a_refusal_of_progress_updates() {
         .mount(&server)
         .await;
     let p = provider(&server, Protocol::Anthropic);
-    let model = ModelSpec::new("claude-opus-5-5");
+    let model = ModelSpec::new("claude-opus-5-5@failed-stream");
     let entries = vec![AiEntry::user(1, "hi")];
     let req = request(&model, &entries, &[]);
     let (result, _) = run(&p, &req).await;
@@ -3283,7 +3286,7 @@ async fn a_refused_beta_and_a_replay_refusal_still_get_an_answer() {
         .mount(&server)
         .await;
     let p = provider(&server, Protocol::Anthropic);
-    let model = ModelSpec::new("claude-opus-5-5");
+    let model = ModelSpec::new("claude-opus-5-5@replay");
     let earlier = AssistantEntry {
         provider_id: PROVIDER_ID.into(),
         model_id: model.id.clone(),
