@@ -180,6 +180,8 @@ const DISK_COMMAND: Record<LocalShellKind, string> = {
  *   autocompact every turn of a conversation that has an answer compacts it first (AI-22)
  *   effortfail every request that carries a thinking level is refused for it and goes again
  *              without it, so the panel says the level was not used (AI-05)
+ *   updates    every response thinks for 3 s with no reasoning text, like a Claude model that writes
+ *              progress updates (AI-06): the status says Thinking, and no Reasoning block shows
  *   showcase   in a connected tab, any message gets the scripted nginx 502 fix that the README
  *              screenshots and demo video show: two commands, a fix, `curl` typed into the shell, a summary
  *   noprovider (Settings → AI mock) no provider is configured
@@ -881,7 +883,12 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const p = await plan(c, turn);
     if (turn.ended) return;
     const part = (turn.streamed = { provider_id: turn.context.provider_id, model_id: turn.context.model_id, text: "", calls: [] as AiToolCall[] });
-    for (const piece of chunks(p.reasoning)) {
+    // Like Rust, a thinking block says the model thinks before any reasoning text comes.
+    const silent = flags.has("updates");
+    const reasoning = silent ? "" : p.reasoning;
+    if (silent || reasoning) turn.emit({ kind: "thinking" });
+    if (silent && !(await sleep(turn, 3000))) return;
+    for (const piece of chunks(reasoning)) {
       if (!(await sleep(turn, 22))) return;
       turn.emit({ kind: "reasoning", delta: piece });
     }
@@ -895,7 +902,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       part.calls.push(x);
       turn.emit({ kind: "tool_call", id: x.id, name: x.name, arguments: x.arguments });
     }
-    const usage: AiUsage = { input_tokens: estimate(c) + 2400, output_tokens: Math.ceil((p.text.length + p.reasoning.length) / 4) + 20, estimated: false };
+    const usage: AiUsage = { input_tokens: estimate(c) + 2400, output_tokens: Math.ceil((p.text.length + reasoning.length) / 4) + 20, estimated: false };
     turn.emit({ kind: "usage", ...usage });
     if (!(await sleep(turn, 80))) return;
     const entry: Assistant = {
@@ -905,7 +912,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       provider_id: turn.context.provider_id,
       model_id: turn.context.model_id,
       text: p.text,
-      reasoning: p.reasoning || null,
+      reasoning: reasoning || null,
       tool_calls: p.calls,
       finish: p.finish,
       usage,
