@@ -138,6 +138,8 @@ async fn responses_captures_reasoning_and_tool_calls_and_replays_them_statelessl
     assert_eq!(
         events,
         vec![
+            // The reasoning item opens before any summary arrives.
+            StreamEvent::Thinking,
             reasoning("**Checking uptime**"),
             reasoning("\n\n"),
             reasoning("The user wants"),
@@ -682,6 +684,51 @@ fn items_without_item_events_come_from_the_terminal_event() {
         ]
     );
     assert_eq!(assembled.usage, Some(usage(10, 5)));
+}
+
+#[test]
+fn reasoning_without_a_summary_still_says_the_model_thinks() {
+    let reasoning_item = json!({"id": "rs_1", "type": "reasoning", "summary": [],
+                                "encrypted_content": "gAAAA"});
+    let message = json!({"id": "msg_1", "type": "message", "role": "assistant",
+                         "content": [{"type": "output_text", "text": "Up 3 days.", "annotations": []}]});
+    let stream = [
+        event(
+            "response.output_item.added",
+            &json!({"type": "response.output_item.added", "output_index": 0,
+                    "item": {"id": "rs_1", "type": "reasoning", "summary": []}}),
+        ),
+        event(
+            "response.output_item.done",
+            &json!({"type": "response.output_item.done", "output_index": 0,
+                    "item": reasoning_item}),
+        ),
+        event(
+            "response.output_item.added",
+            &json!({"type": "response.output_item.added", "output_index": 1,
+                    "item": {"id": "msg_1", "type": "message", "role": "assistant",
+                             "content": []}}),
+        ),
+        event(
+            "response.output_text.delta",
+            &json!({"type": "response.output_text.delta", "output_index": 1,
+                    "delta": "Up 3 days."}),
+        ),
+        event(
+            "response.output_item.done",
+            &json!({"type": "response.output_item.done", "output_index": 1, "item": message}),
+        ),
+        event(
+            "response.completed",
+            &json!({"type": "response.completed", "response": {"status": "completed"}}),
+        ),
+    ]
+    .concat();
+    let (result, events) = assemble(ResponsesStream::new(), &stream, 4096);
+    let assembled = result.unwrap();
+    assert_eq!(events, vec![StreamEvent::Thinking, text("Up 3 days.")]);
+    assert_eq!(assembled.reasoning, "");
+    assert_eq!(assembled.text, "Up 3 days.");
 }
 
 #[test]

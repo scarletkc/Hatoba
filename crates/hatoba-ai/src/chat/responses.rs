@@ -3,7 +3,8 @@
 //! The stream is typed events: `response.output_item.added` opens an item at its `output_index`,
 //! deltas fill it (`response.output_text.delta`, `response.reasoning_summary_text.delta`,
 //! `response.reasoning_text.delta`, `response.function_call_arguments.delta`), and
-//! `response.output_item.done` closes it with its final value. Only `response.completed` and
+//! `response.output_item.done` closes it with its final value. A reasoning item that opens sends
+//! [`StreamEvent::Thinking`], since its summary may never come. Only `response.completed` and
 //! `response.incomplete` end a response; `response.failed` and `error` are errors, and a stream
 //! that ends before either was interrupted.
 //!
@@ -358,6 +359,10 @@ impl ResponsesStream {
         match str_at(message, "type") {
             "response.output_item.added" => {
                 if let Some(Value::Object(value)) = message.get("item") {
+                    // The model thinks, whether or not a summary comes of it.
+                    if value.get("type").and_then(Value::as_str) == Some("reasoning") {
+                        emit(StreamEvent::Thinking);
+                    }
                     let index = message
                         .get("output_index")
                         .and_then(Value::as_u64)
