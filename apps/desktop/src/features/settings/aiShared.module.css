@@ -44,6 +44,7 @@
 }
 
 .testResult {
+  transition: opacity var(--motion-fade) var(--ease-out);
   display: flex;
   align-items: flex-start;
   gap: 8px;
