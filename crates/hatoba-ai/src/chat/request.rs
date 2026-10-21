@@ -66,8 +66,9 @@
 //!   summarized display mixes with reasoning beyond telling apart. Such a model gets
 //!   `display: "updates"` instead, with the beta header [`UPDATES_BETA`]: its reasoning comes
 //!   back empty and each progress update as text, which the panel shows as answer text. With
-//!   `with_updates` false (the retry after a 400 or 422 about that display or its header, which a vendor
-//!   or gateway that does not pass the header on returns) it gets the summarized display.
+//!   `with_updates` false (the retry after a 400 or 422 about that display or its header, which
+//!   a vendor or gateway that does not pass the header on returns) it gets the summarized
+//!   display.
 //! - Anthropic `max_tokens` is the model's output limit, at most 128,000, or 16,000 when the limit
 //!   is unknown. Thinking counts against it, but a larger guess could exceed what an
 //!   Anthropic-compatible vendor allows and fail every request, so an unknown limit stays 16,000

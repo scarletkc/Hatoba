@@ -367,9 +367,9 @@ pub(crate) fn rejects_summary(err: &AiError) -> bool {
     }
 }
 
-/// Whether an Anthropic error is a 400 or 422 about `display: "updates"` or its beta header, which a
-/// vendor or gateway that does not pass the header on returns. The request is then retried with
-/// summarized display, keeping the level. Only a validation error (400 or 422) that names the
+/// Whether an Anthropic error is a 400 or 422 about `display: "updates"` or its beta header,
+/// which a vendor or gateway that does not pass the header on returns. The request is then
+/// retried with summarized display, keeping the level. Only a validation error that names the
 /// display or the header counts, since the base URL is then remembered as refusing it.
 pub(crate) fn rejects_updates(err: &AiError) -> bool {
     match err {
