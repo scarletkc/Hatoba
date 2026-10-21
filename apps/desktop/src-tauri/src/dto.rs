@@ -1400,6 +1400,9 @@ pub struct TunnelForwardView {
     pub forward_id: String,
     /// The actually bound local port (differs from `bind_port` when it was 0).
     pub local_port: u16,
+    /// Where this computer reaches it: `localhost:<port>`, or the address it listens on when that
+    /// is one interface's.
+    pub address: String,
     /// `host:port`, as the server reaches it.
     pub dest: String,
 }

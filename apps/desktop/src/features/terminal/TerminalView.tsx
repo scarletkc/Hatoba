@@ -7,7 +7,7 @@ import type { SessionTab } from "@/app/tabs";
 import { Menu, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { askAi as askAiAbout, askAiAboutConnection } from "@/features/ai/actions";
 import { formatTarget, savedHostFor } from "@/features/hosts/quickConnect";
-import { openForwards } from "@/features/hosts/tunnels";
+import { openForwards, useHostTunnel } from "@/features/hosts/tunnels";
 import { SftpPanel } from "@/features/sftp/SftpPanel";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
@@ -52,6 +52,9 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
   const [menuEntries, setMenuEntries] = useState<MenuEntry[]>([]);
   const forwardsMenu = useMenu();
   const forwardRuns = useForwardRuns(tab.sessionId);
+  // FWD-05: the popover shows the host's forwards running without a terminal as running too.
+  const tunnel = useHostTunnel(tab.hostId);
+  const backgroundForwards = tunnel?.forwards.filter((f) => forwardRuns[f.forward_id]?.state !== "running").length ?? 0;
   const statsMenu = useMenu();
   const stats = useSessionStats(tab.sessionId);
 
@@ -232,7 +235,7 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
         findOpen={findOpen}
         sftpOpen={info.sftpOpen}
         forwards={!!tab.hostId}
-        forwardCount={countRunning(forwardRuns)}
+        forwardCount={countRunning(forwardRuns) + backgroundForwards}
         forwardsOpen={!!forwardsMenu.anchor}
         moreOpen={!!menu.anchor?.trigger}
         statsOn={statsOn}

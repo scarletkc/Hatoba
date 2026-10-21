@@ -11,14 +11,10 @@ import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { ForwardInput, ForwardView, HostView, TunnelView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { hostPort, reachableAddress } from "./address";
 import { ForwardDialog } from "./ForwardDialog";
 import { startTunnelForward, stopTunnelForward, tunnelPort, useTunnels } from "./tunnels";
 import s from "./ForwardsPage.module.css";
-
-/** `host:port`, with IPv6 literals bracketed. */
-export function hostPort(host: string, port: number | string): string {
-  return `${host.includes(":") ? `[${host}]` : host}:${port}`;
-}
 
 const toInput = (f: ForwardView, patch: Partial<ForwardInput> = {}): ForwardInput => ({
   id: f.id,
@@ -232,7 +228,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                       const label = rule(f);
                       const run = runOf(f, tunnel);
                       const failure = run ? null : failures[f.id];
-                      const address = run && `localhost:${run.localPort}`;
+                      const address = run && reachableAddress(f.bind_address, run.localPort);
                       return (
                         <div key={f.id} className={s.row}>
                           <div className={s.body}>

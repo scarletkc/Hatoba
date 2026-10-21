@@ -2506,6 +2506,11 @@ export type TunnelForwardView = {
 	forward_id: string,
 	/**  The actually bound local port (differs from `bind_port` when it was 0). */
 	local_port: number,
+	/**
+	 *  Where this computer reaches it: `localhost:<port>`, or the address it listens on when that
+	 *  is one interface's.
+	 */
+	address: string,
 	/**  `host:port`, as the server reaches it. */
 	dest: string,
 };

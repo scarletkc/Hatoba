@@ -57,7 +57,7 @@ let version = 0;
 const tunnels = (ports: number[], at = ++version): TunnelsEvent => ({
   version: at,
   tunnels: ports.length
-    ? [{ host_id: "h1", host_name: "db", forwards: ports.map((p) => ({ forward_id: `f${p}`, local_port: p, dest: "127.0.0.1:5432" })) }]
+    ? [{ host_id: "h1", host_name: "db", forwards: ports.map((p) => ({ forward_id: `f${p}`, local_port: p, address: `localhost:${p}`, dest: "127.0.0.1:5432" })) }]
     : [],
 });
 const current = () => getTunnels().find((x) => x.host_id === "h1");

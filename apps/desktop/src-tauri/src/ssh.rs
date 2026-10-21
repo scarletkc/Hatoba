@@ -1,6 +1,7 @@
 //! Live SSH sessions, host-key verification (SSH-04) and interactive prompts (SSH-08).
 
 use std::collections::{HashMap, HashSet};
+use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -130,18 +131,18 @@ impl LiveSession {
     pub fn active_forwards(&self) -> Vec<(String, u16)> {
         self.running_forwards()
             .into_iter()
-            .map(|(id, port, _)| (id, port))
+            .map(|(id, addr, _)| (id, addr.port()))
             .collect()
     }
 
-    /// The forwards running: `(forward_id, local_port, dest)`, by local port.
-    pub fn running_forwards(&self) -> Vec<(String, u16, String)> {
+    /// The forwards running: `(forward_id, local address, dest)`, by local port.
+    pub fn running_forwards(&self) -> Vec<(String, SocketAddr, String)> {
         let mut list: Vec<_> = lock(&self.forwards)
             .iter()
             .filter(|(_, f)| f.handle.is_running())
-            .map(|(id, f)| (id.clone(), f.handle.local_port(), f.dest.clone()))
+            .map(|(id, f)| (id.clone(), f.handle.local_addr(), f.dest.clone()))
             .collect();
-        list.sort_by_key(|(_, port, _)| *port);
+        list.sort_by_key(|(_, addr, _)| addr.port());
         list
     }
 

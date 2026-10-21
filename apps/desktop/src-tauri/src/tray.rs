@@ -262,7 +262,7 @@ mod imp {
         let mut items = vec![MenuItemKind::MenuItem(heading)];
         for tunnel in &forwards.tunnels {
             for forward in &tunnel.forwards {
-                let address = format!("localhost:{}", forward.local_port);
+                let address = &forward.address;
                 let copy_id = format!("{FORWARD_COPY}{address}");
                 let copy = MenuItem::with_id(app, copy_id, &forwards.copy, true, None::<&str>)?;
                 let stop_id = format!("{FORWARD_STOP}{}:{}", tunnel.host_id, forward.forward_id);

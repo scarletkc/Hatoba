@@ -19,6 +19,7 @@ import type {
 import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
 import { ENV_MAX_VARS, envRows, envTooLarge, validateEnvRows } from "@/features/hosts/envVars";
 import { formatTarget, sameTarget } from "@/features/hosts/quickConnect";
+import { reachableAddress } from "@/features/hosts/address";
 import { defaultRightClick, defaultTerminalFont } from "@/lib/platform";
 import { FRAME_CLOSED, FRAME_DATA, FRAME_SESSION } from "../types";
 import { createAiMock } from "./ai";
@@ -138,7 +139,7 @@ export function createMockApi(): HatobaApi {
    * opens, as a network failure would.
    */
   const tunnelDemo = q.get("tunnel");
-  const tunnels = new Map<string, { name: string; forwards: Map<string, { port: number; dest: string }> }>();
+  const tunnels = new Map<string, { name: string; forwards: Map<string, { port: number; address: string; dest: string }> }>();
   let tunnelVersion = 0;
   const tunnelList = (): TunnelsEvent => ({
     version: tunnelVersion,
@@ -148,7 +149,7 @@ export function createMockApi(): HatobaApi {
         host_id,
         host_name: t.name,
         forwards: [...t.forwards.entries()]
-          .map(([forward_id, f]) => ({ forward_id, local_port: f.port, dest: f.dest }))
+          .map(([forward_id, f]) => ({ forward_id, local_port: f.port, address: f.address, dest: f.dest }))
           .sort((a, b) => a.local_port - b.local_port),
       })),
   });
@@ -979,7 +980,7 @@ export function createMockApi(): HatobaApi {
       if (running) return running.port;
       const port = f.bind_port || 49152 + Math.floor(Math.random() * 1000);
       const dest = `${f.dest_host.includes(":") ? `[${f.dest_host}]` : f.dest_host}:${f.dest_port}`;
-      t.forwards.set(fid, { port, dest });
+      t.forwards.set(fid, { port, address: reachableAddress(f.bind_address, port), dest });
       tunnelsChanged();
       return port;
     },

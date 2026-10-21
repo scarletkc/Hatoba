@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { errorMessage } from "@/app/errors";
 import { Icon, Spinner } from "@/components/controls";
 import { overlayStyles, toast, type MenuAnchor } from "@/components/overlay";
+import { hostPort, reachableAddress } from "@/features/hosts/address";
 import { stopTunnelForward, tunnelPort, useHostTunnel } from "@/features/hosts/tunnels";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
@@ -19,7 +20,6 @@ import {
 import { useStatusPopover } from "./popover";
 import s from "./ForwardsPopover.module.css";
 
-const hostPort = (host: string, port: number | string) => `${host.includes(":") ? `[${host}]` : host}:${port}`;
 
 /**
  * The status bar's port forwarding popover (FWD-01/02): this host's saved forwards with their state
@@ -170,9 +170,10 @@ function ForwardRow({
 }) {
   const t = useT();
   const state = run?.state ?? "stopped";
-  const running = state === "running" && run?.localPort != null;
+  const port = state === "running" ? (run?.localPort ?? null) : null;
+  const running = port !== null;
   const failed = state === "failed";
-  const local = running ? `localhost:${run.localPort}` : hostPort(f.bind_address, f.bind_port || t("terminal.fwd.autoPort"));
+  const local = port !== null ? reachableAddress(f.bind_address, port) : hostPort(f.bind_address, f.bind_port || t("terminal.fwd.autoPort"));
 
   return (
     <div className={s.row}>

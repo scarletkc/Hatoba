@@ -555,6 +555,8 @@ export interface TunnelOptions {
 export interface TunnelForwardView {
   forward_id: string;
   local_port: number;
+  /** Where this computer reaches it: `localhost:<port>`, or the address it listens on when that is one interface's. */
+  address: string;
   /** `host:port`, as the server reaches it. */
   dest: string;
 }
