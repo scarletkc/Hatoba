@@ -85,8 +85,6 @@ use crate::error::AiError;
 use crate::net;
 use crate::provider::{Effort, ModelSpec, Protocol, ProviderConfig, validate_base_url};
 
-pub(crate) use self::request::writes_progress_updates;
-
 /// A tool offered to the model.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ToolDef {

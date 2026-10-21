@@ -1455,14 +1455,8 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
          blocks.\n",
     );
     if tools {
-        // These models' text before a tool call comes back as a progress update, which the API
-        // returns only as a short summary.
-        out.push_str(if crate::chat::writes_progress_updates(ctx.model.id) {
-            "- Text you write before a tool call reaches the user only as a short summary, so \
-             write your full answer after your last tool call.\n"
-        } else {
-            "- Write your full answer after your last tool call.\n"
-        });
+        // Some models' text before a tool call reaches the user only as a short summary.
+        out.push_str("- Write your full answer after your last tool call.\n");
     }
     let given = match (&instructions, &notes) {
         (Some(_), Some(_)) => Some("the user's instructions and the host notes below"),
@@ -2136,42 +2130,23 @@ mod tests {
         });
         assert!(!forgetful.contains(MEMORY_RULE));
         assert!(forgetful.contains("<memory entries="));
-        // Every model that can call tools is told where its answer goes; only one whose text
-        // before a tool call comes back as a summarized progress update is told why.
-        let summary = "reaches the user only as a short summary";
-        assert!(prompt.contains(&format!(
-            "{summary}, so write your full answer after your last tool call.\n"
-        )));
-        for (id, tools, rule, why) in [
-            ("claude-opus-5", PromptTools::Terminal, true, false),
-            ("gpt-5.5", PromptTools::NoTerminal, true, false),
-            ("claude-sonnet-5-5", PromptTools::NoTerminal, true, true),
-            ("claude-opus-5-5", PromptTools::None, false, false),
-            ("claude-opus-5-5", PromptTools::SideQuestion, false, false),
+        // Every model that can call tools is told where its answer goes, whatever the model.
+        let answer_rule = "
+- Write your full answer after your last tool call.
+";
+        for (id, tools, told) in [
+            ("claude-opus-5-5", PromptTools::Terminal, true),
+            ("gpt-5.5", PromptTools::NoTerminal, true),
+            ("claude-opus-5-5", PromptTools::None, false),
+            ("claude-opus-5-5", PromptTools::SideQuestion, false),
         ] {
             let other = system_prompt(&PromptContext {
                 model: PromptModel { id, ..OPUS },
                 tools,
                 ..ctx
             });
-            let label = format!("{id} with {tools:?}");
-            assert_eq!(
-                other.contains("ite your full answer after your last tool call."),
-                rule,
-                "{label}"
-            );
-            assert_eq!(other.contains(summary), why, "{label}");
+            assert_eq!(other.contains(answer_rule), told, "{id} with {tools:?}");
         }
-        assert!(
-            system_prompt(&PromptContext {
-                model: PromptModel {
-                    id: "gpt-5.5",
-                    ..OPUS
-                },
-                ..ctx
-            })
-            .contains("\n- Write your full answer after your last tool call.\n")
-        );
         // Without instructions or notes, no section and no rule about them.
         for absent in ["<user_instructions>", "<host_notes", "Follow "] {
             assert!(!prompt.contains(absent), "unexpected {absent:?}");
@@ -2761,7 +2736,7 @@ The SSH server identifies itself as "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5".
 - You can call several tools in one response. When calls do not depend on each other, such as reading several files or running several checks, make them together in the same response rather than one at a time.
 - Prefer glob to find files, grep to search them, and read_file, edit_file and write_file to read and change them, over the same work with find, grep, cat, sed or heredocs in the shell: edit_file and write_file show the user the change and can be reverted. Fall back to the shell when these tools cannot do the job, such as finding files by size or age, or files that need sudo. Use send_input for anything that needs the shell's working directory, environment or sudo session, or that is interactive, and run_command for the rest.
 - Answer in the user's language. Be concise, use Markdown, and put commands in code blocks.
-- Text you write before a tool call reaches the user only as a short summary, so write your full answer after your last tool call.
+- Write your full answer after your last tool call.
 - Follow the user's instructions and the host notes below; where they differ from the rules above, follow them instead. Which tool calls need the user's approval is still up to Hatoba.
 </rules>
 
