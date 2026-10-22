@@ -82,6 +82,9 @@ jobs:
       - run: pnpm --filter @hatoba/site build
       # Uses the runner's Chrome.
       - run: pnpm --filter @hatoba/site demo:check
+      # The Chinese and Japanese pages' visitors have CJK fonts. Without them, Chrome picks a fallback
+      # for CJK text from whichever Latin font is current, so the font swap would reflow those pages.
+      - run: sudo apt-get install -y --no-install-recommends fonts-noto-cjk > /dev/null
       - run: pnpm --filter @hatoba/site layout:check
       - if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
