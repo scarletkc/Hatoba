@@ -33,7 +33,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | SSH-13 | SOCKS5 and HTTP proxies | 🟡 | Tests run against in-process proxies; needs a try in the app with a real proxy |
 | SSH-14 | Per-host environment variables | 🟡 | Integration tests send them to OpenSSH on Linux; needs a try in the app against a real server |
 | SSH-15 | Import from Xshell, FinalShell, MobaXterm, SecureCRT, and Tabby | 🟡 | Unit tests parse sample files written to each client's format; not yet tried with sessions saved by the real clients |
-| SSH-16 | One connection per host for its tabs and forwards | 🟡 | Tried in the browser with the mock backend: tabs and forwards on one connection, a lost connection. Not yet tried in the app against a real server, nor the fifth tab's connection, a server that refuses a shell, or a tab joining a connection the network dropped |
+| SSH-16 | One connection per host for its tabs and forwards | ✅ | Tried in the app against real servers: tabs and forwards on one connection, the fifth tab's connection, a server that refuses a shell, a tab joining a connection the network dropped, and a lost connection |
 | TERM-01…06 | Tabs, colors, wide characters, PTY, paste, scrollback, appearance | ✅ / 🟡 | The candidate window position for Microsoft Pinyin tried on Windows 11; for the Japanese IME it needs verification on a real Windows machine. Dragging a tab to move it (TERM-01) tried in the browser with the mock backend; needs a try in the app on Windows, Linux, and macOS |
 | TERM-07, 08 | Terminal search, links | ✅ | |
 | TERM-09…11 | Split panes, session logs, Snippets | ⬜ | P2 |
@@ -41,8 +41,8 @@ This page tracks implementation progress, items awaiting verification, and follo
 | SFTP-01…04 | File panel, transfers, file operations, attributes | ✅ | |
 | SFTP-05 | Edit remote files | ⬜ | P2 |
 | FWD-01, 02 | Local forwarding, start with the connection | ✅ | |
-| FWD-03, 04 | Remote forwarding, SOCKS | 🟡 | Integration tests against OpenSSH (`it_forward.rs`, CI), and tried in the browser with the mock backend: the dialog, the popover and the rows. Not yet tried in the app against a real server |
-| FWD-05 | Port Forwarding page, forwards on the host's connection | 🟡 | Tried in the browser with the mock backend: the Port Forwarding page, start, stop, the terminal popover, an auto-start failure and a lost connection's message. Not yet tried in the app against a real server, nor the tray menu and the notification |
+| FWD-03, 04 | Remote forwarding, SOCKS | ✅ | Integration tests against OpenSSH (`it_forward.rs`, CI), and tried in the app against real servers |
+| FWD-05 | Port Forwarding page, forwards on the host's connection | ✅ | Tried in the app against real servers: the Port Forwarding page, start, stop, the terminal popover, an auto-start failure, the tray menu, and a lost connection's message and notification |
 | LOCAL-01, 02 | Local terminal tabs, the shells | 🟡 | Tried in the app on Windows 11 with PowerShell 7, Windows PowerShell, Command Prompt, Git Bash and WSL Ubuntu; unit tests run Command Prompt in ConPTY. Not yet tried on macOS or Linux |
 | LOCAL-03 | The assistant in local tabs | 🟡 | Tried in the app on Windows 11 against a mock model: `run_command`, `read_file`, `grep`, `glob`, `send_input`, `read_terminal` and a timeout in PowerShell, `run_command` and `read_file` in WSL Ubuntu, `run_command` in Command Prompt. Used in the app on Windows 11 with real providers, including `edit_file`, `write_file` and their revert. Unit tests cover the native file and search tools on every platform, and PowerShell, Command Prompt, Git Bash and WSL commands and their stops on Windows. The read-only check, allowances and Auto's hard rules read PowerShell and Command Prompt syntax (§13.5): unit tests, and in the app on Windows 11 read-only PowerShell and Command Prompt commands ran without a card in manual approval while `rm` asked. Not yet tried on macOS or Linux |
 
