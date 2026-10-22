@@ -27,3 +27,11 @@
   color: var(--red);
   line-height: 1.45;
 }
+
+/* Kept in a centered dialog, which an appearing line would shift up as it grows. It reaches into the
+   space above the buttons, which are on the right, so an empty slot adds little to the gap. */
+.errorSlot {
+  min-height: 16px;
+  line-height: 16px;
+  margin-bottom: -10px;
+}

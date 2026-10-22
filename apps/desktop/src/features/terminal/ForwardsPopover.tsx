@@ -151,8 +151,14 @@ function ForwardRow({
 
   return (
     <div className={s.row}>
-      <span className={cx(s.state, running && s.stateRunning, failed && s.stateFailed)}>
-        <Icon name={running ? "check-circle" : failed ? "warning-circle" : "circle"} fill={running || failed} />
+      {/* A starting forward turns its state icon into a spinner, so the row keeps its height. */}
+      <span
+        className={cx(s.state, running && s.stateRunning, failed && !starting && s.stateFailed)}
+        role={starting ? "status" : undefined}
+        aria-label={starting ? t("terminal.fwd.starting") : undefined}
+        title={starting ? t("terminal.fwd.starting") : undefined}
+      >
+        {starting ? <Spinner size={13} /> : <Icon name={running ? "check-circle" : failed ? "warning-circle" : "circle"} fill={running || failed} />}
       </span>
       <div className={s.body}>
         {running && !remote ? (
@@ -163,14 +169,7 @@ function ForwardRow({
           <span className={s.address}>{remote ? t("terminal.fwd.onServer", { addr: local }) : local}</span>
         )}
         <span className={s.dest}>{kind === "dynamic" ? t("terminal.fwd.socks") : `→ ${dest}`}</span>
-        {starting ? (
-          <span className={s.starting}>
-            <Spinner size={11} />
-            {t("terminal.fwd.starting")}
-          </span>
-        ) : (
-          failed && <span className={s.error}>{error}</span>
-        )}
+        {failed && <span className={s.error}>{error}</span>}
       </div>
       <button type="button" className={s.action} disabled={busy} onClick={running ? onStop : onStart}>
         {running ? t("terminal.fwd.stop") : failed ? t("btn.retry") : t("terminal.fwd.start")}

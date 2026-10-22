@@ -7,6 +7,7 @@ import { NewPasswordFields, useNewPassword } from "@/features/onboarding/Passwor
 import { RecoveryCodeSection } from "@/features/onboarding/RecoveryCode";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
+import { cx } from "@/lib/cx";
 import s from "./dialogs.module.css";
 
 /** Asks for the master password before a sensitive action (Windows Hello or Touch ID, new recovery code). */
@@ -72,11 +73,9 @@ export function VerifyPasswordDialog({
             setError(null);
           }}
         />
-        {error && (
-          <div className={s.error} role="alert">
-            {error}
-          </div>
-        )}
+        <div className={cx(s.error, s.errorSlot)} role="alert">
+          {error}
+        </div>
         <button type="submit" hidden />
       </form>
     </Dialog>

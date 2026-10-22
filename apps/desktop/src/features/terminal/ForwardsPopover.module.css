@@ -108,16 +108,6 @@
   overflow-wrap: anywhere;
 }
 
-.starting {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 2px;
-  font-size: 11.5px;
-  line-height: 1.4;
-  color: var(--fg2);
-}
-
 .action {
   flex: none;
   min-width: 36px;
