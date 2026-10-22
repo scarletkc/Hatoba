@@ -101,16 +101,15 @@
   margin-top: 1px;
 }
 
+/* The message's own elements (e.g. an address that truncates) sit in the line as they are. */
 .statusText {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: contents;
 }
 
 .statusError .statusText {
+  display: block;
+  min-width: 0;
   line-height: 1.4;
-  white-space: normal;
   overflow-wrap: anywhere;
 }
 
