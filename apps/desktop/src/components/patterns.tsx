@@ -87,24 +87,41 @@ export function StatusLine({
         className,
       )}
     >
-      {tone === "progress" ? <Spinner size={13} /> : name && <Icon name={name} fill={tone !== "neutral"} />}
+      {tone === "progress" ? <Spinner size={14} /> : name && <Icon name={name} fill={tone !== "neutral"} />}
       <span className={p.statusText}>{children}</span>
     </span>
   );
 }
 
+interface MessageProps {
+  className?: string;
+  /** An icon before the text, which stays by its first line. */
+  icon?: string;
+  children: ReactNode;
+}
+
+function Message({ className, icon, children, tone }: MessageProps & { tone: "hint" | "warning" | "error" }) {
+  return (
+    <div className={cx(p[tone], icon && p.messageIcon, className)} role={tone === "error" ? "alert" : undefined}>
+      {icon && <Icon name={icon} />}
+      {icon ? <span>{children}</span> : children}
+    </div>
+  );
+}
+
 /** The grey line under a field that says what it takes. */
-export function HintText({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cx(p.hint, className)}>{children}</div>;
+export function HintText(props: MessageProps) {
+  return <Message tone="hint" {...props} />;
+}
+
+/** The orange line under a field: allowed, but worth a second look. */
+export function WarningText({ icon = "warning", ...props }: MessageProps) {
+  return <Message tone="warning" icon={icon} {...props} />;
 }
 
 /** The red line under a field that says what is wrong with it. */
-export function ErrorText({ className, children }: { className?: string; children: ReactNode }) {
-  return (
-    <div className={cx(p.error, className)} role="alert">
-      {children}
-    </div>
-  );
+export function ErrorText(props: MessageProps) {
+  return <Message tone="error" {...props} />;
 }
 
 export type ChipTone = "neutral" | "success" | "error" | "warning" | "accent";
@@ -138,7 +155,7 @@ export function Chip({
       )}
       {...rest}
     >
-      {busy ? <Spinner size={11} /> : icon && <Icon name={icon} />}
+      {busy ? <Spinner size={12} /> : icon && <Icon name={icon} />}
       {children}
     </span>
   );

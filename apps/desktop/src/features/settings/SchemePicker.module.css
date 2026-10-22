@@ -4,14 +4,14 @@
 
 .caption {
   margin-bottom: 10px;
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   color: var(--fg2);
 }
 
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
-  gap: var(--space-14) var(--space-12);
+  gap: var(--space-12) var(--space-12);
 }
 
 .card {
@@ -29,13 +29,13 @@
 .term {
   height: 66px;
   padding: 8px 9px 7px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   overflow: hidden;
   font-family: var(--font-mono);
-  font-size: var(--text-3xs);
+  font-size: var(--text-2xs);
   line-height: 15px;
   white-space: nowrap;
   transition: box-shadow var(--motion-fade) var(--ease-out);
@@ -81,20 +81,20 @@
 .swatches {
   margin-top: auto;
   display: flex;
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 
 .swatches i {
   flex: 1;
   height: 5px;
-  border-radius: var(--radius-2xs);
+  border-radius: var(--radius-mark);
 }
 
 .name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   color: var(--fg2);
 }
 

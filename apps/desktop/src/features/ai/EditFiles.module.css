@@ -6,7 +6,7 @@
   padding: 0;
   overflow-y: auto;
   border: 0.5px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   list-style: none;
 }
 

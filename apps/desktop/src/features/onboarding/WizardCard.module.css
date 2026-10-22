@@ -3,7 +3,7 @@
   max-width: 100%;
   margin: 0;
   background: var(--sheet);
-  border-radius: var(--radius-window);
+  border-radius: var(--radius-xl);
   box-shadow: 0 0 0 0.5px var(--winline), var(--shadow);
   color: var(--fg);
   font-size: var(--text-md);
@@ -29,7 +29,7 @@
   padding: 22px 28px 24px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-18);
+  gap: var(--space-16);
 }
 
 .footer {
@@ -42,7 +42,7 @@
 
 .title {
   margin: 0;
-  font-size: var(--text-wizard);
+  font-size: var(--text-title);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -114,7 +114,7 @@
 }
 
 .bubbleDone i {
-  font-size: var(--icon-11);
+  font-size: var(--icon-12);
 }
 
 .bubbleCurrent {
@@ -126,7 +126,7 @@
 .error {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-7);
+  gap: var(--space-6);
   font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--red);

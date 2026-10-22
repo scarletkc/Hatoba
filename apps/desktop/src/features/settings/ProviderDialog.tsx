@@ -495,7 +495,7 @@ export function ProviderDialog({
                     )}
                     <IconButton
                       icon="x"
-                      size={13}
+                      size={14}
                       label={t("aiSettings.models.remove", { id: d.id.trim() || d.name })}
                       onClick={() => patchModels(form.models.filter((_, j) => j !== i))}
                     />

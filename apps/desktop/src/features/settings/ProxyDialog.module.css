@@ -1,7 +1,7 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-14);
+  gap: var(--space-12);
 }
 
 /* Address and port on one line, as on the host editor. */
@@ -17,7 +17,7 @@
 }
 
 .problem {
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--red);
 }

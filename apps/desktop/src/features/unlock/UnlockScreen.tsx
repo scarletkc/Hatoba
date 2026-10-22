@@ -217,7 +217,7 @@ export function UnlockScreen() {
               <Icon name={revealed ? "eye-slash" : "eye"} />
             </button>
             <button type="submit" className={s.go} aria-label={t("vault.unlock.submit")} disabled={!password || busy || throttled}>
-              {busy ? <Spinner size={13} /> : <Icon name="arrow-right" />}
+              {busy ? <Spinner size={14} /> : <Icon name="arrow-right" />}
             </button>
           </div>
           <div className={s.message} role="alert" aria-live="assertive">

@@ -222,17 +222,17 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
               </div>
               {state === "reverting" && (
                 <span className={s.status}>
-                  <Spinner size={13} />
+                  <Spinner size={14} />
                 </span>
               )}
               {state === "reverted" && (
                 <span className={s.status} role="img" aria-label={t("ai.revert.reverted")}>
-                  <Icon name="check-circle" size={15} fill color="var(--green)" />
+                  <Icon name="check-circle" size={16} fill color="var(--green)" />
                 </span>
               )}
               {state === "failed" && (
                 <span className={s.status}>
-                  <Icon name="warning-circle" size={15} fill color="var(--red)" />
+                  <Icon name="warning-circle" size={16} fill color="var(--red)" />
                 </span>
               )}
             </li>

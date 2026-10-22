@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
-import { Button, Icon, IconButton, Switch } from "@/components/controls";
+import { Button, IconButton, Switch } from "@/components/controls";
 import { EmptyState, Group, PageHeader, Section } from "@/components/layout";
 import { confirm, toast } from "@/components/overlay";
-import { ListRow, StatusLine } from "@/components/patterns";
+import { ErrorText, ListRow, StatusLine } from "@/components/patterns";
 import { writeClipboard } from "@/features/terminal/clipboard";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
@@ -188,10 +188,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
       <div className={s.scroll}>
         <div className={s.column}>
           {loadFailed && (
-            <span className={s.error}>
-              <Icon name="warning-circle" size={14} />
-              {t("hosts.fwd.loadFailed")}
-            </span>
+            <ErrorText icon="warning-circle">{t("hosts.fwd.loadFailed")}</ErrorText>
           )}
           {sections.map(({ host, forwards }) => {
             const conn = connections.find((x) => x.host_id === host.id);
@@ -248,7 +245,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                                 <IconButton
                                   icon="trash"
                                   label={t("btn.delete")}
-                                  className={s.remove}
+                                  danger
                                   disabled={pending.has(f.id)}
                                   onClick={() => void remove(f)}
                                 />

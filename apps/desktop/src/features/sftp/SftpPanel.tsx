@@ -267,7 +267,7 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
           disabled={!cwd || cwd === "/"}
           onClick={() => cwd && void load(parentPath(cwd))}
         >
-          <Icon name="caret-left" size={13} />
+          <Icon name="caret-left" size={14} />
         </button>
         <span className={cx(s.path, "selectable")} title={cwd ?? undefined}>
           {dirPrefix}
@@ -331,7 +331,7 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
         })}
         {loading && entries.length === 0 && (
           <div className={s.message}>
-            <Spinner size={13} />
+            <Spinner size={14} />
             {t("sftp.loading")}
           </div>
         )}
@@ -351,7 +351,7 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
 
       {dragging && (
         <div className={s.drop}>
-          <Icon name="upload-simple" size={22} />
+          <Icon name="upload-simple" size={24} />
           <span>{t("sftp.dropHere", { path: cwd ?? "~" })}</span>
         </div>
       )}

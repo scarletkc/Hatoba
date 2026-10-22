@@ -1,7 +1,7 @@
 .pane {
   display: flex;
   flex-direction: column;
-  gap: var(--space-14);
+  gap: var(--space-12);
 }
 
 .row {
@@ -30,7 +30,7 @@
 }
 
 .hint {
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--fg2);
   text-wrap: pretty;
@@ -51,7 +51,7 @@
 .activity {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-10);
+  gap: var(--space-8);
   min-height: 40px;
   padding: 8px 14px;
 }
@@ -77,7 +77,7 @@
 }
 
 .activityMeta {
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   color: var(--fg2);
   overflow-wrap: anywhere;
 }

@@ -7,7 +7,7 @@
 .head {
   display: flex;
   align-items: center;
-  gap: var(--space-14);
+  gap: var(--space-12);
   font-size: var(--text-sm);
 }
 
@@ -21,7 +21,7 @@
   grid-template-columns: repeat(4, 1fr);
   gap: var(--space-8) var(--space-12);
   padding: 14px 16px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--group);
   box-shadow: inset 0 0 0 0.5px var(--line2);
 }
@@ -35,7 +35,7 @@
 }
 
 .index {
-  font-size: var(--text-3xs);
+  font-size: var(--text-2xs);
   color: var(--fg3);
 }
 
@@ -71,7 +71,7 @@
 
   .print h1 {
     margin: 0 0 24px;
-    font-size: var(--text-display);
+    font-size: var(--text-title);
   }
 
   .print p {
@@ -84,9 +84,9 @@
     display: grid;
     grid-template-columns: repeat(4, auto);
     justify-content: start;
-    gap: var(--space-14) var(--space-28);
+    gap: var(--space-12) var(--space-28);
     font-family: var(--font-mono);
-    font-size: var(--text-display);
+    font-size: var(--text-title);
     letter-spacing: 0.08em;
   }
 

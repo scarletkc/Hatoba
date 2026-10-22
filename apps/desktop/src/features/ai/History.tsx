@@ -113,7 +113,7 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
     <div className={s.history}>
       <div className={s.head}>
         <button type="button" className={s.back} onClick={onClose} title={t("btn.back")} aria-label={t("btn.back")}>
-          <Icon name="caret-left" size={13} />
+          <Icon name="caret-left" size={14} />
         </button>
         <span className={s.title}>{t("ai.history")}</span>
       </div>
@@ -124,7 +124,7 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
         <div className={s.list} role="list">
           {list === null && (
             <div className={s.message}>
-              <Spinner size={13} />
+              <Spinner size={14} />
               {t("ai.loading")}
             </div>
           )}
@@ -164,15 +164,15 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
                     />
                   ) : (
                     <div className={s.rowTitle}>
-                      {c.pinned && <Icon name="push-pin" fill size={11} className={s.pin} />}
+                      {c.pinned && <Icon name="push-pin" fill size={12} className={s.pin} />}
                       <span className={s.titleText}>{c.title || t("ai.untitled")}</span>
                       <Activity id={c.id} />
                     </div>
                   )}
                   <div className={s.rowMeta}>
-                    {place.kind === "host" && <Icon name="hard-drives" size={11} />}
-                    {place.kind === "target" && <Icon name="terminal-window" size={11} />}
-                    {place.kind === "local" && <Icon name="desktop" size={11} />}
+                    {place.kind === "host" && <Icon name="hard-drives" size={12} />}
+                    {place.kind === "target" && <Icon name="terminal-window" size={12} />}
+                    {place.kind === "local" && <Icon name="desktop" size={12} />}
                     <span className={s.metaHost}>{placeName(t, place, useApp.getState().info.device_name)}</span>
                     <span className={s.dot}>·</span>
                     <span className={s.time}>{formatRelative(t.locale, c.last_activity)}</span>
@@ -219,7 +219,7 @@ function SearchField({ value, onChange }: { value: string; onChange: (v: string)
   const ref = useRef<HTMLInputElement>(null);
   return (
     <div className={s.search}>
-      <Icon name="magnifying-glass" size={13} className={s.searchIcon} />
+      <Icon name="magnifying-glass" size={14} className={s.searchIcon} />
       <input
         ref={ref}
         className={s.searchInput}
@@ -294,7 +294,7 @@ function SearchResults({
     return (
       <div className={s.list}>
         <div className={s.message}>
-          <Spinner size={13} />
+          <Spinner size={14} />
           {t("ai.search.searching")}
         </div>
       </div>
@@ -331,7 +331,7 @@ function SearchResults({
           >
             <div className={s.rowMain}>
               <div className={s.rowTitle}>
-                {c?.pinned && <Icon name="push-pin" fill size={11} className={s.pin} />}
+                {c?.pinned && <Icon name="push-pin" fill size={12} className={s.pin} />}
                 <span className={s.titleText}>
                   <Highlighted text={title} query={search.query} />
                 </span>

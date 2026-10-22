@@ -5,7 +5,7 @@
   z-index: 1000;
   overflow-y: auto;
   padding: 4px;
-  border-radius: var(--radius-popover);
+  border-radius: var(--radius-md);
   background: var(--sheet);
   box-shadow: var(--shadow-popover);
   color: var(--fg);
@@ -19,7 +19,7 @@
   gap: var(--space-8);
   min-height: 28px;
   padding: 3px 8px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   cursor: default;
   /* The highlight follows ↑, ↓ and the pointer at once. */
   transition: none;
@@ -101,7 +101,7 @@
   max-width: 30%;
   overflow: hidden;
   padding: 1px 6px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   background: var(--fill);
   color: var(--fg2);
   font-size: var(--text-xs);

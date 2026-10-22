@@ -6,7 +6,7 @@
 /* §13.1: the queued message, above the input box. */
 .queued {
   margin-bottom: 6px;
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: var(--field);
   box-shadow: 0 0 0 0.5px var(--fieldline), 0 1px 2px rgba(0, 0, 0, 0.03);
 }
@@ -46,7 +46,7 @@
   height: 22px;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg3);
 }
@@ -73,7 +73,7 @@
 .box {
   display: flex;
   flex-direction: column;
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: var(--field);
   box-shadow: 0 0 0 0.5px var(--fieldline), 0 1px 2px rgba(0, 0, 0, 0.03);
 }
@@ -131,13 +131,13 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: var(--space-5);
+  gap: var(--space-6);
   height: 24px;
   min-width: 0;
   overflow: hidden;
   padding: 0 7px;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg2);
   font-size: var(--text-sm);
@@ -186,7 +186,7 @@
 .modelEffort {
   flex: none;
   padding: 0 5px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   background: var(--fill);
   font-size: var(--text-xs);
   line-height: 16px;
@@ -207,7 +207,7 @@
   height: 24px;
   padding: 0 6px;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg2);
   font-size: var(--text-xs);
@@ -302,7 +302,7 @@
   min-width: 26px;
   padding: 0 6px;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg2);
   font-size: var(--text-xs);

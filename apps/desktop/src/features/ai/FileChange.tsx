@@ -56,11 +56,11 @@ export function FileChange({ state, replaceAll }: { state: FilePreviewState; rep
     <div className={s.change}>
       {path.text && (
         <div className={s.head}>
-          <Icon name="file-text" size={13} className={s.fileIcon} />
+          <Icon name="file-text" size={14} className={s.fileIcon} />
           <span className={cx(s.path, "selectable")}>
             {path.text}
           </span>
-          {loading && <Spinner size={11} />}
+          {loading && <Spinner size={12} />}
           {stats && (stats.added > 0 || stats.removed > 0) && (
             <span className={s.stats} title={t("ai.approval.diffStats", stats)} aria-label={t("ai.approval.diffStats", stats)}>
               {stats.added > 0 && <span className={s.added}>+{stats.added}</span>}

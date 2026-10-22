@@ -82,7 +82,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   color: var(--fg2);
   direction: rtl; /* keep the end of a long path visible */
   text-align: left;
@@ -109,7 +109,7 @@
 
 .columns {
   padding: 7px 14px 4px;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--fg2);
 }
@@ -132,7 +132,7 @@
   height: 26px;
   flex: none;
   padding: 0 8px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   font-size: var(--text-sm);
 }
 
@@ -148,7 +148,7 @@
 .nameCell {
   display: flex;
   align-items: center;
-  gap: var(--space-7);
+  gap: var(--space-6);
   min-width: 0;
 }
 
@@ -215,7 +215,7 @@
   gap: var(--space-8);
   padding: 16px;
   border: 1.5px dashed var(--accent);
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--win) 82%, var(--accent) 18%);
   color: var(--accent);
   font-size: var(--text-sm);

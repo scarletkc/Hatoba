@@ -6,7 +6,7 @@
   max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
-  border-radius: var(--radius-window);
+  border-radius: var(--radius-xl);
   overflow: hidden;
   background: var(--win);
   color: var(--fg);
@@ -71,7 +71,7 @@
   gap: var(--space-2);
   padding: 5px 0;
   border: 0;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg2);
 }

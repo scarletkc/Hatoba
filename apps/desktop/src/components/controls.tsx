@@ -110,7 +110,7 @@ export function LinkButton({
       className={cx(s.link, tone === "danger" && s.linkDanger, tone === "muted" && s.linkMuted, className)}
       {...rest}
     >
-      {icon && <Icon name={icon} size={13} />}
+      {icon && <Icon name={icon} size={14} />}
       {children}
     </button>
   );
@@ -121,19 +121,34 @@ export function IconButton({
   label,
   active,
   size,
+  fill,
+  small,
+  danger,
   className,
   type = "button",
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { icon: string; label: string; active?: boolean; size?: number }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  icon: string;
+  label: string;
+  active?: boolean;
+  /** The glyph's size in px. */
+  size?: number;
+  /** The filled glyph, e.g. a set star. */
+  fill?: boolean;
+  /** 20px square, for a row's inline actions (remove, clear). */
+  small?: boolean;
+  /** Turns red under the pointer, for a delete. */
+  danger?: boolean;
+}) {
   return (
     <button
       type={type}
       aria-label={label}
       title={label}
-      className={cx(s.iconButton, active && s.iconButtonActive, className)}
+      className={cx(s.iconButton, small && s.iconButtonSmall, danger && s.iconButtonDanger, active && s.iconButtonActive, className)}
       {...rest}
     >
-      <Icon name={icon} size={size} />
+      <Icon name={icon} size={size} fill={fill} />
     </button>
   );
 }

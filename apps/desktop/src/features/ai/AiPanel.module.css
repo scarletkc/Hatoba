@@ -174,7 +174,7 @@
   align-items: center;
   justify-content: center;
   margin-bottom: 4px;
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: var(--accenttint);
   color: var(--accent);
 }
@@ -208,7 +208,7 @@
   justify-content: center;
   gap: var(--space-8);
   border: 1.5px dashed color-mix(in srgb, var(--accent) 70%, transparent);
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--accent) 8%, var(--win));
   color: var(--accent);
   font-size: var(--text-sm);

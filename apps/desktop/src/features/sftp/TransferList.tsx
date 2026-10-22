@@ -50,7 +50,7 @@ function TransferRow({ item }: { item: TransferItem }) {
   return (
     <div className={cx(s.transfer, item.fading && s.fading)}>
       <div className={s.top}>
-        <Icon name={item.direction === "upload" ? "upload-simple" : "download-simple"} size={13} color={failed ? "var(--red)" : "var(--accent)"} />
+        <Icon name={item.direction === "upload" ? "upload-simple" : "download-simple"} size={14} color={failed ? "var(--red)" : "var(--accent)"} />
         <span className={s.name} title={item.name}>
           {item.name}
         </span>
@@ -62,7 +62,7 @@ function TransferRow({ item }: { item: TransferItem }) {
           title={running ? t("sftp.cancelTransfer") : t("sftp.dismissTransfer")}
           onClick={close}
         >
-          <Icon name="x" size={11} />
+          <Icon name="x" size={12} />
         </button>
       </div>
       <div className={s.track} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>

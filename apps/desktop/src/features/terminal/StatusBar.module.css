@@ -4,7 +4,7 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: var(--space-10);
+  gap: var(--space-8);
   padding: 0 10px 0 16px;
   border-bottom: 0.5px solid var(--line);
   font-size: var(--text-sm);
@@ -35,7 +35,7 @@
 
 .target {
   font-family: var(--font-mono);
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   color: var(--fg);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -62,11 +62,11 @@
 .sftp {
   display: flex;
   align-items: center;
-  gap: var(--space-5);
+  gap: var(--space-6);
   height: 26px;
   padding: 0 9px;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg);
   font-size: var(--text-sm);
@@ -99,10 +99,10 @@
   min-width: 13px;
   height: 13px;
   padding: 0 3px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: var(--accent);
   color: #ffffff;
-  font-size: var(--text-3xs);
+  font-size: var(--text-2xs);
   font-weight: 600;
   line-height: 13px;
   text-align: center;
@@ -117,7 +117,7 @@
   height: 26px;
   padding: 0 8px;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg2);
   font-size: var(--text-sm);
@@ -144,7 +144,7 @@
 .statsText {
   display: flex;
   align-items: baseline;
-  gap: var(--space-10);
+  gap: var(--space-8);
 }
 
 .statsText b {

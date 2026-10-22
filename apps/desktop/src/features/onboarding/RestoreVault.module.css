@@ -10,7 +10,7 @@
 }
 
 .fieldError {
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   color: var(--red);
 }
 
@@ -26,7 +26,7 @@
   padding-top: 6px;
   display: flex;
   align-items: center;
-  gap: var(--space-7);
+  gap: var(--space-6);
   font-size: var(--text-sm);
   color: var(--fg2);
   line-height: 1.5;

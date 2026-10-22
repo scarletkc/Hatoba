@@ -1,7 +1,7 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-18);
+  gap: var(--space-16);
 }
 
 .field {
@@ -16,12 +16,12 @@
 }
 
 .hint {
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   color: var(--fg2);
 }
 
 .error {
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   color: var(--red);
   line-height: 1.45;
 }

@@ -135,7 +135,7 @@ export function AiPanel({ slotId }: { slotId: string }) {
     >
       {drop.dragging && (
         <div className={s.drop} aria-hidden>
-          <Icon name="file-arrow-up" size={22} />
+          <Icon name="file-arrow-up" size={24} />
           <span>{t("ai.attach.drop")}</span>
         </div>
       )}
@@ -341,7 +341,7 @@ export function AiPanelButton({ className, activeClassName, dotClassName }: { cl
   const label = `${t(open ? "ai.hide" : "ai.show")} (${shortcutLabel(platform, "Ctrl+Shift+A", "⌘⇧A")})`;
   return (
     <button type="button" className={cx(className, open && activeClassName)} title={label} aria-label={label} aria-pressed={open} onClick={() => toggleAiPanel()}>
-      <Icon name="sparkle" size={15} />
+      <Icon name="sparkle" size={16} />
       {waiting && !open && <span className={dotClassName} />}
     </button>
   );

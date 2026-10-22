@@ -12,7 +12,7 @@
 /* The Linux window chrome, same as .main in App.module.css; vertical scrolling stays. */
 :root[data-floating] .root {
   inset: var(--win-pad);
-  border-radius: var(--radius-window);
+  border-radius: var(--radius-xl);
   overflow: hidden auto;
   box-shadow: var(--shadow-window), 0 0 0 0.5px var(--winline);
 }
@@ -24,7 +24,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-22);
+  gap: var(--space-20);
 }
 
 .logo {
@@ -36,7 +36,7 @@
 .options {
   display: flex;
   flex-direction: column;
-  gap: var(--space-10);
+  gap: var(--space-8);
 }
 
 .option {
@@ -45,7 +45,7 @@
   width: 100%;
   padding: 14px 16px;
   border: 0;
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: var(--group);
   box-shadow: inset 0 0 0 0.5px var(--line2);
   text-align: left;
@@ -106,7 +106,7 @@
 }
 
 .optionIcon {
-  font-size: var(--icon-22);
+  font-size: var(--icon-24);
   color: var(--fg2);
 }
 

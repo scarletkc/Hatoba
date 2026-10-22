@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { IconButton, LinkButton, TextField } from "@/components/controls";
 import { Group, Section } from "@/components/layout";
+import { ErrorText, HintText } from "@/components/patterns";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import {
@@ -100,16 +101,14 @@ export function EnvVarsSection({
                 />
                 <IconButton
                   icon="x"
-                  size={13}
+                  size={14}
                   className={s.remove}
                   label={name ? t("hosts.env.remove", { name }) : t("hosts.env.removeBlank")}
                   onClick={() => onChange(rows.filter((r) => r.uid !== row.uid))}
                 />
               </div>
               {problem && (
-                <div className={s.problem} role="alert">
-                  {problemText(problem)}
-                </div>
+                <ErrorText className={s.problem}>{problemText(problem)}</ErrorText>
               )}
             </div>
           );
@@ -123,11 +122,11 @@ export function EnvVarsSection({
         </div>
       </Group>
       {(error || tooLarge) && (
-        <div className={s.error} role="alert">
+        <ErrorText className={s.message}>
           {error || t("hosts.env.err.tooLarge", { max: `${ENV_MAX_BYTES / 1024} KB` })}
-        </div>
+        </ErrorText>
       )}
-      <div className={s.hint}>{t("hosts.env.hint")}</div>
+      <HintText className={s.message}>{t("hosts.env.hint")}</HintText>
     </Section>
   );
 }

@@ -60,8 +60,8 @@ export function FindBar({ session, onClose }: { session: LiveSession; onClose():
       <span className={cx(s.count, none && s.countNone)} aria-live="polite">
         {label}
       </span>
-      <IconButton icon="caret-up" size={13} label={t("terminal.find.prev")} className={s.button} onClick={() => step("prev")} />
-      <IconButton icon="caret-down" size={13} label={t("terminal.find.next")} className={s.button} onClick={() => step("next")} />
+      <IconButton icon="caret-up" size={14} label={t("terminal.find.prev")} className={s.button} onClick={() => step("prev")} />
+      <IconButton icon="caret-down" size={14} label={t("terminal.find.next")} className={s.button} onClick={() => step("next")} />
       <IconButton icon="x" size={12} label={t("terminal.find.close")} className={s.button} onClick={onClose} />
     </div>
   );

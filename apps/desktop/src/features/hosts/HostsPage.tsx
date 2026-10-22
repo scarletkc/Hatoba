@@ -14,7 +14,7 @@ import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp, type HostFilter } from "@/app/store";
 import { useTabs, type TabStatus } from "@/app/tabs";
-import { Button, Icon, LinkButton } from "@/components/controls";
+import { Button, Icon, IconButton, LinkButton } from "@/components/controls";
 import { EmptyState, PageHeader, SearchField, Tag, layoutStyles } from "@/components/layout";
 import { Menu, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { durationLabel } from "@/features/settings/durations";
@@ -779,19 +779,18 @@ function QuickRow({ item, selected, connectLabel, hint, removeLabel, onSelect, o
       <div className={cx(s.last, s.quickHint)}>
         <span>{hint}</span>
         {recent && (
-          <button
-            type="button"
+          <IconButton
+            small
+            icon="x"
             tabIndex={-1}
             className={s.forget}
-            aria-label={removeLabel}
-            title={removeLabel}
+            label={removeLabel}
             onClick={(e) => {
               e.stopPropagation();
               onRemove(recent);
+
             }}
-          >
-            <Icon name="x" />
-          </button>
+          />
         )}
       </div>
       <div className={s.action}>
@@ -871,19 +870,18 @@ function RecentSuggestions({ targets, active, title, removeLabel, onHover, onCon
             <span className={s.suggestLabel}>
               <TargetText target={target} />
             </span>
-            <button
-              type="button"
+            <IconButton
+              small
+              icon="x"
               tabIndex={-1}
               className={s.forget}
-              aria-label={removeLabel}
-              title={removeLabel}
+              label={removeLabel}
               onClick={(e) => {
                 e.stopPropagation();
                 onRemove(target);
+
               }}
-            >
-              <Icon name="x" />
-            </button>
+            />
           </div>
         ))}
       </div>

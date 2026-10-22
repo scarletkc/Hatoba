@@ -78,12 +78,12 @@ export function ErrorCard({
         <div className={s.meta}>{meta}</div>
         <div className={s.cardActions}>
           <button type="button" className={s.linkButton} onClick={() => void copyDiagnostics()}>
-            <Icon name="copy" size={13} />
+            <Icon name="copy" size={14} />
             {t("terminal.err.copyDiag")}
           </button>
           <div className={s.grow} />
           <button type="button" className={s.darkButton} onClick={() => onAskAi(diagnosticsText(host ?? target, name, err, at ?? Date.now(), attempts))}>
-            <Icon name="sparkle" size={13} />
+            <Icon name="sparkle" size={14} />
             {t("terminal.err.askAi")}
           </button>
           {host && (
@@ -92,7 +92,7 @@ export function ErrorCard({
             </button>
           )}
           <button type="button" className={s.primaryButton} onClick={onRetry}>
-            <Icon name="arrow-clockwise" size={13} />
+            <Icon name="arrow-clockwise" size={14} />
             {t("btn.retry")}
           </button>
         </div>
@@ -118,7 +118,7 @@ export function LocalErrorCard({ name, error, onRetry }: { name: string; error: 
         <div className={s.cardActions}>
           <div className={s.grow} />
           <button type="button" className={s.primaryButton} onClick={onRetry}>
-            <Icon name="arrow-clockwise" size={13} />
+            <Icon name="arrow-clockwise" size={14} />
             {t("btn.retry")}
           </button>
         </div>

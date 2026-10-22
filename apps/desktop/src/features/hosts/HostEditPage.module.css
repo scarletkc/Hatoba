@@ -50,21 +50,9 @@
   flex: 1;
 }
 
+/* An IconButton: grey until set. */
 .favButton {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--radius-control);
-  background: transparent;
   color: var(--fg3);
-  font-size: var(--icon-15);
-}
-
-.favButton:hover {
-  background: var(--fill);
 }
 
 .favOn {
@@ -85,7 +73,7 @@
   max-width: 620px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-18);
+  gap: var(--space-16);
   padding-bottom: 8px;
   align-self: flex-start;
 }
@@ -115,9 +103,9 @@
   height: var(--field-height);
   display: flex;
   align-items: center;
-  gap: var(--space-7);
+  gap: var(--space-6);
   padding: 0 8px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--fill);
   box-shadow: inset 0 0 0 0.5px var(--line);
   color: var(--fg2);
@@ -139,12 +127,6 @@
   min-width: 0;
 }
 
-.hint {
-  font-size: var(--text-sm);
-  color: var(--fg2);
-  line-height: 1.45;
-}
-
 /* AI-37: the hint above the AI notes. */
 .aiNotes {
   display: flex;
@@ -152,13 +134,9 @@
   gap: var(--space-8);
 }
 
+/* A WarningText under the user field. */
 .warn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-5);
   margin-top: 4px;
-  font-size: var(--text-caption);
-  color: var(--orange);
 }
 
 /* Key picker + "Manage Keys" link, which moves under a picker that would be narrower than 200px. */
@@ -183,17 +161,12 @@
 .jump {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-6);
   align-items: flex-start;
 }
 
 .jump > .keyRow {
   align-self: stretch;
-}
-
-.jumpHint {
-  font-size: var(--text-caption);
-  color: var(--fg2);
 }
 
 .footer {

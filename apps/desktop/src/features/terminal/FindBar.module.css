@@ -7,7 +7,7 @@
   align-items: center;
   gap: var(--space-2);
   padding: 4px 4px 4px 8px;
-  border-radius: var(--radius-popover);
+  border-radius: var(--radius-md);
   background: var(--sheet);
   box-shadow: var(--shadow-popover);
   color: var(--fg);
