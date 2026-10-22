@@ -8,6 +8,8 @@ export type HostProtocol = "ssh" | "telnet";
 export interface HostDraft {
   name: string;
   address: string;
+  /** The port typed, unless it was the old protocol's default, which the new one replaces with its own. */
+  port?: string;
   username: string;
   tags: string[];
   note: string;

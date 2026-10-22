@@ -54,7 +54,7 @@ function initialForm(host: TelnetHostView | undefined, groupId: string | null, d
   return {
     name: host?.name ?? draft?.name ?? "",
     address: host?.address ?? draft?.address ?? "",
-    port: String(host?.port ?? 23),
+    port: host ? String(host.port) : (draft?.port ?? "23"),
     username: host?.username ?? draft?.username ?? "",
     password: "",
     replacing: false,
@@ -242,7 +242,15 @@ export function TelnetEditPage({
       hostId: null,
       groupId: form.groupId,
       back,
-      draft: { name: form.name, address: form.address, username: form.username, tags: form.tags, note: form.note, favorite: form.favorite },
+      draft: {
+        name: form.name,
+        address: form.address,
+        port: form.port.trim() === "23" ? undefined : form.port,
+        username: form.username,
+        tags: form.tags,
+        note: form.note,
+        favorite: form.favorite,
+      },
     });
 
   return (

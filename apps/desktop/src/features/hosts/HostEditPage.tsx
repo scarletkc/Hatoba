@@ -69,7 +69,7 @@ function initialForm(host: HostView | undefined, groupId: string | null, prefill
   return {
     name: host?.name ?? draft?.name ?? prefill?.address ?? "",
     address: host?.address ?? draft?.address ?? prefill?.address ?? "",
-    port: String(host?.port ?? prefill?.port ?? 22),
+    port: host ? String(host.port) : (draft?.port ?? String(prefill?.port ?? 22)),
     username: host?.username ?? draft?.username ?? prefill?.username ?? "",
     authKind: host?.auth_kind ?? "password",
     password: "",
@@ -375,7 +375,15 @@ export function HostEditPage({
                       hostId: null,
                       groupId: form.groupId,
                       back,
-                      draft: { name: form.name, address: form.address, username: form.username, tags: form.tags, note: form.note, favorite: form.favorite },
+                      draft: {
+                        name: form.name,
+                        address: form.address,
+                        port: form.port.trim() === "22" ? undefined : form.port,
+                        username: form.username,
+                        tags: form.tags,
+                        note: form.note,
+                        favorite: form.favorite,
+                      },
                     })
                   }
                 />

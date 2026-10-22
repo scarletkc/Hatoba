@@ -194,7 +194,8 @@ impl Telnet {
                     out.extend_from_slice(b"\r\n");
                     self.sent_crlf = true;
                 }
-                b'\n' if sent_crlf => {}
+                // Once binary is on, every byte goes as typed.
+                b'\n' if sent_crlf && !binary => {}
                 _ => out.push(byte),
             }
         }
@@ -424,7 +425,10 @@ mod tests {
         );
         // An LF right after the CR is not sent twice, even in the next chunk.
         assert_eq!(t.encode(b"\nb\n"), b"b\n");
+        // Binary turning on between the CR and its LF keeps the LF.
+        t.encode(b"\r");
         assert_eq!(t.receive(&[IAC, DO, BINARY]).reply, [IAC, WILL, BINARY]);
+        assert_eq!(t.encode(b"\n"), b"\n");
         assert_eq!(t.encode(b"\r"), b"\r");
     }
 }

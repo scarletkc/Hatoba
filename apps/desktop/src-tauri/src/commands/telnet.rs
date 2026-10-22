@@ -319,15 +319,25 @@ async fn open(
     .map_err(AppError::from)?;
     let cols = u16::try_from(options.cols.clamp(10, 1000)).unwrap_or(80);
     let rows = u16::try_from(options.rows.clamp(2, 500)).unwrap_or(24);
-    let (session, events) = TelnetSession::start(stream, cols, rows, login);
     let session_id = uuid::Uuid::now_v7().to_string();
-    let live = Arc::new(TelnetLive::new(session, target.host_id.clone()));
-    state.telnet.insert(session_id.clone(), live.clone());
-    if let Some(host_id) = &target.host_id
-        && let Err(e) = state.with_unlocked(|v| Ok(v.set_last_connected(host_id, now_ms())?))
-    {
-        tracing::debug!("last-connected time not recorded: {}", e.detail);
-    }
+    let (live, events) = {
+        // SEC-03: the vault may have locked while dialing. Under its guard, a lock either comes
+        // before this check, and nothing starts or types a saved password, or after the session
+        // is registered, which it then counts among the sessions it may close.
+        let mut vault = state.vault();
+        if !vault.is_unlocked() {
+            return Err(AppError::locked());
+        }
+        let (session, events) = TelnetSession::start(stream, cols, rows, login);
+        let live = Arc::new(TelnetLive::new(session, target.host_id.clone()));
+        state.telnet.insert(session_id.clone(), live.clone());
+        if let Some(host_id) = &target.host_id
+            && let Err(e) = vault.set_last_connected(host_id, now_ms())
+        {
+            tracing::debug!("last-connected time not recorded: {e}");
+        }
+        (live, events)
+    };
     tracing::info!("telnet connected");
     emit_state(
         app,

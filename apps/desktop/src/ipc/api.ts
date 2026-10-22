@@ -249,7 +249,7 @@ export interface HatobaApi {
   // Telnet hosts and tabs (§7.6)
   telnet_hosts_list(): Promise<TelnetHostView[]>;
   telnet_host_save(input: TelnetHostInput): Promise<TelnetHostView>;
-  /** Its open tabs close too. */
+  /** Its open tabs stay connected, as an SSH host's do. */
   telnet_host_delete(id: string): Promise<void>;
   telnet_host_duplicate(id: string): Promise<TelnetHostView>;
   telnet_host_set_favorite(id: string, favorite: boolean): Promise<void>;
