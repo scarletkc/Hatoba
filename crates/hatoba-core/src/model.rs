@@ -1395,9 +1395,10 @@ pub struct Settings {
     pub updated_at: i64,
 }
 
-/// Any syncable item. Serialises with `"type": "host" | "telnet_host" | "group" | "key" | "known_host" |
-/// "forward" | "snippet" | "proxy" | "ai_provider" | "search_provider" | "ai_conversation" |
-/// "ai_message" | "skill" | "skill_file" | "mcp_server" | "ai_memory" | "settings"`.
+/// Any syncable item. Serialises with `"type": "host" | "telnet_host" | "group" | "key" |
+/// "known_host" | "forward" | "snippet" | "proxy" | "ai_provider" | "search_provider" |
+/// "ai_conversation" | "ai_message" | "skill" | "skill_file" | "mcp_server" | "ai_memory" |
+/// "settings"`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Item {
