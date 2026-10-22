@@ -374,7 +374,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
     <div ref={ref} className={s.list} onScroll={bottom.onScroll} onWheel={bottom.onWheel} onKeyDown={bottom.onKeyDown}>
       {isEmpty && !slot.loading && empty}
       {slot.loading && entries.length === 0 && (
-        <StatusLine className={s.turnStatus} tone="progress">{t("ai.loading")}</StatusLine>
+        <StatusLine tone="progress">{t("ai.loading")}</StatusLine>
       )}
       {entries.map((entry, i) => {
         const outside = contextAt > 0 && i < contextAt;
@@ -442,7 +442,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
       <TurnStatus slotId={slotId} slot={slot} />
       {slot.effortIgnored && (
         <div role="status">
-          <StatusLine className={s.turnStatus} icon="info">{t("ai.effortIgnored")}</StatusLine>
+          <StatusLine icon="info">{t("ai.effortIgnored")}</StatusLine>
         </div>
       )}
       {slot.side && <SideBubble slotId={slotId} q={slot.side} />}
@@ -1701,7 +1701,7 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
 
   if (slot.remoteRunning)
     return (
-      <StatusLine className={s.turnStatus} tone="progress">{t("ai.status.remote")}</StatusLine>
+      <StatusLine tone="progress">{t("ai.status.remote")}</StatusLine>
     );
   if (turn) {
     const live = turn.live;
@@ -1717,14 +1717,14 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
             ? "ai.reasoning.active"
             : "ai.status.waiting";
     return (
-      <StatusLine className={s.turnStatus} tone="progress">
+      <StatusLine tone="progress">
         <span className={s.shimmer}>{t(key)}</span>
       </StatusLine>
     );
   }
   if (slot.compacting)
     return (
-      <StatusLine className={s.turnStatus} tone="progress">{t("ai.status.compacting")}</StatusLine>
+      <StatusLine tone="progress">{t("ai.status.compacting")}</StatusLine>
     );
   if (!outcome) return null;
   const retry = slot.conversationId ? (
@@ -1735,7 +1735,7 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
   switch (outcome.reason) {
     case "stopped":
       return (
-        <StatusLine className={s.turnStatus} icon="stop-circle">{t("ai.outcome.stopped")}</StatusLine>
+        <StatusLine icon="stop-circle">{t("ai.outcome.stopped")}</StatusLine>
       );
     case "length":
       return <Banner icon="scissors" tone="warn" text={t("ai.outcome.length")} />;
@@ -1784,12 +1784,12 @@ function SideBubble({ slotId, q }: { slotId: string; q: SideQuestion }) {
       <div className={cx(s.sideQuestion, "selectable")}>{q.question}</div>
       {q.answer && <Markdown text={q.answer} streaming={q.phase === "streaming"} />}
       {(q.phase === "waiting" || q.phase === "thinking") && (
-        <StatusLine className={s.turnStatus} tone="progress">
+        <StatusLine tone="progress">
           <span className={s.shimmer}>{t(q.phase === "thinking" ? "ai.reasoning.active" : "ai.status.waiting")}</span>
         </StatusLine>
       )}
       {q.phase === "stopped" && (
-        <StatusLine className={s.turnStatus} icon="stop-circle">{t("ai.outcome.stopped")}</StatusLine>
+        <StatusLine icon="stop-circle">{t("ai.outcome.stopped")}</StatusLine>
       )}
       {q.phase === "done" && q.finish === "length" && <Banner icon="scissors" tone="warn" text={t("ai.outcome.length")} />}
       {q.phase === "done" && q.finish === "refused" && <Banner icon="prohibit" tone="warn" text={t("ai.outcome.refused")} />}

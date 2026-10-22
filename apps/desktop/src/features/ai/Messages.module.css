@@ -888,8 +888,3 @@
   color: var(--fg2);
   overflow-wrap: anywhere;
 }
-
-/* Status lines in the conversation (StatusLine) read at the size of the text around them. */
-.turnStatus {
-  font-size: var(--text-sm);
-}
