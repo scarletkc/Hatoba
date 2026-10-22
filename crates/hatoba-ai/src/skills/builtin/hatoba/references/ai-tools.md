@@ -28,6 +28,10 @@ Results longer than 30,000 characters keep the first 7,500 and the last 22,500 (
 
 In a local terminal tab (a shell of this computer, see `references/terminal.md`), the assistant has the same tools, permission modes and approvals as in an SSH tab, and they act on this computer. Approval cards and the panel say **This Computer** and the shell, and **Always allow** there covers this computer's local tabs. In a WSL distribution's tab, commands and the file and search tools act inside the distribution, on its Linux paths. In PowerShell, Command Prompt and Git Bash they act on Windows, with Windows paths (`C:/Users/name/file.txt`; `~` is the home folder), and `run_command` runs the command in that shell without its profile; Command Prompt takes one line. A stop or a timeout ends the command and everything it started. Moving a conversation between a host and a local tab is noted like a move between hosts.
 
+## On a Telnet tab
+
+A Telnet device has no exec channel and no files Hatoba can reach, so in a Telnet tab the assistant offers only **Read terminal** and **Type in terminal**: it reads the screen and types into the device's own command line, with the same approvals as elsewhere. Commands, file and search tools are not offered. A saved Telnet host's AI notes and host memories work as an SSH host's.
+
 ## Permission mode
 
 The shield, robot or lightning button next to the + button in the input area (the robot also shows "Auto" and the lightning "Bypass" unless the panel is narrow); the menu is titled "Permission mode for this conversation".

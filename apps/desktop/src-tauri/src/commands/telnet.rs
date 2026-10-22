@@ -282,7 +282,15 @@ pub async fn telnet_open_target(
         port,
         proxy,
     };
-    open(&app, &state, target, AutoLogin::new(None, None), &options, channel).await
+    open(
+        &app,
+        &state,
+        target,
+        AutoLogin::new(None, None),
+        &options,
+        channel,
+    )
+    .await
 }
 
 /// Where a Telnet tab connects.
