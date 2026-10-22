@@ -29,7 +29,7 @@
   max-width: 680px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--space-18);
   padding-bottom: 8px;
   align-self: flex-start;
 }
@@ -42,7 +42,7 @@
 .hostTitle {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-8);
   min-width: 0;
 }
 
@@ -72,7 +72,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 12px;
+  gap: var(--space-4) var(--space-12);
   min-height: 40px;
   padding: 6px 8px 6px 14px;
   min-width: 0;
@@ -83,13 +83,13 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-2);
 }
 
 .rule {
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -99,7 +99,7 @@
 .status {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-5);
   min-width: 0;
   font-size: var(--text-xs);
   color: var(--fg2);
@@ -166,7 +166,7 @@
 .auto {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   flex: none;
   margin-left: auto;
   font-size: var(--text-sm);
@@ -175,7 +175,7 @@
 
 .actions {
   display: flex;
-  gap: 2px;
+  gap: var(--space-2);
   flex: none;
   color: var(--fg2);
 }
@@ -187,7 +187,7 @@
 .error {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-5);
   font-size: var(--text-sm);
   color: var(--red);
 }

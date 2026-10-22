@@ -11,7 +11,7 @@
 .item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
   min-height: 38px;
   padding: 6px 14px;
   min-width: 0;
@@ -42,7 +42,7 @@
 .via {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--space-3);
   font-size: var(--text-xs);
   color: var(--fg2);
   white-space: nowrap;
@@ -66,7 +66,7 @@
 .skipped {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--space-3);
   font-size: var(--text-xs);
   color: var(--orange);
   white-space: nowrap;
@@ -91,7 +91,7 @@
 .note {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   color: var(--fg2);
   line-height: 1.55;
 }
@@ -99,7 +99,7 @@
 .error {
   display: flex;
   align-items: flex-start;
-  gap: 7px;
+  gap: var(--space-7);
   color: var(--red);
   font-size: var(--text-sm);
   line-height: 1.5;
@@ -113,7 +113,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .keysNote {

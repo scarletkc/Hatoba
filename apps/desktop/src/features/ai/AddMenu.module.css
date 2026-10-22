@@ -43,7 +43,7 @@
   max-height: min(70vh, 480px);
   overflow-y: auto;
   padding: 5px;
-  border-radius: 9px;
+  border-radius: var(--radius-popover);
   background: var(--sheet);
   box-shadow: var(--shadow-popover);
   color: var(--fg);
@@ -58,7 +58,7 @@
 .item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   width: 100%;
   min-height: 28px;
   padding: 3px 8px 3px 10px;
@@ -87,7 +87,7 @@
 
 .itemIcon {
   flex: none;
-  font-size: 15px;
+  font-size: var(--icon-15);
   color: var(--fg2);
 }
 
@@ -179,7 +179,7 @@
 .row {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 6px 6px 6px 10px;
   border-radius: var(--radius-sm);
 }
@@ -226,7 +226,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--space-1);
 }
 
 .name {
@@ -238,7 +238,7 @@
 /* The full command line or URL, wrapped rather than cut (it is what runs). */
 .transport {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.4;
   color: var(--fg2);
   overflow-wrap: anywhere;
@@ -255,7 +255,7 @@
 }
 
 .error {
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   line-height: 1.4;
   color: var(--red);
   overflow-wrap: anywhere;
@@ -263,7 +263,7 @@
 
 .stderrLabel {
   margin-top: 4px;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   color: var(--fg2);
   text-transform: uppercase;
@@ -279,7 +279,7 @@
   background: var(--win);
   box-shadow: inset 0 0 0 0.5px var(--line);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

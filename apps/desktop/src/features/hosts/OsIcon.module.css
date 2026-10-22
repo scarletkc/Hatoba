@@ -69,11 +69,11 @@
 }
 
 .windows {
-  font-size: 15px;
+  font-size: var(--icon-15);
   color: var(--os-windows);
 }
 
 .server {
-  font-size: 16px;
+  font-size: var(--icon-16);
   color: var(--fg2);
 }

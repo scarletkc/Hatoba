@@ -5,7 +5,7 @@
   z-index: 1000;
   overflow-y: auto;
   padding: 4px;
-  border-radius: 9px;
+  border-radius: var(--radius-popover);
   background: var(--sheet);
   box-shadow: var(--shadow-popover);
   color: var(--fg);
@@ -16,7 +16,7 @@
 .row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   min-height: 28px;
   padding: 3px 8px;
   border-radius: var(--radius-sm);
@@ -48,7 +48,7 @@
   flex: 0 1 auto;
   display: inline-flex;
   align-items: baseline;
-  gap: 6px;
+  gap: var(--space-6);
   max-width: 75%;
   min-width: 0;
 }

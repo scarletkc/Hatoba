@@ -38,24 +38,24 @@
 .status {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-5);
   font-variant-numeric: tabular-nums;
 }
 
 .status i {
-  font-size: 13px;
+  font-size: var(--icon-13);
 }
 
 .links {
   display: flex;
   justify-content: center;
-  gap: 18px;
+  gap: var(--space-18);
 }
 
 .progress {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .track {
@@ -63,7 +63,7 @@
   display: block;
   width: 100%;
   height: 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-2xs);
   background: var(--fill2);
   overflow: hidden;
 }
@@ -71,7 +71,7 @@
 .fill {
   display: block;
   height: 100%;
-  border-radius: 2px;
+  border-radius: var(--radius-2xs);
   background: var(--accent);
   transition: width var(--motion-base) var(--ease-out);
 }
@@ -96,7 +96,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 12px 14px;
   border-radius: var(--radius-panel);
   background: var(--group);
@@ -107,7 +107,7 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-12);
   align-self: stretch;
 }
 

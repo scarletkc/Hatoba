@@ -1,13 +1,13 @@
 .block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .head {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--space-14);
   font-size: var(--text-sm);
 }
 
@@ -19,9 +19,9 @@
 .grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px 12px;
+  gap: var(--space-8) var(--space-12);
   padding: 14px 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--group);
   box-shadow: inset 0 0 0 0.5px var(--line2);
 }
@@ -29,18 +29,18 @@
 .item {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-8);
   font-family: var(--font-mono);
   min-width: 0;
 }
 
 .index {
-  font-size: 10px;
+  font-size: var(--text-3xs);
   color: var(--fg3);
 }
 
 .group {
-  font-size: 15px;
+  font-size: var(--text-lg);
   letter-spacing: 0.08em;
   user-select: text;
 }
@@ -71,12 +71,12 @@
 
   .print h1 {
     margin: 0 0 24px;
-    font-size: 22px;
+    font-size: var(--text-display);
   }
 
   .print p {
     margin: 24px 0 0;
-    font-size: 13px;
+    font-size: var(--text-md);
     line-height: 1.6;
   }
 
@@ -84,14 +84,14 @@
     display: grid;
     grid-template-columns: repeat(4, auto);
     justify-content: start;
-    gap: 14px 28px;
+    gap: var(--space-14) var(--space-28);
     font-family: var(--font-mono);
-    font-size: 22px;
+    font-size: var(--text-display);
     letter-spacing: 0.08em;
   }
 
   .printCode small {
-    font-size: 11px;
+    font-size: var(--text-xs);
     letter-spacing: 0;
     color: #666666;
   }

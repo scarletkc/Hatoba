@@ -1,14 +1,14 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-14);
 }
 
 .dialogForm {
   margin-top: 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
 }
 
 .formHint {
@@ -25,7 +25,7 @@
 .filePick {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-10);
   min-width: 0;
 }
 
@@ -33,7 +33,7 @@
   flex: 1;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -46,7 +46,7 @@
 
 .paste {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   line-height: 1.5;
   min-height: 110px;
   white-space: pre;

@@ -9,7 +9,7 @@
   max-height: 80vh;
   overflow-y: auto;
   padding: 5px;
-  border-radius: 9px;
+  border-radius: var(--radius-popover);
   background: var(--sheet);
   box-shadow: var(--shadow-popover);
   color: var(--fg);
@@ -35,13 +35,13 @@
   padding: 6px 12px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--space-5);
 }
 
 .row {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-8);
   min-width: 0;
 }
 
@@ -72,7 +72,7 @@
 .value {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4);
   /* "100%" and the warning icon a filling meter adds, so neither moves the amount beside it. */
   min-width: calc(4.6ch + 17px);
   justify-content: flex-end;
@@ -82,7 +82,7 @@
 }
 
 .value i {
-  font-size: 13px;
+  font-size: var(--icon-13);
 }
 
 .detail {
@@ -93,7 +93,7 @@
 .legend {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4);
   /* The key and room for a rate like "↓ 12 KB/s", so the download figure doesn't push the upload one. */
   min-width: calc(14px + 9ch);
   font-size: var(--text-sm);
@@ -105,7 +105,7 @@
 .key {
   width: 10px;
   height: 2px;
-  border-radius: 1px;
+  border-radius: var(--radius-hair);
   background: var(--spark-line);
 }
 
@@ -127,14 +127,14 @@
 /* Meters: the track is a light step of the fill's own color. */
 .meter {
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-meter);
   background: color-mix(in srgb, var(--meter) 16%, transparent);
   overflow: hidden;
 }
 
 .meterFill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radius-meter);
   background: var(--meter);
 }
 
@@ -155,7 +155,7 @@
 .note {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 6px 12px 8px;
   font-size: var(--text-sm);
   line-height: 1.45;
@@ -197,7 +197,7 @@
 .hide {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   width: 100%;
   height: 24px;
   padding: 0 8px 0 10px;
@@ -209,7 +209,7 @@
 }
 
 .hide i {
-  font-size: 14px;
+  font-size: var(--icon-14);
   color: var(--fg2);
 }
 

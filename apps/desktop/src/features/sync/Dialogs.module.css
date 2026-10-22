@@ -4,19 +4,19 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-10);
 }
 
 .point {
   display: flex;
-  gap: 10px;
+  gap: var(--space-10);
   align-items: flex-start;
   line-height: 1.5;
   text-wrap: pretty;
 }
 
 .pointIcon {
-  font-size: 16px;
+  font-size: var(--icon-16);
   color: var(--fg2);
   margin-top: 2px;
   flex: none;
@@ -26,7 +26,7 @@
   margin-top: 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
 }
 
 .formError {

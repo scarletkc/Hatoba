@@ -4,7 +4,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 18px 24px 14px;
   flex: none;
   container-type: inline-size;
@@ -32,7 +32,7 @@
   display: flex;
   align-items: center;
   justify-content: safe flex-end;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 /* Buttons wider than the page wrap onto more rows rather than running under the AI panel. Their width
@@ -45,7 +45,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 /* Under the title in the narrowest page, the search takes a row of its own when the buttons leave it
@@ -65,7 +65,7 @@
 .search {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   /* A basis, not a width, so it shrinks before the page header moves the actions to a new row. */
   flex: 0 1 var(--search-width, 250px);
   min-width: 80px;
@@ -83,7 +83,7 @@
 }
 
 .search i {
-  font-size: 14px;
+  font-size: var(--icon-14);
 }
 
 .search input {
@@ -118,7 +118,7 @@
 .section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .sectionTitle {
@@ -143,7 +143,7 @@
   display: grid;
   grid-template-columns: var(--form-columns, 104px minmax(0, 1fr));
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
   min-height: 40px;
   padding: 6px 14px;
   /* A popup button's minimum width (PopupSelect) gives way to the width of its cell. */
@@ -172,7 +172,7 @@
 @container (max-width: 420px) {
   .formRow {
     grid-template-columns: minmax(0, 1fr);
-    gap: 6px;
+    gap: var(--space-6);
     padding: 9px 14px 10px;
   }
 
@@ -186,13 +186,13 @@
 }
 
 .formError {
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   color: var(--red);
   margin-top: 4px;
 }
 
 .formHint {
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   color: var(--fg2);
 }
 
@@ -200,7 +200,7 @@
 .row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
   min-height: 38px;
   padding: 0 14px;
 }
@@ -242,7 +242,7 @@
   justify-content: center;
   margin-bottom: 18px;
   color: var(--fg2);
-  font-size: 28px;
+  font-size: var(--icon-28);
 }
 
 .emptyTitle {
@@ -263,7 +263,7 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
+  gap: var(--space-8);
   margin-top: 20px;
 }
 
@@ -272,7 +272,7 @@
   font-size: var(--text-sm);
   color: var(--fg2);
   display: flex;
-  gap: 6px;
+  gap: var(--space-6);
   flex-wrap: wrap;
   justify-content: center;
 }
@@ -283,7 +283,7 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-4);
   padding: 3px 4px;
   border-radius: var(--radius-md);
   background: var(--field);
@@ -297,7 +297,7 @@
 .tagChip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-5);
   height: 20px;
   padding: 0 5px 0 7px;
   border-radius: var(--radius-sm);
@@ -311,7 +311,7 @@
   background: none;
   display: inline-flex;
   color: var(--fg2);
-  font-size: 10px;
+  font-size: var(--icon-10);
 }
 
 .tagInput input {
@@ -322,7 +322,7 @@
   padding: 0 4px;
   background: transparent;
   outline: none;
-  font-size: 12.5px;
+  font-size: var(--text-control);
 }
 
 .tagInput input::placeholder {
@@ -332,7 +332,7 @@
 /* Callout (design §05 step 3 info box) */
 .callout {
   display: flex;
-  gap: 10px;
+  gap: var(--space-10);
   padding: 12px 14px;
   border-radius: var(--radius-panel);
   background: var(--group);
@@ -355,17 +355,17 @@
   width: 44px;
   height: 44px;
   flex: none;
-  border-radius: 12px;
+  border-radius: var(--radius-window);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: var(--icon-24);
 }
 
 /* Column table header */
 .tableHead {
   display: grid;
-  gap: 16px;
+  gap: var(--space-16);
   align-items: center;
   height: 26px;
   margin: 0 24px;
@@ -396,5 +396,5 @@
   max-width: 640px;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: var(--space-22);
 }

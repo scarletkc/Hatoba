@@ -3,7 +3,7 @@
 .head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
   min-width: 0;
 }
 
@@ -52,7 +52,7 @@
 .body {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-16);
 }
 
 /* Readings from before the host stopped answering. */
@@ -63,13 +63,13 @@
 .section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .row {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--space-10);
   min-width: 0;
 }
 
@@ -93,7 +93,7 @@
 .value {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4);
   min-width: 40px;
   justify-content: flex-end;
   font-weight: 600;
@@ -102,7 +102,7 @@
 }
 
 .value i {
-  font-size: 13px;
+  font-size: var(--icon-13);
 }
 
 .detail {
@@ -113,7 +113,7 @@
 .usage {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--space-5);
 }
 
 .usageLabel {
@@ -139,7 +139,7 @@
 .meter {
   --meter: var(--accent);
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-meter);
   background: color-mix(in srgb, var(--meter) 16%, transparent);
   overflow: hidden;
   transition: background-color var(--motion-slow) var(--ease-out);
@@ -148,7 +148,7 @@
 /* Each new reading glides to its value (DashboardPage.module.css). */
 .meterFill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radius-meter);
   background: var(--meter);
   transition:
     width var(--motion-slow) var(--ease-out),
@@ -166,7 +166,7 @@
 .legend {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4);
   font-size: var(--text-sm);
   white-space: nowrap;
 }
@@ -174,7 +174,7 @@
 .key {
   width: 10px;
   height: 2px;
-  border-radius: 1px;
+  border-radius: var(--radius-hair);
   background: var(--spark-line);
 }
 

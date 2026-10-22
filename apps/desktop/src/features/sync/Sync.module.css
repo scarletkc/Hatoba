@@ -21,18 +21,18 @@
   max-width: 640px;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: var(--space-22);
   align-self: flex-start;
 }
 
 .columnTight {
-  gap: 18px;
+  gap: var(--space-18);
 }
 
 .header {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--space-14);
 }
 
 .headerText {
@@ -47,7 +47,7 @@
 }
 
 .sub {
-  font-size: 12.5px;
+  font-size: var(--text-control);
   color: var(--fg2);
   margin-top: 2px;
   text-wrap: pretty;
@@ -75,7 +75,7 @@
 .relogin {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
   padding: 12px 14px;
   border-radius: var(--radius-panel);
   background: var(--group);
@@ -84,7 +84,7 @@
 
 .reloginRow {
   display: flex;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .reloginRow > :first-child {
@@ -100,7 +100,7 @@
 .banner {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-10);
   padding: 10px 14px;
   border-radius: var(--radius-panel);
   background: color-mix(in srgb, var(--orange) 12%, transparent);
@@ -108,7 +108,7 @@
 }
 
 .bannerIcon {
-  font-size: 16px;
+  font-size: var(--icon-16);
   color: var(--orange);
 }
 
@@ -132,13 +132,13 @@
 .device {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
   min-height: 46px;
   padding: 0 14px;
 }
 
 .deviceIcon {
-  font-size: 20px;
+  font-size: var(--icon-20);
   color: var(--fg2);
 }
 
@@ -151,7 +151,7 @@
 .deviceName {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .deviceNameText {
@@ -171,7 +171,7 @@
 }
 
 .deviceMeta {
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   color: var(--fg2);
   margin-top: 1px;
 }
@@ -201,19 +201,19 @@
 /* Security note */
 .security {
   display: flex;
-  gap: 12px;
+  gap: var(--space-12);
   padding: 2px;
 }
 
 .securityIcon {
-  font-size: 18px;
+  font-size: var(--icon-18);
   color: var(--fg2);
   margin-top: 1px;
   flex: none;
 }
 
 .securityText {
-  font-size: 12.5px;
+  font-size: var(--text-control);
   line-height: 1.6;
   color: var(--fg2);
   text-wrap: pretty;
@@ -227,12 +227,12 @@
 .securityLinks {
   margin-top: 8px;
   display: flex;
-  gap: 16px;
+  gap: var(--space-16);
   flex-wrap: wrap;
 }
 
 .securityLink {
-  font-size: 12.5px;
+  font-size: var(--text-control);
 }
 
 /* Conflict cards */
@@ -246,13 +246,13 @@
 .conflictHead {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-10);
   padding: 12px 14px;
   min-width: 0;
 }
 
 .conflictIcon {
-  font-size: 16px;
+  font-size: var(--icon-16);
   color: var(--fg2);
   flex: none;
 }
@@ -274,7 +274,7 @@
   display: grid;
   grid-template-columns: minmax(96px, max-content) minmax(0, 1fr) minmax(0, 1fr);
   border-top: 0.5px solid var(--line);
-  font-size: 12.5px;
+  font-size: var(--text-control);
 }
 
 .diffRow {
@@ -289,7 +289,7 @@
 }
 
 .diffHead {
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   font-weight: 500;
   color: var(--fg2);
   border-left: 0.5px solid var(--line);
@@ -298,7 +298,7 @@
 .diffLabel {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   border-top: 0.5px solid var(--line);
 }
 
@@ -331,7 +331,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 10px 14px;
   border-top: 0.5px solid var(--line);
 }
@@ -339,7 +339,7 @@
 .result {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   flex: 1 1 160px;
   min-width: 0;
   font-size: var(--text-sm);
@@ -349,7 +349,7 @@
 
 .result i {
   color: var(--green);
-  font-size: 14px;
+  font-size: var(--icon-14);
   flex: none;
 }
 

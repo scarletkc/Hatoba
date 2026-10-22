@@ -35,7 +35,7 @@
 }
 
 .md h2 {
-  font-size: 14px;
+  font-size: var(--text-heading);
 }
 
 .md ul,
@@ -96,7 +96,7 @@
   background: var(--group);
   box-shadow: inset 0 0 0 0.5px var(--line2);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   overflow-x: auto;
   white-space: pre;
@@ -139,7 +139,7 @@
 
 .md table {
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .md th,
@@ -158,7 +158,7 @@
 .image {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4);
 }
 
 .badLink {
@@ -173,7 +173,7 @@
   height: 13px;
   margin-left: 2px;
   vertical-align: -2px;
-  border-radius: 1px;
+  border-radius: var(--radius-hair);
   background: var(--accent);
   animation: blink 1s steps(2, start) infinite;
 }

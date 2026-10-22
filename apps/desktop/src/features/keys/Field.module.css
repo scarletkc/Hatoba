@@ -1,14 +1,14 @@
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
   min-width: 0;
 }
 
 .labelLine {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .label {
@@ -18,14 +18,14 @@
 }
 
 .hint {
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   line-height: 1.45;
   color: var(--fg2);
   text-wrap: pretty;
 }
 
 .error {
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   line-height: 1.45;
   color: var(--red);
   text-wrap: pretty;

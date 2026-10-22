@@ -6,11 +6,11 @@
   padding: 10px 14px 14px;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: var(--space-7);
 }
 
 .header {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   color: var(--fg2);
 }
@@ -18,7 +18,7 @@
 .transfer {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: var(--space-7);
   transition: opacity 0.6s ease;
 }
 
@@ -29,8 +29,8 @@
 .top {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 12px;
+  gap: var(--space-7);
+  font-size: var(--text-sm);
 }
 
 .name {
@@ -42,7 +42,7 @@
 }
 
 .pct {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--fg2);
   font-variant-numeric: tabular-nums;
   min-width: 4ch;
@@ -57,7 +57,7 @@
   height: 16px;
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--fg2);
 }
@@ -69,14 +69,14 @@
 
 .track {
   height: 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-2xs);
   background: var(--fill2);
   overflow: hidden;
 }
 
 .fill {
   height: 100%;
-  border-radius: 2px;
+  border-radius: var(--radius-2xs);
   background: var(--accent);
   transition: width var(--motion-base) var(--ease-out);
 }
@@ -86,7 +86,7 @@
 }
 
 .line {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--fg2);
   font-variant-numeric: tabular-nums;
   overflow: hidden;

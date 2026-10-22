@@ -4,14 +4,14 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-14);
   padding: 14px 14px 18px;
 }
 
 .item {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
   min-width: 0;
 }
 
@@ -41,7 +41,7 @@
 .contextDivider {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-10);
   font-size: var(--text-xs);
   color: var(--fg2);
   white-space: nowrap;
@@ -59,7 +59,7 @@
 .noteDivider {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-10);
   font-size: var(--text-xs);
   color: var(--fg2);
 }
@@ -76,7 +76,7 @@
 .noteText {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-5);
   min-width: 0;
   text-align: center;
   overflow-wrap: anywhere;
@@ -86,14 +86,14 @@
   display: flex;
   justify-content: flex-end;
   align-items: flex-start;
-  gap: 4px;
+  gap: var(--space-4);
   padding-left: 4px;
 }
 
 .user {
   max-width: 100%;
   padding: 7px 11px;
-  border-radius: 12px 12px 4px 12px;
+  border-radius: var(--radius-window) var(--radius-window) var(--radius-xs) var(--radius-window);
   background: var(--accenttint);
   font-size: var(--text-md);
   line-height: 1.55;
@@ -114,7 +114,7 @@
   flex: none;
   display: flex;
   justify-content: flex-end;
-  gap: 2px;
+  gap: var(--space-2);
   min-width: 24px;
   margin-top: 3px;
   opacity: 0;
@@ -138,7 +138,7 @@
 .replyFoot {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4);
   min-height: 24px;
   margin: -4px 0 0 -5px;
 }
@@ -164,7 +164,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .userStack:has(> [data-selection-open="true"]) {
@@ -176,13 +176,13 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .editMessage {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: var(--space-7);
   padding-left: 32px;
 }
 
@@ -190,7 +190,7 @@
 .editWarning {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--space-6);
   font-size: var(--text-xs);
   line-height: 1.45;
   color: var(--fg2);
@@ -211,7 +211,7 @@
 
 /* AI-24: a search hit's entry, highlighted for a moment after it scrolls into view. */
 .flash {
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   animation: flash 2.4s ease-out;
 }
 
@@ -230,7 +230,7 @@
 .assistant {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
   min-width: 0;
 }
 
@@ -245,14 +245,14 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .reasoningHead,
 .summaryHead {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-5);
   height: 22px;
   padding: 0 7px 0 5px;
   margin-left: -5px;
@@ -294,7 +294,7 @@
 .tool {
   display: flex;
   flex-direction: column;
-  border-radius: 9px;
+  border-radius: var(--radius-popover);
   background: var(--group);
   box-shadow: inset 0 0 0 0.5px var(--line2);
   min-width: 0;
@@ -304,10 +304,10 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-7);
   height: 32px;
   padding: 0 9px 0 10px;
-  border-radius: 9px;
+  border-radius: var(--radius-popover);
   min-width: 0;
   transition: background-color var(--motion-fade) var(--ease-out);
 }
@@ -338,7 +338,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .labelLink {
@@ -356,7 +356,7 @@
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-7);
   align-self: stretch;
   padding: 0;
   border: 0;
@@ -369,7 +369,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: 9px;
+  border-radius: var(--radius-popover);
 }
 
 .toolHead:focus-visible {
@@ -404,7 +404,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   color: var(--fg2);
 }
 
@@ -417,13 +417,13 @@
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4);
   height: 18px;
   padding: 0 6px;
   border-radius: var(--radius-xs);
   background: var(--fill);
   color: var(--fg2);
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   white-space: nowrap;
 }
 
@@ -452,14 +452,14 @@
 .autoVerdict {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-3);
 }
 
 /* AI-47: why the approval card of a call in Auto mode asks. */
 .autoReason {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--space-6);
   font-size: var(--text-xs);
   line-height: 1.45;
   color: var(--fg2);
@@ -474,13 +474,13 @@
 .toolBody {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--space-5);
   padding: 2px 10px 10px;
   min-width: 0;
 }
 
 .label {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   color: var(--fg2);
   text-transform: uppercase;
@@ -494,7 +494,7 @@
   background: var(--win);
   box-shadow: inset 0 0 0 0.5px var(--line);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -511,7 +511,7 @@
 .revert {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
   margin-top: 4px;
   padding-top: 8px;
   border-top: 0.5px solid var(--line);
@@ -521,7 +521,7 @@
 .revertRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   flex-wrap: wrap;
 }
 
@@ -533,7 +533,7 @@
 .revertWarn {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--space-6);
   font-size: var(--text-xs);
   line-height: 1.45;
   color: var(--fg2);
@@ -553,7 +553,7 @@
 }
 
 .command {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--fg);
 }
 
@@ -571,12 +571,12 @@
 .inputNotes {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: var(--space-5);
 }
 
 /* Approval card (AI-17) */
 .approval {
-  gap: 9px;
+  gap: var(--space-9);
   padding: 10px 11px 11px;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orange) 60%, transparent), 0 1px 3px rgba(0, 0, 0, 0.05);
   background: color-mix(in srgb, var(--orange) 5%, var(--win));
@@ -585,13 +585,13 @@
 .approvalHead {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-7);
 }
 
 .approvalHost {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   min-width: 0;
   font-size: var(--text-sm);
   color: var(--fg2);
@@ -609,13 +609,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--text-caption);
 }
 
 .approvalInput {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--space-5);
 }
 
 /* A command's directory: the whole path, which wraps rather than being cut. */
@@ -623,7 +623,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 6px;
+  gap: var(--space-4) var(--space-6);
   min-width: 0;
   font-size: var(--text-sm);
   color: var(--fg2);
@@ -641,7 +641,7 @@
   min-width: 0;
   overflow-wrap: anywhere;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   color: var(--fg);
 }
 
@@ -654,7 +654,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: var(--space-6);
   flex-wrap: wrap;
 }
 
@@ -669,7 +669,7 @@
 .editForm {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: var(--space-7);
 }
 
 .input {
@@ -682,7 +682,7 @@
   background: var(--field);
   box-shadow: 0 0 0 0.5px var(--fieldline);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
   outline: none;
 }
 
@@ -715,7 +715,7 @@
 .inline {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   flex-wrap: wrap;
   font-size: var(--text-sm);
   color: var(--fg2);
@@ -744,7 +744,7 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-4);
   padding: 3px 4px;
   border-radius: var(--radius-md);
   background: var(--field);
@@ -759,7 +759,7 @@
 .keyChip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-5);
   height: 20px;
   padding: 0 5px 0 7px;
   border-radius: var(--radius-sm);
@@ -776,7 +776,7 @@
   background: none;
   display: inline-flex;
   color: var(--fg2);
-  font-size: 10px;
+  font-size: var(--icon-10);
 }
 
 /* A key Hatoba can’t press. */
@@ -799,7 +799,7 @@
   color: var(--fg);
   outline: none;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .keysInput:focus-visible {
@@ -826,7 +826,7 @@
 .rejectRow {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: var(--space-7);
 }
 
 /* AI-19 and AI-31: run now and stop asking, for this conversation or on this device. */
@@ -835,7 +835,7 @@
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 4px 14px;
+  gap: var(--space-4) var(--space-14);
   margin-top: -2px;
 }
 
@@ -866,7 +866,7 @@
 .hints {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-4);
 }
 
 .rejectRow .input {
@@ -877,7 +877,7 @@
 .side {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
   min-width: 0;
   padding: 8px 10px 10px;
   border-radius: var(--radius-panel);
@@ -888,7 +888,7 @@
 .sideHead {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   min-height: 24px;
   margin-right: -5px;
 }
@@ -925,7 +925,7 @@
 .status {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-7);
   font-size: var(--text-sm);
   color: var(--fg2);
 }
@@ -951,9 +951,9 @@
 .banner {
   display: flex;
   align-items: flex-start;
-  gap: 9px;
+  gap: var(--space-9);
   padding: 9px 11px;
-  border-radius: 9px;
+  border-radius: var(--radius-popover);
   font-size: var(--text-sm);
   line-height: 1.5;
 }
@@ -987,7 +987,7 @@
 .bannerDetail {
   margin-top: 3px;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   color: var(--fg2);
   overflow-wrap: anywhere;
 }

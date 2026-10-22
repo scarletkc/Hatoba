@@ -4,10 +4,10 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-10);
   padding: 0 10px 0 16px;
   border-bottom: 0.5px solid var(--line);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--fg2);
   white-space: nowrap;
   min-width: 0;
@@ -16,7 +16,7 @@
 .state {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   min-width: 0;
   color: var(--fg);
 }
@@ -35,7 +35,7 @@
 
 .target {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   color: var(--fg);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -45,7 +45,7 @@
 .via {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4);
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
@@ -62,14 +62,14 @@
 .sftp {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-5);
   height: 26px;
   padding: 0 9px;
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .sftp:hover:not(:disabled) {
@@ -99,10 +99,10 @@
   min-width: 13px;
   height: 13px;
   padding: 0 3px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: var(--accent);
   color: #ffffff;
-  font-size: 9.5px;
+  font-size: var(--text-3xs);
   font-weight: 600;
   line-height: 13px;
   text-align: center;
@@ -113,14 +113,14 @@
 .stats {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   height: 26px;
   padding: 0 8px;
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg2);
-  font-size: 12px;
+  font-size: var(--text-sm);
   min-width: 0;
 }
 
@@ -144,7 +144,7 @@
 .statsText {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--space-10);
 }
 
 .statsText b {

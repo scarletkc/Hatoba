@@ -1,13 +1,13 @@
 .thumbs {
   display: flex;
-  gap: 14px;
+  gap: var(--space-14);
 }
 
 .thumb {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   border: 0;
   padding: 0;
   background: none;
@@ -16,7 +16,7 @@
 .preview {
   width: 92px;
   height: 60px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   overflow: hidden;
   display: flex;
 }
@@ -63,13 +63,13 @@
   padding: 8px 7px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--space-5);
 }
 
 .lines i {
   display: block;
   height: 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-2xs);
 }
 
 .preview.light .lines i:nth-child(1) {
@@ -108,7 +108,7 @@
 }
 
 .half.light .lines i {
-  border-radius: 2px 0 0 2px;
+  border-radius: var(--radius-2xs) 0 0 var(--radius-2xs);
   background: #e6e6ea;
 }
 
@@ -121,7 +121,7 @@
 }
 
 .half.dark .lines i {
-  border-radius: 0 2px 2px 0;
+  border-radius: 0 var(--radius-2xs) var(--radius-2xs) 0;
   background: #36363b;
 }
 
@@ -130,7 +130,7 @@
 }
 
 .thumbLabel {
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   color: var(--fg2);
 }
 

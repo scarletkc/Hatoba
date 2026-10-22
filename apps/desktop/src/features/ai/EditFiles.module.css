@@ -6,14 +6,14 @@
   padding: 0;
   overflow-y: auto;
   border: 0.5px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   list-style: none;
 }
 
 .file {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 7px 10px;
 }
 
@@ -80,7 +80,7 @@
 
 .lines {
   display: inline-flex;
-  gap: 4px;
+  gap: var(--space-4);
   margin-left: 6px;
   font-family: var(--font-mono);
 }

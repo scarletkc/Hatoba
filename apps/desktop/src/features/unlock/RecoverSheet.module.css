@@ -1,13 +1,13 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--space-18);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .label {
@@ -16,12 +16,12 @@
 }
 
 .hint {
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   color: var(--fg2);
 }
 
 .error {
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   color: var(--red);
   line-height: 1.45;
 }

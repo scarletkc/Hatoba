@@ -14,7 +14,7 @@
 .queuedHead {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   padding: 6px 6px 0 10px;
   color: var(--fg3);
   font-size: var(--text-xs);
@@ -116,7 +116,7 @@
 .bar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   padding: 4px 6px 6px 6px;
   min-width: 0;
   container-type: inline-size;
@@ -131,7 +131,7 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-5);
   height: 24px;
   min-width: 0;
   overflow: hidden;
@@ -203,7 +203,7 @@
 .meter {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4);
   height: 24px;
   padding: 0 6px;
   border: 0;
@@ -297,7 +297,7 @@
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4);
   height: 24px;
   min-width: 26px;
   padding: 0 6px;
@@ -369,7 +369,7 @@
 .fit {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--space-6);
   padding: 8px 12px 0;
   font-size: var(--text-xs);
   line-height: 1.45;
@@ -389,7 +389,7 @@
 .mcpFailed {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--space-6);
   margin-bottom: 6px;
   padding: 0 4px;
   font-size: var(--text-xs);

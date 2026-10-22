@@ -40,7 +40,7 @@
 .sectionHead {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   height: 32px;
   margin-top: 10px;
   font-size: var(--text-sm);
@@ -49,7 +49,7 @@
 }
 
 .sectionIcon {
-  font-size: 14px;
+  font-size: var(--icon-14);
 }
 
 .sectionTitle {
@@ -74,13 +74,13 @@
 .cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
-  gap: 12px;
+  gap: var(--space-12);
 }
 
 .card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
   min-width: 0;
   padding: 12px 14px;
   border-radius: var(--radius-panel);
@@ -124,13 +124,13 @@
 .cardHead {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   min-width: 0;
 }
 
 .fav {
   flex: none;
-  font-size: 12px;
+  font-size: var(--icon-12);
   color: var(--orange);
 }
 
@@ -146,14 +146,14 @@
 .tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-4);
   min-width: 0;
 }
 
 .readings {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--space-5);
   margin-top: 4px;
 }
 
@@ -166,7 +166,7 @@
   display: grid;
   grid-template-columns: 62px minmax(0, 1fr) 46px;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   font-size: var(--text-sm);
 }
 
@@ -187,7 +187,7 @@
   --meter: var(--accent);
   display: block;
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-meter);
   background: color-mix(in srgb, var(--meter) 16%, transparent);
   overflow: hidden;
   transition: background-color var(--motion-slow) var(--ease-out);
@@ -197,7 +197,7 @@
 .meterFill {
   display: block;
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radius-meter);
   background: var(--meter);
   transition:
     width var(--motion-slow) var(--ease-out),
@@ -208,14 +208,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 3px;
+  gap: var(--space-3);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .meterValue i {
-  font-size: 12px;
+  font-size: var(--icon-12);
 }
 
 .alert {
@@ -242,7 +242,7 @@
 .status {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   min-height: 24px;
   margin-top: 2px;
   font-size: var(--text-sm);
@@ -274,7 +274,7 @@
 
 .actions {
   display: inline-flex;
-  gap: 6px;
+  gap: var(--space-6);
   flex: none;
 }
 
@@ -293,7 +293,7 @@
 .leftOutNote {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   margin: 18px 24px 0;
   font-size: var(--text-sm);
   color: var(--fg2);
@@ -303,7 +303,7 @@
 
 .grid {
   display: grid;
-  gap: 12px;
+  gap: var(--space-12);
   align-items: center;
 }
 
@@ -351,7 +351,7 @@
 .rowName {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   min-width: 0;
   font-size: var(--text-md);
 }
@@ -367,7 +367,7 @@
 .cellStatus {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   min-width: 0;
 }
 
@@ -375,7 +375,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 36px;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .miniValue {

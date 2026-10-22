@@ -2,7 +2,7 @@
 .savedRow {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-10);
 }
 
 .savedField {
@@ -11,7 +11,7 @@
   height: var(--field-height);
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-7);
   padding: 0 8px;
   border-radius: var(--radius-md);
   background: var(--fill);
@@ -21,13 +21,13 @@
 
 .savedField i {
   color: var(--green);
-  font-size: 14px;
+  font-size: var(--icon-14);
 }
 
 .keyRow {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
 }
 
 .keyRow > :first-child {
@@ -40,14 +40,14 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .testResult {
   transition: opacity var(--motion-fade) var(--ease-out);
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--space-8);
   max-width: 100%;
   font-size: var(--text-sm);
   line-height: 1.5;
@@ -65,7 +65,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-3);
 }
 
 .testFail {

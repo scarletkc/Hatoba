@@ -1,7 +1,7 @@
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
   min-width: 0;
 }
 
@@ -22,12 +22,12 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px 12px;
+  gap: var(--space-4) var(--space-12);
   padding: 0 4px;
 }
 
 .problem {
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   line-height: 1.45;
   color: var(--red);
 }

@@ -12,19 +12,64 @@
   --font-mono: "Cascadia Mono", Consolas, ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono",
     "Microsoft YaHei UI", "Yu Gothic UI", monospace;
 
+  /* Text sizes. Feature styles use these, never raw px (styles.test.ts). */
+  --text-3xs: 10px;
+  --text-2xs: 10.5px;
   --text-xs: 11px;
+  --text-caption: 11.5px;
   --text-sm: 12px;
+  --text-control: 12.5px;
   --text-md: 13px;
+  --text-heading: 14px;
   --text-lg: 15px;
   --text-xl: 17px;
-  --text-title: 20px;
   --text-wizard: 19px;
+  --text-title: 20px;
+  --text-display: 22px;
+
+  /* Icon glyph sizes (Phosphor is a font, so these set font-size) */
+  --icon-10: 10px;
+  --icon-11: 11px;
+  --icon-12: 12px;
+  --icon-13: 13px;
+  --icon-14: 14px;
+  --icon-15: 15px;
+  --icon-16: 16px;
+  --icon-17: 17px;
+  --icon-18: 18px;
+  --icon-20: 20px;
+  --icon-22: 22px;
+  --icon-24: 24px;
+  --icon-28: 28px;
+
+  /* Spacing, for gap. New layouts keep to the even steps. */
+  --space-1: 1px;
+  --space-2: 2px;
+  --space-3: 3px;
+  --space-4: 4px;
+  --space-5: 5px;
+  --space-6: 6px;
+  --space-7: 7px;
+  --space-8: 8px;
+  --space-9: 9px;
+  --space-10: 10px;
+  --space-12: 12px;
+  --space-14: 14px;
+  --space-16: 16px;
+  --space-18: 18px;
+  --space-22: 22px;
+  --space-28: 28px;
 
   /* Radii */
+  --radius-hair: 1px;
+  --radius-2xs: 2px;
+  --radius-meter: 3px;
   --radius-xs: 4px;
   --radius-sm: 5px;
   --radius-md: 6px;
   --radius-control: 7px;
+  --radius-lg: 8px;
+  --radius-popover: 9px;
   --radius-panel: 10px;
   --radius-window: 12px;
   --radius-icon: 14px;

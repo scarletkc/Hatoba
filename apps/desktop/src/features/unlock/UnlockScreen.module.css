@@ -49,7 +49,7 @@
   width: 290px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
   text-align: left;
 }
 
@@ -57,9 +57,9 @@
   height: 32px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 0 4px 0 11px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--field);
   box-shadow: 0 0 0 0.5px var(--fieldline);
 }
@@ -100,7 +100,7 @@
   padding: 0;
   background: none;
   color: var(--fg2);
-  font-size: 14px;
+  font-size: var(--icon-14);
   display: inline-flex;
 }
 
@@ -120,7 +120,7 @@
   justify-content: center;
   background: var(--accent);
   color: #ffffff;
-  font-size: 13px;
+  font-size: var(--icon-13);
 }
 
 .go:disabled {
@@ -161,7 +161,7 @@
 .divider {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-10);
   font-size: var(--text-xs);
   color: var(--fg2);
 }
@@ -179,15 +179,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: var(--space-7);
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--btn);
   box-shadow: var(--shadow-btn);
 }
 
 .biometric i {
-  font-size: 17px;
+  font-size: var(--icon-17);
   color: var(--accent);
 }
 
@@ -204,7 +204,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .forgot {
@@ -221,18 +221,18 @@
 
 .foot {
   padding: 0 24px 20px;
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   color: var(--fg2);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .sessions {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .sessionDot {

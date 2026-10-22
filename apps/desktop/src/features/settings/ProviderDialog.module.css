@@ -1,13 +1,13 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--space-18);
 }
 
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
   min-width: 0;
 }
 
@@ -15,7 +15,7 @@
 .protocol {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
   min-width: 0;
 }
 
@@ -33,11 +33,11 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
+  gap: var(--space-8) var(--space-12);
 }
 
 .hint {
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   line-height: 1.45;
   color: var(--fg2);
   text-wrap: pretty;
@@ -47,7 +47,7 @@
 .modelsBar {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: var(--space-14);
 }
 
 .modelsBar .hint {
@@ -65,7 +65,7 @@
 .table {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
   padding: 8px 10px 10px;
 }
 
@@ -73,7 +73,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 76px 76px 104px 28px;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 /* A System One provider's models (AI-47): no token limits or thinking levels. */
@@ -85,7 +85,7 @@
 .effort {
   width: 100%;
   padding: 0 6px 0 8px;
-  gap: 4px;
+  gap: var(--space-4);
   font-size: var(--text-sm);
 }
 
@@ -98,7 +98,7 @@
 }
 
 .problem {
-  font-size: 11.5px;
+  font-size: var(--text-caption);
   line-height: 1.45;
   color: var(--red);
 }
@@ -106,7 +106,7 @@
 .addRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .addRow > :first-child {
@@ -117,7 +117,7 @@
 .fetchError {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 9px 12px;
   border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--red) 9%, transparent);
@@ -127,7 +127,7 @@
 
 .fetchError i {
   margin-top: 2px;
-  font-size: 14px;
+  font-size: var(--icon-14);
   color: var(--red);
   flex: none;
 }
@@ -152,7 +152,7 @@
 .pickerBar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-10);
   padding: 8px 10px;
   border-bottom: 0.5px solid var(--line);
 }
@@ -177,7 +177,7 @@
 .pickerRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   width: 100%;
   min-height: 26px;
   padding: 2px 8px;
