@@ -153,6 +153,7 @@ export function Menu({
   const [focus, setFocus] = useState(-1);
   const items = entries.flatMap((e, i) => (e.kind === "separator" || e.kind === "header" ? [] : [i]));
   const hasCheck = entries.some((x) => isItem(x) && x.checked !== undefined);
+  const hasIcon = entries.some((x) => isItem(x) && x.icon !== undefined);
   const locked = useOverlaysLocked() && !whileLocked;
 
   useEffect(() => {
@@ -226,7 +227,7 @@ export function Menu({
 
   if (locked) return null;
   return createPortal(
-    <div ref={ref} role="menu" className={cx(o.menu, o.popIn, !hasCheck && o.menuNoCheck)} style={{ ...pos, minWidth }}>
+    <div ref={ref} role="menu" className={cx(o.menu, o.popIn, !hasCheck && o.menuNoCheck, hasIcon && o.menuIcons)} style={{ ...pos, minWidth }}>
       {entries.map((e, i) => {
         if (e.kind === "separator") return <div key={i} className={o.menuSeparator} />;
         if (e.kind === "header")

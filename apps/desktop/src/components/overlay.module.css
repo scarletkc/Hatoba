@@ -122,6 +122,11 @@
   padding-left: 8px;
 }
 
+/* Headers line up with the labels after the items' icons. */
+.menuNoCheck.menuIcons .menuHeader {
+  padding-left: calc(8px + var(--icon-14) + var(--space-6));
+}
+
 /* A row of options under a label (MenuChoice), lined up with the item labels. */
 .menuChoice {
   display: flex;
