@@ -1,6 +1,7 @@
 ---
 import "@fontsource-variable/archivo/wdth.css";
 import "../styles/global.css";
+import archivo from "@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2?url";
 import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
 import { SITE_URL } from "../consts";
@@ -63,6 +64,7 @@ const redirect =
     <meta charset="utf-8" />
     {redirect && <script is:inline set:html={redirect} />}
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preload" href={archivo} as="font" type="font/woff2" crossorigin />
     <title>{title}</title>
     <meta name="description" content={description} />
     {noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={url} />}

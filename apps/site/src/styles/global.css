@@ -2,6 +2,96 @@
  * Hatoba's site: the night sea of the app icon (a pier standing in seigaiha water) frames the page,
  * and the content between sits on plain paper. Colors come from app-icon.svg.
  */
+
+/*
+ * Arial scaled to Archivo's widths and line metrics, for the moment before Archivo arrives, so text
+ * doesn't move when it swaps in: one face per weight and width the site uses, each covering only the
+ * characters Archivo's Latin files do. Measured in Chrome against archivo-latin-wdth-normal.woff2;
+ * Liberation Sans has Arial's metrics.
+ */
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Arial"), local("ArialMT"), local("Liberation Sans"), local("Helvetica");
+  font-weight: 100 449;
+  font-stretch: 50% 109%;
+  size-adjust: 98.6%;
+  ascent-override: 89.2%;
+  descent-override: 21.3%;
+  line-gap-override: 0%;
+  unicode-range: U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F, U+A720-A7FF, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Arial"), local("ArialMT"), local("Liberation Sans"), local("Helvetica");
+  font-weight: 450 549;
+  font-stretch: 50% 109%;
+  size-adjust: 100.2%;
+  ascent-override: 87.8%;
+  descent-override: 21.0%;
+  line-gap-override: 0%;
+  unicode-range: U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F, U+A720-A7FF, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT"), local("Liberation Sans Bold"), local("Helvetica Bold");
+  font-weight: 550 649;
+  font-stretch: 50% 109%;
+  size-adjust: 95.6%;
+  ascent-override: 92.1%;
+  descent-override: 22.0%;
+  line-gap-override: 0%;
+  unicode-range: U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F, U+A720-A7FF, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT"), local("Liberation Sans Bold"), local("Helvetica Bold");
+  font-weight: 650 749;
+  font-stretch: 50% 109%;
+  size-adjust: 98.7%;
+  ascent-override: 89.2%;
+  descent-override: 21.3%;
+  line-gap-override: 0%;
+  unicode-range: U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F, U+A720-A7FF, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT"), local("Liberation Sans Bold"), local("Helvetica Bold");
+  font-weight: 750 1000;
+  font-stretch: 50% 109%;
+  size-adjust: 103.3%;
+  ascent-override: 85.2%;
+  descent-override: 20.3%;
+  line-gap-override: 0%;
+  unicode-range: U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F, U+A720-A7FF, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT"), local("Liberation Sans Bold"), local("Helvetica Bold");
+  font-weight: 750 1000;
+  font-stretch: 110% 121%;
+  size-adjust: 121.9%;
+  ascent-override: 72.2%;
+  descent-override: 17.2%;
+  line-gap-override: 0%;
+  unicode-range: U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F, U+A720-A7FF, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT"), local("Liberation Sans Bold"), local("Helvetica Bold");
+  font-weight: 750 1000;
+  font-stretch: 122% 200%;
+  size-adjust: 129.0%;
+  ascent-override: 68.2%;
+  descent-override: 16.3%;
+  line-gap-override: 0%;
+  unicode-range: U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F, U+A720-A7FF, U+FEFF, U+FFFD;
+}
 :root {
   --night: #0d1735;
   --night-deep: #091027;
@@ -22,7 +112,7 @@
   --on-night-2: rgb(227 238 255 / 0.74);
 
   --cjk: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC";
-  --font: "Archivo Variable", var(--cjk), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font: "Archivo Variable", "Archivo Fallback", var(--cjk), system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
   --gutter: 24px;

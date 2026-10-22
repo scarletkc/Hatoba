@@ -82,6 +82,7 @@ jobs:
       - run: pnpm --filter @hatoba/site build
       # Uses the runner's Chrome.
       - run: pnpm --filter @hatoba/site demo:check
+      - run: pnpm --filter @hatoba/site layout:check
       - if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:

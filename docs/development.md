@@ -211,6 +211,7 @@ The website at https://hatoba.fog.moe is an Astro site in [`apps/site`](../apps/
 pnpm --filter @hatoba/site dev    # http://localhost:4321
 pnpm --filter @hatoba/site test
 pnpm --filter @hatoba/site build  # writes apps/site/dist
+pnpm --filter @hatoba/site layout:check  # after build: fails when a page moves while it loads (needs Chrome)
 ```
 
 The build reads the newest release from the GitHub API (set `GITHUB_TOKEN` if it hits the rate limit) and takes the docs from the built-in skill at that release's tag, so they describe the version people download. To preview a change to the docs, run it with `HATOBA_DOCS_REF=worktree`. A new reference file needs a place in `DOC_GROUPS` in [`apps/site/src/lib/docs.ts`](../apps/site/src/lib/docs.ts), which a test checks.
