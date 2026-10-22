@@ -624,6 +624,8 @@ pub fn sync_conflict_resolve(
     })?;
     if action == ConflictAction::Restore {
         sync::local_change(&app);
+        // FWD-06: a restored forward rule renames, or stops, where it runs.
+        crate::connection::rules_changed(&app);
     } else {
         sync::emit_status(&app);
     }
