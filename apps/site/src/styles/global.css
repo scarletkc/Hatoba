@@ -103,6 +103,12 @@ html {
   scroll-padding-top: var(--space-24);
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 body {
   margin: 0;
   background: var(--paper);
@@ -122,19 +128,28 @@ video {
   height: auto;
 }
 
+/* A link's underline is faint until the pointer is on it; the colour fades, the line stays put. */
 a {
   color: var(--link);
   text-underline-offset: 0.18em;
   text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  transition:
+    color var(--duration-fast) var(--ease-standard),
+    text-decoration-color var(--duration-fast) var(--ease-standard);
 }
 
 a:hover {
-  text-decoration-thickness: 2px;
+  text-decoration-color: currentColor;
 }
 
 :focus-visible {
-  outline: 2px solid var(--sea);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 3px;
+}
+
+/* A text link's ring follows its words; controls keep their own shape. */
+a:not(.button):focus-visible {
   border-radius: var(--radius-sm);
 }
 
@@ -200,11 +215,7 @@ p {
   letter-spacing: -0.01em;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation: none !important;
-    transition: none !important;
-  }
-}
+/*
+ * Reduced motion: the movement durations in tokens.css drop to zero, and components drop their own
+ * movement (the try button's lift). Colour and opacity fades stay, so hover and press still respond.
+ */

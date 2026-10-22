@@ -244,7 +244,9 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
     --sea-depth: calc(var(--shot) * var(--sink) + var(--water));
     margin-top: var(--space-page-top);
     padding-bottom: var(--water);
-    transition: --sea-depth var(--duration-scene) var(--ease-emphasized);
+    transition:
+      --sea-depth var(--duration-scene) var(--ease-emphasized),
+      margin-top var(--duration-scene) var(--ease-emphasized);
   }
 
   @property --sea-depth {
@@ -328,7 +330,12 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
 
   .horizon :global(.window:hover .try) {
     background: var(--pier-hover);
-    transform: translate(-50%, -50%) scale(1.04);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .horizon :global(.window:hover .try) {
+      transform: translate(-50%, -50%) scale(1.04);
+    }
   }
 
   .horizon :global(.try[hidden]),

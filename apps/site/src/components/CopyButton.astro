@@ -61,6 +61,7 @@ const { text, label, copied, class: className } = Astro.props;
 
   .glyphs > :global(svg) {
     grid-area: 1 / 1;
+    transition: opacity var(--duration-fast) var(--ease-standard);
   }
 
   .glyphs > :global(.done),

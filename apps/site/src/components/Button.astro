@@ -48,7 +48,14 @@ const classes = ["button", variant, size, { "icon-only": iconOnly }, className];
     transition:
       background-color var(--duration-fast) var(--ease-standard),
       border-color var(--duration-fast) var(--ease-standard),
-      color var(--duration-fast) var(--ease-standard);
+      color var(--duration-fast) var(--ease-standard),
+      filter var(--duration-fast) var(--ease-standard);
+  }
+
+  /* Pressing darkens at once; letting go fades back. */
+  .button:active {
+    filter: brightness(0.92);
+    transition-duration: var(--duration-instant);
   }
 
   .button :global(svg) {
@@ -91,17 +98,9 @@ const classes = ["button", variant, size, { "icon-only": iconOnly }, className];
     color: var(--on-pier);
   }
 
-  .pier:hover {
-    background: var(--pier-hover);
-  }
-
   .outline {
     color: var(--on-night);
     border-color: var(--on-night-line);
-  }
-
-  .outline:hover {
-    border-color: var(--on-night-line-strong);
   }
 
   .accent {
@@ -109,17 +108,9 @@ const classes = ["button", variant, size, { "icon-only": iconOnly }, className];
     color: var(--on-accent);
   }
 
-  .accent:hover {
-    background: var(--accent-hover);
-  }
-
   .night {
     color: var(--on-night);
     background: transparent;
-  }
-
-  .night:hover {
-    background: var(--on-night-hover);
   }
 
   .night[aria-current="page"] {
@@ -132,9 +123,28 @@ const classes = ["button", variant, size, { "icon-only": iconOnly }, className];
     border-color: var(--line);
   }
 
-  .quiet:hover {
-    color: var(--ink);
-    border-color: var(--ink-2);
+  /* Hover only where there is a pointer, so a tap on a phone doesn't leave a button lit. */
+  @media (hover: hover) {
+    .pier:hover {
+      background: var(--pier-hover);
+    }
+
+    .outline:hover {
+      border-color: var(--on-night-line-strong);
+    }
+
+    .accent:hover {
+      background: var(--accent-hover);
+    }
+
+    .night:not([aria-current="page"]):hover {
+      background: var(--on-night-hover);
+    }
+
+    .quiet:hover {
+      color: var(--ink);
+      border-color: var(--ink-2);
+    }
   }
 
   summary.button {

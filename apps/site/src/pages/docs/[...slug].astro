@@ -110,11 +110,14 @@ const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
   .sidebar a {
     display: block;
     padding: var(--space-4) var(--space-10);
-    margin-left: -10px;
+    margin-left: calc(-1 * var(--space-10));
     border-radius: var(--radius-md);
     color: var(--ink-2);
     text-decoration: none;
     line-height: 1.35;
+    transition:
+      background-color var(--duration-fast) var(--ease-standard),
+      color var(--duration-fast) var(--ease-standard);
   }
 
   .sidebar a:hover {

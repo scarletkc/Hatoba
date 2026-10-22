@@ -136,6 +136,14 @@ const download = localePath(locale, "/download/");
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-popover);
+    transition: opacity var(--duration-fast) var(--ease-standard);
+  }
+
+  /* The menu fades in as it opens. */
+  @starting-style {
+    .menu {
+      opacity: 0;
+    }
   }
 
   .menu a {
@@ -147,10 +155,16 @@ const download = localePath(locale, "/download/");
     color: var(--ink);
     font-size: var(--text-md);
     text-decoration: none;
+    transition: background-color var(--duration-fast) var(--ease-standard);
   }
 
   .menu a:hover {
     background: var(--mist);
+  }
+
+  .menu a:active {
+    background: var(--line);
+    transition-duration: var(--duration-instant);
   }
 
   .menu a[aria-current="true"] {

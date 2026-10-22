@@ -27,6 +27,8 @@
   --link: #0d4590;
   --code-bg: #e9eff8;
   --code-fg: var(--ink);
+  /* The focus ring: a deeper sea, which stands out from every paper surface (3:1 or more). */
+  --focus-ring: #1683c4;
 
   /* Code in the docs, which Shiki's css-variables theme colours. */
   --astro-code-foreground: var(--code-fg);
@@ -125,7 +127,9 @@
   --radius-lg: 12px; /* windows, menus */
   --radius-full: 999px; /* buttons, pills */
 
-  /* Motion. Colour and opacity changes use --duration-fast; reduced motion keeps them and drops movement. */
+  /* Motion. Colour and opacity changes use --duration-fast and --duration-base, and reduced motion
+     keeps them; it drops only the durations that move things (scene, entrance). */
+  --duration-instant: 0ms; /* a press, which answers at once */
   --duration-fast: 120ms;
   --duration-base: 200ms;
   --duration-slow: 400ms;
@@ -157,12 +161,20 @@
     --line: #22325c;
     --link: #6cc4f2;
     --code-bg: #182651;
+    --focus-ring: var(--sea);
 
     --accent: var(--sea);
     --accent-hover: var(--sea-light);
     --on-accent: var(--night);
 
     color-scheme: dark;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-scene: 0ms;
+    --duration-entrance: 0ms;
   }
 }
 

@@ -60,7 +60,7 @@ describe("site styles", () => {
   });
 
   it("take text sizes, spaces and radii from tokens", () => {
-    const raw = found.filter((d) => SIZED.test(d.prop) && /(?<![\w.-])\d*\.?\d+px/.test(d.value));
+    const raw = found.filter((d) => SIZED.test(d.prop) && /(?<![\w.])-?\d*\.?\d+px/.test(d.value));
     expect(raw.map((d) => d.at)).toEqual([]);
   });
 
