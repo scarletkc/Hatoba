@@ -62,7 +62,7 @@ const STATUS_ICON: Record<StatusTone, string | null> = {
 
 /**
  * One line of state under a title: done (a green check), failed (red, with the message wrapping), or in
- * progress (a spinner). `icon` replaces the tone's own icon.
+ * progress (a spinner). `icon` replaces the tone's own icon; progress always shows the spinner.
  */
 export function StatusLine({
   tone = "neutral",

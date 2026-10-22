@@ -56,16 +56,9 @@
   gap: var(--space-1);
 }
 
+/* Its controls are the row's own flex items, so a narrow row wraps them one by one. */
 .rowTrailing {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--space-12);
-  margin-left: auto;
-}
-
-.rowSmall .rowTrailing {
-  gap: var(--space-6);
+  display: contents;
 }
 
 /* Status line: an icon and a short message under a row's title. */
