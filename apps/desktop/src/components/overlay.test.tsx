@@ -134,6 +134,39 @@ describe("Menu", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("goes to the last item on ↑ from nothing highlighted", () => {
+    const onSelect = vi.fn();
+    render(
+      <Menu
+        anchor={{ x: 0, y: 0 }}
+        onClose={() => {}}
+        entries={[
+          { label: "System", onSelect: () => onSelect("System") },
+          { kind: "separator" },
+          { label: "English", onSelect: () => onSelect("English") },
+          { label: "日本語", onSelect: () => onSelect("日本語") },
+        ]}
+      />,
+    );
+    key("ArrowUp");
+    key("Enter");
+    expect(onSelect).toHaveBeenCalledWith("日本語");
+  });
+
+  it("drops the highlight when the pointer leaves the item", () => {
+    const onSelect = vi.fn();
+    render(<Menu anchor={{ x: 0, y: 0 }} onClose={() => {}} entries={[{ label: "Item", onSelect }]} />);
+    const item = document.querySelector("[role=menuitem]")!;
+    const pointer = (type: string) => act(() => void item.dispatchEvent(new MouseEvent(type, { bubbles: true, relatedTarget: document.body })));
+    pointer("mouseover");
+    pointer("mouseout");
+    key("Enter");
+    expect(onSelect).not.toHaveBeenCalled();
+    pointer("mouseover");
+    key("Enter");
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
   /** The menu's layout size, which placement reads (jsdom lays nothing out). */
   const menuSize = (width: number, height: number) => {
     const w = vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(width);

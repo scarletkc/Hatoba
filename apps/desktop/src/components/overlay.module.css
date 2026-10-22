@@ -55,15 +55,13 @@
   transition: none;
 }
 
-.menuItem:hover:not(:disabled),
+/* One highlight, from the pointer or the arrow keys alike (Menu's focus), never one of each. */
 .menuItemFocused:not(:disabled) {
   background: var(--accent);
   color: #ffffff;
 }
 
-.menuItem:hover:not(:disabled) .menuHint,
 .menuItemFocused:not(:disabled) .menuHint,
-.menuItem:hover:not(:disabled) .menuIcon,
 .menuItemFocused:not(:disabled) .menuIcon {
   color: #ffffff;
 }
@@ -115,6 +113,13 @@
   font-size: var(--text-xs);
   font-weight: 600;
   color: var(--fg2);
+}
+
+/* Without a check column, the text sits as far from the highlight's left edge as from its right. */
+.menuNoCheck .menuItem,
+.menuNoCheck .menuHeader,
+.menuNoCheck .menuChoice {
+  padding-left: 8px;
 }
 
 /* A row of options under a label (MenuChoice), lined up with the item labels. */

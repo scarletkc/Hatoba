@@ -191,7 +191,8 @@ export function Menu({
         e.preventDefault();
         setFocus((f) => {
           const idx = items.indexOf(f);
-          const next = e.key === "ArrowDown" ? idx + 1 : idx - 1;
+          // From nothing highlighted, ↓ goes to the first item and ↑ to the last.
+          const next = idx < 0 ? (e.key === "ArrowDown" ? 0 : -1) : e.key === "ArrowDown" ? idx + 1 : idx - 1;
           return items[(next + items.length) % items.length] ?? -1;
         });
       } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && entries[focus]?.kind === "choice") {
@@ -220,9 +221,12 @@ export function Menu({
     };
   }, [entries, focus, items, onClose, anchor.trigger]);
 
+  // As in a native menu, the pointer leaving an entry takes its highlight with it.
+  const leave = (i: number) => () => setFocus((f) => (f === i ? -1 : f));
+
   if (locked) return null;
   return createPortal(
-    <div ref={ref} role="menu" className={cx(o.menu, o.popIn)} style={{ ...pos, minWidth }}>
+    <div ref={ref} role="menu" className={cx(o.menu, o.popIn, !hasCheck && o.menuNoCheck)} style={{ ...pos, minWidth }}>
       {entries.map((e, i) => {
         if (e.kind === "separator") return <div key={i} className={o.menuSeparator} />;
         if (e.kind === "header")
@@ -239,6 +243,7 @@ export function Menu({
               aria-label={e.label}
               className={cx(o.menuChoice, focus === i && o.menuChoiceFocused)}
               onMouseEnter={() => setFocus(i)}
+              onMouseLeave={leave(i)}
             >
               <div className={o.menuChoiceLabel}>{e.label}</div>
               <div className={o.menuChoiceOptions}>
@@ -266,6 +271,7 @@ export function Menu({
             disabled={e.disabled}
             className={cx(o.menuItem, focus === i && o.menuItemFocused, e.danger && o.menuItemDanger)}
             onMouseEnter={() => setFocus(i)}
+            onMouseLeave={leave(i)}
             onClick={() => {
               if (!e.keepOpen) onClose();
               e.onSelect();
