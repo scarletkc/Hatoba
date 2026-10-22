@@ -37,12 +37,9 @@ type Theme = "light" | "dark";
 
 const params = new URLSearchParams(location.search);
 
-function setTheme(appearance: Theme) {
-  applyPrefs({ ...useApp.getState().prefs, appearance });
-}
-
-function setDensity(density: "regular" | "compact") {
-  applyPrefs({ ...useApp.getState().prefs, density });
+/** Shows the document in this theme and density, without saving either to the app's preferences. */
+function show(appearance: Theme, density: "regular" | "compact") {
+  applyPrefs({ ...useApp.getState().prefs, appearance, density });
 }
 
 /**
@@ -55,12 +52,15 @@ export function Gallery() {
   const [density, setDensityState] = useState<"regular" | "compact">(() =>
     params.get("density") === "compact" ? "compact" : "regular",
   );
-  useEffect(() => {
-    if (mode !== "both") setTheme(mode);
-  }, [mode]);
-  useEffect(() => setDensity(density), [density]);
+  // Side by side, each frame shows its own theme; the toolbar around them stays light.
+  useEffect(() => show(mode === "both" ? "light" : mode, density), [mode, density]);
 
-  if (embedded) return <Specimens />;
+  if (embedded)
+    return (
+      <div className={g.embedded}>
+        <Specimens />
+      </div>
+    );
   return (
     <div className={g.page}>
       <div className={g.toolbar}>

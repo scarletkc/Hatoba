@@ -29,6 +29,12 @@
   overflow-y: auto;
 }
 
+/* One frame of Side by side: the page itself doesn't scroll (base.css), so the frame does. */
+.embedded {
+  height: 100vh;
+  overflow-y: auto;
+}
+
 .split {
   flex: 1;
   min-height: 0;
