@@ -27,8 +27,3 @@
   color: var(--red);
   line-height: 1.45;
 }
-
-/* Kept in a centered dialog, which an appearing line would shift up as it grows. */
-.errorSlot {
-  min-height: 1.45em;
-}
