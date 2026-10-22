@@ -69,6 +69,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       type={type}
       disabled={disabled || busy}
+      aria-busy={busy || undefined}
       className={cx(
         s.button,
         variant === "primary" && s.primary,

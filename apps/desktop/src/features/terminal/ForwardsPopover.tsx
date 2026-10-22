@@ -34,41 +34,37 @@ export function ForwardsPopover({
   const ref = useRef<HTMLDivElement>(null);
   const saved = useHostForwardRules(hostId);
   const conn = useHostConnection(hostId);
-  const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
+  // What each forward is busy with, so a stop that clears it from the connection first doesn't read as a start.
+  const [busy, setBusy] = useState<Readonly<Record<string, "start" | "stop">>>({});
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   // Re-measured as rows appear.
   const { pos, locked } = useStatusPopover(ref, anchor, onClose, "[data-forwards-trigger]", [saved, conn, errors]);
 
-  const setBusyFor = (id: string, on: boolean) =>
-    setBusy((b) => {
-      const next = new Set(b);
-      if (on) next.add(id);
-      else next.delete(id);
-      return next;
-    });
+  const setBusyFor = (id: string, action: "start" | "stop" | null) =>
+    setBusy(({ [id]: _old, ...rest }) => (action === null ? rest : { ...rest, [id]: action }));
   const setError = (id: string, message: string | null) =>
     setErrors(({ [id]: _old, ...rest }) => (message === null ? rest : { ...rest, [id]: message }));
 
   const start = async (f: ForwardView) => {
-    setBusyFor(f.id, true);
+    setBusyFor(f.id, "start");
     setError(f.id, null);
     try {
       await startForward(hostId, f.id);
     } catch (err) {
       setError(f.id, errorMessage(t, err));
     } finally {
-      setBusyFor(f.id, false);
+      setBusyFor(f.id, null);
     }
   };
 
   const stop = async (f: ForwardView) => {
-    setBusyFor(f.id, true);
+    setBusyFor(f.id, "stop");
     try {
       await stopForward(hostId, f.id);
     } catch (err) {
       toast(errorMessage(t, err), "error");
     } finally {
-      setBusyFor(f.id, false);
+      setBusyFor(f.id, null);
     }
   };
 
@@ -96,7 +92,7 @@ export function ForwardsPopover({
             forward={f}
             running={running}
             error={error}
-            busy={busy.has(f.id)}
+            busy={busy[f.id] ?? null}
             onStart={() => void start(f)}
             onStop={() => void stop(f)}
             onCopy={(address) => void copy(address)}
@@ -134,7 +130,8 @@ function ForwardRow({
   running: RunningForwardView | null;
   /** Why it failed to start. */
   error: string | null;
-  busy: boolean;
+  /** What the row is waiting on, if anything. */
+  busy: "start" | "stop" | null;
   onStart(): void;
   onStop(): void;
   onCopy(address: string): void;
@@ -142,7 +139,7 @@ function ForwardRow({
   const t = useT();
   const running = active !== null;
   const failed = error !== null;
-  const starting = busy && !running;
+  const starting = busy === "start" && !running;
   const kind = active?.kind ?? f.kind;
   // A remote forward listens on the server: nothing here connects to it, so it has nothing to copy.
   const remote = kind === "remote";
@@ -171,7 +168,7 @@ function ForwardRow({
         <span className={s.dest}>{kind === "dynamic" ? t("terminal.fwd.socks") : `→ ${dest}`}</span>
         {failed && <span className={s.error}>{error}</span>}
       </div>
-      <button type="button" className={s.action} disabled={busy} onClick={running ? onStop : onStart}>
+      <button type="button" className={s.action} disabled={busy !== null} onClick={running ? onStop : onStart}>
         {running ? t("terminal.fwd.stop") : failed ? t("btn.retry") : t("terminal.fwd.start")}
       </button>
     </div>
