@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
-import { useVaultData } from "@/app/data";
+import { useAllHosts } from "@/app/data";
 import { useApp } from "@/app/store";
-import { useTabs, type SessionTab } from "@/app/tabs";
+import { tabHostId, useTabs, type SessionTab } from "@/app/tabs";
 import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
 import { reconnectSession } from "@/features/terminal/connect";
 import { shellName } from "@/features/terminal/localShells";
 import { useT } from "@/i18n";
-import type { HostView } from "@/ipc/types";
+import type { AnyHostView } from "@/ipc/types";
 import { shortcutLabel } from "@/lib/platform";
 import { cx } from "@/lib/cx";
 import {
@@ -51,8 +51,8 @@ export function AiPanel({ slotId }: { slotId: string }) {
   const slot = stored ?? blank;
   const catalog = useAi((st) => st.catalog);
   const tab = useTabs((st) => (slotId === HOME_SLOT ? undefined : st.tabs.find((x) => x.id === slotId)));
-  const hosts = useVaultData((st) => st.hosts);
-  const tabHost = tab ? hosts.find((h) => h.id === tab.hostId) : undefined;
+  const hosts = useAllHosts();
+  const tabHost = tab ? hosts.find((h) => h.id === tabHostId(tab)) : undefined;
   // §7.5: a local tab is this computer, named so wherever a tab's host is named.
   const local = tab?.local ? { name: t("terminal.local.thisComputer"), target: shellName(tab.local, t), local: true, dialect: dialectOf(tab.local.kind) } : null;
   const [view, setView] = useState<"chat" | "history">("chat");
@@ -233,7 +233,7 @@ function Notice({ icon, tone, children, action }: { icon: ReactNode; tone?: "war
  * The tab's state: no terminal (AI-09), disconnected (AI-08), a conversation from another host or
  * quick-connect target, or the home tab's conversation to continue here (AI-09).
  */
-function Notices({ slotId, slot, tab, tabHost, hosts }: { slotId: string; slot: Slot; tab: SessionTab | undefined; tabHost: HostView | undefined; hosts: HostView[] }) {
+function Notices({ slotId, slot, tab, tabHost, hosts }: { slotId: string; slot: Slot; tab: SessionTab | undefined; tabHost: AnyHostView | undefined; hosts: AnyHostView[] }) {
   const t = useT();
   const device = useApp((st) => st.info.device_name);
   // The title of the home tab's conversation while this tab offers to continue it (AI-09).
@@ -300,7 +300,7 @@ function Notices({ slotId, slot, tab, tabHost, hosts }: { slotId: string; slot: 
   return items.length > 0 ? <div className={s.notices}>{items}</div> : null;
 }
 
-function EmptyConversation({ tab, host }: { tab: SessionTab | undefined; host: HostView | undefined }) {
+function EmptyConversation({ tab, host }: { tab: SessionTab | undefined; host: AnyHostView | undefined }) {
   const t = useT();
   return (
     <div className={s.empty}>

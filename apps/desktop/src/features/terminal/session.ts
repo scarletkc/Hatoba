@@ -3,11 +3,11 @@ import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
-import { hostById, useVaultData } from "@/app/data";
+import { hostById, telnetHostById, useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { isAppShortcut } from "@/app/shortcuts";
 import { useApp } from "@/app/store";
-import { useTabs, type LocalShell, type TabSource, type TabStatus } from "@/app/tabs";
+import { useTabs, type LocalShell, type TabSource, type TabStatus, type TelnetSource } from "@/app/tabs";
 import { toast } from "@/components/overlay";
 import { useRecentTargets } from "@/features/hosts/recent";
 import { useTransfers } from "@/features/sftp/transfers";
@@ -59,9 +59,11 @@ export function ensureSession(tabId: string): LiveSession | null {
   if (!tab) return null;
   const source: TabSource = tab.local
     ? { hostId: null, target: null, local: tab.local }
-    : tab.target !== null
-      ? { hostId: null, target: tab.target }
-      : { hostId: tab.hostId, target: null };
+    : tab.telnet
+      ? { hostId: null, target: null, telnet: tab.telnet }
+      : tab.target !== null
+        ? { hostId: null, target: tab.target }
+        : { hostId: tab.hostId, target: null };
   const session = new LiveSession(tabId, source);
   byTab.set(tabId, session);
   return session;
@@ -87,7 +89,7 @@ export function routeStateEvent(ev: SessionStateEvent) {
 
 useTermSettings.subscribe(() => byTab.forEach((s) => s.applySettings()));
 
-/** How a tab's input, size and end reach its backend session: an SSH shell, or a local PTY (§7.5). */
+/** How a tab's input, size and end reach its backend session: an SSH shell, a local PTY (§7.5) or a Telnet connection (§7.6). */
 interface SessionIo {
   write(sid: string, data: string): Promise<void>;
   writeBytes(sid: string, data: number[]): Promise<void>;
@@ -107,6 +109,13 @@ const LOCAL_IO: SessionIo = {
   writeBytes: (sid, data) => api.local_write_bytes(sid, data),
   resize: (sid, cols, rows) => api.local_resize(sid, cols, rows),
   close: (sid) => api.local_close(sid),
+};
+
+const TELNET_IO: SessionIo = {
+  write: (sid, data) => api.telnet_write(sid, data),
+  writeBytes: (sid, data) => api.telnet_write_bytes(sid, data),
+  resize: (sid, cols, rows) => api.telnet_resize(sid, cols, rows),
+  close: (sid) => api.telnet_close(sid),
 };
 
 export function needsPassphrase(err: AppError): boolean {
@@ -188,8 +197,13 @@ export class LiveSession {
     return this.source.local ?? null;
   }
 
+  /** What a Telnet tab connects to (§7.6); null for the other tabs. */
+  get telnet(): TelnetSource | null {
+    return this.source.telnet ?? null;
+  }
+
   private get io(): SessionIo {
-    return this.source.local ? LOCAL_IO : SSH_IO;
+    return this.source.local ? LOCAL_IO : this.source.telnet ? TELNET_IO : SSH_IO;
   }
 
   /** A quick connection whose target is now a saved host connects as that host from here on. */
@@ -326,6 +340,10 @@ export class LiveSession {
       await this.startLocal(gen, this.source.local);
       return;
     }
+    if (this.source.telnet) {
+      await this.startTelnet(gen, this.source.telnet);
+      return;
+    }
 
     let passphrase = creds?.passphrase ?? null;
     let password = creds?.password ?? null;
@@ -395,6 +413,26 @@ export class LiveSession {
     }
   }
 
+  /** TELNET-02: connects the tab to its Telnet host, or a quick-connect target, with the terminal's size. */
+  private async startTelnet(gen: number, telnet: TelnetSource) {
+    const sentSize = { cols: this.term.cols, rows: this.term.rows };
+    const onFrame = (frame: Uint8Array) => this.onFrame(frame, gen);
+    try {
+      const sid =
+        telnet.hostId !== null
+          ? await api.telnet_open(telnet.hostId, sentSize, onFrame)
+          : await api.telnet_open_target(telnet.address, telnet.port, sentSize, onFrame);
+      if (gen !== this.gen || this.disposed) {
+        void api.telnet_close(sid).catch(() => {});
+        return;
+      }
+      this.onConnected(sid, sentSize);
+    } catch (e) {
+      if (gen !== this.gen || this.disposed) return;
+      this.fail(toAppError(e));
+    }
+  }
+
   private onConnected(sid: string, sentSize: { cols: number; rows: number }) {
     this.releaseSession();
     this.sessionId = sid;
@@ -417,7 +455,7 @@ export class LiveSession {
   private fail(err: AppError) {
     patchInfo(this.tabId, { error: err, errorAt: Date.now() });
     const atLineStart = this.term.buffer.active.cursorX === 0;
-    this.term.write(`${atLineStart ? "" : "\r\n"}${this.local?.name ?? "ssh"}: ${err.detail}\r\n\x1b[?25l`);
+    this.term.write(`${atLineStart ? "" : "\r\n"}${this.local?.name ?? (this.telnet ? "telnet" : "ssh")}: ${err.detail}\r\n\x1b[?25l`);
     this.setStatus("failed");
   }
 
@@ -497,7 +535,10 @@ export class LiveSession {
   /** Reconnect in this tab (SSH-07: always user-initiated, never an automatic loop). */
   async reconnect(collect: () => Promise<Credentials | null>) {
     if (this.disposed || this.isConnecting) return;
-    if (!this.local && !this.target && !hostById(this.hostId)) {
+    const missing = this.telnet
+      ? this.telnet.hostId !== null && !telnetHostById(this.telnet.hostId)
+      : !this.local && !this.target && !hostById(this.hostId);
+    if (missing) {
       toast(t("terminal.hostMissing"), "error");
       return;
     }

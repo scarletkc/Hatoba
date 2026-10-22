@@ -137,6 +137,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             telnet_cmd::telnet_host_set_favorite,
             telnet_cmd::telnet_host_copy_password,
             telnet_cmd::telnet_open,
+            telnet_cmd::telnet_open_target,
             telnet_cmd::telnet_write,
             telnet_cmd::telnet_write_bytes,
             telnet_cmd::telnet_resize,

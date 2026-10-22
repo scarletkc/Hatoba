@@ -226,6 +226,11 @@ export const commands = {
 	 *  output streams on `channel` until the connection ends or `telnet_close`.
 	 */
 	telnetOpen: (hostId: string, options: LocalOpenOptions, channel: Channel<TermFrame>) => __TAURI_INVOKE<string>("telnet_open", { hostId, options, channel }),
+	/**
+	 *  Quick connect (TELNET-05): connects a tab to `address:port`, which is not saved as a host,
+	 *  through this device's default proxy. The user logs in by hand.
+	 */
+	telnetOpenTarget: (address: string, port: number, options: LocalOpenOptions, channel: Channel<TermFrame>) => __TAURI_INVOKE<string>("telnet_open_target", { address, port, options, channel }),
 	telnetWrite: (sessionId: string, data: string) => __TAURI_INVOKE<null>("telnet_write", { sessionId, data }),
 	/**  Writes bytes as they are, for xterm's binary mouse reports (see `ssh_write_bytes`). */
 	telnetWriteBytes: (sessionId: string, data: number[]) => __TAURI_INVOKE<null>("telnet_write_bytes", { sessionId, data }),

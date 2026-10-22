@@ -102,6 +102,13 @@
   flex: none;
 }
 
+/* TELNET-01: marks a Telnet host's row. */
+.protocol {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--fg2);
+}
+
 .addrCell {
   display: flex;
   align-items: center;

@@ -147,10 +147,7 @@ pub fn telnet_host_save(
 pub fn telnet_host_delete(app: AppHandle, state: State<'_, AppState>, id: String) -> AppResult<()> {
     state.with_unlocked(|v| Ok(v.delete_telnet_host(&id)?))?;
     sync::local_change(&app);
-    // Its tabs close with it.
-    for live in state.telnet.take_host(&id) {
-        live.close();
-    }
+    // Its open tabs stay connected, as an SSH host's do.
     Ok(())
 }
 
@@ -246,32 +243,92 @@ pub async fn telnet_open(
         let proxy = crate::ssh::resolve_proxy(v, &host.proxy)?;
         Ok((host, proxy))
     })?;
-    let stream = hatoba_ssh::dial(proxy.as_ref(), &host.address, host.port, CONNECT_TIMEOUT)
-        .await
-        .map_err(AppError::from)?;
-    let cols = u16::try_from(options.cols.clamp(10, 1000)).unwrap_or(80);
-    let rows = u16::try_from(options.rows.clamp(2, 500)).unwrap_or(24);
     // TELNET-03: the saved user name and password are typed at the login prompts.
     let login = AutoLogin::new(
         Some(host.username.clone()),
         Some(host.password.as_str().to_owned()),
     );
+    let target = Target {
+        host_id: Some(host_id),
+        address: &host.address,
+        port: host.port,
+        proxy,
+    };
+    open(&app, &state, target, login, &options, channel).await
+}
+
+/// Quick connect (TELNET-05): connects a tab to `address:port`, which is not saved as a host,
+/// through this device's default proxy. The user logs in by hand.
+#[tauri::command]
+#[specta::specta]
+pub async fn telnet_open_target(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    address: String,
+    port: u16,
+    options: LocalOpenOptions,
+    channel: Channel<TermFrame>,
+) -> AppResult<String> {
+    let address = address.trim();
+    if address.is_empty() || port == 0 {
+        return Err(AppError::invalid("address", "address is required"));
+    }
+    let proxy = state.with_unlocked(|v| {
+        crate::ssh::resolve_proxy(v, &hatoba_core::model::HostProxy::DeviceDefault)
+    })?;
+    let target = Target {
+        host_id: None,
+        address,
+        port,
+        proxy,
+    };
+    open(&app, &state, target, AutoLogin::new(None, None), &options, channel).await
+}
+
+/// Where a Telnet tab connects.
+struct Target<'a> {
+    host_id: Option<String>,
+    address: &'a str,
+    port: u16,
+    proxy: Option<hatoba_ssh::ProxyConfig>,
+}
+
+async fn open(
+    app: &AppHandle,
+    state: &AppState,
+    target: Target<'_>,
+    login: AutoLogin,
+    options: &LocalOpenOptions,
+    channel: Channel<TermFrame>,
+) -> AppResult<String> {
+    let stream = hatoba_ssh::dial(
+        target.proxy.as_ref(),
+        target.address,
+        target.port,
+        CONNECT_TIMEOUT,
+    )
+    .await
+    .map_err(AppError::from)?;
+    let cols = u16::try_from(options.cols.clamp(10, 1000)).unwrap_or(80);
+    let rows = u16::try_from(options.rows.clamp(2, 500)).unwrap_or(24);
     let (session, events) = TelnetSession::start(stream, cols, rows, login);
     let session_id = uuid::Uuid::now_v7().to_string();
-    let live = Arc::new(TelnetLive::new(session, host_id.clone()));
+    let live = Arc::new(TelnetLive::new(session, target.host_id.clone()));
     state.telnet.insert(session_id.clone(), live.clone());
-    if let Err(e) = state.with_unlocked(|v| Ok(v.set_last_connected(&host_id, now_ms())?)) {
+    if let Some(host_id) = &target.host_id
+        && let Err(e) = state.with_unlocked(|v| Ok(v.set_last_connected(host_id, now_ms())?))
+    {
         tracing::debug!("last-connected time not recorded: {}", e.detail);
     }
     tracing::info!("telnet connected");
     emit_state(
-        &app,
+        app,
         &session_id,
-        Some(&host_id),
+        target.host_id.as_deref(),
         SessionState::Connected,
         |_| {},
     );
-    pump(app, session_id.clone(), live, events, channel);
+    pump(app.clone(), session_id.clone(), live, events, channel);
     Ok(session_id)
 }
 
@@ -300,7 +357,7 @@ fn pump(
                     emit_state(
                         &app,
                         &session_id,
-                        Some(&live.host_id),
+                        live.host_id.as_deref(),
                         SessionState::Disconnected,
                         |e| {
                             e.error = error.map(|m| AppError::ssh(SshErrorKind::Disconnected, m));

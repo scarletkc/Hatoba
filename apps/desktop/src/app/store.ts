@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { api } from "@/ipc/api";
 import type { AppInfo, LocalPrefs, QuickTarget, SyncStatus, VaultLockedEvent, VaultStatus } from "@/ipc/types";
 import { detectLocale, setLocale, type Locale } from "@/i18n";
+import type { HostDraft } from "@/features/hosts/ProtocolRow";
 
 export type HostFilter =
   | { kind: "all" }
@@ -22,7 +23,11 @@ export type Page =
       fromDashboard?: boolean;
       /** A new host starts from this quick-connect target (HOST-12). */
       prefill?: QuickTarget;
+      /** A new host starts from what the Telnet editor's form had when its protocol was switched. */
+      draft?: HostDraft;
     }
+  /** A Telnet host's editor (TELNET-01); a new one may start from the SSH editor's form. */
+  | { kind: "telnet-edit"; hostId: string | null; groupId: string | null; back: HostFilter; draft?: HostDraft }
   | { kind: "keys" }
   | { kind: "sync" }
   /** Every host's port forwards (FWD-05), with the section of `hostId` in view. */

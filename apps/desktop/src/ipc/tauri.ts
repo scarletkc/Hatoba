@@ -107,6 +107,26 @@ export function createTauriApi(): HatobaApi {
     local_write_bytes: (sessionId, data) => done(commands.localWriteBytes(sessionId, data)),
     local_resize: (sessionId, cols, rows) => done(commands.localResize(sessionId, cols, rows)),
     local_close: (sessionId) => done(commands.localClose(sessionId)),
+    telnet_hosts_list: () => commands.telnetHostsList(),
+    telnet_host_save: (input) => commands.telnetHostSave(input),
+    telnet_host_delete: (id) => done(commands.telnetHostDelete(id)),
+    telnet_host_duplicate: (id) => commands.telnetHostDuplicate(id),
+    telnet_host_set_favorite: (id, favorite) => done(commands.telnetHostSetFavorite(id, favorite)),
+    telnet_host_copy_password: (id) => done(commands.telnetHostCopyPassword(id)),
+    telnet_open: (hostId, options, onFrame) => {
+      const channel = new Channel<ArrayBuffer | number[]>();
+      channel.onmessage = (msg) => onFrame(msg instanceof ArrayBuffer ? new Uint8Array(msg) : Uint8Array.from(msg));
+      return commands.telnetOpen(hostId, options, channel);
+    },
+    telnet_open_target: (address, port, options, onFrame) => {
+      const channel = new Channel<ArrayBuffer | number[]>();
+      channel.onmessage = (msg) => onFrame(msg instanceof ArrayBuffer ? new Uint8Array(msg) : Uint8Array.from(msg));
+      return commands.telnetOpenTarget(address, port, options, channel);
+    },
+    telnet_write: (sessionId, data) => done(commands.telnetWrite(sessionId, data)),
+    telnet_write_bytes: (sessionId, data) => done(commands.telnetWriteBytes(sessionId, data)),
+    telnet_resize: (sessionId, cols, rows) => done(commands.telnetResize(sessionId, cols, rows)),
+    telnet_close: (sessionId) => done(commands.telnetClose(sessionId)),
     ssh_stats_start: (sessionId, onEvent) => {
       const channel = new Channel<StatsEvent>();
       channel.onmessage = onEvent;

@@ -12,13 +12,13 @@ use crate::error::{AppError, AppResult};
 /// A Telnet tab's connection.
 pub struct TelnetLive {
     pub session: Arc<TelnetSession>,
-    /// The Telnet host it connects to.
-    pub host_id: String,
+    /// The Telnet host it connects to; `None` for a quick connection (TELNET-05).
+    pub host_id: Option<String>,
     closed: AtomicBool,
 }
 
 impl TelnetLive {
-    pub fn new(session: Arc<TelnetSession>, host_id: String) -> Self {
+    pub fn new(session: Arc<TelnetSession>, host_id: Option<String>) -> Self {
         Self {
             session,
             host_id,
@@ -74,16 +74,5 @@ impl TelnetManager {
     /// SEC-03 "lock disconnects sessions", and quitting: takes every session out.
     pub fn take_all(&self) -> Vec<Arc<TelnetLive>> {
         lock(&self.sessions).drain().map(|(_, live)| live).collect()
-    }
-
-    /// The sessions of the Telnet host `host_id`, so deleting it closes them.
-    pub fn take_host(&self, host_id: &str) -> Vec<Arc<TelnetLive>> {
-        let mut sessions = lock(&self.sessions);
-        let ids: Vec<String> = sessions
-            .iter()
-            .filter(|(_, live)| live.host_id == host_id)
-            .map(|(id, _)| id.clone())
-            .collect();
-        ids.iter().filter_map(|id| sessions.remove(id)).collect()
     }
 }

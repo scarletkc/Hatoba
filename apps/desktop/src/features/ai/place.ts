@@ -1,7 +1,7 @@
 import type { TabSource } from "@/app/tabs";
 import { formatTarget, sameTarget, savedHostFor } from "@/features/hosts/quickConnect";
 import type { MessageKey, Params } from "@/i18n";
-import type { AiConversationView, HostView, QuickTarget } from "@/ipc/types";
+import { isTelnetHost, type AiConversationView, type AnyHostView, type HostView, type QuickTarget } from "@/ipc/types";
 
 type Tr = (key: MessageKey, params?: Params) => string;
 type Recorded = Pick<AiConversationView, "host_id" | "quick_target"> & Partial<Pick<AiConversationView, "origin" | "local">>;
@@ -34,13 +34,13 @@ export function recordedTarget(t: QuickTarget): QuickTarget {
  * (HOST-12), a computer's local terminal (§7.5), or nowhere, as a home tab chat.
  */
 export type ConversationPlace =
-  | { kind: "host"; host: HostView }
+  | { kind: "host"; host: AnyHostView }
   | { kind: "deleted" }
   | { kind: "target"; target: QuickTarget }
   | { kind: "local"; device: string }
   | { kind: "none" };
 
-export function conversationPlace(c: Recorded, hosts: HostView[]): ConversationPlace {
+export function conversationPlace(c: Recorded, hosts: AnyHostView[]): ConversationPlace {
   if (c.host_id) {
     const host = hosts.find((h) => h.id === c.host_id);
     return host ? { kind: "host", host } : { kind: "deleted" };
@@ -73,14 +73,21 @@ export function placeName(t: Tr, place: ConversationPlace, device = ""): string 
  */
 export function connectionFor(
   c: Recorded,
-  hosts: HostView[],
+  hosts: AnyHostView[],
   device = "",
 ): { name: string; source: TabSource | "local" } | null {
   const place = conversationPlace(c, hosts);
-  if (place.kind === "host") return { name: place.host.name, source: { hostId: place.host.id, target: null } };
+  if (place.kind === "host")
+    return {
+      name: place.host.name,
+      source: isTelnetHost(place.host) ? { hostId: null, target: null, telnet: { hostId: place.host.id } } : { hostId: place.host.id, target: null },
+    };
   if (place.kind === "local") return place.device === device ? { name: localName(device), source: "local" } : null;
   if (place.kind !== "target") return null;
-  const saved = savedHostFor(hosts, place.target);
+  const saved = savedHostFor(
+    hosts.filter((h): h is HostView => !isTelnetHost(h)),
+    place.target,
+  );
   return saved ? { name: saved.name, source: { hostId: saved.id, target: null } } : { name: formatTarget(place.target), source: { hostId: null, target: place.target } };
 }
 
@@ -90,6 +97,8 @@ export function connectionFor(
  */
 export function moves(c: Recorded, tab: TabSource, device = ""): boolean {
   if (tab.local) return c.host_id !== null || c.quick_target !== null || c.local !== device;
+  // TELNET-04: a saved Telnet host is a host; a Telnet quick connection is no place, so the conversation stays.
+  if (tab.telnet) return tab.telnet.hostId !== null && c.host_id !== tab.telnet.hostId;
   return tab.hostId !== null ? c.host_id !== tab.hostId : c.host_id !== null || !c.quick_target || !sameTarget(c.quick_target, tab.target);
 }
 
@@ -104,16 +113,17 @@ export function moves(c: Recorded, tab: TabSource, device = ""): boolean {
 export function movedFrom(
   c: Recorded,
   tab: TabSource,
-  hosts: HostView[],
+  hosts: AnyHostView[],
   device = "",
 ): { from: string; to: string } | null {
   if (!moves(c, tab, device)) return null;
   const old = hosts.find((h) => h.id === c.host_id);
-  const next = hosts.find((h) => h.id === tab.hostId);
+  const nextId = tab.hostId ?? tab.telnet?.hostId ?? null;
+  const next = hosts.find((h) => h.id === nextId);
   let from: string | null;
-  if (c.host_id) from = tab.target && old && sameTarget(old, tab.target) ? null : (old?.name ?? "");
-  else if (c.quick_target) from = next && sameTarget(next, c.quick_target) ? null : formatTarget(c.quick_target);
+  if (c.host_id) from = tab.target && old && !isTelnetHost(old) && sameTarget(old, tab.target) ? null : (old?.name ?? "");
+  else if (c.quick_target) from = next && !isTelnetHost(next) && sameTarget(next, c.quick_target) ? null : formatTarget(c.quick_target);
   else from = c.local ? localName(c.local) : (c.origin ?? null);
-  const to = tab.local ? localName(device) : tab.hostId !== null ? next?.name : formatTarget(recordedTarget(tab.target));
+  const to = tab.local ? localName(device) : nextId !== null ? next?.name : tab.target ? formatTarget(recordedTarget(tab.target)) : undefined;
   return from !== null && to !== undefined && from !== to ? { from, to } : null;
 }

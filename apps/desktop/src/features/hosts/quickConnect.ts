@@ -1,4 +1,4 @@
-import type { HostView, QuickTarget } from "@/ipc/types";
+import type { HostView, QuickTarget, TelnetHostView } from "@/ipc/types";
 
 /** A destination typed into the hosts search field; `username` is null when none was given. */
 export interface TypedTarget {
@@ -130,6 +130,50 @@ export function parseQuickConnect(input: string): QuickParse | null {
   if (problem) return { ok: false, problem, search };
   const target = { address: dest.address, port, username: username || null };
   return forwarding ? { ok: true, target, search, notice: "forwarding" } : { ok: true, target, search };
+}
+
+/** A Telnet target typed into the hosts search field (TELNET-05). */
+export interface TelnetTarget {
+  address: string;
+  port: number;
+}
+
+/**
+ * Reads `telnet host [port]` and `telnet://host[:port]` (TELNET-05), as the `telnet` command takes
+ * them, with an IPv6 address bare or in brackets. Anything else returns null: the input is then read
+ * as an ssh target or a search. `search` filters the saved hosts, as for HOST-12.
+ */
+export function parseTelnet(input: string): { target: TelnetTarget; search: string } | null {
+  const text = input.trim();
+  let address: string;
+  let portText: string | undefined;
+  const url = /^telnet:\/\/([^/@\s]+)\/?$/i.exec(text);
+  if (url) {
+    const dest = parseDestination(url[1]);
+    if (!dest || dest.username !== null) return null;
+    address = dest.address;
+    portText = dest.port === null ? undefined : String(dest.port);
+  } else {
+    const words = text.split(/\s+/);
+    if (words[0]?.toLowerCase() !== "telnet" || words.length < 2 || words.length > 3) return null;
+    address = words[1].replace(/^\[(.*)\]$/, "$1");
+    portText = words[2];
+    if (!(address.includes(":") ? IPV6 : HOSTNAME).test(address)) return null;
+  }
+  const port = portText === undefined ? 23 : parsePort(portText);
+  if (Number.isNaN(port)) return null;
+  return { target: { address, port }, search: address };
+}
+
+/** The saved Telnet host at a typed Telnet target's address and port, so it logs in as saved. */
+export function savedTelnetHostFor(hosts: TelnetHostView[], target: TelnetTarget): TelnetHostView | undefined {
+  const address = bare(target.address);
+  return hosts.find((h) => bare(h.address) === address && h.port === target.port);
+}
+
+/** `host:port` of a Telnet target, with an IPv6 address in brackets. */
+export function formatTelnetTarget(t: TelnetTarget): string {
+  return `${bracketHost(t.address)}:${t.port}`;
 }
 
 /** The address as it goes before `:port`: an IPv6 address in brackets. */

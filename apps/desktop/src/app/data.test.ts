@@ -11,6 +11,7 @@ vi.mock("@/ipc/api", async (importActual) => ({
     tags_list: async () => [],
     keys_list: async () => [],
     proxies_list: async () => [],
+    telnet_hosts_list: async () => [],
   },
 }));
 

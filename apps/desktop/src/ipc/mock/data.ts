@@ -17,6 +17,7 @@ import type {
   ServerStatsView,
   SettingsView,
   SyncStatus,
+  TelnetHostView,
 } from "../types";
 
 /** Sample data from the design file (`Hatoba.dc.html`), used when running in a plain browser. */
@@ -146,6 +147,44 @@ export const HOSTS: HostView[] = [
     auth_kind: "password",
     has_password: true,
   }),
+];
+
+/** Telnet hosts (TELNET-01): a switch whose login Hatoba types, and a console server it does not. */
+export const TELNET_HOSTS: TelnetHostView[] = [
+  {
+    id: "t-core-sw",
+    name: "core-sw1",
+    address: "10.0.0.2",
+    port: 23,
+    username: "admin",
+    has_password: true,
+    group_id: "g-infra",
+    tags: ["network"],
+    favorite: false,
+    proxy_mode: "device_default",
+    proxy_id: null,
+    note: zh ? "机房核心交换机，只开了 Telnet。" : "Core switch in the rack; Telnet only.",
+    ai_notes: "",
+    updated_at: ago(3 * DAY),
+    last_connected_at: ago(3 * DAY),
+  },
+  {
+    id: "t-console",
+    name: "console-srv",
+    address: "10.0.0.9",
+    port: 2001,
+    username: "",
+    has_password: false,
+    group_id: "g-infra",
+    tags: ["network"],
+    favorite: false,
+    proxy_mode: "device_default",
+    proxy_id: null,
+    note: "",
+    ai_notes: "",
+    updated_at: ago(20 * DAY),
+    last_connected_at: null,
+  },
 ];
 
 /** Saved proxies (SSH-13); `host_ids` is filled in from the hosts. */

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
-import { useTabs } from "@/app/tabs";
+import { tabHostId, useTabs } from "@/app/tabs";
 import { controlStyles, DisclosureCaret, Icon } from "@/components/controls";
 import { getSession } from "@/features/terminal/session";
 import { useT } from "@/i18n";
@@ -80,7 +80,8 @@ export function useTerminalSelection(slotId: string) {
 /** The tab host's display name, or a local tab's computer (§7.5), as the selection block carries it. */
 function useTabHostName(slotId: string): string {
   const tab = useTabs((st) => st.tabs.find((x) => x.id === slotId));
-  const name = useVaultData((st) => st.hosts.find((h) => h.id === tab?.hostId)?.name);
+  const hostId = tab ? tabHostId(tab) : null;
+  const name = useVaultData((st) => [...st.hosts, ...st.telnetHosts].find((h) => h.id === hostId)?.name);
   const device = useApp((st) => st.info.device_name);
   if (tab?.local) return localName(device);
   return name ?? tab?.title ?? "";
