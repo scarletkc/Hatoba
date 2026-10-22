@@ -25,12 +25,23 @@ function files(dir: string): string[] {
   });
 }
 
+/** Only the line breaks of `text`, so that line numbers stay right. */
+const lines = (text: string) => "\n".repeat(text.split("\n").length - 1);
+
 /** The CSS of a file: all of a stylesheet, or the <style> blocks of a component, with comments blanked and lines kept. */
 function css(path: string): string {
   const text = readFileSync(path, "utf8");
-  const source = path.endsWith(".css")
-    ? text
-    : text.replace(/<style[^>]*>([\s\S]*?)<\/style>|[^\n]/g, (match, block: string | undefined) => (block === undefined ? "" : match));
+  let source = text;
+  if (!path.endsWith(".css")) {
+    source = "";
+    let at = 0;
+    for (const block of text.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)) {
+      const start = block.index + block[0].indexOf(">") + 1;
+      source += lines(text.slice(at, start)) + block[1];
+      at = start + block[1].length;
+    }
+    source += lines(text.slice(at));
+  }
   return source.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "));
 }
 
