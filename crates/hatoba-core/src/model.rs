@@ -1430,7 +1430,8 @@ impl Item {
             Self::Group(i) => i.name.clone(),
             Self::Key(i) => i.name.clone(),
             Self::KnownHost(i) => format!("{}:{}", i.host, i.port),
-            Self::Forward(i) => format!("{}:{}", i.bind_address, i.bind_port),
+            Self::Forward(i) if i.name.is_empty() => format!("{}:{}", i.bind_address, i.bind_port),
+            Self::Forward(i) => i.name.clone(),
             Self::Snippet(i) => i.name.clone(),
             Self::Proxy(i) => i.name.clone(),
             Self::AiProvider(i) => i.name.clone(),
@@ -2735,6 +2736,16 @@ mod tests {
             ..KnownHost::default()
         });
         assert_eq!(kh.display_name(), "h:2222");
+        let forward = |name: &str| {
+            Item::Forward(PortForward {
+                name: name.into(),
+                bind_address: "127.0.0.1".into(),
+                bind_port: 15432,
+                ..PortForward::default()
+            })
+        };
+        assert_eq!(forward("Postgres").display_name(), "Postgres");
+        assert_eq!(forward("").display_name(), "127.0.0.1:15432");
     }
 
     #[test]
