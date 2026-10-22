@@ -167,25 +167,12 @@
   display: flex;
   align-items: center;
   padding: 6px 10px 8px;
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--fg2);
 }
 
-.noteError {
-  color: var(--red);
-}
-
+/* In line with the menu's items. */
 .row {
-  display: flex;
-  align-items: flex-start;
   gap: var(--space-8);
   padding: 6px 6px 6px 10px;
-  border-radius: var(--radius-xs);
-}
-
-.row:hover {
-  background: var(--fill);
 }
 
 .rowOff .name,
@@ -221,14 +208,6 @@
   }
 }
 
-.body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
 .name {
   font-weight: 500;
   line-height: 18px;
@@ -244,20 +223,7 @@
   overflow-wrap: anywhere;
 }
 
-.state {
-  font-size: var(--text-xs);
-  line-height: 1.5;
-  color: var(--fg2);
-}
-
-.stateFailed {
-  color: var(--red);
-}
-
 .error {
-  font-size: var(--text-sm);
-  line-height: 1.4;
-  color: var(--red);
   overflow-wrap: anywhere;
 }
 
@@ -289,9 +255,6 @@
 
 .footnote {
   padding: 4px 10px 6px;
-  font-size: var(--text-xs);
-  line-height: 1.45;
-  color: var(--fg2);
 }
 
 /* 8px in all, line included: the tools menu has one more separator than the + menu, and half a

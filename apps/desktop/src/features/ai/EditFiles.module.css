@@ -10,26 +10,18 @@
   list-style: none;
 }
 
-.file {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-8);
-  padding: 7px 10px;
-}
-
 .file + .file {
   border-top: 0.5px solid var(--line);
 }
 
-.fileIcon {
-  flex: none;
-  margin-top: 2px;
-  color: var(--fg2);
+/* The icon and the state stay by the path, the first line. */
+.fileRow {
+  align-items: flex-start;
 }
 
-.fileText {
-  flex: 1;
-  min-width: 0;
+.fileIcon {
+  margin-top: 2px;
+  color: var(--fg2);
 }
 
 .path {
@@ -39,24 +31,9 @@
 }
 
 .server {
-  margin-top: 1px;
   font-size: var(--text-xs);
   color: var(--fg2);
   overflow-wrap: anywhere;
-}
-
-.reason {
-  margin-top: 3px;
-  font-size: var(--text-xs);
-  line-height: 1.45;
-  color: var(--red);
-}
-
-.elsewhere {
-  margin-top: 3px;
-  font-size: var(--text-xs);
-  line-height: 1.45;
-  color: var(--fg2);
 }
 
 .status {
@@ -68,14 +45,6 @@
 
 .note {
   margin-top: 10px;
-  font-size: var(--text-xs);
-  line-height: 1.5;
-  color: var(--fg2);
-  text-wrap: pretty;
-}
-
-.noteFailed {
-  color: var(--red);
 }
 
 .lines {

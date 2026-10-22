@@ -162,20 +162,18 @@ export function AiPanel({ slotId }: { slotId: string }) {
           icon="clock-counter-clockwise"
           label={t("ai.history")}
           active={view === "history"}
-          className={s.iconBtn}
           onClick={() => setView(view === "history" ? "chat" : "history")}
         />
         <IconButton
           icon="note-pencil"
           label={t("ai.newConversation")}
-          className={s.iconBtn}
           disabled={!slot.conversationId && slot.entries.length === 0 && !busy}
           onClick={() => {
             setView("chat");
             newConversation(slotId);
           }}
         />
-        <IconButton icon="x" label={t("ai.close")} className={s.iconBtn} onClick={() => toggleAiPanel(false)} />
+        <IconButton icon="x" label={t("ai.close")} onClick={() => toggleAiPanel(false)} />
       </div>
 
       {view === "history" ? (

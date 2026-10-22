@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
 import { Button, Icon, Spinner } from "@/components/controls";
 import { Dialog, useOverlaysLocked } from "@/components/overlay";
+import { ErrorText, HintText, ListRow } from "@/components/patterns";
 import { useT } from "@/i18n";
 import type { AiFileChange, AiFilePreview, AiFileRevert } from "@/ipc/types";
 import { cx } from "@/lib/cx";
@@ -199,8 +200,29 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
           const lines = counted.every(Boolean) ? counted.reduce((sum, x) => ({ added: sum.added + x!.added, removed: sum.removed + x!.removed }), { added: 0, removed: 0 }) : null;
           return (
             <li key={group.key} className={s.file}>
-              <Icon name={created ? "file-plus" : "note-pencil"} size={14} className={s.fileIcon} />
-              <div className={s.fileText}>
+              <ListRow
+                className={s.fileRow}
+                leading={<Icon name={created ? "file-plus" : "note-pencil"} size={14} className={s.fileIcon} />}
+                trailing={
+                  <>
+                    {state === "reverting" && (
+                      <span className={s.status}>
+                        <Spinner size={14} />
+                      </span>
+                    )}
+                    {state === "reverted" && (
+                      <span className={s.status} role="img" aria-label={t("ai.revert.reverted")}>
+                        <Icon name="check-circle" size={16} fill color="var(--green)" />
+                      </span>
+                    )}
+                    {state === "failed" && (
+                      <span className={s.status}>
+                        <Icon name="warning-circle" size={16} fill color="var(--red)" />
+                      </span>
+                    )}
+                  </>
+                }
+              >
                 <div className={cx(s.path, "selectable")}>{group.path}</div>
                 <div className={s.server}>
                   {serverLabel(t, group.server)}
@@ -213,41 +235,26 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
                     </span>
                   )}
                 </div>
-                {phase === "choose" && ask.server !== null && !here(group) && <div className={s.elsewhere}>{elsewhere}</div>}
+                {phase === "choose" && ask.server !== null && !here(group) && <HintText>{elsewhere}</HintText>}
                 {reasons.map((reason) => (
-                  <div key={reason} className={s.reason} role="alert">
-                    {reason}
-                  </div>
+                  <ErrorText key={reason}>{reason}</ErrorText>
                 ))}
-              </div>
-              {state === "reverting" && (
-                <span className={s.status}>
-                  <Spinner size={14} />
-                </span>
-              )}
-              {state === "reverted" && (
-                <span className={s.status} role="img" aria-label={t("ai.revert.reverted")}>
-                  <Icon name="check-circle" size={16} fill color="var(--green)" />
-                </span>
-              )}
-              {state === "failed" && (
-                <span className={s.status}>
-                  <Icon name="warning-circle" size={16} fill color="var(--red)" />
-                </span>
-              )}
+              </ListRow>
             </li>
           );
         })}
       </ul>
-      <div className={cx(s.note, phase === "failed" && s.noteFailed)} role={phase === "failed" ? "alert" : undefined}>
-        {phase === "failed"
-          ? t("ai.editFiles.failed")
-          : anyHere
+      {phase === "failed" ? (
+        <ErrorText className={s.note}>{t("ai.editFiles.failed")}</ErrorText>
+      ) : (
+        <HintText className={s.note}>
+          {anyHere
             ? t("ai.editFiles.hint")
             : ask.server === null
               ? t("ai.editFiles.disconnected")
               : t("ai.editFiles.noneHere", { server: serverLabel(t, ask.server) })}
-      </div>
+        </HintText>
+      )}
     </Dialog>
   );
 }

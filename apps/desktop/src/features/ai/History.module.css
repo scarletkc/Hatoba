@@ -15,23 +15,6 @@
   border-bottom: 0.5px solid var(--line);
 }
 
-.back {
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--fg2);
-}
-
-.back:hover {
-  background: var(--fill);
-}
-
 .title {
   font-size: var(--text-sm);
   font-weight: 600;
@@ -83,22 +66,9 @@
   display: none;
 }
 
+/* Muted, as a field's own controls are. */
 .searchClear {
-  flex: none;
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
   color: var(--fg3);
-}
-
-.searchClear:hover {
-  color: var(--fg2);
 }
 
 .list {
@@ -229,9 +199,6 @@
 }
 
 .more {
-  width: 26px;
-  height: 24px;
-  color: var(--fg2);
   visibility: hidden;
 }
 

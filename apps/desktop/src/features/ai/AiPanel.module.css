@@ -97,12 +97,6 @@
   color: var(--fg2);
 }
 
-.iconBtn {
-  width: 26px;
-  height: 26px;
-  color: var(--fg2);
-}
-
 .notices {
   flex: none;
   display: flex;

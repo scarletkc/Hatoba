@@ -4,6 +4,7 @@ import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
 import { Icon, Spinner, Switch } from "@/components/controls";
 import { overlayStyles, useExitAnimation, useOverlaysLocked, windowSurface } from "@/components/overlay";
+import { ErrorText, HintText, ListRow, StatusLine } from "@/components/patterns";
 import { useT, type MessageKey } from "@/i18n";
 import type { McpServerState } from "@/ipc/types";
 import { cx } from "@/lib/cx";
@@ -158,12 +159,12 @@ function McpList({ slotId, slot, head, onManage }: { slotId: string; slot: Slot;
           <Spinner size={14} />
         </div>
       )}
-      {failed && <div className={cx(s.note, s.noteError)}>{t("ai.tools.loadFailed")}</div>}
-      {loaded && !failed && rows.length === 0 && <div className={s.note}>{t("ai.tools.empty")}</div>}
+      {failed && <ErrorText className={s.note}>{t("ai.tools.loadFailed")}</ErrorText>}
+      {loaded && !failed && rows.length === 0 && <HintText className={s.note}>{t("ai.tools.empty")}</HintText>}
       {rows.map((row) => (
         <ServerRow key={row.server.id} row={row} onChange={(on) => setMcpServerOff(slotId, row.server.id, !on)} />
       ))}
-      {rows.length > 0 && <div className={s.footnote}>{t("ai.tools.note")}</div>}
+      {rows.length > 0 && <HintText className={s.footnote}>{t("ai.tools.note")}</HintText>}
       <div className={s.separator} />
       <ManageItem onManage={onManage} />
     </>
@@ -439,7 +440,7 @@ function SkillList({ head, onPick, onManage }: { head: ReactNode; onPick: (name:
           <Spinner size={14} />
         </div>
       )}
-      {skills?.length === 0 && <div className={s.note}>{t("ai.add.skillsEmpty")}</div>}
+      {skills?.length === 0 && <HintText className={s.note}>{t("ai.add.skillsEmpty")}</HintText>}
       {skills?.map((skill) => (
         <button key={skill.name} type="button" className={s.item} data-item title={skill.description || undefined} onClick={() => onPick(skill.name)}>
           <Icon name="book-open-text" className={s.itemIcon} />
@@ -460,21 +461,23 @@ function ServerRow({ row, onChange }: { row: ToolsMenuRow; onChange: (on: boolea
   const failed = row.state === "failed";
   const state = !row.on ? t("ai.tools.off") : row.state === "running" ? t("ai.tools.running", { n: row.tools }) : t(STATE_LABEL[row.state]);
   return (
-    <div className={cx(s.row, !row.on && s.rowOff)}>
-      <span className={cx(s.dot, s[row.state])} />
-      <div className={s.body}>
-        <span className={s.name}>{row.server.name}</span>
-        <span className={cx(s.transport, "selectable")}>{transportLabel(row.server.transport)}</span>
-        <span className={cx(s.state, failed && row.on && s.stateFailed)}>{state}</span>
-        {failed && row.error && <span className={cx(s.error, "selectable")}>{row.error}</span>}
-        {failed && row.stderr.length > 0 && (
-          <>
-            <span className={s.stderrLabel}>{t("ai.tools.stderr")}</span>
-            <pre className={cx(s.stderr, "selectable")}>{row.stderr.join("\n")}</pre>
-          </>
-        )}
-      </div>
-      <Switch checked={row.on} label={t("ai.tools.use", { name: row.server.name })} onChange={onChange} />
-    </div>
+    <ListRow
+      size="sm"
+      interactive
+      className={cx(s.row, !row.on && s.rowOff)}
+      leading={<span className={cx(s.dot, s[row.state])} />}
+      trailing={<Switch checked={row.on} label={t("ai.tools.use", { name: row.server.name })} onChange={onChange} />}
+    >
+      <span className={s.name}>{row.server.name}</span>
+      <span className={cx(s.transport, "selectable")}>{transportLabel(row.server.transport)}</span>
+      <StatusLine tone={failed && row.on ? "error" : "neutral"}>{state}</StatusLine>
+      {failed && row.error && <ErrorText className={cx(s.error, "selectable")}>{row.error}</ErrorText>}
+      {failed && row.stderr.length > 0 && (
+        <>
+          <span className={s.stderrLabel}>{t("ai.tools.stderr")}</span>
+          <pre className={cx(s.stderr, "selectable")}>{row.stderr.join("\n")}</pre>
+        </>
+      )}
+    </ListRow>
   );
 }

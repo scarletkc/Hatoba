@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { useTabs } from "@/app/tabs";
 import { Icon, Spinner } from "@/components/controls";
 import { overlayStyles, useExitAnimation, useOverlaysLocked, windowSurface } from "@/components/overlay";
+import { Chip } from "@/components/patterns";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AiHostListing, AiSkillCommand } from "@/ipc/types";
@@ -452,7 +453,11 @@ function MenuPopover({
               {row.args && <span className={s.args}>{row.args}</span>}
             </span>
             {row.description && <span className={s.description}>{row.description}</span>}
-            {row.badge && <span className={s.badge}>{row.badge}</span>}
+            {row.badge && (
+              <Chip className={s.badge}>
+                <span className={s.badgeText}>{row.badge}</span>
+              </Chip>
+            )}
           </div>
         );
       })}

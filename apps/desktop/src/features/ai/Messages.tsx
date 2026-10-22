@@ -1,8 +1,8 @@
 import { Fragment, memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useApp } from "@/app/store";
-import { Button, controlStyles, DisclosureCaret, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
+import { Button, controlStyles, DisclosureCaret, Icon, IconButton, LinkButton } from "@/components/controls";
 import { toast } from "@/components/overlay";
-import { Chip } from "@/components/patterns";
+import { Card, Chip, ErrorText, HintText, StatusLine, WarningText } from "@/components/patterns";
 import { readClipboard, writeClipboard } from "@/features/terminal/clipboard";
 import { formatDateTime, formatMessageTime, useT, useToday, type MessageKey } from "@/i18n";
 import type { AiAutoVerdict, AiEntryView, AiFileChange, AiFilePreview, AiFileRevert, AiToolCall, HostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
@@ -374,10 +374,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
     <div ref={ref} className={s.list} onScroll={bottom.onScroll} onWheel={bottom.onWheel} onKeyDown={bottom.onKeyDown}>
       {isEmpty && !slot.loading && empty}
       {slot.loading && entries.length === 0 && (
-        <div className={s.status}>
-          <Spinner size={14} />
-          {t("ai.loading")}
-        </div>
+        <StatusLine className={s.turnStatus} tone="progress">{t("ai.loading")}</StatusLine>
       )}
       {entries.map((entry, i) => {
         const outside = contextAt > 0 && i < contextAt;
@@ -444,9 +441,8 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
       {turn?.live && <LiveMessage slotId={slotId} live={turn.live} host={host} />}
       <TurnStatus slotId={slotId} slot={slot} />
       {slot.effortIgnored && (
-        <div className={s.status} role="status">
-          <Icon name="info" size={14} />
-          {t("ai.effortIgnored")}
+        <div role="status">
+          <StatusLine className={s.turnStatus} icon="info">{t("ai.effortIgnored")}</StatusLine>
         </div>
       )}
       {slot.side && <SideBubble slotId={slotId} q={slot.side} />}
@@ -707,9 +703,8 @@ function EditMessage({
         }}
       />
       {untracked && (
-        <div className={s.editWarning} role="note">
-          <Icon name="warning" size={14} />
-          <span>{t("ai.editFiles.untracked")}</span>
+        <div role="note">
+          <WarningText>{t("ai.editFiles.untracked")}</WarningText>
         </div>
       )}
       <div className={s.actions}>
@@ -828,7 +823,7 @@ function SummaryBlock({ text, flash }: { text: string; flash?: boolean }) {
     if (flash) setOpen(true);
   }, [flash]);
   return (
-    <div className={cx(s.summary, flash && s.flash)}>
+    <Card className={cx(s.summary, flash && s.flash)}>
       <button type="button" className={s.summaryHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <Icon name="arrows-in-line-vertical" size={14} />
         <span>{t("ai.summary")}</span>
@@ -839,7 +834,7 @@ function SummaryBlock({ text, flash }: { text: string; flash?: boolean }) {
           <Markdown text={text} />
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -1011,7 +1006,7 @@ function ToolBlock({
           {revertible && <RevertChange slotId={slotId} change={change} busy={busy} revert={revert} />}
           {change?.state === "dropped" && (
             <div className={s.revert}>
-              <span className={s.meta}>{t("ai.revert.dropped")}</span>
+              <HintText>{t("ai.revert.dropped")}</HintText>
             </div>
           )}
         </div>
@@ -1030,8 +1025,8 @@ function AutoVerdict({ verdict }: { verdict: AiAutoVerdict }) {
   return (
     <div className={s.autoVerdict}>
       <div className={s.label}>{t("ai.mode.auto")}</div>
-      <div className={s.meta}>{verdict.decision === "run" ? t("ai.auto.ran") : verdictText(t, verdict)}</div>
-      {answers && <div className={s.meta}>{t("ai.auto.answers", { answers })}</div>}
+      <HintText>{verdict.decision === "run" ? t("ai.auto.ran") : verdictText(t, verdict)}</HintText>
+      {answers && <HintText>{t("ai.auto.answers", { answers })}</HintText>}
     </div>
   );
 }
@@ -1044,9 +1039,8 @@ function AutoReason({ ask }: { ask: AutoAsk }) {
   const t = useT();
   const verdict = "verdict" in ask ? ask.verdict : null;
   return (
-    <div className={s.autoReason} title={verdict ? answersText(t, verdict.answers) || undefined : undefined}>
-      <Icon name={MODE_ICON.auto} size={14} />
-      <span>
+    <div title={verdict ? answersText(t, verdict.answers) || undefined : undefined}>
+      <HintText icon={MODE_ICON.auto} className={s.autoReason}>
         {askText(t, ask)}
         {verdict?.failure === "unavailable" && (
           <>
@@ -1056,7 +1050,7 @@ function AutoReason({ ask }: { ask: AutoAsk }) {
             </LinkButton>
           </>
         )}
-      </span>
+      </HintText>
     </div>
   );
 }
@@ -1090,11 +1084,11 @@ function CallChange({ slotId, call, change }: { slotId: string; call: AiToolCall
     <>
       <div className={s.labelRow}>
         <span className={s.label}>{t("ai.call.change")}</span>
-        <LinkButton tone="muted" className={s.labelLink} aria-expanded={input} onClick={() => setInput((v) => !v)}>
+        <LinkButton tone="muted" aria-expanded={input} onClick={() => setInput((v) => !v)}>
           {t(input ? "ai.call.hideInput" : "ai.call.showInput")}
         </LinkButton>
       </div>
-      {failed && <div className={s.fieldError}>{t("ai.call.changeUnreadable")}</div>}
+      {failed && <ErrorText>{t("ai.call.changeUnreadable")}</ErrorText>}
       {preview && <FileChange state={{ preview, loading: keeps && kept === undefined, failure: null }} />}
       {(input || !preview) && <pre className={cx(s.pre, "selectable")}>{prettyArgs(call.arguments) || "{}"}</pre>}
     </>
@@ -1131,19 +1125,16 @@ function RevertChange({ slotId, change, busy, revert }: { slotId: string; change
         </Button>
       </div>
       {change.state === "unfinished" && (
-        <div className={s.revertWarn}>
-          <Icon name="warning" size={14} />
-          <span>{t("ai.revert.unfinished")}</span>
-        </div>
+        <WarningText>{t("ai.revert.unfinished")}</WarningText>
       )}
       {result?.status === "changed" && (
         <>
-          <div className={s.fieldError} role="alert">
+          <ErrorText>
             {outcome?.restore && `${t("ai.revert.changedAgain")} `}
             {t(result.before === null ? "ai.revert.changedCreated" : result.current === null ? "ai.revert.gone" : "ai.revert.changed")}
-          </div>
+          </ErrorText>
           {result.later && (
-            <div className={s.meta}>
+            <HintText>
               {t("ai.revert.later")}
               {laterEntry && (
                 <>
@@ -1153,7 +1144,7 @@ function RevertChange({ slotId, change, busy, revert }: { slotId: string; change
                   </LinkButton>
                 </>
               )}
-            </div>
+            </HintText>
           )}
           <FileChange state={{ preview: { path: result.path, before: result.current, after: result.before ?? "", error: null, crlf: false }, loading: false, failure: null }} />
           <div className={s.revertRow}>
@@ -1164,10 +1155,10 @@ function RevertChange({ slotId, change, busy, revert }: { slotId: string; change
         </>
       )}
       {result?.status === "failed" && (
-        <div className={s.fieldError} role="alert">
+        <ErrorText>
           {revertFailure(t, result.reason, result.detail)}
           {result.detail && result.reason !== "other_server" && <div className={cx(s.revertDetail, "selectable")}>{result.detail}</div>}
-        </div>
+        </ErrorText>
       )}
     </div>
   );
@@ -1468,7 +1459,7 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
         )
       )}
       {auto && <AutoReason ask={auto} />}
-      {mcp?.always_ask && bypass && <div className={s.meta}>{t("ai.approval.alwaysAsk")}</div>}
+      {mcp?.always_ask && bypass && <HintText>{t("ai.approval.alwaysAsk")}</HintText>}
       {mcp && mode !== "edit" && <McpDetails mcp={mcp} />}
 
       {mode === "edit" ? (
@@ -1518,8 +1509,8 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
               />
             </>
           )}
-          {kind === "send_input" && readTerminalInput(draft.main, str(args.text)) !== draft.main && <div className={s.meta}>{t("ai.approval.terminalEscapes")}</div>}
-          {invalid && kind !== "send_input" && <div className={s.fieldError}>{t("ai.approval.invalidJson")}</div>}
+          {kind === "send_input" && readTerminalInput(draft.main, str(args.text)) !== draft.main && <HintText>{t("ai.approval.terminalEscapes")}</HintText>}
+          {invalid && kind !== "send_input" && <ErrorText>{t("ai.approval.invalidJson")}</ErrorText>}
           {kind === "run_command" && (
             <label className={s.inline}>
               {t("ai.approval.workdir")}
@@ -1546,7 +1537,7 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
                 <label htmlFor={keysId}>{t("ai.approval.key")}</label>
                 <KeysField id={keysId} keys={draft.keys} onChange={(keys) => setDraft({ ...draft, keys })} />
               </div>
-              {draft.keys.some((key) => parseSendKey(key) === null) && <div className={s.fieldError}>{t("ai.approval.invalidKey")}</div>}
+              {draft.keys.some((key) => parseSendKey(key) === null) && <ErrorText>{t("ai.approval.invalidKey")}</ErrorText>}
               <label className={s.inline}>
                 {t("ai.approval.wait")}
                 <input className={cx(s.input, s.number)} type="number" min={1} max={120} placeholder="10" value={draft.wait} onChange={(e) => setDraft({ ...draft, wait: e.target.value })} />
@@ -1562,28 +1553,28 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
             <>
               {str(args.workdir) && <Workdir path={str(args.workdir)} />}
               <ShownInput text={str(args.command)} command />
-              <div className={s.meta}>{t("ai.approval.timeoutValue", { s: str(args.timeout_seconds) || 120 })}</div>
+              <HintText>{t("ai.approval.timeoutValue", { s: str(args.timeout_seconds) || 120 })}</HintText>
             </>
           )}
           {kind === "send_input" && (
             <>
               <ShownInput text={str(args.text) || " "} command terminal />
-              <div className={s.meta}>
+              <HintText>
                 {pressed.length ? <PressedKeys keys={pressed} /> : t("ai.approval.noKey")}
                 {" · "}
                 {t("ai.approval.waitValue", { s: str(args.wait_seconds) || 10 })}
-              </div>
+              </HintText>
             </>
           )}
           {kind === "fetch_url" && (
             <>
               <ShownInput text={str(args.url)} command />
               {(args.full_page === true || args.offset !== undefined) && (
-                <div className={s.meta}>
+                <HintText>
                   {[args.full_page === true && t("ai.approval.fullPage"), args.offset !== undefined && t("ai.approval.offset", { n: str(args.offset) })]
                     .filter(Boolean)
                     .join(" · ")}
-                </div>
+                </HintText>
               )}
             </>
           )}
@@ -1657,12 +1648,12 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
         </div>
       ) : (
         <div className={s.actions}>
-          <LinkButton tone="danger" className={s.rejectLink} onClick={() => switchMode("reject")}>
+          <LinkButton tone="danger" onClick={() => switchMode("reject")}>
             {t("ai.approval.reject")}
           </LinkButton>
           {/* The model would see the call as stored, not as edited here, so not while editing. */}
           {question === null && mode === "view" && (
-            <LinkButton tone="muted" icon="chat-teardrop-dots" className={s.rejectLink} title={t("ai.side.askCardHint")} onClick={() => setQuestion(t("ai.side.suggest"))}>
+            <LinkButton tone="muted" icon="chat-teardrop-dots" title={t("ai.side.askCardHint")} onClick={() => setQuestion(t("ai.side.suggest"))}>
               {t("ai.side.askCard")}
             </LinkButton>
           )}
@@ -1710,10 +1701,7 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
 
   if (slot.remoteRunning)
     return (
-      <div className={s.status}>
-        <Spinner size={14} />
-        {t("ai.status.remote")}
-      </div>
+      <StatusLine className={s.turnStatus} tone="progress">{t("ai.status.remote")}</StatusLine>
     );
   if (turn) {
     const live = turn.live;
@@ -1729,18 +1717,14 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
             ? "ai.reasoning.active"
             : "ai.status.waiting";
     return (
-      <div className={s.status}>
-        <Spinner size={14} />
+      <StatusLine className={s.turnStatus} tone="progress">
         <span className={s.shimmer}>{t(key)}</span>
-      </div>
+      </StatusLine>
     );
   }
   if (slot.compacting)
     return (
-      <div className={s.status}>
-        <Spinner size={14} />
-        {t("ai.status.compacting")}
-      </div>
+      <StatusLine className={s.turnStatus} tone="progress">{t("ai.status.compacting")}</StatusLine>
     );
   if (!outcome) return null;
   const retry = slot.conversationId ? (
@@ -1751,10 +1735,7 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
   switch (outcome.reason) {
     case "stopped":
       return (
-        <div className={s.status}>
-          <Icon name="stop-circle" size={14} />
-          {t("ai.outcome.stopped")}
-        </div>
+        <StatusLine className={s.turnStatus} icon="stop-circle">{t("ai.outcome.stopped")}</StatusLine>
       );
     case "length":
       return <Banner icon="scissors" tone="warn" text={t("ai.outcome.length")} />;
@@ -1788,9 +1769,7 @@ function SideBubble({ slotId, q }: { slotId: string; q: SideQuestion }) {
       <div className={s.sideHead}>
         <Icon name="chat-teardrop-dots" size={14} className={s.sideIcon} />
         <span className={s.sideTitle}>{t("ai.side.title")}</span>
-        <span className={s.sideNote} title={t("ai.side.notSavedHint")}>
-          {t("ai.side.notSaved")}
-        </span>
+        <Chip title={t("ai.side.notSavedHint")}>{t("ai.side.notSaved")}</Chip>
         <span className={s.gap} />
         {running ? (
           <IconButton icon="stop" label={t("ai.side.stop")} size={14} className={s.messageAction} onClick={() => stopSideQuestion(slotId)} />
@@ -1805,16 +1784,12 @@ function SideBubble({ slotId, q }: { slotId: string; q: SideQuestion }) {
       <div className={cx(s.sideQuestion, "selectable")}>{q.question}</div>
       {q.answer && <Markdown text={q.answer} streaming={q.phase === "streaming"} />}
       {(q.phase === "waiting" || q.phase === "thinking") && (
-        <div className={s.status}>
-          <Spinner size={14} />
+        <StatusLine className={s.turnStatus} tone="progress">
           <span className={s.shimmer}>{t(q.phase === "thinking" ? "ai.reasoning.active" : "ai.status.waiting")}</span>
-        </div>
+        </StatusLine>
       )}
       {q.phase === "stopped" && (
-        <div className={s.status}>
-          <Icon name="stop-circle" size={14} />
-          {t("ai.outcome.stopped")}
-        </div>
+        <StatusLine className={s.turnStatus} icon="stop-circle">{t("ai.outcome.stopped")}</StatusLine>
       )}
       {q.phase === "done" && q.finish === "length" && <Banner icon="scissors" tone="warn" text={t("ai.outcome.length")} />}
       {q.phase === "done" && q.finish === "refused" && <Banner icon="prohibit" tone="warn" text={t("ai.outcome.refused")} />}

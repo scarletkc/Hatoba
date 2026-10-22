@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
-import { controlStyles, DisclosureCaret, Icon } from "@/components/controls";
+import { Button, controlStyles, DisclosureCaret, Icon } from "@/components/controls";
+import { Chip } from "@/components/patterns";
 import { getSession } from "@/features/terminal/session";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
@@ -225,7 +226,7 @@ function AttachmentChip({
           <Icon name={icon} size={14} className={s.chipIcon} />
           <span className={s.chipText}>{label}</span>
           {size && <span className={s.size}>{size}</span>}
-          {badge && <span className={s.truncated}>{badge}</span>}
+          {badge && <Chip tone="warning">{badge}</Chip>}
         </button>
         <button type="button" className={s.chipRemove} title={removeLabel} aria-label={removeLabel} onClick={onRemove}>
           <Icon name="x" size={12} />
@@ -239,8 +240,8 @@ function AttachmentChip({
             <div className={s.previewFoot}>
               {more && <span className={s.previewMore}>{more}</span>}
               {action && (
-                <button
-                  type="button"
+                <Button
+                  size="xs"
                   className={s.previewAction}
                   title={action.title}
                   onClick={() => {
@@ -250,7 +251,7 @@ function AttachmentChip({
                   }}
                 >
                   {action.label}
-                </button>
+                </Button>
               )}
             </div>
           )}
@@ -397,7 +398,7 @@ function AttachmentCard({ icon, title, host, badge, body }: { icon: string; titl
         <Icon name={icon} size={14} className={s.chipIcon} />
         <span className={s.cardTitle}>{title}</span>
         {host && <span className={s.cardHost}>{host}</span>}
-        {badge && <span className={s.truncated}>{badge}</span>}
+        {badge && <Chip tone="warning">{badge}</Chip>}
         <DisclosureCaret open={open} size={12} className={s.caret} />
       </button>
       {open && <pre className={cx(s.cardBody, controlStyles.reveal, "selectable")}>{body}</pre>}

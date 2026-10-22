@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
-import { Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
+import { Icon, IconButton, LinkButton } from "@/components/controls";
 import { confirm, Menu, useMenu, type MenuEntry } from "@/components/overlay";
+import { StatusLine } from "@/components/patterns";
 import { formatRelative, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AiConversationView, AiSearchHit, HostView } from "@/ipc/types";
@@ -112,9 +113,7 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
   return (
     <div className={s.history}>
       <div className={s.head}>
-        <button type="button" className={s.back} onClick={onClose} title={t("btn.back")} aria-label={t("btn.back")}>
-          <Icon name="caret-left" size={14} />
-        </button>
+        <IconButton small icon="caret-left" label={t("btn.back")} size={14} onClick={onClose} />
         <span className={s.title}>{t("ai.history")}</span>
       </div>
       <SearchField value={query} onChange={setQuery} />
@@ -124,8 +123,7 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
         <div className={s.list} role="list">
           {list === null && (
             <div className={s.message}>
-              <Spinner size={14} />
-              {t("ai.loading")}
+              <StatusLine tone="progress">{t("ai.loading")}</StatusLine>
             </div>
           )}
           {list !== null && failed && (
@@ -239,18 +237,18 @@ function SearchField({ value, onChange }: { value: string; onChange: (v: string)
         }}
       />
       {value && (
-        <button
-          type="button"
+        <IconButton
+          small
+          icon="x-circle"
+          fill
+          size={14}
+          label={t("ai.search.clear")}
           className={s.searchClear}
-          title={t("ai.search.clear")}
-          aria-label={t("ai.search.clear")}
           onClick={() => {
             onChange("");
             ref.current?.focus();
           }}
-        >
-          <Icon name="x-circle" fill size={14} />
-        </button>
+        />
       )}
     </div>
   );
@@ -294,8 +292,7 @@ function SearchResults({
     return (
       <div className={s.list}>
         <div className={s.message}>
-          <Spinner size={14} />
-          {t("ai.search.searching")}
+          <StatusLine tone="progress">{t("ai.search.searching")}</StatusLine>
         </div>
       </div>
     );

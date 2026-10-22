@@ -96,15 +96,13 @@
   white-space: nowrap;
 }
 
+/* A long badge gives way to the name. */
 .badge {
-  flex: none;
   max-width: 30%;
+}
+
+.badgeText {
+  min-width: 0;
   overflow: hidden;
-  padding: 1px 6px;
-  border-radius: var(--radius-xs);
-  background: var(--fill);
-  color: var(--fg2);
-  font-size: var(--text-xs);
   text-overflow: ellipsis;
-  white-space: nowrap;
 }

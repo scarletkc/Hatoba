@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
-import { Icon, Spinner } from "@/components/controls";
-import { Chip } from "@/components/patterns";
+import { Icon, LinkButton, Spinner } from "@/components/controls";
+import { Chip, ErrorText, HintText, StatusLine } from "@/components/patterns";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { diffLines, diffStats, withContext } from "./diff";
@@ -44,12 +44,9 @@ export function FileChange({ state, replaceAll }: { state: FilePreviewState; rep
 
   if (!preview && loading)
     return (
-      <div className={s.status}>
-        <Spinner size={12} />
-        {t("ai.approval.readingFile")}
-      </div>
+      <StatusLine tone="progress">{t("ai.approval.readingFile")}</StatusLine>
     );
-  if (!preview) return <div className={ms.fieldError}>{failure}</div>;
+  if (!preview) return <ErrorText>{failure}</ErrorText>;
   const path = shown(preview.path);
 
   return (
@@ -83,7 +80,7 @@ export function FileChange({ state, replaceAll }: { state: FilePreviewState; rep
           <div className={cx(s.errorText, "selectable")}>{preview.error}</div>
         </div>
       ) : cells.length === 0 ? (
-        <div className={ms.meta}>{t("ai.approval.noChanges")}</div>
+        <HintText>{t("ai.approval.noChanges")}</HintText>
       ) : (
         <div className={cx(s.diff, "selectable")} role="group" aria-label={t("ai.approval.diff")}>
           {cells.slice(0, shownRows).map((row, i) =>
@@ -114,9 +111,9 @@ export function FileChange({ state, replaceAll }: { state: FilePreviewState; rep
             ),
           )}
           {left > 0 && (
-            <button type="button" className={s.more} onClick={() => setShownRows((n) => n + PAGE_ROWS)}>
+            <LinkButton className={s.more} onClick={() => setShownRows((n) => n + PAGE_ROWS)}>
               {t("ai.approval.showMore", { n: Math.min(PAGE_ROWS, left), left })}
-            </button>
+            </LinkButton>
           )}
         </div>
       )}

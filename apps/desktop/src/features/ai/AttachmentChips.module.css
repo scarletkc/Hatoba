@@ -55,17 +55,6 @@
   color: var(--accent);
 }
 
-.truncated {
-  flex: none;
-  height: 16px;
-  padding: 0 5px;
-  border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--orange) 13%, transparent);
-  color: var(--orange);
-  font-size: var(--text-xs);
-  line-height: 16px;
-}
-
 /* An attachment's size (AI-35), quieter than a warning badge. */
 .size {
   flex: none;
@@ -162,22 +151,10 @@
   color: var(--fg2);
 }
 
-/* Paste as Text (AI-35): the button style of the panel's small actions. */
+/* Paste as Text (AI-35), at the foot's end. */
 .previewAction {
   flex: none;
   margin-left: auto;
-  height: 22px;
-  padding: 0 9px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: var(--fill);
-  color: var(--fg);
-  font-size: var(--text-xs);
-  font-weight: 500;
-}
-
-.previewAction:hover {
-  background: var(--fill2);
 }
 
 /* The card above a sent message, in the tool block's look. */

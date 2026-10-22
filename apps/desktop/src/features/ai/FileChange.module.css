@@ -7,14 +7,6 @@
   min-width: 0;
 }
 
-.status {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-  font-size: var(--text-xs);
-  color: var(--fg2);
-}
-
 .head {
   display: flex;
   align-items: flex-start;
@@ -127,22 +119,12 @@
   user-select: none;
 }
 
+/* Show more, under the rows it adds to. */
 .more {
   grid-column: 1 / -1;
-  margin: 3px 6px 1px;
-  padding: 3px 8px;
-  border: none;
-  border-radius: var(--radius-xs);
-  background: var(--fill);
-  color: var(--accent);
+  justify-self: start;
+  margin: 4px 9px 2px;
   font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  text-align: left;
-  cursor: pointer;
-}
-
-.more:hover {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .noEol {

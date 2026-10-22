@@ -26,12 +26,6 @@
   padding: 0 4px;
 }
 
-.problem {
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--red);
-}
-
 .size {
   margin-left: auto;
   font-family: var(--font-mono);
