@@ -1,0 +1,19 @@
+---
+/** A screenshot of the app, framed as its window. */
+interface Props {
+  class?: string;
+  [attribute: string]: unknown;
+}
+const { class: className, ...rest } = Astro.props;
+---
+
+<div class:list={["window", className]} {...rest}><slot /></div>
+
+<style>
+  .window {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--window-bg);
+    box-shadow: var(--shadow-window);
+  }
+</style>

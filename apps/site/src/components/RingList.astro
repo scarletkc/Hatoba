@@ -1,0 +1,35 @@
+---
+/** A list whose points are rings of the seigaiha. */
+interface Props {
+  items: string[];
+}
+const { items } = Astro.props;
+---
+
+<ul class="ring-list">{items.map((item) => <li>{item}</li>)}</ul>
+
+<style>
+  .ring-list {
+    display: grid;
+    gap: var(--space-16);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  li {
+    position: relative;
+    padding-left: var(--space-24);
+  }
+
+  li::before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: calc(var(--leading-body) * 0.5em - 6px);
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-full);
+    border: 2px solid var(--sea);
+  }
+</style>

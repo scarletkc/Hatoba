@@ -1,6 +1,7 @@
 import { defineCollection } from "astro:content";
 import { z } from "astro/zod";
 import { gitRef, readDocs, workingTree, type DocsSource } from "./lib/docs";
+import { frameCodeBlocks } from "./lib/markdown";
 import { loadRelease } from "./lib/release";
 
 /**
@@ -30,7 +31,8 @@ const docs = defineCollection({
       store.clear();
       for (const doc of readDocs(source, version ?? "development")) {
         const { slug, body, ...data } = doc;
-        store.set({ id: slug, data: { ...data, version }, body, rendered: await renderMarkdown(body) });
+        const rendered = await renderMarkdown(body);
+        store.set({ id: slug, data: { ...data, version }, body, rendered: { ...rendered, html: frameCodeBlocks(rendered.html) } });
       }
     },
   },

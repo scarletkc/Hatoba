@@ -1,6 +1,7 @@
 ---
 import { BUG_REPORT_URL, CONTRIBUTING_URL, LICENSE_URL, RELEASES_URL, REPO_URL, SECURITY_URL } from "../consts";
 import { LANG, LANGUAGE_NAME, LOCALES, localePath, messages, type Locale } from "../i18n";
+import Link from "./Link.astro";
 
 interface Props {
   locale: Locale;
@@ -15,24 +16,31 @@ const t = messages(locale);
     <div class="about">
       <p class="name wide">Hatoba</p>
       <p>{t.meta.tagline}</p>
-      <p class="license"><a href={LICENSE_URL}>{t.footer.license}</a></p>
+      <p class="license"><Link variant="muted" href={LICENSE_URL}>{t.footer.license}</Link></p>
     </div>
     <ul class="links">
-      <li><a href={localePath(locale, "/download/")}>{t.nav.download}</a></li>
-      <li><a href="/docs/" hreflang="en">{t.nav.docs}</a></li>
-      <li><a href={RELEASES_URL}>{t.footer.releases}</a></li>
-      <li><a href={REPO_URL}>{t.nav.github}</a></li>
-      <li><a href={BUG_REPORT_URL}>{t.footer.report}</a></li>
-      <li><a href={SECURITY_URL}>{t.footer.security}</a></li>
-      <li><a href={CONTRIBUTING_URL}>{t.footer.contributing}</a></li>
+      <li><Link variant="muted" href={localePath(locale, "/download/")}>{t.nav.download}</Link></li>
+      <li><Link variant="muted" href="/docs/" hreflang="en">{t.nav.docs}</Link></li>
+      <li><Link variant="muted" href={RELEASES_URL}>{t.footer.releases}</Link></li>
+      <li><Link variant="muted" href={REPO_URL}>{t.nav.github}</Link></li>
+      <li><Link variant="muted" href={BUG_REPORT_URL}>{t.footer.report}</Link></li>
+      <li><Link variant="muted" href={SECURITY_URL}>{t.footer.security}</Link></li>
+      <li><Link variant="muted" href={CONTRIBUTING_URL}>{t.footer.contributing}</Link></li>
     </ul>
     <ul class="languages" aria-label={t.nav.language}>
       {
         LOCALES.map((other) => (
           <li>
-            <a href={localePath(other)} hreflang={LANG[other]} lang={LANG[other]} data-locale={other} aria-current={other === locale ? "true" : undefined}>
+            <Link
+              variant="muted"
+              href={localePath(other)}
+              hreflang={LANG[other]}
+              lang={LANG[other]}
+              data-locale={other}
+              aria-current={other === locale ? "true" : undefined}
+            >
               {LANGUAGE_NAME[other]}
-            </a>
+            </Link>
           </li>
         ))
       }
@@ -66,16 +74,6 @@ const t = messages(locale);
     margin-top: var(--space-16);
   }
 
-  a {
-    color: var(--on-night-2);
-    text-decoration: none;
-  }
-
-  a:hover {
-    color: var(--on-night);
-    text-decoration: underline;
-  }
-
   ul {
     margin: 0;
     padding: 0;
@@ -92,7 +90,7 @@ const t = messages(locale);
     padding: var(--space-4) 0;
   }
 
-  .languages a[aria-current="true"] {
+  .languages :global(a[aria-current="true"]) {
     color: var(--on-night);
     font-weight: 600;
   }

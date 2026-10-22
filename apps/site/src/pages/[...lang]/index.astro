@@ -1,8 +1,14 @@
 ---
+import Button from "../../components/Button.astro";
 import DownloadButton from "../../components/DownloadButton.astro";
 import Icon from "../../components/Icon.astro";
+import NightBand from "../../components/NightBand.astro";
+import RingList from "../../components/RingList.astro";
 import Sea from "../../components/Sea.astro";
+import Section from "../../components/Section.astro";
+import SectionHeader from "../../components/SectionHeader.astro";
 import Shot from "../../components/Shot.astro";
+import Window from "../../components/Window.astro";
 import { REPO_URL, SECURITY_MODEL_URL } from "../../consts";
 import { LANG, localePath, localeStaticPaths, messages, type Locale } from "../../i18n";
 import Base from "../../layouts/Base.astro";
@@ -28,13 +34,13 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
 ---
 
 <Base locale={locale} title={pageTitle(locale)} description={t.meta.description} path="/" jsonLd={softwareApplication(locale, release)} heroHeader>
-  <section class="hero night">
+  <NightBand class="hero">
     <div class="container intro">
       <h1 class="wordmark wide">Hatoba</h1>
       <p class="lead">{t.meta.description}</p>
       <div class="actions">
         <DownloadButton locale={locale} release={release} />
-        <a class="btn btn-outline" href={REPO_URL}><Icon name="github" size={20} />{t.hero.github}</a>
+        <Button variant="outline" href={REPO_URL} icon="github" iconSize={20}>{t.hero.github}</Button>
       </div>
       <p class="available"><a href={localePath(locale, "/download/")}>{t.hero.available(release.version)}</a></p>
     </div>
@@ -45,109 +51,96 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
             <div class="demo-bar" hidden>
               <p>{t.demo.note}</p>
               <div class="demo-actions">
-                <button type="button" data-demo-restart>
-                  <Icon name="restart" size={16} />
+                <Button variant="night" size="sm" icon="restart" data-demo-restart>
                   {t.demo.restart}
-                </button>
-                <a href={demo} target="_blank" rel="noopener">
-                  <Icon name="external" size={16} />
+                </Button>
+                <Button variant="night" size="sm" icon="external" href={demo} target="_blank" rel="noopener">
                   {t.demo.newTab}
-                </a>
-                <button type="button" data-demo-close>
-                  <Icon name="close" size={16} />
+                </Button>
+                <Button variant="night" size="sm" icon="close" data-demo-close>
                   {t.demo.close}
-                </button>
+                </Button>
               </div>
             </div>
           )
         }
-        <div class="window rise">
+        <Window class="rise">
           <Shot src={hero} alt={t.hero.alt} width="min(1100px, 100vw - 48px)" eager />
           {
             demo && (
-              <button type="button" class="btn btn-pier try" data-demo-open hidden>
-                <span class="try-icon"><Icon name="play" /></span>
+              <Button variant="pier" class="try" data-demo-open hidden>
+                <span class="try-icon">
+                  <Icon name="play" />
+                </span>
                 {t.demo.try}
-              </button>
+              </Button>
             )
           }
-        </div>
+        </Window>
       </div>
       <Sea depth="var(--sea-depth)" />
     </div>
-  </section>
+  </NightBand>
 
-  <section id="features" class="feature">
-    <div class="container split">
-      <div class="text">
-        <h2>{t.ai.title}</h2>
-        <p class="body">{t.ai.body}</p>
-        <ul class="points">{t.ai.points.map((point) => <li>{point}</li>)}</ul>
-      </div>
-      <div class="media">
-        <div class="window panel">
-          <Shot src={screenshot(locale, "ai-approval")} alt={t.ai.alt} width="min(420px, 100vw - 32px)" crop={AI_PANEL} />
-        </div>
-      </div>
+  <Section id="features" class="split">
+    <div class="text">
+      <SectionHeader title={t.ai.title} lead={t.ai.body} />
+      <RingList items={t.ai.points} />
     </div>
-  </section>
-
-  <section class="feature reverse">
-    <div class="container split">
-      <div class="text">
-        <h2>{t.sync.title}</h2>
-        <p class="body">{t.sync.body}</p>
-        <ul class="points">{t.sync.points.map((point) => <li>{point}</li>)}</ul>
-      </div>
-      <div class="media">
-        <div class="window dialog">
-          <Shot src={screenshot(locale, "sync-deploy")} alt={t.sync.alt} width="min(560px, 100vw - 32px)" crop={DEPLOY_DIALOG} />
-        </div>
-      </div>
+    <div class="media">
+      <Window class="panel">
+        <Shot src={screenshot(locale, "ai-approval")} alt={t.ai.alt} width="min(420px, 100vw - 32px)" crop={AI_PANEL} />
+      </Window>
     </div>
-  </section>
+  </Section>
 
-  <section class="essentials">
+  <Section continues class="split reverse">
+    <div class="text">
+      <SectionHeader title={t.sync.title} lead={t.sync.body} />
+      <RingList items={t.sync.points} />
+    </div>
+    <div class="media">
+      <Window class="dialog">
+        <Shot src={screenshot(locale, "sync-deploy")} alt={t.sync.alt} width="min(560px, 100vw - 32px)" crop={DEPLOY_DIALOG} />
+      </Window>
+    </div>
+  </Section>
+
+  <Section tone="mist" class="essentials">
+    <SectionHeader title={t.essentials.title} />
+    <Window>
+      <Shot src={screenshot(locale, "dashboard")} alt={t.essentials.alt} width="min(1180px, 100vw - 32px)" />
+    </Window>
+    <dl>
+      {
+        t.essentials.items.map((item) => (
+          <div>
+            <dt>{item.term}</dt>
+            <dd>{item.text}</dd>
+          </div>
+        ))
+      }
+    </dl>
+  </Section>
+
+  <Section class="columns">
+    <SectionHeader title={t.security.title} />
+    <div class="text">
+      <p>{t.security.body}</p>
+      <p>{t.security.openSource}</p>
+      <p><a href={SECURITY_MODEL_URL} hreflang="en">{t.security.link}</a></p>
+    </div>
+  </Section>
+
+  <NightBand sea="40px" class="cta">
     <div class="container">
-      <h2>{t.essentials.title}</h2>
-      <div class="window">
-        <Shot src={screenshot(locale, "dashboard")} alt={t.essentials.alt} width="min(1180px, 100vw - 32px)" />
-      </div>
-      <dl>
-        {
-          t.essentials.items.map((item) => (
-            <div>
-              <dt>{item.term}</dt>
-              <dd>{item.text}</dd>
-            </div>
-          ))
-        }
-      </dl>
-    </div>
-  </section>
-
-  <section class="security">
-    <div class="container columns">
-      <h2>{t.security.title}</h2>
-      <div class="text">
-        <p>{t.security.body}</p>
-        <p>{t.security.openSource}</p>
-        <p><a href={SECURITY_MODEL_URL} hreflang="en">{t.security.link}</a></p>
-      </div>
-    </div>
-  </section>
-
-  <section class="cta night">
-    <div class="container">
-      <h2>{t.cta.title}</h2>
-      <p>{t.cta.body}</p>
+      <SectionHeader as="h2" size="h1" align="center" title={t.cta.title} lead={t.cta.body} />
       <div class="actions">
         <DownloadButton locale={locale} release={release} />
-        <a class="btn btn-outline" href={localePath(locale, "/download/")}>{t.hero.allDownloads}</a>
+        <Button variant="outline" href={localePath(locale, "/download/")}>{t.hero.allDownloads}</Button>
       </div>
     </div>
-    <Sea depth="var(--cta-sea)" />
-  </section>
+  </NightBand>
 </Base>
 
 <script>
@@ -199,7 +192,7 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
 
 <style>
   /* The hero: the name over the night sky, and the app standing in the sea like the pier of the icon. */
-  .hero {
+  :global(.hero) {
     overflow: hidden;
     padding-top: var(--space-page-top);
   }
@@ -260,10 +253,10 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
     initial-value: 0px;
   }
 
-  /* The sea falls below the demo's window, whose waves (36px) stay under it, and the bar above the
-     window takes most of the space over it. */
+  /* The sea falls below the demo's window, whose waves stay under it, and the bar above the window
+     takes most of the space over it. */
   .horizon.open {
-    --sea-depth: calc(var(--water) - 36px);
+    --sea-depth: calc(var(--water) - var(--wave-height));
     margin-top: var(--space-24);
   }
 
@@ -272,12 +265,12 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
     margin: 0 auto;
   }
 
-  .horizon .window {
+  .horizon :global(.window) {
     position: relative;
   }
 
   /* The demo fills the window over its screenshot, and shows once it has loaded. */
-  .window :global(iframe) {
+  .horizon :global(iframe) {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -288,26 +281,26 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
     transition: opacity var(--duration-slow) var(--ease-standard);
   }
 
-  .open .window :global(iframe) {
+  .open :global(iframe) {
     opacity: 1;
     pointer-events: auto;
   }
 
   /* A short screen keeps all of the demo in view, the bar above it included. */
-  .open .window {
+  .open :global(.window) {
     height: min(var(--shot) * var(--ratio), 100svh - 96px);
   }
 
-  .open .window :global(.shot) {
+  .open :global(.window .shot) {
     display: none;
   }
 
   /* The screenshot is the demo's poster: it dims under the pointer, and a click anywhere starts it. */
-  .playable:not(.open) .window {
+  .playable:not(.open) :global(.window) {
     cursor: pointer;
   }
 
-  .playable .window::after {
+  .playable :global(.window)::after {
     content: "";
     position: absolute;
     inset: 0;
@@ -316,12 +309,12 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
     transition: background-color var(--duration-base) var(--ease-standard);
   }
 
-  .playable:not(.open) .window:hover::after,
-  .loading .window::after {
+  .playable:not(.open) :global(.window:hover)::after,
+  .loading :global(.window)::after {
     background: var(--scrim);
   }
 
-  .try {
+  .horizon :global(.try) {
     position: absolute;
     z-index: 1;
     left: 50%;
@@ -333,13 +326,13 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
       transform var(--duration-base) var(--ease-standard);
   }
 
-  .window:hover .try {
-    background: var(--foam);
+  .horizon :global(.window:hover .try) {
+    background: var(--pier-hover);
     transform: translate(-50%, -50%) scale(1.04);
   }
 
-  .try[hidden],
-  .open .try {
+  .horizon :global(.try[hidden]),
+  .open :global(.try) {
     display: none;
   }
 
@@ -353,7 +346,7 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
     height: 18px;
     border: 2px solid currentColor;
     border-right-color: transparent;
-    border-radius: 50%;
+    border-radius: var(--radius-full);
     animation: spin var(--duration-scene) linear infinite;
   }
 
@@ -376,6 +369,9 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
     gap: var(--space-4) var(--space-24);
     margin-bottom: var(--space-12);
     font-size: var(--text-sm);
+  }
+
+  .available a {
     color: var(--on-night-2);
   }
 
@@ -393,27 +389,7 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
     gap: var(--space-4);
   }
 
-  .demo-actions button,
-  .demo-actions a {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-6);
-    padding: var(--space-6) var(--space-10);
-    border: 0;
-    border-radius: var(--radius-full);
-    background: none;
-    font: inherit;
-    color: var(--on-night);
-    text-decoration: none;
-    cursor: pointer;
-  }
-
-  .demo-actions button:hover,
-  .demo-actions a:hover {
-    background: var(--on-night-hover);
-  }
-
-  .rise {
+  :global(.rise) {
     animation: rise var(--duration-entrance) var(--ease-emphasized) both;
   }
 
@@ -424,58 +400,19 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
   }
 
   /* Features: the text beside a detail of the app. */
-  .feature {
-    padding: var(--space-section) 0;
-  }
-
-  .feature + .feature {
-    padding-top: 0;
-  }
-
-  .split {
+  :global(.split) {
     display: grid;
     grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
     gap: var(--space-split);
     align-items: center;
   }
 
-  .reverse .text {
+  :global(.reverse) .text {
     order: 2;
   }
 
-  h2 {
-    font-size: var(--text-h2);
-  }
-
-  .body {
-    margin-top: var(--space-20);
-    font-size: var(--text-lg);
-    color: var(--ink-2);
-  }
-
-  .points {
-    margin: var(--space-32) 0 0;
-    padding: 0;
-    list-style: none;
-    display: grid;
-    gap: var(--space-16);
-  }
-
-  .points li {
-    position: relative;
-    padding-left: var(--space-24);
-  }
-
-  /* Each point is a ring of the seigaiha. */
-  .points li::before {
-    content: "";
-    position: absolute;
-    left: 2px;
-    top: calc(var(--leading-body) * 0.5em - 6px);
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    border: 2px solid var(--sea);
+  .text :global(.ring-list) {
+    margin-top: var(--space-32);
   }
 
   .media {
@@ -483,25 +420,20 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
     justify-content: center;
   }
 
-  .panel {
+  .media :global(.panel) {
     width: min(420px, 100%);
   }
 
-  .dialog {
+  .media :global(.dialog) {
     width: min(560px, 100%);
   }
 
   /* Everything else: the dashboard, then the list. */
-  .essentials {
-    padding: var(--space-section) 0;
-    background: var(--mist);
-  }
-
-  .essentials h2 {
+  :global(.essentials) :global(.section-header) {
     max-width: 18em;
   }
 
-  .essentials .window {
+  :global(.essentials) > :global(.window) {
     margin-top: var(--space-40);
   }
 
@@ -523,17 +455,13 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
   }
 
   /* Security: a quiet statement. */
-  .security {
-    padding: var(--space-section) 0;
-  }
-
-  .columns {
+  :global(.columns) {
     display: grid;
     grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
     gap: var(--space-split);
   }
 
-  .security .text {
+  :global(.columns) .text {
     display: grid;
     gap: var(--space-16);
     font-size: var(--text-lg);
@@ -541,30 +469,17 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
   }
 
   /* The closing call, back on the night sea. */
-  .cta {
-    --cta-sea: 40px;
-    padding: var(--space-section) 0 calc(var(--cta-sea) + var(--wave-height) + var(--space-above-sea));
-    text-align: center;
-    overflow: hidden;
-  }
-
-  .cta h2 {
-    font-size: var(--text-h1);
-  }
-
-  .cta p {
-    max-width: 36em;
-    margin: var(--space-20) auto 0;
-    color: var(--on-night-2);
+  :global(.cta) {
+    padding-top: var(--space-section);
   }
 
   @media (max-width: 900px) {
-    .split,
-    .columns {
+    :global(.split),
+    :global(.columns) {
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .reverse .text {
+    :global(.reverse) .text {
       order: 0;
     }
 
@@ -575,12 +490,12 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
 
   /* The app is laid out as a desktop window, so narrower screens keep the screenshot. */
   @media (max-width: 959px) {
-    .try,
-    .playable .window::after {
+    .horizon :global(.try),
+    .playable :global(.window)::after {
       display: none;
     }
 
-    .playable:not(.open) .window {
+    .playable:not(.open) :global(.window) {
       cursor: auto;
     }
   }

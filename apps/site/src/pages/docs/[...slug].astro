@@ -1,6 +1,8 @@
 ---
 import { getCollection, render, type CollectionEntry } from "astro:content";
-import Icon from "../../components/Icon.astro";
+import CodeBlock from "../../components/CodeBlock.astro";
+import Link from "../../components/Link.astro";
+import SectionHeader from "../../components/SectionHeader.astro";
 import Base from "../../layouts/Base.astro";
 import { OVERVIEW, docPath, sidebar } from "../../lib/docs";
 import { pageTitle } from "../../lib/seo";
@@ -41,19 +43,27 @@ const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
       </details>
     </nav>
     <article>
-      <h1>{heading}</h1>
-      <p class="version">{version ? `Describes Hatoba ${version}.` : "Describes the development version of Hatoba."}</p>
+      <SectionHeader as="h1" size="title" title={heading}>
+        <p class="version">{version ? `Describes Hatoba ${version}.` : "Describes the development version of Hatoba."}</p>
+      </SectionHeader>
       <div class="prose">
         <Content />
       </div>
       <p class="edit">
-        <a href={editUrl}><Icon name="external" size={16} />Edit this page on GitHub</a>
+        <Link href={editUrl} icon="external">Edit this page on GitHub</Link>
       </p>
     </article>
   </div>
+  <!-- A <template> would keep the CodeBlock's script from running, so the source is a hidden div. -->
+  <div id="code-block" hidden><CodeBlock code="" copyLabel="Copy" copied="Copied" /></div>
 </Base>
 
 <script>
+  // Each code block gets the Copy button of a CodeBlock. It sits in the block's corner, so adding it
+  // moves nothing.
+  const copy = document.querySelector("#code-block button")!;
+  for (const block of document.querySelectorAll(".prose .code-block")) block.append(copy.cloneNode(true));
+
   // On a narrow screen the contents start closed, so the page starts with the article.
   const contents = document.querySelector<HTMLDetailsElement>(".sidebar details");
   if (contents && matchMedia("(max-width: 900px)").matches) contents.open = false;
@@ -122,10 +132,6 @@ const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
     max-width: 46em;
   }
 
-  h1 {
-    font-size: var(--text-title);
-  }
-
   .version {
     margin-top: var(--space-12);
     color: var(--ink-2);
@@ -137,12 +143,6 @@ const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
     padding-top: var(--space-20);
     border-top: 1px solid var(--line);
     font-size: var(--text-md);
-  }
-
-  .edit a {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-8);
   }
 
   .prose {
@@ -191,16 +191,8 @@ const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
     color: var(--ink-2);
   }
 
-  .prose :global(pre) {
-    padding: var(--space-16);
-    border-radius: var(--radius-md);
-    overflow-x: auto;
-    font-size: var(--text-sm);
-  }
-
-  .prose :global(pre code) {
-    background: none;
-    padding: 0;
+  .prose :global(.code-block) {
+    margin: 0 0 var(--space-16);
   }
 
   @media (max-width: 900px) {

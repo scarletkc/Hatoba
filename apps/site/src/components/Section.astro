@@ -1,0 +1,32 @@
+---
+/**
+ * A section of a page on paper, with the space between sections above and below it. `continues`
+ * drops the space above, for a section that carries on from the one before.
+ */
+interface Props {
+  tone?: "paper" | "mist";
+  continues?: boolean;
+  id?: string;
+  class?: string;
+}
+
+const { tone = "paper", continues = false, id, class: className } = Astro.props;
+---
+
+<section id={id} class:list={["section", tone, { continues }]}>
+  <div class:list={["container", className]}><slot /></div>
+</section>
+
+<style>
+  .section {
+    padding: var(--space-section) 0;
+  }
+
+  .continues {
+    padding-top: 0;
+  }
+
+  .mist {
+    background: var(--mist);
+  }
+</style>

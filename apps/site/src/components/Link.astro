@@ -1,0 +1,36 @@
+---
+import Icon, { type IconName } from "./Icon.astro";
+
+/**
+ * A text link. `muted` takes its colour from the text around it and shows its underline under the
+ * pointer, for lists of links such as the footer's.
+ */
+interface Props {
+  href: string;
+  variant?: "default" | "muted";
+  icon?: IconName;
+  class?: string;
+  [attribute: string]: unknown;
+}
+
+const { href, variant = "default", icon, class: className, ...rest } = Astro.props;
+---
+
+<a href={href} class:list={["link", variant, { "with-icon": icon }, className]} {...rest}>{icon && <Icon name={icon} size={16} />}<slot /></a>
+
+<style>
+  .muted {
+    color: inherit;
+    text-decoration-color: transparent;
+  }
+
+  .muted:hover {
+    text-decoration-color: currentColor;
+  }
+
+  .with-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-8);
+  }
+</style>

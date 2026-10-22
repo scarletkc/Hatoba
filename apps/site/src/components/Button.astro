@@ -1,0 +1,147 @@
+---
+import Icon, { type IconName } from "./Icon.astro";
+
+/**
+ * The site's one button, as a link (`href`), a button, or the summary of a menu.
+ *
+ * - `pier`: the white of the pier, the main action on the night band.
+ * - `outline`: the second action on the night band.
+ * - `accent`: the main action on paper (the deep blue of the water; the sea in the dark).
+ * - `night`: a quiet item on the night band, such as the header's links. `aria-current` marks the page.
+ * - `quiet`: a small outlined control on paper, such as Copy.
+ */
+interface Props {
+  variant?: "pier" | "outline" | "accent" | "night" | "quiet";
+  size?: "lg" | "md" | "sm";
+  href?: string;
+  as?: "summary";
+  icon?: IconName;
+  iconSize?: number;
+  /** Shows only the icon; the label is then the accessible name and the tooltip. */
+  iconOnly?: boolean;
+  label?: string;
+  class?: string;
+  [attribute: string]: unknown;
+}
+
+const { variant = "accent", size = "lg", href, as, icon, iconSize, iconOnly = false, label, class: className, ...rest } = Astro.props;
+const Tag = as ?? (href ? "a" : "button");
+const classes = ["button", variant, size, { "icon-only": iconOnly }, className];
+---
+
+<Tag class:list={classes} href={href} type={Tag === "button" ? "button" : undefined} aria-label={iconOnly ? label : undefined} title={iconOnly ? label : undefined} {...rest}>
+  {icon && <Icon name={icon} size={iconSize ?? (size === "lg" ? 18 : 16)} class="button-icon" />}
+  {iconOnly ? <slot /> : <slot>{label}</slot>}
+</Tag>
+
+<style>
+  .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    font: inherit;
+    font-weight: 600;
+    line-height: 1.2;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      background-color var(--duration-fast) var(--ease-standard),
+      border-color var(--duration-fast) var(--ease-standard),
+      color var(--duration-fast) var(--ease-standard);
+  }
+
+  .button :global(svg) {
+    flex: none;
+  }
+
+  .lg {
+    gap: var(--space-10);
+    min-height: 48px;
+    padding: 0 var(--space-24);
+    border-radius: var(--radius-full);
+    font-size: var(--text-button);
+  }
+
+  .md {
+    gap: var(--space-8);
+    min-height: 40px;
+    padding: 0 var(--space-12);
+    border-radius: var(--radius-full);
+    font-size: var(--text-md);
+    font-weight: 500;
+  }
+
+  .sm {
+    gap: var(--space-6);
+    min-height: 32px;
+    padding: 0 var(--space-10);
+    border-radius: var(--radius-full);
+    font-size: var(--text-sm);
+    font-weight: 500;
+  }
+
+  .icon-only {
+    padding: 0;
+    aspect-ratio: 1;
+  }
+
+  .pier {
+    background: var(--pier);
+    color: var(--on-pier);
+  }
+
+  .pier:hover {
+    background: var(--pier-hover);
+  }
+
+  .outline {
+    color: var(--on-night);
+    border-color: var(--on-night-line);
+  }
+
+  .outline:hover {
+    border-color: var(--on-night-line-strong);
+  }
+
+  .accent {
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+
+  .accent:hover {
+    background: var(--accent-hover);
+  }
+
+  .night {
+    color: var(--on-night);
+    background: transparent;
+  }
+
+  .night:hover {
+    background: var(--on-night-hover);
+  }
+
+  .night[aria-current="page"] {
+    background: var(--on-night-current);
+  }
+
+  .quiet {
+    color: var(--ink-2);
+    background: transparent;
+    border-color: var(--line);
+  }
+
+  .quiet:hover {
+    color: var(--ink);
+    border-color: var(--ink-2);
+  }
+
+  summary.button {
+    list-style: none;
+  }
+
+  summary.button::-webkit-details-marker {
+    display: none;
+  }
+</style>

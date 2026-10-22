@@ -11,3 +11,11 @@ export function inlineMarkdown(text: string): string {
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
 }
+
+/**
+ * Puts each code block of rendered Markdown in the frame of the CodeBlock component, whose Copy
+ * button the docs page adds to it.
+ */
+export function frameCodeBlocks(html: string): string {
+  return html.replace(/<pre[\s>][\s\S]*?<\/pre>/g, (pre) => `<div class="code-block" data-copy-scope>${pre}</div>`);
+}

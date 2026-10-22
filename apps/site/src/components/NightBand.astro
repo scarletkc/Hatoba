@@ -1,0 +1,51 @@
+---
+import Sea from "./Sea.astro";
+
+/**
+ * The night band of the app icon, which heads every page and closes the home page. With `sea`, a
+ * strip of sea that deep ends it, and the band leaves room for its waves (and, with `room`, some
+ * night above them).
+ */
+interface Props {
+  as?: "header" | "section" | "div";
+  /** The depth of the sea below its waves, as a CSS length. */
+  sea?: string;
+  room?: boolean;
+  /** A flat night without the gradient toward the harbour, as the header over a page's own band. */
+  flat?: boolean;
+  class?: string;
+  [attribute: string]: unknown;
+}
+
+const { as: Tag = "section", sea, room = true, flat = false, class: className, ...rest } = Astro.props;
+---
+
+<Tag class:list={["night", { "has-sea": sea, room: sea && room, flat }, className]} style={sea && { "--band-sea": sea }} {...rest}>
+  <slot />
+  {sea && <Sea depth="var(--band-sea)" />}
+</Tag>
+
+<style>
+  .night {
+    position: relative;
+    background: linear-gradient(180deg, var(--night) 0%, var(--harbor) 100%);
+    color: var(--on-night);
+  }
+
+  .flat {
+    background: var(--night);
+  }
+
+  .has-sea {
+    padding-bottom: calc(var(--band-sea) + var(--wave-height));
+  }
+
+  .room {
+    padding-bottom: calc(var(--band-sea) + var(--wave-height) + var(--space-above-sea));
+  }
+
+  /* Links in the night take its text colour; :where keeps this weaker than a page's own link styles. */
+  :where(.night) :global(a:not(.button)) {
+    color: var(--on-night);
+  }
+</style>

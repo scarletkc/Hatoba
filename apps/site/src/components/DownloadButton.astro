@@ -1,15 +1,16 @@
 ---
 import { localePath, messages, type Locale } from "../i18n";
 import type { Platform, SiteRelease } from "../lib/release";
-import Icon from "./Icon.astro";
+import Button from "./Button.astro";
 
 interface Props {
   locale: Locale;
   release: SiteRelease;
-  class?: string;
+  /** pier on the night band, accent on paper. */
+  variant?: "pier" | "accent";
 }
 
-const { locale, release, class: className = "btn-pier" } = Astro.props;
+const { locale, release, variant = "pier" } = Astro.props;
 const t = messages(locale);
 const downloadPage = localePath(locale, "/download/");
 /**
@@ -29,16 +30,17 @@ const platforms = Object.keys(targets) as Platform[];
   before the first paint, so the button never changes its width after the page shows. Phones and
   unknown systems get the download page.
 -->
-<a
-  class:list={["btn", "download", className]}
+<Button
+  variant={variant}
+  icon="download"
+  class="download"
   href={downloadPage}
   data-download
   {...Object.fromEntries(platforms.map((platform) => [`data-${platform}-href`, targets[platform]]))}
 >
-  <Icon name="download" />
   <span class="for-all">{t.hero.allDownloads}</span>
   {platforms.map((platform) => <span class={`for-${platform}`}>{t.hero.downloadFor(t.platforms[platform])}</span>)}
-</a>
+</Button>
 
 <script>
   const os = document.documentElement.dataset.os;
@@ -51,14 +53,14 @@ const platforms = Object.keys(targets) as Platform[];
 </script>
 
 <style>
-  .download > span {
+  :global(.download) > span {
     display: none;
   }
 
-  :global(html:not([data-os])) .for-all,
-  :global(html[data-os="windows"]) .for-windows,
-  :global(html[data-os="linux"]) .for-linux,
-  :global(html[data-os="macos"]) .for-macos {
+  :global(html:not([data-os]) .download) > .for-all,
+  :global(html[data-os="windows"] .download) > .for-windows,
+  :global(html[data-os="linux"] .download) > .for-linux,
+  :global(html[data-os="macos"] .download) > .for-macos {
     display: inline;
   }
 </style>

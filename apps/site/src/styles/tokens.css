@@ -28,6 +28,19 @@
   --code-bg: #e9eff8;
   --code-fg: var(--ink);
 
+  /* Code in the docs, which Shiki's css-variables theme colours. */
+  --astro-code-foreground: var(--code-fg);
+  --astro-code-background: var(--code-bg);
+  --astro-code-token-comment: var(--ink-2);
+  --astro-code-token-punctuation: var(--ink-2);
+  --astro-code-token-keyword: var(--link);
+  --astro-code-token-constant: var(--link);
+  --astro-code-token-string: var(--link);
+  --astro-code-token-string-expression: var(--link);
+  --astro-code-token-function: var(--ink);
+  --astro-code-token-parameter: var(--ink);
+  --astro-code-token-link: var(--link);
+
   /* The solid button on paper, and the white one on the night band. */
   --accent: var(--deep);
   --accent-hover: var(--deep-dark);

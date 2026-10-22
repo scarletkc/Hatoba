@@ -1,0 +1,74 @@
+---
+import Button from "./Button.astro";
+import Icon from "./Icon.astro";
+
+/**
+ * Copies `text`, or the code in the nearest [data-copy-scope] when there is none. Its copy icon turns
+ * into a check for two seconds and a screen reader hears `copied`, so the button never changes size.
+ */
+interface Props {
+  text?: string;
+  /** What the button copies, for its accessible name and tooltip, such as "Copy SHA-256". */
+  label: string;
+  copied: string;
+  class?: string;
+}
+
+const { text, label, copied, class: className } = Astro.props;
+---
+
+<Button variant="quiet" size="sm" iconOnly label={label} class:list={["copy", className]} data-copy={text} data-copied={copied}>
+  <span class="glyphs" aria-hidden="true">
+    <Icon name="copy" size={16} class="idle" />
+    <Icon name="check" size={16} class="done" />
+  </span>
+  <span class="visually-hidden" aria-live="polite"></span>
+</Button>
+
+<script>
+  // One listener for every Copy button, the ones a page adds later included.
+  const timers = new WeakMap<HTMLElement, number>();
+  document.addEventListener("click", async (event) => {
+    const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>("button[data-copied]") : null;
+    if (!button) return;
+    const code = button.closest("[data-copy-scope]")?.querySelector("code");
+    try {
+      await navigator.clipboard.writeText(button.dataset.copy ?? code?.textContent ?? "");
+    } catch {
+      // Without the clipboard, select the text so it can be copied by hand.
+      if (code) getSelection()?.selectAllChildren(code);
+      return;
+    }
+    const status = button.querySelector("[aria-live]")!;
+    button.dataset.state = "done";
+    status.textContent = button.dataset.copied!;
+    clearTimeout(timers.get(button));
+    timers.set(
+      button,
+      window.setTimeout(() => {
+        delete button.dataset.state;
+        status.textContent = "";
+      }, 2000),
+    );
+  });
+</script>
+
+<style>
+  /* Both icons share one cell, so swapping them can't move anything. */
+  .glyphs {
+    display: inline-grid;
+  }
+
+  .glyphs > :global(svg) {
+    grid-area: 1 / 1;
+  }
+
+  .glyphs > :global(.done),
+  :global([data-state="done"]) .glyphs > :global(.idle) {
+    opacity: 0;
+  }
+
+  :global([data-state="done"]) .glyphs > :global(.done) {
+    opacity: 1;
+  }
+</style>

@@ -6,6 +6,10 @@ export default defineConfig({
   site: "https://hatoba.fog.moe",
   trailingSlash: "always",
   devToolbar: { enabled: false },
+  markdown: {
+    // Code takes its colours from the tokens (--astro-code-*), in both schemes.
+    shikiConfig: { theme: "css-variables" },
+  },
   i18n: {
     locales: ["en", "zh", "ja"],
     defaultLocale: "en",
