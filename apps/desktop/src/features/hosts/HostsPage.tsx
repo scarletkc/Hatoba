@@ -18,10 +18,10 @@ import { Button, Icon, LinkButton } from "@/components/controls";
 import { EmptyState, PageHeader, SearchField, Tag, layoutStyles } from "@/components/layout";
 import { Menu, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { durationLabel } from "@/features/settings/durations";
-import { connectHost, connectTarget } from "@/features/terminal/connect";
+import { connectHost, connectTarget, connectTelnetHost, connectTelnetTarget } from "@/features/terminal/connect";
 import { formatRelative, useT, type Locale } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { HostView, ImportSource, QuickTarget } from "@/ipc/types";
+import { isTelnetHost, type AnyHostView, type ImportSource, type QuickTarget } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { copyText } from "@/lib/native";
@@ -31,10 +31,14 @@ import { OsIcon } from "./OsIcon";
 import {
   bracketHost,
   formatTarget,
+  formatTelnetTarget,
   parseQuickConnect,
+  parseTelnet,
   sameTarget,
   savedHostFor,
+  savedTelnetHostFor,
   type QuickProblem,
+  type TelnetTarget,
   type TypedTarget,
 } from "./quickConnect";
 import { applyFilter, sortHosts } from "./order";
@@ -51,15 +55,20 @@ let handledSearchTick = 0;
 
 /** Row id of the typed quick-connect target (HOST-12); saved hosts use their item ids. */
 const TYPED_ROW = "quick:typed";
+/** Row id of a typed Telnet target (TELNET-05). */
+const TELNET_ROW = "quick:telnet";
 const SUGGESTIONS_ID = "recent-targets";
 
 /** A Connect row for a target that is not a saved host: the one typed, or a recent one. */
-interface QuickRowItem {
-  id: string;
-  target: TypedTarget;
-  /** Set when the target is in the recent list, so the row can remove it. */
-  recent: QuickTarget | null;
-}
+type QuickRowItem =
+  | {
+      id: string;
+      target: TypedTarget;
+      telnet?: undefined;
+      /** Set when the target is in the recent list, so the row can remove it. */
+      recent: QuickTarget | null;
+    }
+  | { id: string; target?: undefined; telnet: TelnetTarget; recent: null };
 
 export function HostsPage({ filter }: { filter: HostFilter }) {
   const t = useT();
@@ -68,6 +77,9 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   const searchTick = useApp((st) => st.searchFocusTick);
   const navigate = useApp((st) => st.navigate);
   const hosts = useVaultData((st) => st.hosts);
+  const telnetHosts = useVaultData((st) => st.telnetHosts);
+  // TELNET-01: Telnet hosts are listed with the SSH hosts.
+  const allHosts = useMemo<AnyHostView[]>(() => [...hosts, ...telnetHosts], [hosts, telnetHosts]);
   const groups = useVaultData((st) => st.groups);
   const tabs = useTabs((st) => st.tabs);
   const recents = useRecentTargets((st) => st.targets);
@@ -77,7 +89,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   const deferredQuery = useDeferredValue(query);
   const [probe, setProbe] = useState<Record<string, boolean>>({});
   const [importing, setImporting] = useState<ImportSource | null>(null);
-  const [ctxHost, setCtxHost] = useState<HostView | null>(null);
+  const [ctxHost, setCtxHost] = useState<AnyHostView | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [searchFocused, setSearchFocused] = useState(false);
   const [suggestDismissed, setSuggestDismissed] = useState(false);
@@ -109,20 +121,26 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   }, [filter, groups, t]);
 
   // Filter + sort only when inputs change; typing in the search box touches neither.
-  const base = useMemo(() => sortHosts(applyFilter(hosts, filter), sort, t.locale), [hosts, filter, sort, t.locale]);
+  const base = useMemo(() => sortHosts(applyFilter(allHosts, filter), sort, t.locale), [allHosts, filter, sort, t.locale]);
   const index = useMemo(() => buildHostIndex(base), [base]);
-  // HOST-12: `user@host` and `ssh …` input is also a target to connect to. The list is then
-  // filtered by its destination, without the ssh syntax around it.
-  const parsed = useMemo(() => parseQuickConnect(deferredQuery), [deferredQuery]);
-  const searchText = parsed ? parsed.search : deferredQuery;
+  // HOST-12: `user@host` and `ssh …` input is also a target to connect to, and TELNET-05:
+  // `telnet host [port]`. The list is then filtered by its destination, without the syntax around it.
+  const telnetTyped = useMemo(() => parseTelnet(deferredQuery), [deferredQuery]);
+  const parsed = useMemo(() => (telnetTyped ? null : parseQuickConnect(deferredQuery)), [telnetTyped, deferredQuery]);
+  const searchText = telnetTyped ? telnetTyped.search : parsed ? parsed.search : deferredQuery;
   const found = useMemo(() => searchHosts(index, searchText), [index, searchText]);
   // A typed target that is a saved host connects as that host, with its key and jump host.
-  const exact = useMemo(() => (parsed?.ok ? savedHostFor(hosts, parsed.target) : undefined), [parsed, hosts]);
+  const exact = useMemo<AnyHostView | undefined>(
+    () =>
+      telnetTyped ? savedTelnetHostFor(telnetHosts, telnetTyped.target) : parsed?.ok ? savedHostFor(hosts, parsed.target) : undefined,
+    [telnetTyped, telnetHosts, parsed, hosts],
+  );
   const visible = useMemo(() => (exact && !found.includes(exact) ? [exact, ...found] : found), [exact, found]);
   // Recent targets that have been saved as hosts since show as those hosts.
   const unsavedRecents = useMemo(() => recents.filter((r) => !savedHostFor(hosts, r)), [recents, hosts]);
   const quickRows = useMemo(() => {
     const rows: QuickRowItem[] = [];
+    if (telnetTyped && !exact) rows.push({ id: TELNET_ROW, telnet: telnetTyped.target, recent: null });
     if (parsed?.ok && !exact)
       rows.push({ id: TYPED_ROW, target: parsed.target, recent: unsavedRecents.find((r) => sameTarget(r, parsed.target)) ?? null });
     const q = searchText.trim().toLowerCase();
@@ -131,7 +149,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
         if (!(parsed?.ok && sameTarget(r, parsed.target)) && formatTarget(r).toLowerCase().includes(q))
           rows.push({ id: `quick:recent:${formatTarget(r)}`, target: r, recent: r });
     return rows;
-  }, [parsed, exact, unsavedRecents, searchText]);
+  }, [telnetTyped, parsed, exact, unsavedRecents, searchText]);
   const problem = parsed && !parsed.ok ? parsed.problem : null;
   const notice = parsed?.ok ? parsed.notice : undefined;
 
@@ -140,14 +158,18 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   // The latest tab per host tells us whether the last attempt failed (design: red "连接失败").
   const tabStatus = useMemo(() => {
     const m = new Map<string, TabStatus>();
-    for (const tab of tabs) if (tab.hostId) m.set(tab.hostId, tab.status);
+    for (const tab of tabs) {
+      const id = tab.hostId ?? tab.telnet?.hostId;
+      if (id) m.set(id, tab.status);
+    }
     return m;
   }, [tabs]);
 
   const rowIds = useMemo(() => [...quickRows.map((r) => r.id), ...visible.map((h) => h.id)], [quickRows, visible]);
   // The typed target, or the saved host it is, is selected until the user picks another row; otherwise
   // the best saved host is, even with recent targets listed above it.
-  const preferred = exact?.id ?? (quickRows[0]?.id === TYPED_ROW ? TYPED_ROW : null);
+  const typedRow = quickRows[0]?.id === TYPED_ROW || quickRows[0]?.id === TELNET_ROW ? quickRows[0].id : null;
+  const preferred = exact?.id ?? typedRow;
   const effectiveId = useMemo(() => {
     const picked = pickedFor === deferredQuery;
     if (selectedId && rowIds.includes(selectedId) && (picked || (!preferred && !problem))) return selectedId;
@@ -259,7 +281,8 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     [navigate, filter],
   );
   const editHost = useCallback(
-    (id: string) => navigate({ kind: "host-edit", hostId: id, groupId: null, back: filter }),
+    (host: AnyHostView) =>
+      navigate({ kind: isTelnetHost(host) ? "telnet-edit" : "host-edit", hostId: host.id, groupId: null, back: filter }),
     [navigate, filter],
   );
 
@@ -267,17 +290,19 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     (id: string) => {
       const quick = latest.current.quickRows.find((r) => r.id === id);
       if (quick) {
-        void connectTarget(quick.target);
+        if (quick.telnet) connectTelnetTarget(quick.telnet.address, quick.telnet.port);
+        else void connectTarget(quick.target);
         return;
       }
       select(id);
-      void connectHost(id);
+      if (useVaultData.getState().telnetHosts.some((h) => h.id === id)) connectTelnetHost(id);
+      else void connectHost(id);
     },
     [select],
   );
 
   const onContext = useCallback(
-    (e: MouseEvent, host: HostView) => {
+    (e: MouseEvent, host: AnyHostView) => {
       e.preventDefault();
       select(host.id);
       setCtxHost(host);
@@ -288,18 +313,18 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
 
   const fail = (e: unknown) => toast(errorMessage(t, e), "error");
 
-  const toggleFavorite = async (host: HostView) => {
+  const toggleFavorite = async (host: AnyHostView) => {
     try {
-      await api.host_set_favorite(host.id, !host.favorite);
+      await (isTelnetHost(host) ? api.telnet_host_set_favorite : api.host_set_favorite)(host.id, !host.favorite);
       await useVaultData.getState().reload();
     } catch (e) {
       fail(e);
     }
   };
 
-  const duplicate = async (host: HostView) => {
+  const duplicate = async (host: AnyHostView) => {
     try {
-      const copy = await api.host_duplicate(host.id);
+      const copy = await (isTelnetHost(host) ? api.telnet_host_duplicate : api.host_duplicate)(host.id);
       await useVaultData.getState().reload();
       select(copy.id);
       toast(t("hosts.duplicated", { name: copy.name }), "success");
@@ -308,7 +333,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     }
   };
 
-  const remove = async (host: HostView) => {
+  const remove = async (host: AnyHostView) => {
     const ok = await confirm({
       title: t("hosts.deleteTitle", { name: host.name }),
       body: t("hosts.deleteBody"),
@@ -317,7 +342,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     });
     if (!ok) return;
     try {
-      await api.host_delete(host.id);
+      await (isTelnetHost(host) ? api.telnet_host_delete : api.host_delete)(host.id);
       await useVaultData.getState().reload();
       toast(t("hosts.deleted", { name: host.name }));
     } catch (e) {
@@ -325,8 +350,10 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     }
   };
 
-  const copyAddress = async (host: HostView) => {
-    const text = `${host.username ? `${host.username}@` : ""}${host.address}${host.port !== 22 ? ` -p ${host.port}` : ""}`;
+  const copyAddress = async (host: AnyHostView) => {
+    const text = isTelnetHost(host)
+      ? `${host.address}${host.port !== 23 ? ` ${host.port}` : ""}`
+      : `${host.username ? `${host.username}@` : ""}${host.address}${host.port !== 22 ? ` -p ${host.port}` : ""}`;
     try {
       await copyText(text);
       toast(t("hosts.copied"), "success");
@@ -336,9 +363,9 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   };
 
   // SEC-08: the backend copies the saved password and clears the clipboard after this device's delay.
-  const copyPassword = async (host: HostView) => {
+  const copyPassword = async (host: AnyHostView) => {
     try {
-      await api.host_copy_password(host.id);
+      await (isTelnetHost(host) ? api.telnet_host_copy_password : api.host_copy_password)(host.id);
       const secs = useApp.getState().prefs.clipboard_clear_secs;
       toast(secs ? t("hosts.passwordCopied", { time: durationLabel(t, secs) }) : t("hosts.passwordCopiedKept"), "success");
     } catch (e) {
@@ -346,9 +373,9 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     }
   };
 
-  const menuEntries = (host: HostView): MenuEntry[] => [
+  const menuEntries = (host: AnyHostView): MenuEntry[] => [
     { label: t("hosts.menu.connect"), icon: "plugs-connected", onSelect: () => connect(host.id) },
-    { label: t("hosts.menu.edit"), icon: "pencil-simple", onSelect: () => editHost(host.id) },
+    { label: t("hosts.menu.edit"), icon: "pencil-simple", onSelect: () => editHost(host) },
     { label: t("hosts.menu.duplicate"), icon: "copy", onSelect: () => void duplicate(host) },
     {
       label: host.favorite ? t("hosts.menu.unfavorite") : t("hosts.menu.favorite"),
@@ -403,6 +430,14 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       move(e.key === "ArrowDown" ? 1 : -1);
+    } else if (e.key === "Enter" && effectiveId === TELNET_ROW) {
+      e.preventDefault();
+      // The list may still show an earlier keystroke: connect what the field says now.
+      const typed = parseTelnet(query);
+      if (!typed) return;
+      const saved = savedTelnetHostFor(telnetHosts, typed.target);
+      if (saved) connect(saved.id);
+      else connectTelnetTarget(typed.target.address, typed.target.port);
     } else if (e.key === "Enter" && effectiveId === TYPED_ROW) {
       e.preventDefault();
       // The list may still show an earlier keystroke: connect what the field says now.
@@ -490,7 +525,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   );
 
   // The vault has no hosts at all: design §01b. Quick connect still works from the search field.
-  if (hosts.length === 0 && !query.trim()) {
+  if (allHosts.length === 0 && !query.trim()) {
     return (
       <div className={s.page} onKeyDown={onKeyDown}>
         <PageHeader title={title} search={searchField}>
@@ -527,7 +562,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   const searching = deferredQuery.trim() !== "";
   const hasQuick = quickRows.length > 0 || problem !== null;
   const emptyBody = (() => {
-    if (base.length === 0 && hosts.length > 0 && !hasQuick && !exact) {
+    if (base.length === 0 && allHosts.length > 0 && !hasQuick && !exact) {
       switch (filter.kind) {
         case "favorites":
           return { icon: "star", key: "hosts.emptyFav" } as const;
@@ -609,14 +644,15 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
                 key={h.id}
                 host={h}
                 selected={h.id === effectiveId}
-                jumpName={h.jump_host_id ? (hostName.get(h.jump_host_id) ?? null) : null}
+                jumpName={!isTelnetHost(h) && h.jump_host_id ? (hostName.get(h.jump_host_id) ?? null) : null}
                 status={tabStatus.get(h.id)}
                 online={probe[h.id]}
                 now={now}
                 locale={t.locale}
                 connectLabel={t("hosts.connect")}
                 failedLabel={t("hosts.failed")}
-                viaTitle={h.jump_host_id ? t("hosts.viaTitle", { name: hostName.get(h.jump_host_id) ?? "" }) : ""}
+                viaTitle={!isTelnetHost(h) && h.jump_host_id ? t("hosts.viaTitle", { name: hostName.get(h.jump_host_id) ?? "" }) : ""}
+                telnetLabel={t("hosts.telnet")}
                 onSelect={pick}
                 onConnect={connect}
                 onContext={onContext}
@@ -645,7 +681,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
 }
 
 interface RowProps {
-  host: HostView;
+  host: AnyHostView;
   selected: boolean;
   jumpName: string | null;
   status: TabStatus | undefined;
@@ -655,9 +691,11 @@ interface RowProps {
   connectLabel: string;
   failedLabel: string;
   viaTitle: string;
+  /** What marks a Telnet host's row. */
+  telnetLabel: string;
   onSelect: (id: string) => void;
   onConnect: (id: string) => void;
-  onContext: (e: MouseEvent, host: HostView) => void;
+  onContext: (e: MouseEvent, host: AnyHostView) => void;
 }
 
 const HostRow = memo(function HostRow({
@@ -671,10 +709,12 @@ const HostRow = memo(function HostRow({
   connectLabel,
   failedLabel,
   viaTitle,
+  telnetLabel,
   onSelect,
   onConnect,
   onContext,
 }: RowProps) {
+  const telnet = isTelnetHost(host);
   const failed = status === "failed";
   const dot = status === "connected" ? "var(--green)" : failed ? "var(--red)" : online ? "var(--green)" : "var(--fg3)";
   const last = failed
@@ -693,9 +733,10 @@ const HostRow = memo(function HostRow({
       onContextMenu={(e) => onContext(e, host)}
     >
       <div className={s.nameCell}>
-        <OsIcon os={host.os} badge={dot} />
+        {telnet ? <OsIcon os={null} icon="network" badge={dot} /> : <OsIcon os={host.os} badge={dot} />}
         <span className={s.name}>{host.name}</span>
         {host.favorite && <Icon name="star" fill className={s.fav} />}
+        {telnet && <span className={s.protocol}>{telnetLabel}</span>}
       </div>
       <div className={s.addrCell}>
         <span className={s.addr}>
@@ -773,7 +814,14 @@ function QuickRow({ item, selected, connectLabel, hint, removeLabel, onSelect, o
         <span className={s.name}>{connectLabel}</span>
       </div>
       <div className={s.addrCell}>
-        <TargetText target={item.target} />
+        {item.telnet ? (
+          <span className={s.addr}>
+            <span className={s.dim}>telnet </span>
+            {formatTelnetTarget(item.telnet)}
+          </span>
+        ) : (
+          <TargetText target={item.target} />
+        )}
       </div>
       <div className={s.tags} />
       <div className={cx(s.last, s.quickHint)}>

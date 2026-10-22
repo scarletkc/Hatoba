@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { useVaultData } from "@/app/data";
+import { useAllHosts } from "@/app/data";
 import { useApp } from "@/app/store";
 import { Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
 import { confirm, Menu, useMenu, type MenuEntry } from "@/components/overlay";
 import { formatRelative, useT } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { AiConversationView, AiSearchHit, HostView } from "@/ipc/types";
+import type { AiConversationView, AiSearchHit, AnyHostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { conversationBusy, deleteConversation, exportConversation, forkConversation, loadHistory, openConversation, pinConversation, renameConversation } from "./actions";
@@ -50,7 +50,7 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
   const t = useT();
   const history = useAi((st) => st.history);
   const failed = useAi((st) => st.historyFailed);
-  const hosts = useVaultData((st) => st.hosts);
+  const hosts = useAllHosts();
   const [renaming, setRenaming] = useState<string | null>(null);
   const menu = useMenu();
   const [menuEntries, setMenuEntries] = useState<MenuEntry[]>([]);
@@ -284,7 +284,7 @@ function SearchResults({
   search: Search;
   query: string;
   history: AiConversationView[] | null;
-  hosts: HostView[];
+  hosts: AnyHostView[];
   currentId: string | null;
   onOpen: (hit: AiSearchHit) => void;
   onRetry: () => void;

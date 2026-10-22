@@ -109,7 +109,8 @@ hatoba/
 │   ├── hatoba-ai/            # Model provider adapters, MCP client, web search, URL fetching
 │   ├── hatoba-core/          # Crypto, vault, data model, local store, sync engine
 │   ├── hatoba-local/         # Local terminal tabs: this computer's shells, PTY, the AI's tools here
-│   └── hatoba-ssh/           # SSH sessions, PTY, SFTP, port forwarding, known_hosts
+│   ├── hatoba-ssh/           # SSH sessions, PTY, SFTP, port forwarding, known_hosts
+│   └── hatoba-telnet/        # Telnet tabs: option negotiation, typing the saved login
 ├── workers/sync/             # Cloudflare Worker source, D1 migrations, deployment guide
 └── docs/
 ```
@@ -212,7 +213,7 @@ All item IDs are UUIDv7. Reading plaintext tolerates unknown and missing fields,
 
 ```ts
 type Item =
-  | Host | Group | SshKey | KnownHost | PortForward | Snippet | Proxy
+  | Host | TelnetHost | Group | SshKey | KnownHost | PortForward | Snippet | Proxy
   | AiProvider | SearchProvider | AiConversation | AiMessage
   | Skill | SkillFile | McpServer
   | Settings;
@@ -239,6 +240,26 @@ interface Host {
   ai_notes?: string;            // AI-37, at most 16 KB of UTF-8; absent while empty
   updated_at: number;           // Milliseconds since the epoch, used for conflict resolution
   env?: { name: string; value: string }[];  // SSH-14; absent while empty
+}
+
+// TELNET-01. A type of its own rather than a protocol on Host, so a version without Telnet
+// skips these items instead of reading them as SSH hosts.
+interface TelnetHost {
+  type: "telnet_host";
+  name: string;
+  address: string;
+  port: number;                 // 23 by default
+  username: string;             // Typed at the login prompt (TELNET-03); empty to type it by hand
+  password?: string;            // Typed at the password prompt; absent while empty
+  group_id: string | null;
+  tags: string[];
+  favorite: boolean;
+  proxy?:                       // As for Host (SSH-13)
+    | { kind: "direct" }
+    | { kind: "proxy"; proxy_id: string };
+  note: string;
+  ai_notes?: string;            // AI-37
+  updated_at: number;
 }
 
 interface Group {
@@ -895,6 +916,18 @@ A local terminal tab runs a shell of this computer, next to the SSH tabs, so loc
 | LOCAL-03 | The AI assistant works in local tabs as in SSH tabs (AI-07…13, AI-38…41, AI-46, AI-48…51), in every permission mode, with the same approvals: approval cards name **This Computer** and the shell, and **Always allow** on a local tab covers this computer's local tabs, saved under the target `local`. How the tools run on this computer is below the table | P1 |
 
 **The assistant's tools on this computer (LOCAL-03).** "The tab's host" of §13.4 is this computer. A tab whose shell has `sh` behind it runs the hosts' own exec scripts with it, so the tools behave as on a host: on macOS and Linux with `/bin/sh`, `run_command` running commands with the tab's shell as `$SHELL` (on macOS with the login shell's `PATH`, as MCP servers get it, AI-32), and for a WSL distribution with its `sh` through `wsl.exe -d <name> -e sh`, so the tools act inside the distribution, on its Linux paths. A Windows shell (PowerShell, Command Prompt, Git Bash) cannot run them, so the file tools, `glob` and `grep` run in Hatoba on Windows paths: `~`, `~/` and a relative path from the home directory, and a Git Bash path such as `/c/Users` as `C:/Users`; results show paths with forward slashes and the drive letter in capitals, which Windows accepts too. They give the results and refusals of the scripts: a write replaces an existing file's content in place, checked against what the card read right before it, a file it creates gets owner-only permission bits until its mode where the system has them, `grep` reads patterns with rg's own regex engine (so `multiline` and Unicode classes always work), a `multiline` search whose pattern can span lines reads each file whole, as rg does, and reports a file larger than 256 MiB as not searched, binary files and `.git` are skipped, and a glob that starts with a drive, such as `C:/Projects/**/*.json`, searches from there. `run_command` runs in the tab's shell, without its profile and without a console window, in `workdir` read as the file tools read paths; a missing directory, or in Command Prompt a network path, which it cannot start in, is refused before anything runs: PowerShell through `-EncodedCommand` with UTF-8 output and no progress bars, ending with a failed last command's own exit status, else 1; Command Prompt one line after `chcp 65001`; Git Bash with the command on stdin, read before the command runs, so the command's own stdin is empty as on a host. The command runs in a Job Object, so a stop or the timeout ends it and every process it started, and the result says they ended; processes a command that ends on its own leaves in the background keep running until Hatoba quits. The system prompt says that the tab is the user's own computer, names the computer, its system, the shell and the user, and for a Windows shell or a WSL distribution where the tools act and which paths they take; the tool definitions say "on this computer" for the tab's host, without the SSH server's identification string.
+
+### 7.6 Telnet
+
+Telnet hosts are switches, routers and other devices that offer Telnet, saved in the vault and synced like SSH hosts. `crates/hatoba-telnet` runs the protocol on a connection the desktop app dials through the host's proxy (SSH-13), and types the saved credentials at the login prompts; the desktop app keeps the tabs' sessions by id like the local ones (§7.5).
+
+| ID | Requirement | Priority |
+|---|---|---|
+| TELNET-01 | A Telnet host is an item of its own (`telnet_host`, §5.1): name, address, port (23 by default), user name and password for the login, group, tags, favorite, proxy, note and AI notes. **New Host** chooses SSH or Telnet in the editor, which keeps what was typed when it switches; a host's protocol is fixed once saved. Telnet hosts are listed, searched, filtered, sorted, probed (HOST-10), duplicated and deleted with the SSH hosts, marked **Telnet**, and count in the sidebar and tag counts. The editor says that Telnet is not encrypted. A saved password shows only **Saved** (HOST-08), and can be replaced or removed | P1 |
+| TELNET-02 | A Telnet tab opens with a double-click or Enter (HOST-07) and uses the terminal settings, search, links, copy and paste of SSH tabs (TERM-02…08); its status bar shows `telnet address:port`, without resource usage, port forwarding or SFTP, and its tab shows a network icon. The client offers the window size (NAWS, RFC 1073) and the terminal type (RFC 1091: `XTERM-256COLOR`, then `XTERM` and `VT100`), asks the server to echo and to suppress go-ahead, takes binary transmission (RFC 856) either way when offered, refuses other options, and answers an option only when its state changes. Until the server takes binary, Enter goes as CR LF and a CR NUL from the server arrives as CR. A connection the server closes leaves the tab with **Reconnect**; a failed one says why, with **Retry** and **Edit Host**. Lock and quit close Telnet tabs as SSH-03 and quitting close SSH ones | P1 |
+| TELNET-03 | The saved user name is typed at a prompt that ends with `login:`, `username:`, `user name:` or `user:`, and the saved password at one that ends with `password:` or `passcode:`, ignoring case and escape sequences, each once and only while the prompt ends the output. Typing stops once the password is typed, once the user has pressed Enter twice, or two minutes after connecting; a prompt that comes back after a wrong password is left to the user. Either field left empty is typed by hand | P1 |
+| TELNET-04 | The AI assistant works in Telnet tabs with `read_terminal` and `send_input` only, as Telnet has no exec channel or file access; its system prompt says the tab is a Telnet session to the host and that it works through the device's command line. A saved Telnet host takes AI notes (AI-37) and host memories (AI-53) like an SSH host, and a conversation moves to it as to one (AI-09); a quick connection (TELNET-05) is no place, so its conversation stays where it was | P1 |
+| TELNET-05 | Quick connect from the search box (HOST-12) also reads `telnet host [port]` and `telnet://host[:port]`, with an IPv6 address bare or in brackets. The saved Telnet host at that address and port connects as itself; otherwise a **Connect** row opens a Telnet tab through this device's default proxy, where the user logs in by hand | P2 |
 
 ---
 

@@ -1,8 +1,8 @@
-import type { HostView } from "@/ipc/types";
+import type { HostLike } from "./order";
 
 /** Lower-cased searchable text of one host, built once per vault reload (HOST-05). */
-export interface HostIndexEntry {
-  host: HostView;
+export interface HostIndexEntry<T extends HostLike = HostLike> {
+  host: T;
   name: string;
   address: string;
   user: string;
@@ -11,7 +11,7 @@ export interface HostIndexEntry {
   full: string;
 }
 
-export function buildHostIndex(hosts: HostView[]): HostIndexEntry[] {
+export function buildHostIndex<T extends HostLike>(hosts: T[]): HostIndexEntry<T>[] {
   return hosts.map((host) => ({
     host,
     name: host.name.toLowerCase(),
@@ -67,10 +67,10 @@ function scoreToken(e: HostIndexEntry, token: string): number {
  * Case-insensitive token search over name, address, username and tags. Every whitespace-separated
  * token must match; results are ordered best-first and keep the incoming order for equal scores.
  */
-export function searchHosts(index: HostIndexEntry[], query: string): HostView[] {
+export function searchHosts<T extends HostLike>(index: HostIndexEntry<T>[], query: string): T[] {
   const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return index.map((e) => e.host);
-  const scored: { host: HostView; score: number; order: number }[] = [];
+  const scored: { host: T; score: number; order: number }[] = [];
   index.forEach((e, order) => {
     let total = 0;
     for (const token of tokens) {

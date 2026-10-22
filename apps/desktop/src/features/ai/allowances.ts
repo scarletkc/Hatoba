@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { TabSource } from "@/app/tabs";
-import { formatTarget } from "@/features/hosts/quickConnect";
+import { formatTarget, formatTelnetTarget } from "@/features/hosts/quickConnect";
 import { api } from "@/ipc/api";
 import type { AiAllowance } from "@/ipc/types";
 import { recordedTarget } from "./place";
@@ -15,6 +15,10 @@ export const LOCAL_TARGET = "local";
 /** The host a tab's calls are approved for (AI-19). */
 export function hostRefOf(source: TabSource): HostRef {
   if (source.local) return { host_id: null, target: LOCAL_TARGET };
+  if (source.telnet)
+    return source.telnet.hostId !== null
+      ? { host_id: source.telnet.hostId, target: null }
+      : { host_id: null, target: `telnet:${formatTelnetTarget(source.telnet).toLowerCase()}` };
   return source.hostId !== null ? { host_id: source.hostId, target: null } : { host_id: null, target: formatTarget(recordedTarget(source.target)) };
 }
 

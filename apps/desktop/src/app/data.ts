@@ -1,6 +1,7 @@
+import { useMemo } from "react";
 import { create } from "zustand";
 import { api } from "@/ipc/api";
-import type { GroupView, HostView, KeyView, ProxyView, TagCount } from "@/ipc/types";
+import type { AnyHostView, GroupView, HostView, KeyView, ProxyView, TagCount, TelnetHostView } from "@/ipc/types";
 
 /**
  * Decrypted-vault metadata shown across the app (sidebar counts, host list, key pickers).
@@ -9,13 +10,15 @@ import type { GroupView, HostView, KeyView, ProxyView, TagCount } from "@/ipc/ty
 interface VaultData {
   loaded: boolean;
   hosts: HostView[];
+  /** Telnet hosts (§7.6), listed with the SSH hosts but kept apart from what only SSH hosts have. */
+  telnetHosts: TelnetHostView[];
   groups: GroupView[];
   tags: TagCount[];
   keys: KeyView[];
   /** Saved proxies (SSH-13). */
   proxies: ProxyView[];
   reload(): Promise<void>;
-  /** Re-reads only the hosts, for the device-local fields a connection updates (HOST-06, HOST-11). */
+  /** Re-reads only the SSH and Telnet hosts, for the device-local fields a connection updates (HOST-06, HOST-11). */
   reloadHosts(): Promise<void>;
   clear(): void;
 }
@@ -26,32 +29,45 @@ let generation = 0;
 export const useVaultData = create<VaultData>((set) => ({
   loaded: false,
   hosts: [],
+  telnetHosts: [],
   groups: [],
   tags: [],
   keys: [],
   proxies: [],
   reload: async () => {
     generation++;
-    const [hosts, groups, tags, keys, proxies] = await Promise.all([
+    const [hosts, telnetHosts, groups, tags, keys, proxies] = await Promise.all([
       api.hosts_list(),
+      api.telnet_hosts_list(),
       api.groups_list(),
       api.tags_list(),
       api.keys_list(),
       api.proxies_list(),
     ]);
-    set({ loaded: true, hosts, groups: [...groups].sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name)), tags, keys, proxies });
+    set({ loaded: true, hosts, telnetHosts, groups: [...groups].sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name)), tags, keys, proxies });
   },
   reloadHosts: async () => {
     const started = generation;
-    const hosts = await api.hosts_list();
-    if (started === generation) set({ hosts });
+    const [hosts, telnetHosts] = await Promise.all([api.hosts_list(), api.telnet_hosts_list()]);
+    if (started === generation) set({ hosts, telnetHosts });
   },
   clear: () => {
     generation++;
-    set({ loaded: false, hosts: [], groups: [], tags: [], keys: [], proxies: [] });
+    set({ loaded: false, hosts: [], telnetHosts: [], groups: [], tags: [], keys: [], proxies: [] });
   },
 }));
 
 export function hostById(id: string | null | undefined): HostView | undefined {
   return id ? useVaultData.getState().hosts.find((h) => h.id === id) : undefined;
+}
+
+export function telnetHostById(id: string | null | undefined): TelnetHostView | undefined {
+  return id ? useVaultData.getState().telnetHosts.find((h) => h.id === id) : undefined;
+}
+
+/** The SSH and Telnet hosts together, for what names a host whichever it is (TELNET-01). */
+export function useAllHosts(): AnyHostView[] {
+  const hosts = useVaultData((st) => st.hosts);
+  const telnetHosts = useVaultData((st) => st.telnetHosts);
+  return useMemo(() => [...hosts, ...telnetHosts], [hosts, telnetHosts]);
 }

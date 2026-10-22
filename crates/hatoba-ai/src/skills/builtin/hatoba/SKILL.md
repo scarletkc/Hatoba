@@ -33,7 +33,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/command-line.md` | The `hatoba` command: opening hosts from a terminal, and letting coding agents and scripts use the saved hosts with `hatoba hosts`, `hatoba exec` and `hatoba cp` |
 | `references/dashboard.md` | The Dashboard: every host's status and resource usage, cards and table, sorting, thresholds, how hosts are read, hosts that need a password or failed to sign in, leaving hosts out |
 | `references/keys-vault-and-lock.md` | The master password, recovery code, locking and auto-lock, Windows Hello and Touch ID, the PIN, the encrypted backup, and the Keys page (import, generate, deploy) |
-| `references/terminal.md` | The terminal tab: local terminal tabs and their shells, status bar, copy and paste, search, links, context menus, and the Terminal settings (font, cursor, scrollback, local terminal shell) |
+| `references/terminal.md` | The terminal tab: local terminal tabs and their shells, Telnet hosts and tabs, status bar, copy and paste, search, links, context menus, and the Terminal settings (font, cursor, scrollback, local terminal shell) |
 | `references/sftp.md` | The SFTP file panel: browsing, upload, download, rename, delete, transfers |
 | `references/port-forwarding.md` | Port forwarding (local, remote and SOCKS): creating rules, auto-start, starting and stopping them on the host's shared connection |
 | `references/sync.md` | Cloud Sync: what syncs, the setup wizard, joining a cloud vault from a device that has its own, the status page, devices, conflicts, restoring on a new device, disconnecting |

@@ -1,9 +1,9 @@
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
-import { useTabs, type SessionTab, type TabSource } from "@/app/tabs";
+import { tabHostId, useTabs, type SessionTab, type TabSource } from "@/app/tabs";
 import { confirm, toast } from "@/components/overlay";
-import { connectHost, connectTarget, openLocalTerminal } from "@/features/terminal/connect";
+import { connectHost, connectTarget, connectTelnetHost, connectTelnetTarget, openLocalTerminal } from "@/features/terminal/connect";
 import { getSession, type LiveSession } from "@/features/terminal/session";
 import { getLocale, t, type MessageKey, type Params } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
@@ -172,10 +172,11 @@ export function turnContext(slotId: string): AiTurnContext | null {
     provider_id: model.provider_id,
     model_id: model.model_id,
     effort: slotEffort(slotId),
-    host_id: attached ? attached.tab.hostId : (conversation?.host_id ?? null),
+    host_id: attached ? tabHostId(attached.tab) : (conversation?.host_id ?? null),
     target: attached ? attached.tab.target : (conversation?.quick_target ?? null),
     local: attached ? localOf(attached.tab) : conversation?.local ? { device: conversation.local, shell: null, kind: null } : null,
     tab: connected,
+    telnet: !!attached?.tab.telnet,
     session_id: connected ? (attached.tab.sessionId ?? null) : null,
     disabled_mcp_servers: slot.mcpOff,
     permission_mode: slot.mode,
@@ -1698,11 +1699,15 @@ export function openNotified({ tab, conversation_id }: NotificationTarget) {
  */
 export async function connectConversation(source: TabSource | "local") {
   const before = new Set(useTabs.getState().tabs.map((x) => x.id));
-  await (source === "local" || source.local
-    ? openLocalTerminal()
-    : source.hostId !== null
-      ? connectHost(source.hostId)
-      : connectTarget(source.target));
+  if (source !== "local" && source.telnet) {
+    if (source.telnet.hostId !== null) connectTelnetHost(source.telnet.hostId);
+    else connectTelnetTarget(source.telnet.address, source.telnet.port);
+  } else
+    await (source === "local" || source.local
+      ? openLocalTerminal()
+      : source.hostId !== null
+        ? connectHost(source.hostId)
+        : connectTarget(source.target));
   const tab = useTabs.getState().tabs.find((x) => !before.has(x.id));
   if (tab) moveSlot(HOME_SLOT, tab.id);
 }
@@ -1840,7 +1845,9 @@ export function selectionHost(tabId: string): string {
   const tab = useTabs.getState().tabs.find((x) => x.id === tabId);
   if (!tab) return "";
   if (tab.local) return localName(useApp.getState().info.device_name);
-  return useVaultData.getState().hosts.find((h) => h.id === tab.hostId)?.name ?? tab.title;
+  const id = tabHostId(tab);
+  const { hosts, telnetHosts } = useVaultData.getState();
+  return [...hosts, ...telnetHosts].find((h) => h.id === id)?.name ?? tab.title;
 }
 
 /** What the chip attaches to the next message, or null when it does not show. */

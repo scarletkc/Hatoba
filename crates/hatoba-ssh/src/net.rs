@@ -9,6 +9,7 @@ use tokio::net::TcpStream;
 use tokio::time::Instant;
 
 use crate::error::{SshError, SshErrorKind, classify_io};
+use crate::proxy::{self, ProxyConfig};
 
 /// Which stage of connection setup is currently running (used in timeout messages).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -195,6 +196,25 @@ pub(crate) async fn tcp_connect(
     let addrs = resolve(host, port).await?;
     clock.set_phase(Phase::Tcp);
     connect_first(&addrs).await
+}
+
+/// Opens a plain TCP connection to `host:port`, through `proxy` when there is one (SSH-13), for a
+/// protocol other than SSH such as Telnet. `budget` bounds name resolution and the connect.
+pub async fn dial(
+    proxy: Option<&ProxyConfig>,
+    host: &str,
+    port: u16,
+    budget: Duration,
+) -> Result<TcpStream, SshError> {
+    let clock = ConnectClock::new();
+    let work = async {
+        match proxy {
+            Some(proxy) => proxy::open_tunnel(proxy, host, port, &clock).await,
+            None => tcp_connect(host, port, &clock).await,
+        }
+    };
+    let (stream, _) = clock.run(budget, work).await??;
+    Ok(stream)
 }
 
 /// Connects to the first of `addrs` that accepts, as [`tcp_connect`] does after resolving.

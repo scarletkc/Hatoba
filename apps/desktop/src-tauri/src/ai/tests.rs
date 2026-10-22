@@ -371,6 +371,7 @@ impl Fixture {
             target: None,
             local: None,
             tab: true,
+            telnet: false,
             session_id: None,
             disabled_mcp_servers: Vec::new(),
             permission_mode: AiPermissionMode::Manual,

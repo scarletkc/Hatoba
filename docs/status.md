@@ -44,6 +44,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | FWD-03, 04 | Remote forwarding, SOCKS | 🟡 | Integration tests against OpenSSH (`it_forward.rs`, CI), and tried in the browser with the mock backend: the dialog, the popover and the rows. Not yet tried in the app against a real server |
 | FWD-05 | Port Forwarding page, forwards on the host's connection | 🟡 | Tried in the browser with the mock backend: the Port Forwarding page, start, stop, the terminal popover, an auto-start failure and a lost connection's message. Not yet tried in the app against a real server, nor the tray menu and the notification |
 | LOCAL-01, 02 | Local terminal tabs, the shells | 🟡 | Tried in the app on Windows 11 with PowerShell 7, Windows PowerShell, Command Prompt, Git Bash and WSL Ubuntu; unit tests run Command Prompt in ConPTY. Not yet tried on macOS or Linux |
+| TELNET-01…05 | Telnet hosts and tabs, the login, the assistant, quick connect | 🟡 | Unit tests cover the option negotiation, the login prompts and a session over an in-memory stream; tried in the browser with the mock backend: the host list, the editor, a tab and quick connect. Not yet tried in the app against a real Telnet server |
 | LOCAL-03 | The assistant in local tabs | 🟡 | Tried in the app on Windows 11 against a mock model: `run_command`, `read_file`, `grep`, `glob`, `send_input`, `read_terminal` and a timeout in PowerShell, `run_command` and `read_file` in WSL Ubuntu, `run_command` in Command Prompt. Used in the app on Windows 11 with real providers, including `edit_file`, `write_file` and their revert. Unit tests cover the native file and search tools on every platform, and PowerShell, Command Prompt, Git Bash and WSL commands and their stops on Windows. The read-only check, allowances and Auto's hard rules read PowerShell and Command Prompt syntax (§13.5): unit tests, and in the app on Windows 11 read-only PowerShell and Command Prompt commands ran without a card in manual approval while `rm` asked. Not yet tried on macOS or Linux |
 
 ## Vault, hosts, and keys (§8)
@@ -159,7 +160,7 @@ A contributor tried these by hand on an Apple Silicon Mac; the maintainer has no
 
 Out of scope for the MVP: team sharing and multi-user vaults, mobile apps (the architecture leaves room for them, see [§3.4](hatoba-spec.md#34-mobile-readiness)), and a sync service hosted by Hatoba.
 
-Hosts connect only over SSH. Telnet, Serial, and Mosh are proposed in [#60](https://github.com/scarletkc/Hatoba/issues/60). RDP, VNC, and FTP are not planned.
+Hosts connect over SSH or Telnet (§7.6). Serial and Mosh are proposed in [#60](https://github.com/scarletkc/Hatoba/issues/60). RDP, VNC, and FTP are not planned.
 
 ## Milestones
 

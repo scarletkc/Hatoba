@@ -22,7 +22,8 @@ type Key = "dashboard" | "all" | "favorites" | "recent" | "forwards" | `group:${
 function pageKey(page: Page): Key | null {
   switch (page.kind) {
     case "hosts":
-    case "host-edit": {
+    case "host-edit":
+    case "telnet-edit": {
       if (page.kind === "host-edit" && page.fromDashboard) return "dashboard";
       const f: HostFilter = page.kind === "hosts" ? page.filter : page.back;
       if (f.kind === "group") return `group:${f.id}`;
@@ -46,7 +47,9 @@ export function Sidebar() {
   const updateAvailable = useOfferedUpdate() !== null;
   const settingsLabel = updateAvailable ? t("sidebar.settingsUpdate") : t("sidebar.settings");
   const activateHome = () => useTabs.getState().activate("home");
-  const { hosts, groups, tags, keys } = useVaultData();
+  const { hosts: sshHosts, telnetHosts, groups, tags, keys } = useVaultData();
+  // TELNET-01: the counts take in Telnet hosts too.
+  const hosts = [...sshHosts, ...telnetHosts];
   const active = pageKey(page);
   const groupMenu = useMenu();
   const [menuGroup, setMenuGroup] = useState<GroupView | null>(null);

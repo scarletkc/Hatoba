@@ -5,6 +5,7 @@ export default defineMessages({
   "zh-CN": {
     "hosts.editHost": "编辑主机",
     "hosts.newHost": "新建主机",
+    "hosts.telnet": "Telnet",
 
     "hosts.count": "{n} 台",
     "hosts.search": "搜索主机或 ssh user@host",
@@ -92,6 +93,7 @@ export default defineMessages({
 
     "hosts.edit.sec.basic": "基本信息",
     "hosts.edit.sec.auth": "认证",
+    "hosts.edit.sec.login": "登录",
     "hosts.edit.sec.org": "组织与网络",
     "hosts.edit.sec.note": "备注",
     "hosts.f.name": "名称",
@@ -104,6 +106,11 @@ export default defineMessages({
     "hosts.f.method": "方式",
     "hosts.f.password": "密码",
     "hosts.f.passwordPlaceholder": "输入密码",
+    "hosts.f.protocol": "协议",
+    "hosts.f.forgetPassword": "移除",
+    "hosts.f.telnetPasswordPlaceholder": "留空则手动输入",
+    "hosts.f.telnetLoginHint": "设备要求输入用户名和密码时，Hatoba 会替你输入。留空的一项由你手动输入。",
+    "hosts.f.telnetPlaintext": "Telnet 不加密，密码和终端里的内容都以明文传输。",
     "hosts.f.passwordNewPlaceholder": "输入新密码",
     "hosts.f.passwordSaved": "已保存",
     "hosts.f.replace": "替换",
@@ -215,6 +222,7 @@ export default defineMessages({
   en: {
     "hosts.editHost": "Edit Host",
     "hosts.newHost": "New Host",
+    "hosts.telnet": "Telnet",
 
     "hosts.count": "{n} hosts",
     "hosts.count_one": "1 host",
@@ -306,6 +314,7 @@ export default defineMessages({
 
     "hosts.edit.sec.basic": "General",
     "hosts.edit.sec.auth": "Authentication",
+    "hosts.edit.sec.login": "Login",
     "hosts.edit.sec.org": "Organization & Network",
     "hosts.edit.sec.note": "Notes",
     "hosts.f.name": "Name",
@@ -318,6 +327,11 @@ export default defineMessages({
     "hosts.f.method": "Method",
     "hosts.f.password": "Password",
     "hosts.f.passwordPlaceholder": "Enter password",
+    "hosts.f.protocol": "Protocol",
+    "hosts.f.forgetPassword": "Remove",
+    "hosts.f.telnetPasswordPlaceholder": "Leave empty to type it yourself",
+    "hosts.f.telnetLoginHint": "Hatoba types these when the device asks for a user name and password. Leave one empty to type it yourself.",
+    "hosts.f.telnetPlaintext": "Telnet isn't encrypted: the password and everything in the terminal travel as plain text.",
     "hosts.f.passwordNewPlaceholder": "Enter new password",
     "hosts.f.passwordSaved": "Saved",
     "hosts.f.replace": "Replace",
@@ -430,6 +444,7 @@ export default defineMessages({
   ja: {
     "hosts.editHost": "ホストを編集",
     "hosts.newHost": "新規ホスト",
+    "hosts.telnet": "Telnet",
 
     "hosts.count": "{n} 台",
     "hosts.search": "ホストを検索、または ssh user@host",
@@ -516,6 +531,7 @@ export default defineMessages({
 
     "hosts.edit.sec.basic": "基本情報",
     "hosts.edit.sec.auth": "認証",
+    "hosts.edit.sec.login": "ログイン",
     "hosts.edit.sec.org": "整理とネットワーク",
     "hosts.edit.sec.note": "メモ",
     "hosts.f.name": "名前",
@@ -528,6 +544,11 @@ export default defineMessages({
     "hosts.f.method": "方式",
     "hosts.f.password": "パスワード",
     "hosts.f.passwordPlaceholder": "パスワードを入力",
+    "hosts.f.protocol": "プロトコル",
+    "hosts.f.forgetPassword": "削除",
+    "hosts.f.telnetPasswordPlaceholder": "空欄なら手動で入力",
+    "hosts.f.telnetLoginHint": "デバイスがユーザー名とパスワードを求めると、Hatoba が代わりに入力します。空欄の項目は手動で入力します。",
+    "hosts.f.telnetPlaintext": "Telnet は暗号化されません。パスワードもターミナルの内容も平文で送られます。",
     "hosts.f.passwordNewPlaceholder": "新しいパスワードを入力",
     "hosts.f.passwordSaved": "保存済み",
     "hosts.f.replace": "置き換え",

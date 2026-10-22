@@ -4,7 +4,9 @@ import { Button, controlStyles, DisclosureCaret, Icon, IconButton, LinkButton, S
 import { toast } from "@/components/overlay";
 import { readClipboard, writeClipboard } from "@/features/terminal/clipboard";
 import { formatDateTime, formatMessageTime, useT, useToday, type MessageKey } from "@/i18n";
-import type { AiAutoVerdict, AiEntryView, AiFileChange, AiFilePreview, AiFileRevert, AiToolCall, HostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
+import type { AiAutoVerdict, AiEntryView, AiFileChange, AiFilePreview, AiFileRevert, AiToolCall, AnyHostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
+import { isTelnetHost } from "@/ipc/types";
+import { formatTelnetTarget } from "@/features/hosts/quickConnect";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import {
@@ -285,8 +287,9 @@ export interface HostInfo {
   dialect?: ShellDialect;
 }
 
-export function hostInfo(host: HostView | undefined): HostInfo | null {
-  return host ? { name: host.name, target: `${host.username}@${host.address}:${host.port}` } : null;
+export function hostInfo(host: AnyHostView | undefined): HostInfo | null {
+  if (!host) return null;
+  return { name: host.name, target: isTelnetHost(host) ? `telnet ${formatTelnetTarget(host)}` : `${host.username}@${host.address}:${host.port}` };
 }
 
 // ───────────────────────── the list ─────────────────────────

@@ -2,14 +2,14 @@
 
 use hatoba_core::model::{
     Group, Host, HostAuth, HostProxy, KeyAlgorithm as CoreAlg, Proxy, ProxyKind as CoreProxyKind,
-    SshKey,
+    SshKey, TelnetHost,
 };
 use hatoba_core::vault::Vault;
 use hatoba_ssh::ServerStats;
 
 use crate::dto::{
     AuthKind, GroupView, HostEnvVar, HostView, KeyAlgorithm, KeyView, MountView, ProxyKind,
-    ProxyMode, ProxyView, ServerStatsView,
+    ProxyMode, ProxyView, ServerStatsView, TelnetHostView,
 };
 
 pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
@@ -19,11 +19,7 @@ pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
         HostAuth::Agent => (AuthKind::Agent, false, None),
         HostAuth::Ask => (AuthKind::Ask, false, None),
     };
-    let (proxy_mode, proxy_id) = match &host.proxy {
-        HostProxy::DeviceDefault => (ProxyMode::DeviceDefault, None),
-        HostProxy::Direct => (ProxyMode::Direct, None),
-        HostProxy::Proxy { proxy_id } => (ProxyMode::Proxy, Some(proxy_id.clone())),
-    };
+    let (proxy_mode, proxy_id) = proxy_choice(&host.proxy);
     HostView {
         id: id.to_owned(),
         name: host.name.clone(),
@@ -57,6 +53,35 @@ pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
     }
 }
 
+fn proxy_choice(proxy: &HostProxy) -> (ProxyMode, Option<String>) {
+    match proxy {
+        HostProxy::DeviceDefault => (ProxyMode::DeviceDefault, None),
+        HostProxy::Direct => (ProxyMode::Direct, None),
+        HostProxy::Proxy { proxy_id } => (ProxyMode::Proxy, Some(proxy_id.clone())),
+    }
+}
+
+pub fn telnet_host_view(id: &str, host: &TelnetHost, vault: &Vault) -> TelnetHostView {
+    let (proxy_mode, proxy_id) = proxy_choice(&host.proxy);
+    TelnetHostView {
+        id: id.to_owned(),
+        name: host.name.clone(),
+        address: host.address.clone(),
+        port: host.port,
+        username: host.username.clone(),
+        has_password: !host.password.is_empty(),
+        group_id: host.group_id.clone(),
+        tags: host.tags.clone(),
+        favorite: host.favorite,
+        proxy_mode,
+        proxy_id,
+        note: host.note.clone(),
+        ai_notes: host.ai_notes.clone(),
+        updated_at: host.updated_at,
+        last_connected_at: vault.last_connected(id),
+    }
+}
+
 pub fn proxy_view(id: &str, proxy: &Proxy, vault: &Vault) -> ProxyView {
     ProxyView {
         id: id.to_owned(),
@@ -74,6 +99,13 @@ pub fn proxy_view(id: &str, proxy: &Proxy, vault: &Vault) -> ProxyView {
             .into_iter()
             .filter(|(_, h)| h.proxy.proxy_id() == Some(id))
             .map(|(host_id, _)| host_id)
+            .chain(
+                vault
+                    .telnet_hosts()
+                    .into_iter()
+                    .filter(|(_, h)| h.proxy.proxy_id() == Some(id))
+                    .map(|(host_id, _)| host_id),
+            )
             .collect(),
         updated_at: proxy.updated_at,
     }

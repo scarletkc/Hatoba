@@ -99,6 +99,8 @@ import type {
   VaultStatus,
   LocalOpenOptions,
   LocalShellView,
+  TelnetHostInput,
+  TelnetHostView,
 } from "./types";
 
 /** Receives raw terminal frames (see FRAME_* in types.ts). */
@@ -243,6 +245,24 @@ export interface HatobaApi {
   local_resize(session_id: string, cols: number, rows: number): Promise<void>;
   /** Ends the shell and the console programs it started. */
   local_close(session_id: string): Promise<void>;
+
+  // Telnet hosts and tabs (§7.6)
+  telnet_hosts_list(): Promise<TelnetHostView[]>;
+  telnet_host_save(input: TelnetHostInput): Promise<TelnetHostView>;
+  /** Its open tabs stay connected, as an SSH host's do. */
+  telnet_host_delete(id: string): Promise<void>;
+  telnet_host_duplicate(id: string): Promise<TelnetHostView>;
+  telnet_host_set_favorite(id: string, favorite: boolean): Promise<void>;
+  /** SEC-08, as `host_copy_password`. */
+  telnet_host_copy_password(id: string): Promise<void>;
+  /** TELNET-02: connects a tab; resolves to the session id once connected. Output arrives as the frames SSH tabs get. */
+  telnet_open(host_id: string, options: LocalOpenOptions, onFrame: FrameHandler): Promise<string>;
+  /** TELNET-05: quick connect to a target that is not saved, through this device's default proxy; the user logs in by hand. */
+  telnet_open_target(address: string, port: number, options: LocalOpenOptions, onFrame: FrameHandler): Promise<string>;
+  telnet_write(session_id: string, data: string): Promise<void>;
+  telnet_write_bytes(session_id: string, data: number[]): Promise<void>;
+  telnet_resize(session_id: string, cols: number, rows: number): Promise<void>;
+  telnet_close(session_id: string): Promise<void>;
 
   // port forwarding (FWD-01..05)
   /** Every host's forwards, by host. */

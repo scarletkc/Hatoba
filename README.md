@@ -49,6 +49,9 @@ account.
 - **Local terminal**: tabs for the shells of your own computer, such as
   PowerShell, Command Prompt, Git Bash, and WSL distributions on Windows, or
   your login shell on macOS and Linux, beside the SSH tabs.
+- **Telnet**: switches, routers, and other devices that offer Telnet, in the
+  same host list and tabs, with the saved user name and password typed at the
+  device's login prompts.
 - **Authentication**: passwords, Ed25519, ECDSA, and RSA keys with or without
   a passphrase, ask on every connection, ssh-agent, and keyboard-interactive
   (2FA).

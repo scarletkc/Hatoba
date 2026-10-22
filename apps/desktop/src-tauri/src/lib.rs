@@ -23,13 +23,15 @@ mod ssh;
 mod ssh_agent;
 mod state;
 mod sync;
+mod telnet;
 mod tray;
 mod update;
 
 use commands::{
     ai as ai_cmd, allowances, app, cli, dashboard as dashboard_cmd, deploy as deploy_cmd, forwards,
     hosts, import as import_cmd, keys, local as local_cmd, mcp as mcp_cmd, memory as memory_cmd,
-    proxies, quick, settings, sftp, skills, ssh as ssh_cmd, sync as sync_cmd, vault,
+    proxies, quick, settings, sftp, skills, ssh as ssh_cmd, sync as sync_cmd, telnet as telnet_cmd,
+    vault,
 };
 use tauri::Manager;
 use tauri_specta::{collect_commands, collect_events};
@@ -128,6 +130,18 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             local_cmd::local_write_bytes,
             local_cmd::local_resize,
             local_cmd::local_close,
+            telnet_cmd::telnet_hosts_list,
+            telnet_cmd::telnet_host_save,
+            telnet_cmd::telnet_host_delete,
+            telnet_cmd::telnet_host_duplicate,
+            telnet_cmd::telnet_host_set_favorite,
+            telnet_cmd::telnet_host_copy_password,
+            telnet_cmd::telnet_open,
+            telnet_cmd::telnet_open_target,
+            telnet_cmd::telnet_write,
+            telnet_cmd::telnet_write_bytes,
+            telnet_cmd::telnet_resize,
+            telnet_cmd::telnet_close,
             ssh_cmd::hostkey_respond,
             ssh_cmd::auth_prompt_respond,
             forwards::forwards_list_all,
@@ -373,6 +387,9 @@ pub fn run() {
                     tauri::async_runtime::block_on(state.mcp.shutdown());
                     // Local shells end with the app, as with any terminal.
                     for (_, live) in state.local.take_all() {
+                        live.close();
+                    }
+                    for live in state.telnet.take_all() {
                         live.close();
                     }
                 }

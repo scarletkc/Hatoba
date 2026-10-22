@@ -17,6 +17,7 @@ export type ResponsesMatch = [
   Check<Assignable<Rust.UpdateProgress, Ui.UpdateProgress>>,
   Check<Assignable<Rust.VaultStatus, Ui.VaultStatus>>,
   Check<Assignable<Rust.HostView, Ui.HostView>>,
+  Check<Assignable<Rust.TelnetHostView, Ui.TelnetHostView>>,
   Check<Assignable<Rust.GroupView, Ui.GroupView>>,
   Check<Assignable<Rust.TagCount, Ui.TagCount>>,
   Check<Assignable<Rust.ImportPreview, Ui.ImportPreview>>,
@@ -112,6 +113,7 @@ export type ResponsesMatch = [
 /** UI → Rust: command arguments. */
 export type InputsMatch = [
   Check<Assignable<Ui.HostInput, Rust.HostInput>>,
+  Check<Assignable<Ui.TelnetHostInput, Rust.TelnetHostInput>>,
   Check<Assignable<Ui.GroupInput, Rust.GroupInput>>,
   Check<Assignable<Ui.ImportSource, Rust.ImportSource>>,
   Check<Assignable<Ui.KeyImportInput, Rust.KeyImportInput>>,

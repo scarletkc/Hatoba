@@ -6,7 +6,8 @@
 //!
 //! - a host: hosts that jumped through it connect directly, and its port forwards and the AI
 //!   assistant's memories of it go with it;
-//! - a group: its hosts and child groups move to the top level;
+//! - a Telnet host: the AI assistant's memories of it go with it;
+//! - a group: its hosts, Telnet hosts and child groups move to the top level;
 //! - a key: hosts that signed in with it ask on every connection ([`HostAuth::Ask`]).
 
 use zeroize::Zeroize;
@@ -50,7 +51,24 @@ impl Vault {
         self.commit_cascade(puts, &deletes)
     }
 
-    /// Deletes a group and moves its hosts and child groups to the top level.
+    /// Deletes a Telnet host and the AI assistant's memories of it (AI-53).
+    ///
+    /// # Errors
+    /// [`Error::Locked`]; [`Error::ItemNotFound`] when `id` is not a Telnet host; storage errors,
+    /// after which nothing has changed.
+    pub fn delete_telnet_host(&mut self, id: &str) -> Result<()> {
+        self.live(id, Item::as_telnet_host)?;
+        let mut deletes: Vec<String> = self
+            .ai_memories()
+            .into_iter()
+            .filter(|(_, memory)| memory.host_id.as_deref() == Some(id))
+            .map(|(memory_id, _)| memory_id)
+            .collect();
+        deletes.push(id.to_owned());
+        self.commit_cascade(Vec::new(), &deletes)
+    }
+
+    /// Deletes a group and moves its hosts, Telnet hosts and child groups to the top level.
     ///
     /// # Errors
     /// [`Error::Locked`]; [`Error::ItemNotFound`] when `id` is not a group; storage errors, after
@@ -65,6 +83,14 @@ impl Vault {
                 host.group_id = None;
                 (host_id, Item::Host(host))
             });
+        let telnet_hosts = self
+            .telnet_hosts()
+            .into_iter()
+            .filter(|(_, host)| host.group_id.as_deref() == Some(id))
+            .map(|(host_id, mut host)| {
+                host.group_id = None;
+                (host_id, Item::TelnetHost(host))
+            });
         let children = self
             .groups()
             .into_iter()
@@ -73,7 +99,7 @@ impl Vault {
                 child.parent_id = None;
                 (child_id, Item::Group(child))
             });
-        let puts = hosts.chain(children).collect();
+        let puts = hosts.chain(telnet_hosts).chain(children).collect();
         self.commit_cascade(puts, &[id.to_owned()])
     }
 
@@ -172,7 +198,7 @@ mod tests {
 
     use super::*;
     use crate::crypto::KdfParams;
-    use crate::model::{AiMemory, Group, Host, PortForward, SshKey};
+    use crate::model::{AiMemory, Group, Host, PortForward, SshKey, TelnetHost};
     use crate::vault::ManualClock;
 
     const PW: &str = "correct horse battery staple";
@@ -401,6 +427,56 @@ mod tests {
         v.lock();
         v.unlock(PW).unwrap();
         assert_eq!(items(&v), items_after);
+    }
+
+    #[test]
+    fn deleting_a_group_moves_its_telnet_hosts_to_the_top() {
+        let (mut v, _clock) = vault();
+        let gone = v.put(None, group("switches", None)).unwrap();
+        let switch = v
+            .put(
+                None,
+                Item::TelnetHost(TelnetHost {
+                    name: "core".into(),
+                    address: "10.0.0.2".into(),
+                    group_id: Some(gone.clone()),
+                    ..TelnetHost::default()
+                }),
+            )
+            .unwrap();
+        v.delete_group(&gone).unwrap();
+        let moved = v.get(&switch).and_then(Item::as_telnet_host).unwrap();
+        assert_eq!(moved.group_id, None);
+    }
+
+    #[test]
+    fn deleting_a_telnet_host_deletes_its_memories() {
+        let (mut v, _clock) = vault();
+        let switch = v
+            .put(
+                None,
+                Item::TelnetHost(TelnetHost {
+                    address: "10.0.0.2".into(),
+                    ..TelnetHost::default()
+                }),
+            )
+            .unwrap();
+        let memory = v
+            .put(
+                None,
+                Item::AiMemory(AiMemory {
+                    name: "vlans".into(),
+                    host_id: Some(switch.clone()),
+                    ..AiMemory::default()
+                }),
+            )
+            .unwrap();
+        assert!(matches!(
+            v.delete_host(&switch),
+            Err(Error::ItemNotFound(_))
+        ));
+        v.delete_telnet_host(&switch).unwrap();
+        assert!(v.get(&switch).is_none() && v.get(&memory).is_none());
     }
 
     #[test]

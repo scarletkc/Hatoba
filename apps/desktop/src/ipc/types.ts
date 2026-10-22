@@ -205,6 +205,59 @@ export interface HostEnvVar {
   value: string;
 }
 
+/** A Telnet host (TELNET-01), listed with the SSH hosts. Its password never reaches the WebView. */
+export interface TelnetHostView {
+  id: string;
+  name: string;
+  address: string;
+  port: number;
+  /** Typed at the login prompt (TELNET-03); empty to type it by hand. */
+  username: string;
+  /** A password is saved (HOST-08: it can be replaced but never read back). */
+  has_password: boolean;
+  group_id: string | null;
+  tags: string[];
+  favorite: boolean;
+  proxy_mode: ProxyMode;
+  proxy_id: string | null;
+  note: string;
+  /** What the AI assistant is told about the host (AI-37). */
+  ai_notes: string;
+  updated_at: number;
+  /** Device-local, never synced (HOST-06). */
+  last_connected_at: number | null;
+  /** Never set: an SSH host's `HostView` has one, which tells the two apart. */
+  auth_kind?: never;
+}
+
+export interface TelnetHostInput {
+  /** `null` creates a new host. */
+  id: string | null;
+  name: string;
+  address: string;
+  port: number;
+  username: string;
+  /** `null` keeps the saved password, a string replaces it, and an empty one removes it. */
+  password: string | null;
+  group_id: string | null;
+  tags: string[];
+  favorite: boolean;
+  proxy_mode: ProxyMode;
+  /** Required when `proxy_mode` is `proxy`, ignored otherwise. */
+  proxy_id: string | null;
+  note: string;
+  /** At most 16 KB of UTF-8 (AI-37). */
+  ai_notes: string;
+}
+
+/** An SSH host or a Telnet host, as the host list shows them. */
+export type AnyHostView = HostView | TelnetHostView;
+
+/** Whether a host from the host list is a Telnet host (TELNET-01). */
+export function isTelnetHost(host: AnyHostView): host is TelnetHostView {
+  return host.auth_kind === undefined;
+}
+
 export interface GroupView {
   id: string;
   name: string;
@@ -793,6 +846,7 @@ export interface ConflictField {
 
 export type ItemType =
   | "host"
+  | "telnet_host"
   | "group"
   | "key"
   | "known_host"
@@ -1291,6 +1345,8 @@ export interface AiTurnContext {
   local: AiLocalTab | null;
   /** A connected terminal tab is attached; false offers no terminal tools (AI-09). */
   tab: boolean;
+  /** `host_id` names a Telnet host and the tab is its session: only `read_terminal` and `send_input` (TELNET-04). */
+  telnet: boolean;
   /** The tab's SSH session while it is connected; the system prompt states its server's identification string (§13.1). */
   session_id: string | null;
   /** MCP servers switched off for this conversation in **MCP Tools** (AI-30, P2). */

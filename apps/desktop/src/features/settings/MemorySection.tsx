@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { useVaultData } from "@/app/data";
+import { useAllHosts } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { Button, Icon, IconButton, Spinner, Switch, TextArea, TextField } from "@/components/controls";
@@ -20,7 +20,7 @@ import {
 } from "@/features/ai/memory";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { AiMemoryView, HostView } from "@/ipc/types";
+import type { AiMemoryView, AnyHostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { aiErrorMessage } from "./aiShared";
 import { useFreshReads } from "./freshReads";
@@ -46,7 +46,7 @@ const PROBLEM: Record<MemoryProblem, MessageKey> = {
 type Tr = ReturnType<typeof useT>;
 
 /** How the list and the dialog name a scope: Global, This Computer or another computer's local terminal, or a host. */
-function scopeLabel(t: Tr, scope: MemoryScope, hosts: readonly HostView[], device: string): string {
+function scopeLabel(t: Tr, scope: MemoryScope, hosts: readonly AnyHostView[], device: string): string {
   const { host_id, local } = scopeFields(scope);
   if (host_id !== null) return hosts.find((h) => h.id === host_id)?.name ?? t("ai.history.hostGone");
   if (local !== null) return local === device ? t("terminal.local.thisComputer") : t("ai.place.localOn", { device: local });
@@ -61,7 +61,7 @@ function scopeIcon(scope: MemoryScope): string {
  * Where a scope goes in the list: the global memories, then this computer's, the saved hosts' by name, other
  * computers', and those of hosts deleted since.
  */
-function scopeRank(scope: MemoryScope, hosts: readonly HostView[], device: string): [number, string] {
+function scopeRank(scope: MemoryScope, hosts: readonly AnyHostView[], device: string): [number, string] {
   const { host_id, local } = scopeFields(scope);
   if (host_id !== null) {
     const host = hosts.find((h) => h.id === host_id);
@@ -72,7 +72,7 @@ function scopeRank(scope: MemoryScope, hosts: readonly HostView[], device: strin
 }
 
 /** The memories by scope, in list order, each oldest first. */
-function scopeGroups(list: readonly AiMemoryView[], hosts: readonly HostView[], device: string): [MemoryScope, AiMemoryView[]][] {
+function scopeGroups(list: readonly AiMemoryView[], hosts: readonly AnyHostView[], device: string): [MemoryScope, AiMemoryView[]][] {
   const groups = new Map<MemoryScope, AiMemoryView[]>();
   for (const m of list) {
     const scope = memoryScope(m);
@@ -100,7 +100,8 @@ export function MemorySection({ enabled, settled }: { enabled: MemorySwitch | nu
   const section = useRef<HTMLElement>(null);
   const requested = useApp((st) => st.settingsSection);
   const device = useApp((st) => st.info.device_name);
-  const hosts = useVaultData((st) => st.hosts);
+  // AI-53: Telnet hosts have host memories too.
+  const hosts = useAllHosts();
   const loaded = memories !== null;
   const list = memories ?? [];
 
@@ -273,7 +274,7 @@ function MemoryDialog({
 }: {
   memory: AiMemoryView | null;
   memories: readonly AiMemoryView[];
-  hosts: readonly HostView[];
+  hosts: readonly AnyHostView[];
   device: string;
   onClose: () => void;
   onSaved: (saved: AiMemoryView, replaced: readonly string[]) => void;
