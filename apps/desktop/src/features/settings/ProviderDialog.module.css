@@ -25,22 +25,11 @@
   overflow-wrap: anywhere;
 }
 
-.hint.accountWarn {
-  color: var(--orange);
-}
-
 .accountActions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-8) var(--space-12);
-}
-
-.hint {
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--fg2);
-  text-wrap: pretty;
 }
 
 /* Models */
@@ -50,7 +39,7 @@
   gap: var(--space-12);
 }
 
-.modelsBar .hint {
+.modelsHint {
   flex: 1;
   padding-top: 3px;
 }
@@ -97,12 +86,6 @@
   white-space: nowrap;
 }
 
-.problem {
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--red);
-}
-
 .addRow {
   display: flex;
   align-items: center;
@@ -112,24 +95,6 @@
 .addRow > :first-child {
   flex: 1;
   min-width: 0;
-}
-
-.fetchError {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-8);
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--red) 9%, transparent);
-  font-size: var(--text-sm);
-  line-height: 1.5;
-}
-
-.fetchError i {
-  margin-top: 2px;
-  font-size: var(--icon-14);
-  color: var(--red);
-  flex: none;
 }
 
 .fetchDetail {

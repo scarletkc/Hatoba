@@ -119,7 +119,7 @@ export function ProxiesPane() {
                 </span>
                 <Icon name="caret-right" className={s.caret} />
               </button>
-              <IconButton icon="trash" label={t("settings.proxy.delete", { name: p.name })} className={s.delete} onClick={() => void remove(p)} />
+              <IconButton icon="trash" label={t("settings.proxy.delete", { name: p.name })} className={s.delete} danger onClick={() => void remove(p)} />
             </div>
           ))}
         </div>

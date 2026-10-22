@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Button, DisclosureCaret, Icon, LinkButton, StatusDot, TextField } from "@/components/controls";
+import { Button, DisclosureCaret, Icon, LinkButton, TextField } from "@/components/controls";
+import { StatusLine } from "@/components/patterns";
 import { errorMessage } from "@/app/errors";
 import { Field } from "@/features/keys/Field";
 import { useT } from "@/i18n";
@@ -78,9 +79,9 @@ export function WorkerStep({
       const parts = [t(initialized ? "sync.test.hasVault" : "sync.test.connected")];
       if (test.result.version) parts.push(t("sync.test.version", { version: test.result.version }));
       if (test.result.latency_ms !== null) parts.push(`${test.result.latency_ms} ms`);
-      return { color: "var(--green)", text: parts.join(" · ") };
+      return { tone: "success" as const, text: parts.join(" · ") };
     }
-    if (test.status === "failed") return { color: "var(--red)", text: test.message };
+    if (test.status === "failed") return { tone: "error" as const, text: test.message };
     return null;
   })();
 
@@ -169,10 +170,7 @@ export function WorkerStep({
           </Button>
           {status && (
             <div className={s.testStatus} role="status">
-              <span className={s.dotSlot}>
-                <StatusDot color={status.color} />
-              </span>
-              <span>{status.text}</span>
+              <StatusLine tone={status.tone}>{status.text}</StatusLine>
             </div>
           )}
         </div>

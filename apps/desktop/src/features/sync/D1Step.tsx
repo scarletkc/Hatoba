@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from "react";
-import { Button, Icon, LinkButton, StatusDot, TextField } from "@/components/controls";
+import { Button, Icon, LinkButton, TextField } from "@/components/controls";
 import { PopupSelect } from "@/components/overlay";
+import { ErrorText, StatusLine } from "@/components/patterns";
 import { errorMessage } from "@/app/errors";
 import { Field } from "@/features/keys/Field";
 import { useT } from "@/i18n";
@@ -137,18 +138,15 @@ export function D1Step({
             onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && void runVerify()}
           />
           {verify.status === "failed" && (
-            <div className={s.tokenError} role="alert">
-              <Icon name="warning-circle" />
-              <div className={s.tokenErrorText}>
-                <div>{verify.message}</div>
-                <LinkButton onClick={() => void openExternal(API_TOKENS_URL)}>
-                  <span className={s.externalLink}>
-                    {t("sync.token.edit")}
-                    <Icon name="arrow-up-right" />
-                  </span>
-                </LinkButton>
-              </div>
-            </div>
+            <ErrorText icon="warning-circle" className={s.tokenError}>
+              <div>{verify.message}</div>
+              <LinkButton onClick={() => void openExternal(API_TOKENS_URL)}>
+                <span className={s.externalLink}>
+                  {t("sync.token.edit")}
+                  <Icon name="arrow-up-right" />
+                </span>
+              </LinkButton>
+            </ErrorText>
           )}
           <div className={s.testRow}>
             <Button size="sm" icon="seal-check" busy={verify.status === "testing"} disabled={!canVerify} onClick={() => void runVerify()}>
@@ -156,10 +154,7 @@ export function D1Step({
             </Button>
             {verifiedLine && (
               <div className={s.testStatus} role="status">
-                <span className={s.dotSlot}>
-                  <StatusDot color="var(--green)" />
-                </span>
-                <span>{verifiedLine}</span>
+                <StatusLine tone="success">{verifiedLine}</StatusLine>
               </div>
             )}
           </div>

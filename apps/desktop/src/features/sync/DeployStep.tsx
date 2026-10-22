@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type Dispatch, type SetStateAction 
 import { Button, controlStyles, DisclosureCaret, Icon, LinkButton, Spinner, TextField } from "@/components/controls";
 import { Callout } from "@/components/layout";
 import { PopupSelect } from "@/components/overlay";
+import { ErrorText, HintText, StatusLine } from "@/components/patterns";
 import { errorMessage } from "@/app/errors";
 import { Field } from "@/features/keys/Field";
 import { useT, type MessageKey } from "@/i18n";
@@ -351,23 +352,19 @@ function ReviewPhase({ form, set, onJoin }: { form: DeployForm; set: Set; onJoin
 function PlanSummary({ t, form, plan, url, onRetry }: { t: T; form: DeployForm; plan: DeployPlan | null; url: string | null; onRetry: () => void }) {
   if (form.inspecting)
     return (
-      <div className={s.planStatus} role="status">
-        <Spinner />
+      <StatusLine tone="progress" className={s.planStatus}>
         {t("sync.dep.checking")}
-      </div>
+      </StatusLine>
     );
   if (form.planError)
     return (
-      <div className={s.tokenError} role="alert">
-        <Icon name="warning-circle" />
-        <div className={s.tokenErrorText}>
-          <div>{deployError(t, form.planError)}</div>
-          <div className={s.linkRow}>
-            <EditTokenLink error={form.planError} />
-            <LinkButton onClick={onRetry}>{t("sync.dep.checkAgain")}</LinkButton>
-          </div>
+      <ErrorText icon="warning-circle" className={s.tokenError}>
+        <div>{deployError(t, form.planError)}</div>
+        <div className={s.linkRow}>
+          <EditTokenLink error={form.planError} />
+          <LinkButton onClick={onRetry}>{t("sync.dep.checkAgain")}</LinkButton>
         </div>
-      </div>
+      </ErrorText>
     );
   if (!plan) return null;
 
@@ -418,7 +415,7 @@ function PlanSummary({ t, form, plan, url, onRetry }: { t: T; form: DeployForm; 
           </li>
         )}
       </ul>
-      {renamed && <div className={s.planNote}>{t("sync.dep.plan.renamed", { name: form.databaseName.trim(), other: database })}</div>}
+      {renamed && <HintText>{t("sync.dep.plan.renamed", { name: form.databaseName.trim(), other: database })}</HintText>}
     </div>
   );
 }
@@ -464,9 +461,7 @@ export function StepList({
               </span>
               {step === failedStep && error && (
                 <>
-                  <span className={s.stepError} role="alert">
-                    {deployError(t, error)}
-                  </span>
+                  <ErrorText>{deployError(t, error)}</ErrorText>
                   <EditTokenLink error={error} />
                 </>
               )}
@@ -606,11 +601,9 @@ function RunPhase({ form, set, handle, onReady }: { form: DeployForm; set: Set; 
         label={(step) => t(`sync.dep.step.${step}` as MessageKey)}
         ariaLabel={t("sync.dep.run.title")}
       />
-      {form.run === "failed" && !fixInReview && <div className={s.planNote}>{t("sync.dep.retryHint")}</div>}
+      {form.run === "failed" && !fixInReview && <HintText>{t("sync.dep.retryHint")}</HintText>}
       {form.run === "failed" && !failedStep && form.runError && (
-        <div className={s.stepError} role="alert">
-          {deployError(t, form.runError)}
-        </div>
+        <ErrorText>{deployError(t, form.runError)}</ErrorText>
       )}
       {form.run === "waiting" && <Callout icon="hourglass-medium" iconColor="var(--orange)">{t("sync.dep.waiting")}</Callout>}
       {form.run === "removed" && <Callout icon="trash">{t("sync.dep.removed")}</Callout>}

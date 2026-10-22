@@ -214,15 +214,6 @@
   font-weight: 600;
 }
 
-.recommended {
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: var(--accent);
-  padding: 1px 6px;
-  border-radius: var(--radius-xs);
-  background: var(--accenttint);
-}
-
 .optionDesc {
   display: block;
   margin-top: 4px;
@@ -335,39 +326,14 @@
   min-height: 28px;
 }
 
+/* Holds the StatusLine beside the test button. */
 .testStatus {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-6);
   min-width: 0;
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  color: var(--fg2);
 }
 
-.dotSlot {
-  display: flex;
-  padding-top: 5.5px;
-}
-
+/* An ErrorText with its links under the message. */
 .tokenError {
-  display: flex;
-  gap: var(--space-6);
-  align-items: flex-start;
   margin-top: 2px;
-  font-size: var(--text-sm);
-  line-height: 1.5;
-}
-
-.tokenError i {
-  font-size: var(--icon-16);
-  color: var(--red);
-  margin-top: 1px;
-}
-
-.tokenErrorText {
-  flex: 1;
-  text-wrap: pretty;
 }
 
 .externalLink {
@@ -415,13 +381,9 @@
   padding-right: 4px;
 }
 
+/* A StatusLine as tall as the button row it stands in for. */
 .planStatus {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
   min-height: 28px;
-  font-size: var(--text-sm);
-  color: var(--fg2);
 }
 
 .plan {
@@ -458,13 +420,6 @@
   flex: none;
 }
 
-.planNote {
-  font-size: var(--text-sm);
-  color: var(--fg2);
-  line-height: 1.5;
-  text-wrap: pretty;
-}
-
 .stepList {
   list-style: none;
   margin: 0;
@@ -494,13 +449,6 @@
   flex-direction: column;
   min-width: 0;
   line-height: 20px;
-}
-
-.stepError {
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  color: var(--red);
-  text-wrap: pretty;
 }
 
 .linkRow {

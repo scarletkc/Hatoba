@@ -2,6 +2,7 @@ import { useId, useRef, useState } from "react";
 import { Button, Segmented, TextArea, TextField } from "@/components/controls";
 import { Dialog, FooterSpacer, PopupSelect, Sheet, SheetHeader, toast } from "@/components/overlay";
 import { errorMessage } from "@/app/errors";
+import { ErrorText, HintText } from "@/components/patterns";
 import { formatDate, useT } from "@/i18n";
 import { api, isTauri, toAppError } from "@/ipc/api";
 import type { HostView, KeyView } from "@/ipc/types";
@@ -283,11 +284,7 @@ export function GenerateKeyDialog({ onClose, onDone }: { onClose: () => void; on
             onChange={(e) => setConfirmation(e.target.value)}
           />
         </Field>
-        {error && (
-          <div className={s.formError} role="alert">
-            {error}
-          </div>
-        )}
+        {error && <ErrorText>{error}</ErrorText>}
       </form>
     </Sheet>
   );
@@ -392,7 +389,7 @@ export function DeployKeyDialog({ keyView, hosts, onClose }: { keyView: KeyView;
     >
       <div className={s.dialogForm}>
         {sorted.length === 0 ? (
-          <div className={s.formHint}>{t("keys.deploy.noHosts")}</div>
+          <HintText>{t("keys.deploy.noHosts")}</HintText>
         ) : (
           <Field label={t("keys.deploy.host")} error={error}>
             <PopupSelect

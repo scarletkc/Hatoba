@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { toast } from "@/components/overlay";
+import { HintText } from "@/components/patterns";
 import { useT } from "@/i18n";
 import type { LocalPrefs, SettingsView, TerminalSettings } from "@/ipc/types";
 import s from "./shared.module.css";
@@ -42,7 +43,7 @@ export function SettingRow({
     <div className={top ? `${s.row} ${s.rowTop}` : s.row}>
       <div className={s.text}>
         <span className={s.label}>{label}</span>
-        {hint && <span className={s.hint}>{hint}</span>}
+        {hint && <HintText>{hint}</HintText>}
       </div>
       {children && <div className={s.control}>{children}</div>}
     </div>

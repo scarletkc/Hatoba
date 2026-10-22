@@ -11,17 +11,6 @@
   gap: var(--space-12);
 }
 
-.formHint {
-  font-size: var(--text-sm);
-  color: var(--fg2);
-}
-
-.formError {
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--red);
-}
-
 .filePick {
   display: flex;
   align-items: center;

@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { enterUnlocked } from "@/app/boot";
 import { errorMessage } from "@/app/errors";
-import { Button, Icon, Segmented, StatusDot, TextField } from "@/components/controls";
+import { Button, Icon, Segmented, TextField } from "@/components/controls";
 import { FooterSpacer } from "@/components/overlay";
+import { ErrorText, StatusLine } from "@/components/patterns";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { SyncConfigInput } from "@/ipc/types";
-import { ErrorLine, WizardCard } from "./WizardCard";
+import { WizardCard } from "./WizardCard";
 import s from "./RestoreVault.module.css";
 
 type Method = "worker" | "d1";
@@ -145,7 +146,7 @@ export function RestoreConnect({
               reset();
             }}
           />
-          {urlError && <div className={s.fieldError}>{urlError}</div>}
+          {urlError && <ErrorText>{urlError}</ErrorText>}
         </div>
       ) : (
         <>
@@ -175,12 +176,9 @@ export function RestoreConnect({
           {t("vault.restore.test")}
         </Button>
         <div className={s.status} role="status">
-          {status.state === "running" && t("vault.restore.testing")}
+          {status.state === "running" && <StatusLine tone="progress">{t("vault.restore.testing")}</StatusLine>}
           {(status.state === "ok" || status.state === "warn" || status.state === "error") && (
-            <>
-              <StatusDot color={status.state === "ok" ? "var(--green)" : status.state === "warn" ? "var(--orange)" : "var(--red)"} />
-              <span className={status.state === "error" ? s.statusError : undefined}>{status.text}</span>
-            </>
+            <StatusLine tone={status.state === "ok" ? "success" : status.state === "warn" ? "warning" : "error"}>{status.text}</StatusLine>
           )}
         </div>
       </div>
@@ -248,7 +246,7 @@ export function RestorePassword({ steps, config, onBack }: { steps: string[]; co
           }}
         />
       </div>
-      {error && <ErrorLine>{error}</ErrorLine>}
+      {error && <ErrorText icon="warning-circle">{error}</ErrorText>}
     </WizardCard>
   );
 }

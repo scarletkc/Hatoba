@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Button, Icon, LinkButton, Switch, TextField } from "@/components/controls";
 import { Group, Row, RowValue, Section, StatusTile } from "@/components/layout";
 import { confirm, toast } from "@/components/overlay";
+import { Chip, ErrorText, ListRow } from "@/components/patterns";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { formatRelative, useT } from "@/i18n";
@@ -269,11 +270,7 @@ function ReloginForm() {
           {t("sync.auth.login")}
         </Button>
       </div>
-      {error && (
-        <div className={s.reloginError} role="alert">
-          {error}
-        </div>
-      )}
+      {error && <ErrorText>{error}</ErrorText>}
     </div>
   );
 }
@@ -317,29 +314,36 @@ function Devices({ status }: { status: SyncStatus }) {
         {devices.map((d) => {
           const stale = isStale(d);
           return (
-            <div key={d.device_id} className={s.device}>
-              <Icon name={deviceIcon(d)} className={s.deviceIcon} />
-              <div className={s.deviceText}>
-                <div className={s.deviceName}>
-                  <span className={s.deviceNameText}>{d.name}</span>
-                  {d.current && <span className={s.badge}>{t("sync.device.thisPc")}</span>}
-                </div>
+            <ListRow
+              key={d.device_id}
+              className={s.device}
+              leading={<Icon name={deviceIcon(d)} className={s.deviceIcon} />}
+              status={
                 <div className={s.deviceMeta}>
                   {d.platform} · {formatRelative(t.locale, d.last_seen)}
                 </div>
+              }
+              trailing={
+                <>
+                  {stale && <span className={s.deviceMeta}>{t("sync.device.stale")}</span>}
+                  {!d.current && (
+                    <LinkButton
+                      tone={stale ? undefined : "muted"}
+                      className={cx(s.removeLink, !stale && s.removeQuiet)}
+                      aria-label={t("sync.device.removeAria", { name: d.name })}
+                      onClick={() => void revoke(d)}
+                    >
+                      {t("btn.remove")}
+                    </LinkButton>
+                  )}
+                </>
+              }
+            >
+              <div className={s.deviceName}>
+                <span className={s.deviceNameText}>{d.name}</span>
+                {d.current && <Chip>{t("sync.device.thisPc")}</Chip>}
               </div>
-              {stale && <span className={s.deviceMeta}>{t("sync.device.stale")}</span>}
-              {!d.current && (
-                <LinkButton
-                  tone={stale ? undefined : "muted"}
-                  className={cx(s.removeLink, !stale && s.removeQuiet)}
-                  aria-label={t("sync.device.removeAria", { name: d.name })}
-                  onClick={() => void revoke(d)}
-                >
-                  {t("btn.remove")}
-                </LinkButton>
-              )}
-            </div>
+            </ListRow>
           );
         })}
       </Group>

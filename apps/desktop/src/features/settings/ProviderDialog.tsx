@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Button, Icon, IconButton, LinkButton, Segmented, Spinner, TextField, controlStyles } from "@/components/controls";
+import { Button, Icon, IconButton, LinkButton, Segmented, TextField, controlStyles } from "@/components/controls";
 import { FormRow, Group, Section } from "@/components/layout";
 import { FooterSpacer, Menu, PopupSelect, Sheet, SheetHeader, toast, useMenu } from "@/components/overlay";
+import { ErrorText, HintText, StatusLine, WarningText } from "@/components/patterns";
 import { openExternal } from "@/features/sync/external";
 import { EFFORTS, UNKNOWN_EFFORTS, effortKey } from "@/features/ai/effort";
 import { useT, type MessageKey } from "@/i18n";
@@ -367,7 +368,7 @@ export function ProviderDialog({
                 options={protocolOptions}
                 onChange={(protocol) => patchConnection({ protocol, protocolChosen: true })}
               />
-              {decision && <span className={s.hint}>{t("aiSettings.f.protocol.system_one")}</span>}
+              {decision && <HintText>{t("aiSettings.f.protocol.system_one")}</HintText>}
             </div>
           </FormRow>
           <FormRow label={t("aiSettings.f.baseUrl")} htmlFor={ids.url} top error={errors.baseUrl}>
@@ -380,7 +381,7 @@ export function ProviderDialog({
                 placeholder={PLACEHOLDER_URL[form.protocol]}
                 onChange={(e) => setBaseUrl(e.target.value)}
               />
-              <span className={s.hint}>{t(`aiSettings.f.baseUrl.${form.protocol}` as MessageKey)}</span>
+              <HintText>{t(`aiSettings.f.baseUrl.${form.protocol}` as MessageKey)}</HintText>
             </div>
           </FormRow>
           <FormRow label={t("aiSettings.f.apiKey")} htmlFor={ids.key}>
@@ -404,7 +405,7 @@ export function ProviderDialog({
                   ]}
                   onChange={(authHeader) => patchConnection({ authHeader })}
                 />
-                <span className={s.hint}>{t("aiSettings.f.authHeader.hint")}</span>
+                <HintText>{t("aiSettings.f.authHeader.hint")}</HintText>
               </div>
             </FormRow>
           )}
@@ -414,20 +415,17 @@ export function ProviderDialog({
 
         <Section title={t("aiSettings.models")}>
           <div className={s.modelsBar}>
-            <span className={s.hint}>{t("aiSettings.models.hint")}</span>
+            <HintText className={s.modelsHint}>{t("aiSettings.models.hint")}</HintText>
             <Button size="sm" icon="cloud-arrow-down" busy={fetched.state === "loading"} onClick={() => void fetchModels()}>
               {t("aiSettings.models.fetch")}
             </Button>
           </div>
 
           {fetched.state === "error" && (
-            <div className={s.fetchError} role="alert">
-              <Icon name="warning-circle" />
-              <div>
-                <div>{t("aiSettings.models.fetchFailed")}</div>
-                <div className={`${s.fetchDetail} selectable`}>{fetched.text}</div>
-              </div>
-            </div>
+            <ErrorText icon="warning-circle">
+              <div>{t("aiSettings.models.fetchFailed")}</div>
+              <div className={`${s.fetchDetail} selectable`}>{fetched.text}</div>
+            </ErrorText>
           )}
 
           {fetched.state === "ok" && (
@@ -505,9 +503,7 @@ export function ProviderDialog({
             )}
           </Group>
           {modelProblem >= 0 && (
-            <div className={s.problem} role="alert">
-              {modelMessage()}
-            </div>
+            <ErrorText>{modelMessage()}</ErrorText>
           )}
 
           <div className={s.addRow}>
@@ -533,9 +529,7 @@ export function ProviderDialog({
         <TestConnection scope="provider" state={test} chatgpt={!!account} onRun={() => void runTest()} />
 
         {errors.general && (
-          <div className={s.problem} role="alert">
-            {errors.general}
-          </div>
+          <ErrorText>{errors.general}</ErrorText>
         )}
       </form>
     </Sheet>
@@ -561,11 +555,14 @@ function ChatgptAccount({
   return (
     <div className={s.stack}>
       {account.email && <span className={s.account}>{account.email}</span>}
-      <span className={cx(s.hint, !signedIn && s.accountWarn)}>{t(`aiSettings.chatgpt.status.${account.status}`)}</span>
+      {signedIn ? (
+        <HintText>{t(`aiSettings.chatgpt.status.${account.status}`)}</HintText>
+      ) : (
+        <WarningText>{t(`aiSettings.chatgpt.status.${account.status}`)}</WarningText>
+      )}
       {busy === "sign_in" ? (
         <span className={s.accountActions}>
-          <Spinner />
-          <span className={s.hint}>{t("aiSettings.chatgpt.waiting.inline")}</span>
+          <StatusLine tone="progress">{t("aiSettings.chatgpt.waiting.inline")}</StatusLine>
           <LinkButton onClick={onCancel}>{t("btn.cancel")}</LinkButton>
         </span>
       ) : (

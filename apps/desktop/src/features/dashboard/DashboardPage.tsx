@@ -4,7 +4,7 @@ import { useApp, type HostFilter } from "@/app/store";
 import { Button, Icon, IconButton, LinkButton, Segmented, Spinner } from "@/components/controls";
 import { EmptyState, PageHeader, Tag } from "@/components/layout";
 import { Menu, PopupSelect, useMenu, type MenuEntry } from "@/components/overlay";
-import { Card } from "@/components/patterns";
+import { Card, Chip } from "@/components/patterns";
 import { OsIcon } from "@/features/hosts/OsIcon";
 import { applyFilter, sortHosts } from "@/features/hosts/order";
 import { usePrefs } from "@/features/settings/shared";
@@ -376,7 +376,7 @@ function StatusActions({ host, readout, t, compact }: { host: HostView; readout:
     <span className={s.actions} onClick={(e) => e.stopPropagation()}>
       {held &&
         (compact ? (
-          <IconButton icon="plugs-connected" label={t("hosts.connect")} className={s.rowAction} onClick={() => void connectHost(host.id)} />
+          <IconButton icon="plugs-connected" label={t("hosts.connect")} onClick={() => void connectHost(host.id)} />
         ) : (
           <Button size="xs" variant="primary" onClick={() => void connectHost(host.id)}>
             {t("hosts.connect")}
@@ -384,7 +384,7 @@ function StatusActions({ host, readout, t, compact }: { host: HostView; readout:
         ))}
       {retry &&
         (compact ? (
-          <IconButton icon="arrow-clockwise" label={t("btn.retry")} className={s.rowAction} onClick={() => retryHost(host.id)} />
+          <IconButton icon="arrow-clockwise" label={t("btn.retry")} onClick={() => retryHost(host.id)} />
         ) : (
           <Button size="xs" onClick={() => retryHost(host.id)}>
             {t("btn.retry")}
@@ -533,7 +533,7 @@ const HostCard = memo(function HostCard({ host, readout, leftOut, view }: ItemPr
       )}
       {leftOut ? (
         <div className={s.status}>
-          <span className={s.badge}>{t("dashboard.leftOutBadge")}</span>
+          <Chip>{t("dashboard.leftOutBadge")}</Chip>
           <IncludeButton host={host} groups={view.groups} t={t} />
         </div>
       ) : (
@@ -622,7 +622,7 @@ const HostRow = memo(function HostRow({ host, readout, leftOut, columns, view }:
   const cell = (c: DashboardColumn) => {
     switch (c) {
       case "status":
-        if (leftOut) return <span className={s.badge}>{t("dashboard.leftOutBadge")}</span>;
+        if (leftOut) return <Chip>{t("dashboard.leftOutBadge")}</Chip>;
         return (
           <span className={s.cellStatus}>
             <span className={cx(s.statusText, s[status.tone])} title={status.full}>

@@ -174,49 +174,12 @@
   background: var(--line2);
 }
 
-.biometric {
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-6);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: var(--btn);
-  box-shadow: var(--shadow-btn);
-}
-
-.biometric i {
-  font-size: var(--icon-16);
-  color: var(--accent);
-}
-
-.biometric:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--btn) 92%, var(--fg) 8%);
-}
-
-.biometric:disabled {
-  opacity: 0.5;
-}
-
 .links {
   margin-top: 18px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-8);
-}
-
-.forgot {
-  border: 0;
-  padding: 0;
-  background: none;
-  font-size: var(--text-sm);
-  color: var(--accent);
-}
-
-.forgot:hover {
-  text-decoration: underline;
 }
 
 .foot {

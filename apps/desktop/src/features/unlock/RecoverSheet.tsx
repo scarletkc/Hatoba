@@ -3,6 +3,7 @@ import { enterUnlocked } from "@/app/boot";
 import { errorMessage } from "@/app/errors";
 import { Button, TextField } from "@/components/controls";
 import { FooterSpacer, Sheet, SheetHeader } from "@/components/overlay";
+import { ErrorText, HintText } from "@/components/patterns";
 import { NewPasswordFields, useNewPassword } from "@/features/onboarding/PasswordStrength";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
@@ -82,13 +83,7 @@ export function RecoverSheet({ onClose }: { onClose: () => void }) {
               setCodeError(null);
             }}
           />
-          {codeError ? (
-            <div className={s.error} role="alert">
-              {codeError}
-            </div>
-          ) : (
-            <div className={s.hint}>{t("vault.recover.codeHint")}</div>
-          )}
+          {codeError ? <ErrorText>{codeError}</ErrorText> : <HintText>{t("vault.recover.codeHint")}</HintText>}
         </div>
         <NewPasswordFields
           state={pw}
@@ -96,11 +91,7 @@ export function RecoverSheet({ onClose }: { onClose: () => void }) {
           passwordLabel={t("vault.recover.newPassword")}
           confirmLabel={t("vault.field.confirm")}
         />
-        {error && (
-          <div className={s.error} role="alert">
-            {error}
-          </div>
-        )}
+        {error && <ErrorText>{error}</ErrorText>}
         {/* Lets Enter submit from any field. */}
         <button type="submit" hidden />
       </form>

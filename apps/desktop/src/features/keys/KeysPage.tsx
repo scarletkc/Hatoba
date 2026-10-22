@@ -2,6 +2,7 @@ import { useMemo, useState, type KeyboardEvent } from "react";
 import { Button, Icon } from "@/components/controls";
 import { PageHeader, SearchField, EmptyState } from "@/components/layout";
 import { confirm, toast } from "@/components/overlay";
+import { Chip } from "@/components/patterns";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { formatDate, useT } from "@/i18n";
@@ -186,7 +187,9 @@ export function KeysPage() {
                     <Icon name="key" className={s.keyIcon} />
                     <span className={s.nameText}>{k.name}</span>
                   </span>
-                  <span className={s.typeBadge}>{keyTypeLabel(k)}</span>
+                  <Chip mono className={s.typeBadge}>
+                    {keyTypeLabel(k)}
+                  </Chip>
                   <span className={s.cellFingerprint} title={k.fingerprint}>
                     {shortFingerprint(k.fingerprint)}
                   </span>

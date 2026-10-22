@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Icon, TextField } from "@/components/controls";
+import { ErrorText, HintText, WarningText } from "@/components/patterns";
 import { useT } from "@/i18n";
-import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { COMMON_PASSWORDS } from "./commonPasswords";
 import s from "./PasswordStrength.module.css";
@@ -126,11 +126,8 @@ export function NewPasswordFields({
           onKeyDown={enter}
         />
         <StrengthMeter score={password ? score : null} />
-        {password.length > 0 && issue && (
-          <div className={cx(s.note, issue === "weak" && s.noteWarn)}>
-            {issue === "short" ? t("vault.err.tooShort") : t("vault.err.tooWeak")}
-          </div>
-        )}
+        {password.length > 0 && issue === "short" && <HintText>{t("vault.err.tooShort")}</HintText>}
+        {password.length > 0 && issue === "weak" && <WarningText>{t("vault.err.tooWeak")}</WarningText>}
       </div>
       <div className={s.field}>
         <label className={s.label2} htmlFor="confirm-password">
@@ -149,11 +146,7 @@ export function NewPasswordFields({
           onBlur={() => setConfirmTouched(true)}
           onKeyDown={enter}
         />
-        {mismatch && (
-          <div className={s.error} role="alert">
-            {t("vault.err.mismatch")}
-          </div>
-        )}
+        {mismatch && <ErrorText>{t("vault.err.mismatch")}</ErrorText>}
       </div>
     </>
   );

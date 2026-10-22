@@ -5,21 +5,6 @@
   gap: var(--space-8);
 }
 
-.hint {
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--fg2);
-  text-wrap: pretty;
-}
-
-.hintWarn {
-  color: var(--orange);
-}
-
-.hintWarn i {
-  vertical-align: -1px;
-}
-
 /* ───────── Server rows ───────── */
 
 .server {
@@ -104,26 +89,6 @@
   }
 }
 
-.badge {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: var(--radius-xs);
-  background: var(--fill);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--fg2);
-  white-space: nowrap;
-}
-
-.badgeAsk {
-  background: color-mix(in srgb, var(--orange) 14%, transparent);
-  color: var(--orange);
-  font-family: inherit;
-}
-
 .summary {
   min-width: 0;
   overflow: hidden;
@@ -134,19 +99,10 @@
   color: var(--fg2);
 }
 
-.state {
-  font-size: var(--text-xs);
-  color: var(--fg2);
-}
-
 /* An open row shows the whole command line or URL, wrapped. */
 .open .summary {
   white-space: normal;
   overflow-wrap: anywhere;
-}
-
-.stateFailed {
-  color: var(--red);
 }
 
 .actions {
@@ -307,23 +263,6 @@
   color: var(--fg2);
 }
 
-.chip {
-  display: inline-flex;
-  align-items: center;
-  height: 17px;
-  padding: 0 6px;
-  border-radius: var(--radius-xs);
-  background: var(--fill);
-  font-size: var(--text-xs);
-  color: var(--fg2);
-  white-space: nowrap;
-}
-
-.chipDanger {
-  background: color-mix(in srgb, var(--red) 12%, transparent);
-  color: var(--red);
-}
-
 .allow {
   flex: none;
   display: flex;
@@ -380,26 +319,18 @@
   padding-top: 3px;
 }
 
-.alwaysAsk .hint {
+.alwaysAskHint {
   flex: 1;
   min-width: 0;
 }
 
+/* An ErrorText that breaks a long path or command anywhere. */
 .problem {
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--red);
   overflow-wrap: anywhere;
 }
 
 .pre {
   white-space: pre-wrap;
-}
-
-.note {
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  color: var(--fg2);
 }
 
 /* Environment and header rows */

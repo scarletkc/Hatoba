@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button, Icon } from "@/components/controls";
 import { FooterSpacer, Sheet } from "@/components/overlay";
+import { StatusLine, type StatusTone } from "@/components/patterns";
 import { OsIcon } from "@/features/hosts/OsIcon";
 import { Sparkline } from "@/features/terminal/Sparkline";
 import { formatLoad, formatPercent, formatRate, formatUptime, percentOf, STATS_WINDOW_MS, type StatsReading } from "@/features/terminal/stats";
@@ -12,6 +13,13 @@ import { statusColor, statusText } from "./status";
 import { isStale, memPercent, readingGapMs, mountPercent, pastThreshold, rootPercent } from "./logic";
 import type { HostReadout } from "./readings";
 import s from "./HostDetail.module.css";
+
+const TONE: Record<ReturnType<typeof statusText>["tone"], StatusTone> = {
+  normal: "neutral",
+  dim: "neutral",
+  warn: "warning",
+  error: "error",
+};
 
 /** The charts span the sheet's content width. */
 const CHART_WIDTH = 484;
@@ -97,11 +105,11 @@ export function HostDetail({
           <div className={s.target}>{target}</div>
         </div>
       </div>
-      <div className={cx(s.status, s[status.tone])}>
+      <StatusLine className={s.status} tone={!shown ? "neutral" : phase === "connecting" ? "progress" : TONE[status.tone]}>
         {!shown ? t("dashboard.leftOutBadge") : status.text}
         {stale && reading && ` · ${t("dashboard.readAt", { time: formatMessageTime(t.locale, history[last].at, now) })}`}
         {picked != null && index < last && ` · ${t("terminal.stats.ago", { n: Math.round((history[last].at - reading!.at) / 1000) })}`}
-      </div>
+      </StatusLine>
       {reading && (
         <div className={cx(s.body, stale && s.stale)}>
           <Section label={t("terminal.stats.cpu")} value={reading.cpu_percent != null ? formatPercent(reading.cpu_percent) : "—"} alert={pastThreshold(reading.cpu_percent, alerts.cpu)}>

@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { errorMessage } from "@/app/errors";
-import { Button, Icon, IconButton, Spinner, TextArea, TextField } from "@/components/controls";
+import { Button, IconButton, TextArea, TextField } from "@/components/controls";
 import { FormRow, Group, Section } from "@/components/layout";
 import { FooterSpacer, Sheet, SheetHeader, confirm } from "@/components/overlay";
+import { ErrorText, HintText, StatusLine } from "@/components/patterns";
 import { formatBytes, useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AppError, SkillDetail, SkillView } from "@/ipc/types";
@@ -173,16 +174,15 @@ export function SkillDialog({
       <SheetHeader title={id ? t("aiSettings.skills.dlg.editTitle") : t("aiSettings.skills.dlg.newTitle")} />
 
       {loading && (
-        <div className={s.loading} role="status">
-          <Spinner />
+        <StatusLine tone="progress" className={s.loading}>
           {t("aiSettings.skills.dlg.loading")}
-        </div>
+        </StatusLine>
       )}
       {!!loadError && (
-        <div className={s.loadFailed} role="alert">
-          <div className={s.problem}>
+        <div className={s.loadFailed}>
+          <ErrorText className={s.problem}>
             {t("aiSettings.skills.loadFailed")} {errorMessage(t, loadError)}
-          </div>
+          </ErrorText>
           <Button size="sm" onClick={() => void load()}>
             {t("btn.retry")}
           </Button>
@@ -210,7 +210,7 @@ export function SkillDialog({
                   placeholder={t("aiSettings.skills.f.namePlaceholder")}
                   onChange={(e) => patch({ name: e.target.value })}
                 />
-                {nameProblem !== "invalid" && <span className={s.hint}>{t("aiSettings.skills.f.nameHint")}</span>}
+                {nameProblem !== "invalid" && <HintText>{t("aiSettings.skills.f.nameHint")}</HintText>}
               </div>
             </FormRow>
             <FormRow
@@ -243,7 +243,7 @@ export function SkillDialog({
           </Group>
 
           <Section title={t("aiSettings.skills.f.body")}>
-            <div className={s.hint}>{t("aiSettings.skills.f.bodyHint")}</div>
+            <HintText>{t("aiSettings.skills.f.bodyHint")}</HintText>
             <TextArea
               id={ids.body}
               className={cx(s.code, s.body)}
@@ -256,12 +256,12 @@ export function SkillDialog({
             <span className={cx(s.counter, !!problems.body && s.counterOver)}>
               {formatBytes(bodyBytes)} / {formatBytes(SKILL_FILE_MAX_BYTES)}
             </span>
-            {problems.body && <div className={s.problem}>{t("aiSettings.skills.err.bodyTooLarge")}</div>}
+            {problems.body && <ErrorText className={s.problem}>{t("aiSettings.skills.err.bodyTooLarge")}</ErrorText>}
           </Section>
 
           <Section title={t("aiSettings.skills.files")}>
             <div className={s.filesBar}>
-              <span className={s.hint}>{t("aiSettings.skills.files.hint")}</span>
+              <HintText className={s.filesHint}>{t("aiSettings.skills.files.hint")}</HintText>
               <Button size="sm" icon="plus" onClick={addFile}>
                 {t("aiSettings.skills.files.add")}
               </Button>
@@ -286,19 +286,19 @@ export function SkillDialog({
                 </div>
               )}
             </Group>
-            {problems.tooManyFiles && <div className={s.problem}>{t("aiSettings.skills.err.tooManyFiles", { max: SKILL_MAX_FILES })}</div>}
-            {problems.tooLarge && <div className={s.problem}>{t("aiSettings.skills.err.tooLarge")}</div>}
+            {problems.tooManyFiles && <ErrorText className={s.problem}>{t("aiSettings.skills.err.tooManyFiles", { max: SKILL_MAX_FILES })}</ErrorText>}
+            {problems.tooLarge && <ErrorText className={s.problem}>{t("aiSettings.skills.err.tooLarge")}</ErrorText>}
           </Section>
 
           {detail && detail.frontmatter_keys.length > 0 && (
-            <div className={s.note}>{t("aiSettings.skills.frontmatter", { keys: detail.frontmatter_keys.join(", ") })}</div>
+            <HintText className={s.note}>{t("aiSettings.skills.frontmatter", { keys: detail.frontmatter_keys.join(", ") })}</HintText>
           )}
 
           {rejected && (
-            <div className={s.problem} role="alert">
+            <ErrorText className={s.problem}>
               {errorMessage(t, rejected)}
               {rejected.detail && <div className={cx(s.detail, "selectable")}>{rejected.detail}</div>}
-            </div>
+            </ErrorText>
           )}
         </form>
       )}
@@ -330,15 +330,14 @@ function FileEditor({
   return (
     <div className={s.file}>
       <div className={s.fileHead}>
-        <button
-          type="button"
-          className={cx(s.fileToggle, open && s.fileOpen)}
+        <IconButton
+          small
+          icon="caret-right"
+          className={cx(s.fileCaret, open && s.fileOpen)}
           aria-expanded={open}
-          aria-label={t("aiSettings.skills.file.toggle", { path: label })}
+          label={t("aiSettings.skills.file.toggle", { path: label })}
           onClick={onToggle}
-        >
-          <Icon name="caret-right" />
-        </button>
+        />
         <TextField
           mono
           autoFocus={autoFocus}
@@ -364,9 +363,7 @@ function FileEditor({
         </div>
       )}
       {problem && (
-        <div className={s.problem} role="alert">
-          {t(`aiSettings.skills.file.err.${problem}` as MessageKey)}
-        </div>
+        <ErrorText className={s.problem}>{t(`aiSettings.skills.file.err.${problem}` as MessageKey)}</ErrorText>
       )}
     </div>
   );

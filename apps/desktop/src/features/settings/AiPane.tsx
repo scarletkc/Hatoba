@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useVaultData } from "@/app/data";
-import { Button, Icon, IconButton, Segmented, Spinner, StatusDot, Switch, controlStyles } from "@/components/controls";
+import { Button, Icon, IconButton, Segmented, Switch, controlStyles } from "@/components/controls";
 import { Group, layoutStyles } from "@/components/layout";
 import { Menu, PopupSelect, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
+import { HintText, ListRow, StatusLine } from "@/components/patterns";
 import { LOCAL_TARGET, removeAllowance, savedAllowances, useAllowances } from "@/features/ai/allowances";
 import { EFFORTS, effortKey } from "@/features/ai/effort";
 import { answersText, verdictText } from "@/features/ai/autoText";
@@ -166,11 +167,11 @@ export function AiPane() {
         </div>
         <div className={cx(layoutStyles.group, s.clip)}>
           {!loaded && !loadError && (
-            <StatusRow icon={<Spinner />}>{t("aiSettings.loading")}</StatusRow>
+            <StatusRow tone="progress">{t("aiSettings.loading")}</StatusRow>
           )}
           {!loaded && !!loadError && (
             <StatusRow
-              icon={<Icon name="warning-circle" color="var(--red)" />}
+              tone="error"
               action={
                 <Button
                   size="sm"
@@ -357,7 +358,7 @@ function ProviderRow({ provider: p, onEdit, onDelete }: { provider: AiProviderVi
         </span>
         <Icon name="caret-right" className={s.providerCaret} />
       </button>
-      <IconButton icon="trash" label={t("aiSettings.provider.delete", { name: p.name })} className={s.providerDelete} onClick={onDelete} />
+      <IconButton icon="trash" label={t("aiSettings.provider.delete", { name: p.name })} className={s.providerDelete} danger onClick={onDelete} />
     </div>
   );
 }
@@ -510,7 +511,7 @@ function JudgeSection({
         </SettingRow>
         {shown && <JudgeTestResult test={shown} details={details} onDetails={() => setDetails((open) => !open)} />}
       </Group>
-      <div className={s.sectionHint}>{t("aiSettings.judge.hint")}</div>
+      <HintText className={s.sectionHint}>{t("aiSettings.judge.hint")}</HintText>
     </section>
   );
 }
@@ -524,29 +525,28 @@ function JudgeTestResult({ test, details, onDetails }: { test: JudgeTest; detail
   const t = useT();
   if (test.state === "running") {
     return (
-      <div className={s.judgeStatus} role="status">
-        <Spinner size={12} />
-        {t("aiSettings.judge.test.running")}
+      <div className={s.judgeStatus}>
+        <StatusLine tone="progress">{t("aiSettings.judge.test.running")}</StatusLine>
       </div>
     );
   }
   if (test.state === "error") {
     return (
       <div className={s.judgeStatus} role="status">
-        <StatusDot color="var(--red)" />
-        <span className={s.judgeFail}>{test.message}</span>
+        <StatusLine tone="error">{test.message}</StatusLine>
       </div>
     );
   }
   const { outcomes } = test;
   const matched = outcomes.filter(asExpected).length;
   const ranWrongly = outcomes.some((o) => !asExpected(o) && o.verdict.decision === "run");
-  const summary = matched === outcomes.length ? "var(--green)" : ranWrongly ? "var(--red)" : "var(--orange)";
+  const summary = matched === outcomes.length ? "success" : ranWrongly ? "error" : "warning";
   return (
     <div className={s.judgeResult}>
       <div className={s.judgeStatus}>
-        <StatusDot color={summary} />
-        <span role="status">{t("aiSettings.judge.test.summary", { n: matched, total: outcomes.length })}</span>
+        <span role="status">
+          <StatusLine tone={summary}>{t("aiSettings.judge.test.summary", { n: matched, total: outcomes.length })}</StatusLine>
+        </span>
         <Button
           size="xs"
           className={s.judgeDetails}
@@ -631,7 +631,7 @@ function InstructionsSection({ value, onSave }: { value: string; onSave: (text: 
   return (
     <section className={layoutStyles.section}>
       <div className={layoutStyles.sectionTitle}>{t("aiSettings.instructions")}</div>
-      <div className={s.sectionHint}>{t("aiSettings.instructions.hint")}</div>
+      <HintText className={s.sectionHint}>{t("aiSettings.instructions.hint")}</HintText>
       <InstructionsField
         id="ai-custom-instructions"
         label={t("aiSettings.instructions")}
@@ -674,14 +674,14 @@ function SavedApprovals() {
     <>
       <SettingRow label={t("aiSettings.allowances")} hint={list?.length === 0 ? t("aiSettings.allowances.empty") : undefined} />
       {list?.map((a) => (
-        <div key={`${a.kind}\n${a.host_id ?? ""}\n${a.target ?? ""}\n${a.value}`} className={s.allowance}>
-          <Icon name={ALLOWANCE_ICON[a.kind === "tool" ? a.value : a.kind] ?? "check-circle"} className={s.allowanceIcon} />
-          <span className={s.allowanceText}>
-            <span className={s.allowanceWhat}>{what(a)}</span>
-            {a.kind !== "domain" && <span className={s.allowanceHost}>{hostName(a)}</span>}
-          </span>
-          <IconButton icon="x" label={t("btn.remove")} onClick={() => void remove(a)} />
-        </div>
+        <ListRow
+          key={`${a.kind}\n${a.host_id ?? ""}\n${a.target ?? ""}\n${a.value}`}
+          leading={<Icon name={ALLOWANCE_ICON[a.kind === "tool" ? a.value : a.kind] ?? "check-circle"} className={s.allowanceIcon} />}
+          status={a.kind !== "domain" && <span className={s.allowanceHost}>{hostName(a)}</span>}
+          trailing={<IconButton icon="x" label={t("btn.remove")} onClick={() => void remove(a)} />}
+        >
+          <span className={s.allowanceWhat}>{what(a)}</span>
+        </ListRow>
       ))}
     </>
   );

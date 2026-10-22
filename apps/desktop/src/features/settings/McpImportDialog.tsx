@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { errorMessage } from "@/app/errors";
-import { Button, Icon, TextArea } from "@/components/controls";
+import { Button, TextArea } from "@/components/controls";
 import { Group, Section } from "@/components/layout";
 import { FooterSpacer, Sheet, SheetHeader, toast } from "@/components/overlay";
+import { Chip, ErrorText, HintText, WarningText } from "@/components/patterns";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { McpImportPreview, McpServerView } from "@/ipc/types";
@@ -167,7 +168,7 @@ export function McpImportDialog({ onClose, onImported }: { onClose: () => void; 
 
         {preview && (
           <>
-            {count === 0 && <div className={s.note}>{t("aiSettings.mcp.imp.none")}</div>}
+            {count === 0 && <HintText>{t("aiSettings.mcp.imp.none")}</HintText>}
             {count > 0 && (
               <Section title={t("aiSettings.mcp.imp.found")}>
                 <Group>
@@ -175,25 +176,23 @@ export function McpImportDialog({ onClose, onImported }: { onClose: () => void; 
                     <div className={s.found} key={server.name}>
                       <div className={s.foundHead}>
                         <span className={s.foundName}>{server.name}</span>
-                        <span className={s.badge}>{t(`aiSettings.mcp.kind.${server.transport.kind}` as MessageKey)}</span>
+                        <Chip mono>{t(`aiSettings.mcp.kind.${server.transport.kind}` as MessageKey)}</Chip>
                       </div>
                       <div className={cx(s.commandLine, s.commandLineRow, "selectable")}>{transportSummary(server.transport)}</div>
                       {(server.transport.kind === "stdio" ? server.transport.env_keys : server.transport.header_keys).length > 0 && (
-                        <div className={s.hint}>
+                        <HintText>
                           {t(server.transport.kind === "stdio" ? "aiSettings.mcp.imp.envNames" : "aiSettings.mcp.imp.headerNames", {
                             names: (server.transport.kind === "stdio" ? server.transport.env_keys : server.transport.header_keys).join(", "),
                           })}
-                        </div>
+                        </HintText>
                       )}
                       {server.exists && (
-                        <div className={cx(s.hint, s.hintWarn)}>
-                          <Icon name="warning" /> {t("aiSettings.mcp.imp.exists")}
-                        </div>
+                        <WarningText>{t("aiSettings.mcp.imp.exists")}</WarningText>
                       )}
                     </div>
                   ))}
                 </Group>
-                {hasStdio && <div className={s.hint}>{t("aiSettings.mcp.imp.stdioNote")}</div>}
+                {hasStdio && <HintText>{t("aiSettings.mcp.imp.stdioNote")}</HintText>}
               </Section>
             )}
             {preview.skipped.length > 0 && (
@@ -202,7 +201,7 @@ export function McpImportDialog({ onClose, onImported }: { onClose: () => void; 
                   {preview.skipped.map((entry, i) => (
                     <div className={s.found} key={`${entry.name}-${i}`}>
                       <div className={s.foundName}>{entry.name}</div>
-                      <div className={cx(s.hint, "selectable")}>{entry.reason}</div>
+                      <HintText className="selectable">{entry.reason}</HintText>
                     </div>
                   ))}
                 </Group>
@@ -212,9 +211,7 @@ export function McpImportDialog({ onClose, onImported }: { onClose: () => void; 
         )}
 
         {error && (
-          <div className={cx(s.problem, s.pre, "selectable")} role="alert">
-            {error}
-          </div>
+          <ErrorText className={cx(s.problem, s.pre, "selectable")}>{error}</ErrorText>
         )}
       </form>
     </Sheet>

@@ -35,15 +35,14 @@
   color: var(--fg);
 }
 
+/* A StatusLine; the download's numbers keep their width as they count. */
 .status {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-6);
   font-variant-numeric: tabular-nums;
 }
 
-.status i {
-  font-size: var(--icon-14);
+/* An update to install is news: the icon takes the accent. */
+.available > i {
+  color: var(--accent);
 }
 
 .links {
@@ -92,15 +91,12 @@
   }
 }
 
+/* A Card. */
 .notes {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-8);
-  padding: 12px 14px;
-  border-radius: var(--radius-lg);
-  background: var(--group);
-  box-shadow: inset 0 0 0 0.5px var(--line);
 }
 
 .notesHead {

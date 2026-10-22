@@ -14,14 +14,3 @@
   font-size: var(--text-sm);
   font-weight: 500;
 }
-
-.hint {
-  font-size: var(--text-sm);
-  color: var(--fg2);
-}
-
-.error {
-  font-size: var(--text-sm);
-  color: var(--red);
-  line-height: 1.45;
-}

@@ -29,13 +29,6 @@
   padding-top: 2px;
 }
 
-.hint {
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--fg2);
-  text-wrap: pretty;
-}
-
 .warn {
   color: var(--orange);
 }

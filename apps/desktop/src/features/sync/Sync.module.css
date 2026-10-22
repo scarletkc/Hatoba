@@ -91,11 +91,6 @@
   flex: 1;
 }
 
-.reloginError {
-  font-size: var(--text-sm);
-  color: var(--red);
-}
-
 /* "N conflicts resolved automatically · Review" */
 .banner {
   display: flex;
@@ -128,24 +123,14 @@
   color: var(--accent);
 }
 
-/* Devices */
+/* Devices: ListRows, a little taller for the two-line body. */
 .device {
-  display: flex;
-  align-items: center;
-  gap: var(--space-12);
   min-height: 46px;
-  padding: 0 14px;
 }
 
 .deviceIcon {
   font-size: var(--icon-20);
   color: var(--fg2);
-}
-
-/* Keeps some room for the name, so a narrow row wraps the stale note instead. */
-.deviceText {
-  flex: 1;
-  min-width: 96px;
 }
 
 .deviceName {
@@ -161,23 +146,9 @@
   white-space: nowrap;
 }
 
-.badge {
-  flex: none;
-  font-size: var(--text-xs);
-  color: var(--fg2);
-  padding: 1px 6px;
-  border-radius: var(--radius-xs);
-  background: var(--fill);
-}
-
 .deviceMeta {
   font-size: var(--text-sm);
   color: var(--fg2);
-  margin-top: 1px;
-}
-
-.device > .deviceMeta {
-  margin-top: 0;
 }
 
 .removeLink {
@@ -336,21 +307,10 @@
   border-top: 0.5px solid var(--line);
 }
 
+/* A StatusLine that takes the room before the buttons. */
 .result {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
   flex: 1 1 160px;
-  min-width: 0;
-  font-size: var(--text-sm);
-  color: var(--fg2);
   text-wrap: pretty;
-}
-
-.result i {
-  color: var(--green);
-  font-size: var(--icon-14);
-  flex: none;
 }
 
 .empty {

@@ -1,15 +1,15 @@
 import type { ReactNode } from "react";
 import { Icon } from "@/components/controls";
+import { ListRow, StatusLine } from "@/components/patterns";
 import s from "./AiPane.module.css";
 
 /** A loading or load-failed row inside a section's group. */
-export function StatusRow({ icon, action, children }: { icon: ReactNode; action?: ReactNode; children: ReactNode }) {
+export function StatusRow({ tone, action, children }: { tone: "progress" | "error"; action?: ReactNode; children: ReactNode }) {
   return (
-    <div className={s.status} role="status">
-      {icon}
-      <span className={s.statusText}>{children}</span>
-      {action}
-    </div>
+    // A progress line is a status region itself.
+    <ListRow role={tone === "error" ? "status" : undefined} trailing={action}>
+      <StatusLine tone={tone}>{children}</StatusLine>
+    </ListRow>
   );
 }
 

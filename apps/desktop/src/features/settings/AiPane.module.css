@@ -20,12 +20,9 @@
   gap: var(--space-8);
 }
 
+/* A HintText under a section's group. */
 .sectionHint {
   padding: 0 4px;
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  color: var(--fg2);
-  text-wrap: pretty;
 }
 
 /* Lets the hover of the first and last row follow the group's rounded corners. */
@@ -59,26 +56,6 @@
   gap: var(--space-6);
   min-width: 0;
   font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-/* Loading and load-failed rows */
-.status {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  min-height: 44px;
-  padding: 8px 14px;
-  color: var(--fg2);
-}
-
-.status i {
-  flex: none;
-}
-
-.statusText {
-  flex: 1;
-  min-width: 0;
   overflow-wrap: anywhere;
 }
 
@@ -231,13 +208,6 @@
   min-width: 0;
 }
 
-.fieldHint {
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--fg2);
-  text-wrap: pretty;
-}
-
 /* Test and Save of the search provider */
 .searchActions {
   display: flex;
@@ -254,19 +224,12 @@
   gap: var(--space-12);
 }
 
-/* Test beside the judge of Auto mode (AI-47) */
+/* Test beside the judge of Auto mode (AI-47): a StatusLine, and Details after it. */
 .judgeStatus {
   display: flex;
   align-items: center;
   gap: var(--space-8);
   padding: 10px 14px;
-  font-size: var(--text-sm);
-  line-height: 1.5;
-}
-
-.judgeFail {
-  color: var(--red);
-  overflow-wrap: anywhere;
 }
 
 .judgeDetails {
@@ -331,26 +294,9 @@
   overflow-wrap: anywhere;
 }
 
-/* Saved approvals (AI-19) */
-.allowance {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  min-height: 40px;
-  padding: 6px 8px 6px 14px;
-}
-
+/* Saved approvals (AI-19): ListRows. */
 .allowanceIcon {
-  flex: none;
   color: var(--fg2);
-}
-
-.allowanceText {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
 }
 
 .allowanceWhat {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button, Icon, LinkButton, StatusDot } from "@/components/controls";
 import { toast } from "@/components/overlay";
+import { HintText } from "@/components/patterns";
 import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { formatDate, formatRelative, useT } from "@/i18n";
@@ -119,7 +120,7 @@ export function KeyDetail({
             {t("keys.detail.usedHosts")} <span className={s.blockCount}>{hosts.length}</span>
           </div>
           {hosts.length === 0 ? (
-            <div className={s.hint}>{t("keys.detail.noHosts")}</div>
+            <HintText>{t("keys.detail.noHosts")}</HintText>
           ) : (
             hosts.map((h) => (
               <button

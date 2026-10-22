@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Icon, IconButton, Spinner, Switch } from "@/components/controls";
+import { Button, Icon, IconButton, Switch } from "@/components/controls";
 import { layoutStyles } from "@/components/layout";
 import { Menu, confirm, toast, useMenu } from "@/components/overlay";
+import { Chip, HintText, StatusLine } from "@/components/patterns";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { McpServerState, McpServerStatus, McpServerView, McpToolView } from "@/ipc/types";
@@ -211,10 +212,10 @@ export function McpSection() {
       )}
 
       <div className={cx(layoutStyles.group, a.clip)}>
-        {!loaded && !loadError && <StatusRow icon={<Spinner />}>{t("aiSettings.loading")}</StatusRow>}
+        {!loaded && !loadError && <StatusRow tone="progress">{t("aiSettings.loading")}</StatusRow>}
         {!loaded && !!loadError && (
           <StatusRow
-            icon={<Icon name="warning-circle" color="var(--red)" />}
+            tone="error"
             action={
               <Button size="sm" onClick={() => void load()}>
                 {t("btn.retry")}
@@ -247,7 +248,7 @@ export function McpSection() {
           />
         ))}
       </div>
-      <div className={a.sectionHint}>{t("aiSettings.mcp.hint")}</div>
+      <HintText className={a.sectionHint}>{t("aiSettings.mcp.hint")}</HintText>
 
       {editing && (
         <McpServerDialog
@@ -315,13 +316,13 @@ function ServerRow({
             <span className={s.nameLine}>
               <span className={s.dot} data-state={off ? "stopped" : state} style={{ background: STATE_COLOR[off ? "stopped" : state] }} />
               <span className={s.name}>{server.name}</span>
-              <span className={s.badge}>{t(`aiSettings.mcp.kind.${server.transport.kind}` as MessageKey)}</span>
-              {server.always_ask && <span className={cx(s.badge, s.badgeAsk)}>{t("aiSettings.mcp.alwaysAsk")}</span>}
+              <Chip mono>{t(`aiSettings.mcp.kind.${server.transport.kind}` as MessageKey)}</Chip>
+              {server.always_ask && <Chip tone="warning">{t("aiSettings.mcp.alwaysAsk")}</Chip>}
             </span>
             <span className={cx(s.summary, "selectable")} title={transportSummary(server.transport)}>
               {transportSummary(server.transport)}
             </span>
-            <span className={cx(s.state, state === "failed" && s.stateFailed)}>{label}</span>
+            <StatusLine tone={state === "failed" ? "error" : "neutral"}>{label}</StatusLine>
           </span>
         </button>
         <div className={s.actions}>
@@ -329,7 +330,7 @@ function ServerRow({
             <Switch checked={server.enabled} label={t("aiSettings.mcp.row.enable", { name: server.name })} onChange={onEnabled} />
           </span>
           <IconButton icon="pencil-simple" label={t("aiSettings.mcp.row.edit", { name: server.name })} onClick={onEdit} />
-          <IconButton icon="trash" label={t("aiSettings.mcp.row.delete", { name: server.name })} onClick={onDelete} />
+          <IconButton icon="trash" label={t("aiSettings.mcp.row.delete", { name: server.name })} danger onClick={onDelete} />
         </div>
       </div>
       {open && (
@@ -418,14 +419,14 @@ function ServerDetails({
       <div className={s.allowAll}>
         <div className={s.allowAllText}>
           <span className={s.allowAllLabel}>{t("aiSettings.mcp.allowAll")}</span>
-          <span className={s.hint}>{t("aiSettings.mcp.allowAll.hint")}</span>
+          <HintText>{t("aiSettings.mcp.allowAll.hint")}</HintText>
         </div>
         <Switch checked={server.always_allow} label={t("aiSettings.mcp.allowAll")} onChange={(allow) => onAlwaysAllow(null, allow)} />
       </div>
 
       <div className={s.toolsHead}>
         <span className={s.toolsTitle}>{t("aiSettings.mcp.tools")}</span>
-        {tools.length > 0 && <span className={s.hint}>{tools.length}</span>}
+        {tools.length > 0 && <HintText>{tools.length}</HintText>}
       </div>
       {tools.length === 0 ? (
         state !== "starting" && <div className={s.noTools}>{t("aiSettings.mcp.tools.none")}</div>
@@ -458,9 +459,9 @@ function ToolItem({ tool, allowed, locked, onChange }: { tool: McpToolView; allo
           </span>
           {tool.annotations.title && tool.annotations.title !== tool.tool && <span className={s.toolDisplay}>{tool.annotations.title}</span>}
           {keys.map((key) => (
-            <span key={key} className={cx(s.chip, key === "destructive" && s.chipDanger)}>
+            <Chip key={key} tone={key === "destructive" ? "error" : "neutral"}>
               {t(`aiSettings.mcp.ann.${key}` as MessageKey)}
-            </span>
+            </Chip>
           ))}
         </div>
         <label className={cx(s.allow, locked && s.allowLocked)} title={locked ? t("aiSettings.mcp.allowAll") : undefined}>

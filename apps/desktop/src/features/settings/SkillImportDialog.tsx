@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { errorMessage } from "@/app/errors";
-import { Button, Icon, LinkButton, Spinner, TextField } from "@/components/controls";
+import { Button, Icon, LinkButton, TextField } from "@/components/controls";
 import { Group, Section } from "@/components/layout";
 import { FooterSpacer, Sheet, SheetHeader, toast } from "@/components/overlay";
+import { ErrorText, HintText, StatusLine } from "@/components/patterns";
 import { formatBytes, useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AppError, SkillImportPreview, SkillIssue, SkillView } from "@/ipc/types";
@@ -128,12 +129,8 @@ export function SkillImportDialog({
         invalid={!!renameError}
         onChange={(e) => setNewName(e.target.value)}
       />
-      {renameProblem !== "invalid" && <span className={s.hint}>{t("aiSettings.skills.f.nameHint")}</span>}
-      {renameError && (
-        <div className={s.problem} role="alert">
-          {renameError}
-        </div>
-      )}
+      {renameProblem !== "invalid" && <HintText>{t("aiSettings.skills.f.nameHint")}</HintText>}
+      {renameError && <ErrorText className={s.problem}>{renameError}</ErrorText>}
     </div>
   );
 
@@ -157,16 +154,15 @@ export function SkillImportDialog({
       <SheetHeader title={t("aiSettings.skills.imp.title")} subtitle={t("aiSettings.skills.imp.subtitle")} />
 
       {!preview && !loadError && (
-        <div className={s.loading} role="status">
-          <Spinner />
+        <StatusLine tone="progress" className={s.loading}>
           {t("aiSettings.skills.imp.loading", { source: sourceName(path) })}
-        </div>
+        </StatusLine>
       )}
       {!!loadError && (
-        <div className={s.loadFailed} role="alert">
-          <div className={s.problem}>
+        <div className={s.loadFailed}>
+          <ErrorText className={s.problem}>
             {t("aiSettings.skills.imp.failed")} {errorMessage(t, loadError)}
-          </div>
+          </ErrorText>
           <Button size="sm" onClick={() => void load()}>
             {t("btn.retry")}
           </Button>
@@ -187,7 +183,7 @@ export function SkillImportDialog({
               <Icon name="warning-circle" />
               <div>
                 <div className={s.issuesTitle}>{t("aiSettings.skills.imp.issuesTitle")}</div>
-                <div className={s.note}>{t("aiSettings.skills.imp.issuesBody")}</div>
+                <HintText className={s.note}>{t("aiSettings.skills.imp.issuesBody")}</HintText>
                 <ul className={cx(s.issuesList, "selectable")}>
                   {preview.issues.map((issue, i) => (
                     <li key={i}>{issueText(issue)}</li>
@@ -226,7 +222,7 @@ export function SkillImportDialog({
                 <Radio checked={choice === "replace"} onSelect={() => setChoice("replace")}>
                   <span className={s.choice}>
                     <span className={s.choiceLabel}>{t("aiSettings.skills.imp.replace")}</span>
-                    <span className={s.hint}>{t("aiSettings.skills.imp.replaceHint")}</span>
+                    <span className={s.choiceHint}>{t("aiSettings.skills.imp.replaceHint")}</span>
                   </span>
                 </Radio>
               </div>
@@ -236,7 +232,7 @@ export function SkillImportDialog({
           {preview.body !== null && (
             <Section title={t("aiSettings.skills.imp.files")}>
               <div className={s.blockBar}>
-                <span className={s.hint}>{t("aiSettings.skills.fileCount", { n: preview.files.length + 1 })}</span>
+                <HintText>{t("aiSettings.skills.fileCount", { n: preview.files.length + 1 })}</HintText>
                 <LinkButton onClick={() => setOpen(new Set(allOpen ? [] : allPaths))}>
                   {allOpen ? t("aiSettings.skills.imp.collapseAll") : t("aiSettings.skills.imp.expandAll")}
                 </LinkButton>
@@ -251,12 +247,12 @@ export function SkillImportDialog({
           )}
 
           {preview.frontmatter_keys.length > 0 && (
-            <div className={s.note}>{t("aiSettings.skills.imp.frontmatter", { keys: preview.frontmatter_keys.join(", ") })}</div>
+            <HintText className={s.note}>{t("aiSettings.skills.imp.frontmatter", { keys: preview.frontmatter_keys.join(", ") })}</HintText>
           )}
 
           {preview.skipped.length > 0 && (
             <Section title={t("aiSettings.skills.imp.skipped")}>
-              <div className={s.hint}>{t("aiSettings.skills.imp.skippedBody")}</div>
+              <HintText>{t("aiSettings.skills.imp.skippedBody")}</HintText>
               <Group>
                 <ul className={cx(s.skippedList, "selectable")}>
                   {preview.skipped.map((p) => (
@@ -268,10 +264,10 @@ export function SkillImportDialog({
           )}
 
           {rejected && (
-            <div className={s.problem} role="alert">
+            <ErrorText className={s.problem}>
               {errorMessage(t, rejected)}
               {rejected.detail && <div className={cx(s.detail, "selectable")}>{rejected.detail}</div>}
-            </div>
+            </ErrorText>
           )}
         </form>
       )}

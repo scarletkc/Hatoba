@@ -122,18 +122,9 @@
   text-overflow: ellipsis;
 }
 
+/* A Chip in the type column. */
 .typeBadge {
   justify-self: start;
-  display: inline-flex;
-  align-items: center;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: var(--radius-xs);
-  background: var(--fill);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--fg2);
-  white-space: nowrap;
 }
 
 .cellFingerprint {
@@ -312,12 +303,6 @@
   line-height: 1.4;
   overflow: hidden;
   white-space: nowrap;
-}
-
-.hint {
-  font-size: var(--text-xs);
-  line-height: 1.45;
-  color: var(--fg2);
 }
 
 .usedHosts {

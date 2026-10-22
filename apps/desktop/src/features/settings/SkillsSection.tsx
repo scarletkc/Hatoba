@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Badge, Button, Icon, IconButton, Spinner, Switch } from "@/components/controls";
+import { Badge, Button, Icon, IconButton, Switch } from "@/components/controls";
 import { layoutStyles } from "@/components/layout";
 import { Menu, confirm, toast, useMenu } from "@/components/overlay";
+import { HintText } from "@/components/patterns";
 import { useT } from "@/i18n";
 import { api, isTauri } from "@/ipc/api";
 import type { BuiltinSkillView, SkillView } from "@/ipc/types";
@@ -162,10 +163,10 @@ export function SkillsSection({ builtin }: { builtin: BuiltinSwitch | null }) {
       )}
 
       <div className={cx(layoutStyles.group, a.clip)}>
-        {!loaded && !loadError && <StatusRow icon={<Spinner />}>{t("aiSettings.loading")}</StatusRow>}
+        {!loaded && !loadError && <StatusRow tone="progress">{t("aiSettings.loading")}</StatusRow>}
         {!loaded && !!loadError && (
           <StatusRow
-            icon={<Icon name="warning-circle" color="var(--red)" />}
+            tone="error"
             action={
               <Button size="sm" onClick={() => void load()}>
                 {t("btn.retry")}
@@ -202,7 +203,7 @@ export function SkillsSection({ builtin }: { builtin: BuiltinSwitch | null }) {
           />
         ))}
       </div>
-      <div className={a.sectionHint}>{t("aiSettings.skills.hint")}</div>
+      <HintText className={a.sectionHint}>{t("aiSettings.skills.hint")}</HintText>
 
       {editing && (
         <SkillDialog
@@ -300,7 +301,7 @@ function SkillRow({
       <div className={s.actions}>
         <Switch checked={skill.enabled} label={t("aiSettings.skills.enable", { name: skill.name })} onChange={onToggle} />
         <IconButton icon="export" label={t("aiSettings.skills.export", { name: skill.name })} onClick={onExport} />
-        <IconButton icon="trash" label={t("aiSettings.skills.delete", { name: skill.name })} onClick={onDelete} />
+        <IconButton icon="trash" label={t("aiSettings.skills.delete", { name: skill.name })} danger onClick={onDelete} />
       </div>
     </div>
   );

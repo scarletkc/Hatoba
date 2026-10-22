@@ -43,48 +43,28 @@
   gap: var(--space-8);
 }
 
+/* A StatusLine, with the provider's words under it. */
 .testResult {
   transition: opacity var(--motion-fade) var(--ease-out);
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-8);
+  flex-direction: column;
+  gap: var(--space-4);
   max-width: 100%;
-  font-size: var(--text-sm);
-  line-height: 1.5;
 }
 
 .testStale {
   opacity: 0.5;
 }
 
-.testResult > :first-child {
-  margin-top: 5px;
-}
-
-.testText {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.testFail {
-  color: var(--red);
-}
-
+/* A Chip after the failure. */
 .testStatus {
   margin-left: 8px;
-  padding: 0 5px;
-  border-radius: var(--radius-xs);
-  background: var(--fill);
-  color: var(--fg2);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  white-space: nowrap;
+  vertical-align: 1px;
 }
 
-/* The provider's own words, kept as sent. */
+/* The provider's own words, kept as sent, in line with the status text past its icon. */
 .testDetail {
+  padding-left: 20px;
   color: var(--fg2);
   font-family: var(--font-mono);
   font-size: var(--text-xs);

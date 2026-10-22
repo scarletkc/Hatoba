@@ -9,31 +9,17 @@
   font-weight: 500;
 }
 
-.fieldError {
-  font-size: var(--text-sm);
-  color: var(--red);
-}
-
 .testRow {
   display: flex;
   align-items: flex-start;
   gap: var(--space-12);
 }
 
+/* Holds the StatusLine beside the Test button, level with its label. */
 .status {
   flex: 1;
   min-width: 0;
-  padding-top: 6px;
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-  font-size: var(--text-sm);
-  color: var(--fg2);
-  line-height: 1.5;
-}
-
-.statusError {
-  color: var(--red);
+  padding-top: 7px;
 }
 
 .busyText {

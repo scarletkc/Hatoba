@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button, LinkButton, TextField } from "@/components/controls";
 import { FormRow, Group, layoutStyles } from "@/components/layout";
 import { PopupSelect, confirm, toast } from "@/components/overlay";
+import { HintText } from "@/components/patterns";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AiSettingsPatch, SearchKind, SearchProviderInput, SearchProviderView } from "@/ipc/types";
@@ -217,7 +218,7 @@ export function SearchSection({
                     placeholder="https://searx.example.com"
                     onChange={(e) => edit({ baseUrl: e.target.value })}
                   />
-                  <span className={s.fieldHint}>{t("aiSettings.search.baseUrlHint")}</span>
+                  <HintText>{t("aiSettings.search.baseUrlHint")}</HintText>
                 </div>
               </FormRow>
             ) : (

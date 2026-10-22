@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button, Icon, LinkButton } from "@/components/controls";
 import { useApp } from "@/app/store";
+import { Chip } from "@/components/patterns";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { EncryptionDialog } from "./EncryptionDialog";
@@ -53,7 +54,7 @@ export function MethodStep({ method, onChange, onNext }: { method: Method; onCha
               <span className={s.optionText}>
                 <span className={s.optionTitle}>
                   {o.title}
-                  {o.recommended && <span className={s.recommended}>{t("sync.opt.recommended")}</span>}
+                  {o.recommended && <Chip tone="accent">{t("sync.opt.recommended")}</Chip>}
                 </span>
                 <span className={s.optionDesc}>
                   {o.desc}

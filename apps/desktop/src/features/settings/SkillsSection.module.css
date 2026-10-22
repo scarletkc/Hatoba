@@ -122,7 +122,8 @@
   min-width: 0;
 }
 
-.hint {
+/* The hint inside a radio choice, which is a button and so takes no HintText. */
+.choiceHint {
   font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--fg2);
@@ -140,10 +141,8 @@
   color: var(--red);
 }
 
+/* An ErrorText that breaks a long name or path anywhere. */
 .problem {
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--red);
   overflow-wrap: anywhere;
 }
 
@@ -185,7 +184,7 @@
   gap: var(--space-12);
 }
 
-.filesBar .hint {
+.filesHint {
   flex: 1;
   padding-top: 3px;
 }
@@ -222,11 +221,8 @@
   font-size: var(--icon-12);
 }
 
-.fileToggle:hover {
-  background: var(--fill);
-}
-
-.fileToggle i {
+.fileToggle i,
+.fileCaret i {
   transition: transform var(--motion-fast) var(--ease-out);
 }
 
@@ -255,19 +251,14 @@
   text-align: center;
 }
 
+/* A HintText that names frontmatter keys or paths, which break anywhere. */
 .note {
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  color: var(--fg2);
   overflow-wrap: anywhere;
 }
 
+/* A StatusLine while the skill loads. */
 .loading {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
   padding: 24px 0;
-  color: var(--fg2);
 }
 
 .loadFailed {

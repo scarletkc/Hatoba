@@ -62,12 +62,3 @@ export function WizardCard({
     </form>
   );
 }
-
-export function ErrorLine({ children }: { children: ReactNode }) {
-  return (
-    <div className={s.error} role="alert">
-      <Icon name="warning-circle" size={16} />
-      <span>{children}</span>
-    </div>
-  );
-}

@@ -3,6 +3,7 @@ import { errorMessage } from "@/app/errors";
 import { Button, IconButton, LinkButton, Segmented, Switch, TextField } from "@/components/controls";
 import { FormRow, Group, Section } from "@/components/layout";
 import { FooterSpacer, Sheet, SheetHeader } from "@/components/overlay";
+import { ErrorText, HintText, WarningText } from "@/components/patterns";
 import { openExternal } from "@/features/sync/external";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
@@ -203,7 +204,7 @@ export function McpServerDialog({
                 ]}
                 onChange={(kind) => patch({ kind })}
               />
-              <span className={s.hint}>{t(form.kind === "stdio" ? "aiSettings.mcp.transport.stdioHint" : "aiSettings.mcp.transport.httpHint")}</span>
+              <HintText>{t(form.kind === "stdio" ? "aiSettings.mcp.transport.stdioHint" : "aiSettings.mcp.transport.httpHint")}</HintText>
             </div>
           </FormRow>
           {form.kind === "stdio" ? (
@@ -222,12 +223,12 @@ export function McpServerDialog({
                     }}
                   />
                   {looksLikeCommandLine(form.command) && form.args.length === 0 ? (
-                    <span className={cx(s.hint, s.hintWarn)}>
+                    <WarningText>
                       {splitFailed ? t("aiSettings.mcp.f.splitFailed") : t("aiSettings.mcp.f.commandLine")}{" "}
                       <LinkButton onClick={splitCommand}>{t("aiSettings.mcp.f.split")}</LinkButton>
-                    </span>
+                    </WarningText>
                   ) : (
-                    <span className={s.hint}>{t("aiSettings.mcp.f.commandHint")}</span>
+                    <HintText>{t("aiSettings.mcp.f.commandHint")}</HintText>
                   )}
                 </div>
               </FormRow>
@@ -282,7 +283,7 @@ export function McpServerDialog({
         </Group>
 
         <Section title={form.kind === "stdio" ? t("aiSettings.mcp.f.env") : t("aiSettings.mcp.f.headers")}>
-          {form.kind === "http" && <div className={s.hint}>{t("aiSettings.mcp.f.headersHint")}</div>}
+          {form.kind === "http" && <HintText>{t("aiSettings.mcp.f.headersHint")}</HintText>}
           <SecretRows
             // The two transports keep their own rows; switching must not carry one's focus or values into the other.
             key={form.kind}
@@ -300,15 +301,13 @@ export function McpServerDialog({
           <FormRow label={t("aiSettings.mcp.f.alwaysAsk")} top>
             <div className={s.alwaysAsk}>
               <Switch checked={form.alwaysAsk} label={t("aiSettings.mcp.f.alwaysAsk")} onChange={(alwaysAsk) => patch({ alwaysAsk })} />
-              <span className={s.hint}>{t("aiSettings.mcp.f.alwaysAskHint")}</span>
+              <HintText className={s.alwaysAskHint}>{t("aiSettings.mcp.f.alwaysAskHint")}</HintText>
             </div>
           </FormRow>
         </Group>
 
         {rejected.general && (
-          <div className={cx(s.problem, s.pre, "selectable")} role="alert">
-            {rejected.general}
-          </div>
+          <ErrorText className={cx(s.problem, s.pre, "selectable")}>{rejected.general}</ErrorText>
         )}
       </form>
     </Sheet>
@@ -399,16 +398,14 @@ function SecretRows({
                     />
                   </div>
                   {problem && (
-                    <div className={s.problem} role="alert">
-                      {problemText(problem)}
-                    </div>
+                    <ErrorText className={s.problem}>{problemText(problem)}</ErrorText>
                   )}
                   {tokenLink?.uid === row.uid && (
-                    <div className={s.hint}>
+                    <HintText>
                       <LinkButton icon="arrow-up-right" onClick={() => void openExternal(tokenLink.url)}>
                         {t(tokenLink.label)}
                       </LinkButton>
-                    </div>
+                    </HintText>
                   )}
                 </div>
               );

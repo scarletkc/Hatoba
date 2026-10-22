@@ -4,11 +4,12 @@ import { errorMessage } from "@/app/errors";
 import { Button } from "@/components/controls";
 import { Callout } from "@/components/layout";
 import { FooterSpacer } from "@/components/overlay";
+import { ErrorText } from "@/components/patterns";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import { NewPasswordFields, useNewPassword } from "./PasswordStrength";
 import { RecoveryCodeSection } from "./RecoveryCode";
-import { ErrorLine, WizardCard } from "./WizardCard";
+import { WizardCard } from "./WizardCard";
 
 /** Flow A step 2: master password with strength meter (VAULT-01, SEC-09). */
 export function CreatePassword({
@@ -69,7 +70,7 @@ export function CreatePassword({
       <Callout icon="info" iconColor="var(--orange)" title={t("vault.create.lossTitle")}>
         {t("vault.create.lossBody")}
       </Callout>
-      {error && <ErrorLine>{error}</ErrorLine>}
+      {error && <ErrorText icon="warning-circle">{error}</ErrorText>}
     </WizardCard>
   );
 }

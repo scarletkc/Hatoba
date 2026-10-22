@@ -1,15 +1,17 @@
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
 import { useUpdate } from "@/app/update";
-import { AppLogo, Button, Icon, LinkButton, Switch, controlStyles } from "@/components/controls";
+import { AppLogo, Button, LinkButton, Switch } from "@/components/controls";
 import { Group } from "@/components/layout";
 import { confirm, toast } from "@/components/overlay";
+import { Card, StatusLine, type StatusTone } from "@/components/patterns";
 import { Markdown } from "@/features/ai/Markdown";
 import { copyText } from "@/features/keys/clipboard";
 import { useTransfers } from "@/features/sftp/transfers";
 import { openExternal } from "@/features/sync/external";
 import { formatBytes, formatDate, useT, type MessageKey, type Params } from "@/i18n";
 import type { AppError, AvailableUpdate, PackageManager, UpdateProgress } from "@/ipc/types";
+import { cx } from "@/lib/cx";
 import { REPO_URL, WEBSITE_URL, bugReportUrl } from "@/lib/github";
 import { Pane, SettingRow, usePrefs } from "./shared";
 import s from "./AboutPane.module.css";
@@ -20,8 +22,8 @@ const SCOOP_UPDATE = "scoop update hatoba";
 type T = (key: MessageKey, params?: Params) => string;
 type Install = UpdateProgress | { kind: "starting" };
 interface Status {
-  icon: string;
-  color: string;
+  tone: StatusTone;
+  icon?: string;
   text: string;
 }
 
@@ -52,14 +54,14 @@ function updateStatus(
     checked: boolean;
   },
 ): Status | null {
-  const busy = (text: string) => ({ icon: "circle-notch", color: "var(--fg2)", text });
-  const failed = (text: string) => ({ icon: "warning-circle", color: "var(--red)", text });
+  const busy = (text: string): Status => ({ tone: "progress", text });
+  const failed = (text: string): Status => ({ tone: "error", text });
   if (install) return busy(installText(t, install));
   if (checking) return busy(t("settings.about.checking"));
   if (error) return failed(t(error.code === "sync_offline" ? "settings.about.offline" : "settings.about.failed"));
   if (installError) return failed(t(installErrorKey(installError)));
-  if (found) return { icon: "arrow-circle-up", color: "var(--accent)", text: t("settings.about.available", { version: found.version }) };
-  if (checked) return { icon: "check-circle", color: "var(--green)", text: t("settings.about.latest") };
+  if (found) return { tone: "neutral", icon: "arrow-circle-up", text: t("settings.about.available", { version: found.version }) };
+  if (checked) return { tone: "success", text: t("settings.about.latest") };
   return null;
 }
 
@@ -145,9 +147,10 @@ export function AboutPane() {
             (status || manager) && (
               <span className={s.progress}>
                 {status && (
-                  <span className={s.status} role="status">
-                    <Icon name={status.icon} color={status.color} className={spinning ? controlStyles.spinner : undefined} />
-                    {status.text}
+                  <span role="status">
+                    <StatusLine tone={status.tone} icon={status.icon} className={cx(s.status, status.icon && s.available)}>
+                      {status.text}
+                    </StatusLine>
                   </span>
                 )}
                 {install && (
@@ -186,7 +189,7 @@ export function AboutPane() {
       </Group>
 
       {update && (
-        <section className={s.notes} aria-label={t("settings.about.notes", { version: update.version })}>
+        <Card role="region" className={s.notes} aria-label={t("settings.about.notes", { version: update.version })}>
           <div className={s.notesHead}>
             <span className={s.notesTitle}>{t("settings.about.notes", { version: update.version })}</span>
             {update.published_at !== null && (
@@ -201,7 +204,7 @@ export function AboutPane() {
           <LinkButton icon="arrow-up-right" onClick={() => void openExternal(update.release_url)}>
             {t("settings.about.releasePage")}
           </LinkButton>
-        </section>
+        </Card>
       )}
 
       <div className={s.links}>

@@ -28,9 +28,3 @@
   flex-direction: column;
   gap: var(--space-12);
 }
-
-.formError {
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--red);
-}

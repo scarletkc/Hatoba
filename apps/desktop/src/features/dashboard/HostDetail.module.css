@@ -30,23 +30,10 @@
   text-overflow: ellipsis;
 }
 
+/* A StatusLine under the header; a long failure wraps anywhere. */
 .status {
   margin-top: -8px;
-  font-size: var(--text-sm);
   overflow-wrap: anywhere;
-}
-
-.normal,
-.dim {
-  color: var(--fg2);
-}
-
-.warn {
-  color: var(--orange);
-}
-
-.error {
-  color: var(--red);
 }
 
 .body {

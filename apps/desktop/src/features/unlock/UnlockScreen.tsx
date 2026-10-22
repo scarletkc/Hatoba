@@ -4,7 +4,7 @@ import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
 import { WindowChrome } from "@/app/TitleBar";
-import { AppLogo, Icon, Spinner } from "@/components/controls";
+import { AppLogo, Button, Icon, LinkButton, Spinner } from "@/components/controls";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import { cx } from "@/lib/cx";
@@ -227,29 +227,28 @@ export function UnlockScreen() {
           {vault?.biometric_enabled && (
             <>
               <div className={s.divider}>{t("vault.unlock.or")}</div>
-              <button type="button" className={s.biometric} disabled={busy} onClick={() => void unlockBiometric()}>
-                <Icon name="fingerprint" />
+              <Button icon="fingerprint" disabled={busy} onClick={() => void unlockBiometric()}>
                 {biometricLabel}
-              </button>
+              </Button>
             </>
           )}
         </form>
 
         <div className={s.links}>
           {pinMode ? (
-            <button type="button" className={s.forgot} onClick={() => switchMode(true)}>
+            <LinkButton onClick={() => switchMode(true)}>
               {t("vault.unlock.usePassword")}
-            </button>
+            </LinkButton>
           ) : (
             <>
               {vault?.pin_unlock && (
-                <button type="button" className={s.forgot} onClick={() => switchMode(false)}>
+                <LinkButton onClick={() => switchMode(false)}>
                   {t("vault.unlock.usePin")}
-                </button>
+                </LinkButton>
               )}
-              <button type="button" className={s.forgot} onClick={() => setRecovering(true)}>
+              <LinkButton onClick={() => setRecovering(true)}>
                 {t("vault.unlock.forgot")}
-              </button>
+              </LinkButton>
             </>
           )}
         </div>

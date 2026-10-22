@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { errorMessage } from "@/app/errors";
-import { Button, Icon, LinkButton, StatusDot, TextField } from "@/components/controls";
+import { Button, Icon, LinkButton, TextField } from "@/components/controls";
+import { Chip, StatusLine } from "@/components/patterns";
 import { useT, type MessageKey } from "@/i18n";
 import { toAppError } from "@/ipc/api";
 import type { AiTestResult } from "@/ipc/types";
@@ -198,14 +199,15 @@ export function TestConnection({
       </div>
       {line && (
         <div className={cx(s.testResult, running && s.testStale)} role="status" aria-busy={running}>
-          <StatusDot color={ok ? "var(--green)" : "var(--red)"} />
-          <div className={s.testText}>
-            <span className={ok ? undefined : s.testFail}>
-              {line}
-              {status && <span className={s.testStatus}>{status}</span>}
-            </span>
-            {detail && <span className={`${s.testDetail} selectable`}>{detail}</span>}
-          </div>
+          <StatusLine tone={ok ? "success" : "error"}>
+            {line}
+            {status && (
+              <Chip mono className={s.testStatus}>
+                {status}
+              </Chip>
+            )}
+          </StatusLine>
+          {detail && <span className={`${s.testDetail} selectable`}>{detail}</span>}
         </div>
       )}
     </div>

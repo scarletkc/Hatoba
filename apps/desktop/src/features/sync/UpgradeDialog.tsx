@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Button, Icon, LinkButton, Spinner, TextField } from "@/components/controls";
+import { Button, Icon, LinkButton, TextField } from "@/components/controls";
 import { Callout } from "@/components/layout";
 import { Dialog, PopupSelect } from "@/components/overlay";
+import { ErrorText, HintText, StatusLine } from "@/components/patterns";
 import { Field } from "@/features/keys/Field";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
@@ -236,11 +237,9 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
         <div className={d.form}>
           <StepList steps={UPGRADE_STEPS} states={steps} error={runError} label={stepLabel(t)} ariaLabel={t("sync.up.run.title")} />
           {run === "failed" && !failedStep && runError && (
-            <div className={s.stepError} role="alert">
-              {deployError(t, runError)}
-            </div>
+            <ErrorText>{deployError(t, runError)}</ErrorText>
           )}
-          {run === "failed" && !fixInReview && <div className={s.planNote}>{t("sync.up.retryHint")}</div>}
+          {run === "failed" && !fixInReview && <HintText>{t("sync.up.retryHint")}</HintText>}
           {run === "waiting" && (
             <Callout icon="hourglass-medium" iconColor="var(--orange)">
               {t("sync.up.waiting")}
@@ -443,23 +442,19 @@ function UpgradeSummary({
 }) {
   if (inspecting)
     return (
-      <div className={s.planStatus} role="status">
-        <Spinner />
+      <StatusLine tone="progress" className={s.planStatus}>
         {t("sync.dep.checking")}
-      </div>
+      </StatusLine>
     );
   if (error)
     return (
-      <div className={s.tokenError} role="alert">
-        <Icon name="warning-circle" />
-        <div className={s.tokenErrorText}>
-          <div>{deployError(t, error)}</div>
-          <div className={s.linkRow}>
-            <EditTokenLink error={error} />
-            <LinkButton onClick={onRetry}>{t("sync.dep.checkAgain")}</LinkButton>
-          </div>
+      <ErrorText icon="warning-circle" className={s.tokenError}>
+        <div>{deployError(t, error)}</div>
+        <div className={s.linkRow}>
+          <EditTokenLink error={error} />
+          <LinkButton onClick={onRetry}>{t("sync.dep.checkAgain")}</LinkButton>
         </div>
-      </div>
+      </ErrorText>
     );
   if (!plan) return null;
 

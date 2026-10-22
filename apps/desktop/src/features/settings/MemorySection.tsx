@@ -2,9 +2,10 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
-import { Button, Icon, IconButton, Spinner, Switch, TextArea, TextField } from "@/components/controls";
+import { Button, Icon, IconButton, Switch, TextArea, TextField } from "@/components/controls";
 import { FormRow, Group, layoutStyles } from "@/components/layout";
 import { FooterSpacer, PopupSelect, Sheet, SheetHeader, confirm, toast, type SelectOption } from "@/components/overlay";
+import { ErrorText } from "@/components/patterns";
 import {
   cleanMemoryContent,
   cleanMemoryName,
@@ -182,10 +183,10 @@ export function MemorySection({ enabled, settled }: { enabled: MemorySwitch | nu
 
       {(!loaded || list.length === 0) && (
         <div className={cx(layoutStyles.group, a.clip)}>
-          {!loaded && !loadError && <StatusRow icon={<Spinner />}>{t("aiSettings.loading")}</StatusRow>}
+          {!loaded && !loadError && <StatusRow tone="progress">{t("aiSettings.loading")}</StatusRow>}
           {!loaded && !!loadError && (
             <StatusRow
-              icon={<Icon name="warning-circle" color="var(--red)" />}
+              tone="error"
               action={
                 <Button size="sm" onClick={() => reads.refresh()}>
                   {t("btn.retry")}
@@ -228,7 +229,7 @@ export function MemorySection({ enabled, settled }: { enabled: MemorySwitch | nu
                   </span>
                 </button>
                 <div className={s.actions}>
-                  <IconButton icon="trash" label={t("aiSettings.memory.delete", { name: memory.name })} onClick={() => void remove(memory)} />
+                  <IconButton icon="trash" label={t("aiSettings.memory.delete", { name: memory.name })} danger onClick={() => void remove(memory)} />
                 </div>
               </div>
             ))}
@@ -391,7 +392,7 @@ function MemoryDialog({
               setProblem(null);
             }}
           />
-          {problem && !nameProblem && <span className={s.problem}>{message}</span>}
+          {problem && !nameProblem && <ErrorText className={s.problem}>{message}</ErrorText>}
           <span className={cx(s.counter, used > MEMORY_MAX_BYTES && s.counterOver)}>
             {t("aiSettings.memory.size", { n: nf.format(used), max: nf.format(MEMORY_MAX_BYTES) })}
           </span>

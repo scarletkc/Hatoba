@@ -122,17 +122,3 @@
   box-shadow: none;
   color: #ffffff;
 }
-
-.error {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-6);
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  color: var(--red);
-}
-
-.error i {
-  margin-top: 1px;
-  flex: none;
-}
