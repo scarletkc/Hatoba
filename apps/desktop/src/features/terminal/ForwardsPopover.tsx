@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { errorMessage } from "@/app/errors";
-import { Icon, Spinner } from "@/components/controls";
+import { Icon, LinkButton, Spinner } from "@/components/controls";
 import { overlayStyles, toast, type MenuAnchor } from "@/components/overlay";
 import { ListRow } from "@/components/patterns";
 import { forwardDest, hostPort } from "@/features/hosts/address";
@@ -163,9 +163,9 @@ function ForwardRow({
       }
       status={failed && <span className={s.error}>{error}</span>}
       trailing={
-        <button type="button" className={s.action} disabled={busy !== null} onClick={running ? onStop : onStart}>
+        <LinkButton className={s.action} disabled={busy !== null} onClick={running ? onStop : onStart}>
           {running ? t("terminal.fwd.stop") : failed ? t("btn.retry") : t("terminal.fwd.start")}
-        </button>
+        </LinkButton>
       }
     >
       {running && !remote ? (

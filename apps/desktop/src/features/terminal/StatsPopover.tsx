@@ -1,8 +1,9 @@
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { errorMessage } from "@/app/errors";
-import { Icon, Spinner } from "@/components/controls";
+import { Icon, LinkButton, Spinner } from "@/components/controls";
 import { overlayStyles, type MenuAnchor } from "@/components/overlay";
+import { ErrorText } from "@/components/patterns";
 import { formatBytes, useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { useStatusPopover } from "./popover";
@@ -118,10 +119,10 @@ function Failed({ message, onRetry }: { message: string; onRetry(): void }) {
   const t = useT();
   return (
     <div className={cx(s.note, s.noteError)}>
-      <span className={s.noteText}>{t("terminal.stats.failed", { error: message })}</span>
-      <button type="button" className={s.retry} onClick={onRetry}>
+      <ErrorText className={s.noteText}>{t("terminal.stats.failed", { error: message })}</ErrorText>
+      <LinkButton className={s.retry} onClick={onRetry}>
         {t("btn.retry")}
-      </button>
+      </LinkButton>
     </div>
   );
 }

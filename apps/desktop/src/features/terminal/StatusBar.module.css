@@ -59,31 +59,15 @@
   flex: 1;
 }
 
+/* An icon button (controls.module.css) with a label. */
 .sftp {
-  display: flex;
-  align-items: center;
+  width: auto;
   gap: var(--space-6);
-  height: 26px;
   padding: 0 9px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--fg);
   font-size: var(--text-sm);
 }
 
-.sftp:hover:not(:disabled) {
-  background: var(--fill);
-}
-
-.sftp:disabled {
-  color: var(--fg3);
-}
-
-.sftpOn,
-.sftpOn:hover:not(:disabled) {
-  background: var(--fill2);
-  color: var(--accent);
+.sftpOn {
   font-weight: 500;
 }
 

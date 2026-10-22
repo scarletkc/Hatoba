@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, Icon, TextField } from "@/components/controls";
 import { Modal } from "@/components/overlay";
+import { ErrorText } from "@/components/patterns";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { startSessionListeners } from "./listeners";
@@ -189,7 +190,7 @@ function SecretDialog({ item }: { item: PromptItem & { kind: "secret" } }) {
             {isPassword ? t("terminal.password.body", { target: r.target }) : t("terminal.passphrase.body", { name: r.hostName })}
           </div>
         )}
-        {r.wrong && <div className={s.wrong}>{t("terminal.passphrase.wrong")}</div>}
+        {r.wrong && <ErrorText className={s.wrong}>{t("terminal.passphrase.wrong")}</ErrorText>}
         <div className={s.fields}>
           <TextField
             secret

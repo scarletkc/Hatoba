@@ -31,10 +31,6 @@
   color: var(--fg2);
 }
 
-.noteError {
-  color: var(--red);
-}
-
 .state {
   width: 20px;
   height: 18px;
@@ -92,27 +88,13 @@
   overflow-wrap: anywhere;
 }
 
+/* A link button, level with the address beside it. */
 .action {
   flex: none;
   min-width: 36px;
   height: 18px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: none;
-  color: var(--accent);
-  font-size: var(--text-sm);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.action:hover:not(:disabled) {
-  background: var(--fill);
-}
-
-.action:disabled {
-  color: var(--fg3);
+  margin-right: 4px;
+  justify-content: flex-end;
 }
 
 .separator {

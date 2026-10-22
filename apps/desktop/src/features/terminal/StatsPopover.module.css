@@ -164,7 +164,6 @@
 
 .noteError {
   align-items: flex-start;
-  color: var(--red);
 }
 
 .noteText {
@@ -173,19 +172,10 @@
   overflow-wrap: anywhere;
 }
 
+/* Level with the message's first line. */
 .retry {
   flex: none;
-  height: 20px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: none;
-  color: var(--accent);
-  font-size: var(--text-sm);
-}
-
-.retry:hover {
-  background: var(--fill);
+  height: 17px;
 }
 
 .separator {

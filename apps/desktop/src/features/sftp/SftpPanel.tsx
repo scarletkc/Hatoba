@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type Mous
 import { errorMessage } from "@/app/errors";
 import { Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
 import { confirm, Menu, toast, useMenu, type MenuEntry } from "@/components/overlay";
+import { ErrorText, HintText } from "@/components/patterns";
 import { writeClipboard } from "@/features/terminal/clipboard";
 import { formatBytes, formatDate, useT } from "@/i18n";
 import { api } from "@/ipc/api";
@@ -259,16 +260,15 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
       </div>
 
       <div className={s.pathBar}>
-        <button
-          type="button"
+        <IconButton
+          small
+          icon="caret-left"
+          size={14}
+          label={t("sftp.parent")}
           className={s.back}
-          aria-label={t("sftp.parent")}
-          title={t("sftp.parent")}
           disabled={!cwd || cwd === "/"}
           onClick={() => cwd && void load(parentPath(cwd))}
-        >
-          <Icon name="caret-left" size={14} />
-        </button>
+        />
         <span className={cx(s.path, "selectable")} title={cwd ?? undefined}>
           {dirPrefix}
           <span className={s.pathLast}>{dirLast}</span>
@@ -336,9 +336,9 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
           </div>
         )}
         {error && (
-          <div className={cx(s.message, s.messageError)}>
-            <div>{t("sftp.loadFailed")}</div>
-            <div className={s.errorDetail}>{errorMessage(t, error)}</div>
+          <div className={s.message}>
+            <ErrorText>{t("sftp.loadFailed")}</ErrorText>
+            <HintText>{errorMessage(t, error)}</HintText>
             <LinkButton icon="arrows-clockwise" onClick={refresh}>
               {t("btn.retry")}
             </LinkButton>

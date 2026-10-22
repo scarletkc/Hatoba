@@ -49,22 +49,10 @@
   text-align: right;
 }
 
+/* Overhangs the name's line rather than making it taller. */
 .close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
+  margin: -2px 0;
   color: var(--fg2);
-}
-
-.close:hover {
-  background: var(--fill2);
-  color: var(--fg);
 }
 
 .track {

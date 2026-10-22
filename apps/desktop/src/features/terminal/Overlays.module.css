@@ -39,7 +39,19 @@
   font-size: var(--text-sm);
 }
 
-/* The error card and banner are dark in both app themes, like the design's terminal. */
+/* The error card and banner are dark in both app themes, like the design's terminal: they take the dark
+   theme's text and button colors (tokens.css), so the shared controls in them look as they do there. */
+.card,
+.banner {
+  --fg: #f5f5f7;
+  --fg2: rgba(235, 235, 245, 0.64);
+  --fg3: rgba(235, 235, 245, 0.32);
+  --fill: rgba(255, 255, 255, 0.07);
+  --btn: rgba(255, 255, 255, 0.1);
+  --btnline: rgba(255, 255, 255, 0.07);
+  --shadow-btn: 0 0 0 0.5px var(--btnline), 0 1px 1.5px rgba(0, 0, 0, 0.05);
+}
+
 .scrim {
   position: absolute;
   z-index: 2;
@@ -115,55 +127,6 @@
 
 .grow {
   flex: 1;
-}
-
-.linkButton {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  font-size: var(--text-sm);
-  color: rgba(235, 235, 245, 0.64);
-}
-
-.linkButton:hover {
-  color: #f5f5f7;
-}
-
-.darkButton,
-.primaryButton {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-  height: 28px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-md);
-  white-space: nowrap;
-  color: #f5f5f7;
-}
-
-.darkButton {
-  background: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.08);
-}
-
-.darkButton:hover {
-  background: rgba(255, 255, 255, 0.16);
-}
-
-.primaryButton {
-  padding: 0 14px;
-  background: var(--accent);
-  color: #ffffff;
-  font-weight: 500;
-}
-
-.primaryButton:hover {
-  background: color-mix(in srgb, var(--accent) 90%, #000000 10%);
 }
 
 .banner {

@@ -39,8 +39,6 @@
 }
 
 .iconBtn {
-  width: 26px;
-  height: 26px;
   color: var(--fg2);
 }
 
@@ -55,25 +53,7 @@
 }
 
 .back {
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
   color: var(--fg2);
-  flex: none;
-}
-
-.back:hover:not(:disabled) {
-  background: var(--fill);
-}
-
-.back:disabled {
-  color: var(--fg3);
 }
 
 .path {
@@ -193,15 +173,6 @@
   text-align: center;
   font-size: var(--text-sm);
   color: var(--fg2);
-}
-
-.messageError {
-  color: var(--red);
-}
-
-.errorDetail {
-  color: var(--fg2);
-  line-height: 1.5;
 }
 
 .drop {

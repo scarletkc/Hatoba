@@ -1,4 +1,4 @@
-import { Icon } from "@/components/controls";
+import { Icon, IconButton } from "@/components/controls";
 import { formatBytes, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import { cx } from "@/lib/cx";
@@ -55,15 +55,13 @@ function TransferRow({ item }: { item: TransferItem }) {
           {item.name}
         </span>
         <span className={s.pct}>{pct}%</span>
-        <button
-          type="button"
+        <IconButton
+          small
+          icon="x"
+          label={running ? t("sftp.cancelTransfer") : t("sftp.dismissTransfer")}
           className={s.close}
-          aria-label={running ? t("sftp.cancelTransfer") : t("sftp.dismissTransfer")}
-          title={running ? t("sftp.cancelTransfer") : t("sftp.dismissTransfer")}
           onClick={close}
-        >
-          <Icon name="x" size={12} />
-        </button>
+        />
       </div>
       <div className={s.track} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
         <div className={cx(s.fill, failed && s.fillFailed)} style={{ width: `${pct}%` }} />

@@ -63,8 +63,6 @@
 
 .wrong {
   margin-top: 10px;
-  font-size: var(--text-sm);
-  color: var(--red);
 }
 
 .fields {

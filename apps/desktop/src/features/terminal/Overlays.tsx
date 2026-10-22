@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { errorMessage } from "@/app/errors";
-import { Button, Icon, Spinner } from "@/components/controls";
+import { Button, Icon, LinkButton, Spinner } from "@/components/controls";
 import { toast, useExitAnimation } from "@/components/overlay";
 import { useT } from "@/i18n";
 import type { AppError, HostView, QuickTarget } from "@/ipc/types";
@@ -77,24 +77,17 @@ export function ErrorCard({
         </div>
         <div className={s.meta}>{meta}</div>
         <div className={s.cardActions}>
-          <button type="button" className={s.linkButton} onClick={() => void copyDiagnostics()}>
-            <Icon name="copy" size={14} />
+          <LinkButton tone="muted" icon="copy" onClick={() => void copyDiagnostics()}>
             {t("terminal.err.copyDiag")}
-          </button>
+          </LinkButton>
           <div className={s.grow} />
-          <button type="button" className={s.darkButton} onClick={() => onAskAi(diagnosticsText(host ?? target, name, err, at ?? Date.now(), attempts))}>
-            <Icon name="sparkle" size={14} />
+          <Button icon="sparkle" onClick={() => onAskAi(diagnosticsText(host ?? target, name, err, at ?? Date.now(), attempts))}>
             {t("terminal.err.askAi")}
-          </button>
-          {host && (
-            <button type="button" className={s.darkButton} onClick={onEdit}>
-              {t("terminal.err.editHost")}
-            </button>
-          )}
-          <button type="button" className={s.primaryButton} onClick={onRetry}>
-            <Icon name="arrow-clockwise" size={14} />
+          </Button>
+          {host && <Button onClick={onEdit}>{t("terminal.err.editHost")}</Button>}
+          <Button variant="primary" icon="arrow-clockwise" onClick={onRetry}>
             {t("btn.retry")}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -117,10 +110,9 @@ export function LocalErrorCard({ name, error, onRetry }: { name: string; error: 
         <div className={s.cardBody}>{!error ? "" : error.code === "not_found" ? t("terminal.local.shellGone") : error.detail || errorMessage(t, error)}</div>
         <div className={s.cardActions}>
           <div className={s.grow} />
-          <button type="button" className={s.primaryButton} onClick={onRetry}>
-            <Icon name="arrow-clockwise" size={14} />
+          <Button variant="primary" icon="arrow-clockwise" onClick={onRetry}>
             {t("btn.retry")}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

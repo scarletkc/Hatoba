@@ -110,7 +110,7 @@ export function StatusBar({
       {!local && (
         <button
           type="button"
-          className={cx(s.sftp, sftpOpen && connected && s.sftpOn)}
+          className={cx(controlStyles.iconButton, sftpOpen && connected && controlStyles.iconButtonActive, s.sftp, sftpOpen && connected && s.sftpOn)}
           disabled={!connected}
           aria-pressed={sftpOpen && connected}
           title={t("terminal.sftpToggle")}
