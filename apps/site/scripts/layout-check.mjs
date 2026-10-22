@@ -45,17 +45,26 @@ try {
       // English pages would send a Chinese or Japanese browser to its language.
       localStorage.setItem("hatoba.locale", "en");
       window.__shift = 0;
+      window.__moved = [];
       new PerformanceObserver((list) => {
-        for (const entry of list.getEntries()) if (!entry.hadRecentInput) window.__shift += entry.value;
+        for (const entry of list.getEntries()) {
+          if (entry.hadRecentInput) continue;
+          window.__shift += entry.value;
+          // What moved, to name in a failure.
+          for (const { node } of entry.sources) {
+            const element = node instanceof Element ? node : node?.parentElement;
+            if (element) window.__moved.push(`${element.localName}${element.id ? `#${element.id}` : ""}${element.className && typeof element.className === "string" ? `.${element.className.split(" ")[0]}` : ""} "${(node.textContent ?? "").trim().slice(0, 40)}"`);
+          }
+        }
       }).observe({ type: "layout-shift", buffered: true });
     }, visitor.platform);
     for (const path of PAGES) {
       const page = await context.newPage();
       await page.goto(origin + path, { waitUntil: "networkidle" });
       await page.waitForTimeout(500);
-      const shift = await page.evaluate(() => window.__shift);
+      const { shift, moved } = await page.evaluate(() => ({ shift: window.__shift, moved: window.__moved }));
       const line = `${path} (${visitor.name}): ${shift.toFixed(4)}`;
-      if (shift > BUDGET) failures.push(line);
+      if (shift > BUDGET) failures.push(`${line}, moving ${[...new Set(moved)].slice(0, 5).join(", ")}`);
       console.log(line);
       await page.close();
     }
