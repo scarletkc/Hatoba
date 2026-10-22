@@ -191,12 +191,20 @@ impl Connection {
 
     /// Keeps the forward unless its rule went while it started: a delete removes the rule, then
     /// stops the forward under the same lock, so it either finds the forward or the forward finds
-    /// no rule.
-    fn add_forward(&self, state: &AppState, id: &str, running: RunningForward) -> AppResult<()> {
+    /// no rule. It takes the rule's name as it is now, which a rename while it started changed.
+    fn add_forward(
+        &self,
+        state: &AppState,
+        id: &str,
+        mut running: RunningForward,
+    ) -> AppResult<()> {
         let mut users = self.users();
-        if let Err(e) = saved_forward(state, &self.host_id, id) {
-            running.handle.stop();
-            return Err(e);
+        match saved_forward(state, &self.host_id, id) {
+            Ok(rule) => running.name = rule.name,
+            Err(e) => {
+                running.handle.stop();
+                return Err(e);
+            }
         }
         users.failed.remove(id);
         if let Some(old) = users.forwards.insert(id.to_owned(), running) {
