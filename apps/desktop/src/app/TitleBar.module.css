@@ -22,14 +22,14 @@
 .tab {
   display: flex;
   align-items: center;
-  gap: var(--space-7);
+  gap: var(--space-6);
   height: 28px;
   padding: 0 10px;
   border: 0;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg2);
-  font-size: var(--text-control);
+  font-size: var(--text-sm);
   min-width: 0;
   max-width: 200px;
   flex-shrink: 1;
@@ -59,7 +59,7 @@
 }
 
 .tabIcon {
-  font-size: var(--icon-15);
+  font-size: var(--icon-16);
   flex: none;
 }
 
@@ -78,7 +78,7 @@
   margin-left: 2px;
   margin-right: -4px;
   border-radius: var(--radius-xs);
-  font-size: var(--icon-11);
+  font-size: var(--icon-12);
   color: var(--fg2);
   visibility: hidden;
   opacity: 0;
@@ -115,7 +115,7 @@
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg2);
   font-size: var(--icon-14);
@@ -148,7 +148,7 @@
   justify-content: center;
   margin-right: 6px;
   border: 0;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg2);
 }

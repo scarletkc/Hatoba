@@ -349,7 +349,7 @@ function FileEditor({
           onChange={(e) => onChange({ path: e.target.value })}
         />
         <span className={cx(s.size, bytes > SKILL_FILE_MAX_BYTES && s.counterOver)}>{formatBytes(bytes)}</span>
-        <IconButton icon="x" size={13} label={t("aiSettings.skills.file.remove", { path: label })} onClick={onRemove} />
+        <IconButton icon="x" size={14} label={t("aiSettings.skills.file.remove", { path: label })} onClick={onRemove} />
       </div>
       {open && (
         <div className={s.fileBody}>

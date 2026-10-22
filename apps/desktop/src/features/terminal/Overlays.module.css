@@ -29,14 +29,14 @@
 .connectingPill {
   display: flex;
   align-items: center;
-  gap: var(--space-9);
+  gap: var(--space-8);
   padding: 8px 14px;
-  border-radius: var(--radius-popover);
+  border-radius: var(--radius-md);
   background: rgba(28, 29, 33, 0.88);
   box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1);
   color: rgba(235, 235, 245, 0.72);
   font-family: var(--font-sans);
-  font-size: var(--text-control);
+  font-size: var(--text-sm);
 }
 
 /* The error card and banner are dark in both app themes, like the design's terminal. */
@@ -56,7 +56,7 @@
   width: 440px;
   max-width: 100%;
   padding: 22px 22px 18px;
-  border-radius: var(--radius-window);
+  border-radius: var(--radius-xl);
   background: var(--term-dialog);
   box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.12), 0 24px 60px rgba(0, 0, 0, 0.5);
   font-family: var(--font-sans);
@@ -76,7 +76,7 @@
 .cardHead {
   display: flex;
   align-items: center;
-  gap: var(--space-10);
+  gap: var(--space-8);
 }
 
 .cardTitle {
@@ -97,10 +97,10 @@
 .meta {
   margin-top: 12px;
   padding: 8px 10px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.05);
   font-family: var(--font-mono);
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   color: rgba(235, 235, 245, 0.64);
   user-select: text;
 }
@@ -120,7 +120,7 @@
 .linkButton {
   display: flex;
   align-items: center;
-  gap: var(--space-5);
+  gap: var(--space-6);
   padding: 0;
   border: 0;
   background: transparent;
@@ -136,11 +136,11 @@
 .primaryButton {
   display: flex;
   align-items: center;
-  gap: var(--space-5);
+  gap: var(--space-6);
   height: 28px;
   padding: 0 12px;
   border: 0;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   font-size: var(--text-md);
   white-space: nowrap;
   color: #f5f5f7;
@@ -174,9 +174,9 @@
   bottom: 14px;
   display: flex;
   align-items: center;
-  gap: var(--space-10);
+  gap: var(--space-8);
   padding: 8px 8px 8px 14px;
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: var(--term-dialog);
   box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.12), 0 12px 32px rgba(0, 0, 0, 0.4);
   color: #f5f5f7;

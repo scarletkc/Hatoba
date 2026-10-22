@@ -145,7 +145,7 @@ export function WorkerStep({
             placeholder={t("sync.workerUrl.placeholder")}
             inputMode="url"
             invalid={test.status === "failed"}
-            trailing={ok ? <Icon name="check-circle" fill size={15} color="var(--green)" /> : undefined}
+            trailing={ok ? <Icon name="check-circle" fill size={16} color="var(--green)" /> : undefined}
             onChange={(e) => {
               request.current++;
               update({ url: e.target.value, test: { status: "idle" } });

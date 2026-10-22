@@ -4,7 +4,7 @@
   max-height: calc(100vh - 48px);
   overflow-y: auto;
   padding: 22px 22px 18px;
-  border-radius: var(--radius-window);
+  border-radius: var(--radius-xl);
   background: var(--sheet);
   box-shadow: 0 0 0 0.5px var(--winline), var(--shadow);
   color: var(--fg);
@@ -34,7 +34,7 @@
 .head {
   display: flex;
   align-items: center;
-  gap: var(--space-10);
+  gap: var(--space-8);
 }
 
 .title {
@@ -70,14 +70,14 @@
 .fields {
   display: flex;
   flex-direction: column;
-  gap: var(--space-10);
+  gap: var(--space-8);
   margin-top: 14px;
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-6);
 }
 
 .fieldLabel {
@@ -88,7 +88,7 @@
 .fp {
   margin-top: 12px;
   padding: 8px 10px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: var(--fill);
 }
 
@@ -101,7 +101,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-10);
+  gap: var(--space-8);
   font-size: var(--text-xs);
   font-weight: 500;
   color: var(--fg2);
@@ -115,7 +115,7 @@
 .fpValue {
   margin-top: 3px;
   font-family: var(--font-mono);
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--fg);
   word-break: break-all;

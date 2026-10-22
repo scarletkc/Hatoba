@@ -41,7 +41,7 @@
 .stats {
   flex: none;
   display: inline-flex;
-  gap: var(--space-5);
+  gap: var(--space-6);
   margin-left: auto;
   padding-top: 1px;
   font-family: var(--font-mono);
@@ -62,11 +62,11 @@
   display: grid;
   grid-template-columns: max-content max-content 1.4ch minmax(0, 1fr);
   padding: 4px 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--win);
   box-shadow: inset 0 0 0 0.5px var(--line);
   font-family: var(--font-mono);
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   line-height: 1.5;
   cursor: text;
 }
@@ -123,7 +123,7 @@
   background: var(--fill);
   color: var(--fg3);
   font-family: var(--font-sans);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   user-select: none;
 }
 
@@ -155,7 +155,7 @@
   flex-direction: column;
   gap: var(--space-4);
   padding: 7px 9px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--red) 8%, var(--win));
   box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--red) 45%, transparent);
   font-size: var(--text-xs);
@@ -164,7 +164,7 @@
 
 .errorText {
   font-family: var(--font-mono);
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   color: var(--red);
   white-space: pre-wrap;
   overflow-wrap: anywhere;

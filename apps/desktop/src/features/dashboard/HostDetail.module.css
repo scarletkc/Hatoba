@@ -12,7 +12,7 @@
 }
 
 .title {
-  font-size: var(--text-wizard);
+  font-size: var(--text-title);
   font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;
@@ -69,7 +69,7 @@
 .row {
   display: flex;
   align-items: baseline;
-  gap: var(--space-10);
+  gap: var(--space-8);
   min-width: 0;
 }
 
@@ -102,7 +102,7 @@
 }
 
 .value i {
-  font-size: var(--icon-13);
+  font-size: var(--icon-14);
 }
 
 .detail {
@@ -113,7 +113,7 @@
 .usage {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-6);
 }
 
 .usageLabel {
@@ -139,7 +139,7 @@
 .meter {
   --meter: var(--accent);
   height: 6px;
-  border-radius: var(--radius-meter);
+  border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--meter) 16%, transparent);
   overflow: hidden;
   transition: background-color var(--motion-slow) var(--ease-out);
@@ -148,7 +148,7 @@
 /* Each new reading glides to its value (DashboardPage.module.css). */
 .meterFill {
   height: 100%;
-  border-radius: var(--radius-meter);
+  border-radius: var(--radius-full);
   background: var(--meter);
   transition:
     width var(--motion-slow) var(--ease-out),

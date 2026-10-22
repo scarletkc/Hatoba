@@ -17,12 +17,12 @@
 .waiting {
   display: flex;
   align-items: center;
-  gap: var(--space-10);
+  gap: var(--space-8);
 }
 
 .sectionHint {
   padding: 0 4px;
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--fg2);
   text-wrap: pretty;
@@ -48,7 +48,7 @@
   justify-content: space-between;
   gap: var(--space-2) var(--space-12);
   padding: 0 4px;
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--fg2);
 }
@@ -56,7 +56,7 @@
 .scopeName {
   display: flex;
   align-items: center;
-  gap: var(--space-5);
+  gap: var(--space-6);
   min-width: 0;
   font-weight: 600;
   overflow-wrap: anywhere;
@@ -66,7 +66,7 @@
 .status {
   display: flex;
   align-items: center;
-  gap: var(--space-10);
+  gap: var(--space-8);
   min-height: 44px;
   padding: 8px 14px;
   color: var(--fg2);
@@ -94,14 +94,14 @@
 .emptyIcon {
   width: 44px;
   height: 44px;
-  border-radius: var(--radius-window);
+  border-radius: var(--radius-xl);
   background: var(--fill);
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 12px;
   color: var(--fg2);
-  font-size: var(--icon-22);
+  font-size: var(--icon-24);
 }
 
 .emptyTitle {
@@ -155,7 +155,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--accenttint);
   color: var(--accent);
   font-size: var(--icon-16);
@@ -166,7 +166,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
 .providerName {
@@ -179,8 +179,8 @@
 .providerMeta {
   display: flex;
   min-width: 0;
-  gap: var(--space-5);
-  font-size: var(--text-caption);
+  gap: var(--space-6);
+  font-size: var(--text-sm);
   color: var(--fg2);
   white-space: nowrap;
 }
@@ -232,7 +232,7 @@
 }
 
 .fieldHint {
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--fg2);
   text-wrap: pretty;
@@ -251,7 +251,7 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: var(--space-14);
+  gap: var(--space-12);
 }
 
 /* Test beside the judge of Auto mode (AI-47) */
@@ -280,7 +280,7 @@
 .samples {
   display: flex;
   flex-direction: column;
-  gap: var(--space-9);
+  gap: var(--space-8);
   margin: 0;
   padding: 0 14px 12px;
   list-style: none;
@@ -303,7 +303,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
 .sampleName {
@@ -313,8 +313,8 @@
 .sampleMeta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 var(--space-5);
-  font-size: var(--text-caption);
+  gap: 0 var(--space-6);
+  font-size: var(--text-sm);
   color: var(--fg2);
 }
 
@@ -335,7 +335,7 @@
 .allowance {
   display: flex;
   align-items: center;
-  gap: var(--space-10);
+  gap: var(--space-8);
   min-height: 40px;
   padding: 6px 8px 6px 14px;
 }
@@ -350,7 +350,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
 .allowanceWhat {
@@ -361,6 +361,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   color: var(--fg2);
 }

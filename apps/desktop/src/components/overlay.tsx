@@ -603,7 +603,7 @@ function ToastItem({ toast: x }: { toast: Toast }) {
       <Icon
         name={x.tone === "error" ? "warning-circle" : x.tone === "success" ? "check-circle" : "info"}
         fill={x.tone !== "info"}
-        size={15}
+        size={16}
       />
       {x.text}
     </div>

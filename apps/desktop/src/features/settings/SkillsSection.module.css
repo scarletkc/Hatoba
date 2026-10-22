@@ -36,7 +36,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--accenttint);
   color: var(--accent);
   font-size: var(--icon-16);
@@ -59,7 +59,7 @@
 
 .name {
   font-family: var(--font-mono);
-  font-size: var(--text-control);
+  font-size: var(--text-sm);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -112,7 +112,7 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-18);
+  gap: var(--space-16);
 }
 
 .stack {
@@ -123,7 +123,7 @@
 }
 
 .hint {
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--fg2);
   text-wrap: pretty;
@@ -141,7 +141,7 @@
 }
 
 .problem {
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--red);
   overflow-wrap: anywhere;
@@ -170,7 +170,7 @@
 /* A text area that holds code or Markdown. */
 .code {
   font-family: var(--font-mono);
-  font-size: var(--text-control);
+  font-size: var(--text-sm);
   line-height: 1.5;
   tab-size: 2;
 }
@@ -182,7 +182,7 @@
 .filesBar {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-14);
+  gap: var(--space-12);
 }
 
 .filesBar .hint {
@@ -216,7 +216,7 @@
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--fg2);
   font-size: var(--icon-12);
@@ -265,7 +265,7 @@
 .loading {
   display: flex;
   align-items: center;
-  gap: var(--space-10);
+  gap: var(--space-8);
   padding: 24px 0;
   color: var(--fg2);
 }
@@ -274,7 +274,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-10);
+  gap: var(--space-8);
   padding: 8px 0;
 }
 
@@ -303,9 +303,9 @@
 
 .issues {
   display: flex;
-  gap: var(--space-10);
+  gap: var(--space-8);
   padding: 11px 13px;
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--red) 9%, transparent);
   line-height: 1.5;
 }
@@ -313,7 +313,7 @@
 .issues > i {
   margin-top: 2px;
   flex: none;
-  font-size: var(--icon-15);
+  font-size: var(--icon-16);
   color: var(--red);
 }
 
@@ -363,7 +363,7 @@
 .blockPath {
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: var(--text-control);
+  font-size: var(--text-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -406,7 +406,7 @@
 .clash {
   display: flex;
   flex-direction: column;
-  gap: var(--space-10);
+  gap: var(--space-8);
   padding: 12px 14px;
 }
 
@@ -432,7 +432,7 @@
 .radio {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-10);
+  gap: var(--space-8);
   padding: 0;
   border: 0;
   background: transparent;

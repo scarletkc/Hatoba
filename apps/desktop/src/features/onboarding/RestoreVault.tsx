@@ -139,7 +139,7 @@ export function RestoreConnect({
             placeholder={t("vault.restore.workerUrlPlaceholder")}
             value={url}
             invalid={!!urlError}
-            trailing={status.state === "ok" ? <Icon name="check-circle" fill size={15} color="var(--green)" /> : undefined}
+            trailing={status.state === "ok" ? <Icon name="check-circle" fill size={16} color="var(--green)" /> : undefined}
             onChange={(e) => {
               setUrl(e.target.value);
               reset();

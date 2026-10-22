@@ -155,7 +155,7 @@ function McpList({ slotId, slot, head, onManage }: { slotId: string; slot: Slot;
       <div className={s.separator} />
       {!loaded && !failed && (
         <div className={s.note}>
-          <Spinner size={13} />
+          <Spinner size={14} />
         </div>
       )}
       {failed && <div className={cx(s.note, s.noteError)}>{t("ai.tools.loadFailed")}</div>}
@@ -436,7 +436,7 @@ function SkillList({ head, onPick, onManage }: { head: ReactNode; onPick: (name:
       <div className={s.separator} />
       {skills === null && (
         <div className={s.note}>
-          <Spinner size={13} />
+          <Spinner size={14} />
         </div>
       )}
       {skills?.length === 0 && <div className={s.note}>{t("ai.add.skillsEmpty")}</div>}

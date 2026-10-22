@@ -195,7 +195,7 @@ export function ForwardDialog({
       >
         {general && (
           <div className={s.general} role="alert">
-            <Icon name="warning-circle" size={15} />
+            <Icon name="warning-circle" size={16} />
             {general}
           </div>
         )}
@@ -260,7 +260,7 @@ export function ForwardDialog({
                 </div>
               ) : exposed ? (
                 <div className={s.warn}>
-                  <Icon name="warning" size={13} />
+                  <Icon name="warning" size={14} />
                   {t(remote ? "hosts.fwd.f.gatewayPorts" : "hosts.fwd.f.exposedWarn")}
                 </div>
               ) : (

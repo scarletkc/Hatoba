@@ -46,7 +46,7 @@
   height: 28px;
   margin: 8px 10px 2px;
   padding: 0 4px 0 8px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: var(--field);
   box-shadow: 0 0 0 0.5px var(--fieldline);
 }
@@ -108,7 +108,7 @@
   padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
 /* A search hit is a button row. */
@@ -133,7 +133,7 @@
 }
 
 .mark {
-  border-radius: var(--radius-2xs);
+  border-radius: var(--radius-mark);
   background: color-mix(in srgb, var(--orange) 28%, transparent);
   color: inherit;
 }
@@ -144,7 +144,7 @@
   gap: var(--space-4);
   min-height: 46px;
   padding: 5px 4px 5px 10px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
 }
 
 .row:hover {
@@ -167,7 +167,7 @@
 .rowTitle {
   display: flex;
   align-items: center;
-  gap: var(--space-5);
+  gap: var(--space-6);
   min-width: 0;
   font-size: var(--text-md);
 }

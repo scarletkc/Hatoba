@@ -1,5 +1,5 @@
 .list {
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: var(--group);
   box-shadow: inset 0 0 0 0.5px var(--line);
   max-height: 300px;
@@ -42,7 +42,7 @@
 .via {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-4);
   font-size: var(--text-xs);
   color: var(--fg2);
   white-space: nowrap;
@@ -66,7 +66,7 @@
 .skipped {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-4);
   font-size: var(--text-xs);
   color: var(--orange);
   white-space: nowrap;
@@ -99,7 +99,7 @@
 .error {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-7);
+  gap: var(--space-6);
   color: var(--red);
   font-size: var(--text-sm);
   line-height: 1.5;

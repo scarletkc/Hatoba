@@ -1,7 +1,7 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-14);
+  gap: var(--space-12);
 }
 
 /* Address · Port label · Port (same grid as the host editor's address row) */
@@ -23,7 +23,7 @@
 }
 
 .hint {
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--fg2);
 }
@@ -31,8 +31,8 @@
 .warn {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-5);
-  font-size: var(--text-caption);
+  gap: var(--space-6);
+  font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--orange);
 }
@@ -42,7 +42,7 @@
 }
 
 .error {
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--red);
 }
@@ -50,7 +50,7 @@
 .general {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-7);
+  gap: var(--space-6);
   font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--red);

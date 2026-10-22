@@ -1,6 +1,6 @@
 .thumbs {
   display: flex;
-  gap: var(--space-14);
+  gap: var(--space-12);
 }
 
 .thumb {
@@ -16,7 +16,7 @@
 .preview {
   width: 92px;
   height: 60px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   overflow: hidden;
   display: flex;
 }
@@ -63,13 +63,13 @@
   padding: 8px 7px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-6);
 }
 
 .lines i {
   display: block;
   height: 4px;
-  border-radius: var(--radius-2xs);
+  border-radius: var(--radius-mark);
 }
 
 .preview.light .lines i:nth-child(1) {
@@ -108,7 +108,7 @@
 }
 
 .half.light .lines i {
-  border-radius: var(--radius-2xs) 0 0 var(--radius-2xs);
+  border-radius: var(--radius-mark) 0 0 var(--radius-mark);
   background: #e6e6ea;
 }
 
@@ -121,7 +121,7 @@
 }
 
 .half.dark .lines i {
-  border-radius: 0 var(--radius-2xs) var(--radius-2xs) 0;
+  border-radius: 0 var(--radius-mark) var(--radius-mark) 0;
   background: #36363b;
 }
 
@@ -130,7 +130,7 @@
 }
 
 .thumbLabel {
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   color: var(--fg2);
 }
 

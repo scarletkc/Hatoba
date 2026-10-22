@@ -158,7 +158,7 @@ function ForwardRow({
           aria-label={starting ? t("terminal.fwd.starting") : undefined}
           title={starting ? t("terminal.fwd.starting") : undefined}
         >
-          {starting ? <Spinner size={13} /> : <Icon name={running ? "check-circle" : failed ? "warning-circle" : "circle"} fill={running || failed} />}
+          {starting ? <Spinner size={14} /> : <Icon name={running ? "check-circle" : failed ? "warning-circle" : "circle"} fill={running || failed} />}
         </span>
       }
       status={failed && <span className={s.error}>{error}</span>}

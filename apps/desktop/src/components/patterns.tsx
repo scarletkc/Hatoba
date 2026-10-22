@@ -87,7 +87,7 @@ export function StatusLine({
         className,
       )}
     >
-      {tone === "progress" ? <Spinner size={13} /> : name && <Icon name={name} fill={tone !== "neutral"} />}
+      {tone === "progress" ? <Spinner size={14} /> : name && <Icon name={name} fill={tone !== "neutral"} />}
       <span className={p.statusText}>{children}</span>
     </span>
   );
@@ -138,7 +138,7 @@ export function Chip({
       )}
       {...rest}
     >
-      {busy ? <Spinner size={11} /> : icon && <Icon name={icon} />}
+      {busy ? <Spinner size={12} /> : icon && <Icon name={icon} />}
       {children}
     </span>
   );

@@ -406,7 +406,7 @@ export function HostEditPage({
                   />
                   {userTouched && !form.username.trim() && !errors.username && (
                     <div className={s.warn}>
-                      <Icon name="warning" size={13} />
+                      <Icon name="warning" size={14} />
                       {t("hosts.f.userWarn")}
                     </div>
                   )}

@@ -158,7 +158,7 @@ export function ImportDialog({ source, onClose }: { source: ImportSource; onClos
       />
       {error && (
         <div className={s.error} role="alert">
-          <Icon name="warning-circle" size={15} />
+          <Icon name="warning-circle" size={16} />
           {error}
         </div>
       )}

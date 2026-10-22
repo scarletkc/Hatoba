@@ -276,7 +276,7 @@ function Indicators() {
       </Line>
       <Line label="Spinner">
         <Spinner />
-        <Spinner size={11} />
+        <Spinner size={12} />
       </Line>
       <Line label="Badge · Tag">
         <Badge>ED25519</Badge>
@@ -430,7 +430,7 @@ function Patterns() {
           >
             <span className={g.mono}>localhost:15432</span>
           </ListRow>
-          <ListRow size="sm" leading={<Spinner size={13} />} trailing={<LinkButton disabled>Start</LinkButton>}>
+          <ListRow size="sm" leading={<Spinner size={14} />} trailing={<LinkButton disabled>Start</LinkButton>}>
             <span className={g.mono}>localhost:3000</span>
           </ListRow>
         </div>

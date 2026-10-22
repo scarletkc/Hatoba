@@ -46,7 +46,7 @@ function ImageLink({ src, alt }: { src?: unknown; alt?: string }) {
   const label = alt || url || "";
   const body = (
     <>
-      <Icon name="image" size={13} />
+      <Icon name="image" size={14} />
       {label}
     </>
   );
@@ -86,7 +86,7 @@ function CodeBlock({ children }: { children?: ReactNode }) {
         {children}
       </pre>
       <button type="button" className={s.copy} title={t(copied ? "btn.copied" : "btn.copy")} aria-label={t("btn.copy")} onClick={() => void copy()}>
-        <Icon name={copied ? "check" : "copy"} size={13} />
+        <Icon name={copied ? "check" : "copy"} size={14} />
       </button>
     </div>
   );

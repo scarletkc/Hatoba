@@ -251,7 +251,7 @@ export function McpServerDialog({
                       />
                       <IconButton
                         icon="x"
-                        size={13}
+                        size={14}
                         label={t("aiSettings.mcp.f.argRemove", { n: i + 1 })}
                         onClick={() => patch({ args: form.args.filter((a) => a.uid !== arg.uid) })}
                       />
@@ -393,7 +393,7 @@ function SecretRows({
                     />
                     <IconButton
                       icon="x"
-                      size={13}
+                      size={14}
                       label={row.key.trim() ? t("aiSettings.mcp.f.rowRemove", { key: row.key.trim() }) : t("aiSettings.mcp.f.rowRemoveBlank")}
                       onClick={() => onChange(rows.filter((r) => r.uid !== row.uid))}
                     />

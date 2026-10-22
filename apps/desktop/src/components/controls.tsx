@@ -110,7 +110,7 @@ export function LinkButton({
       className={cx(s.link, tone === "danger" && s.linkDanger, tone === "muted" && s.linkMuted, className)}
       {...rest}
     >
-      {icon && <Icon name={icon} size={13} />}
+      {icon && <Icon name={icon} size={14} />}
       {children}
     </button>
   );

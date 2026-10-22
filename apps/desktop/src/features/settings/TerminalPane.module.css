@@ -6,7 +6,7 @@
   display: inline-flex;
   align-items: center;
   padding: 2px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: var(--fill);
 }
 
@@ -14,7 +14,7 @@
   width: 28px;
   height: 22px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--fg2);
   font-size: var(--icon-12);
@@ -36,14 +36,14 @@
 .stepValue {
   min-width: 34px;
   text-align: center;
-  font-size: var(--text-control);
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
 /* Live preview of font, size and cursor */
 .preview {
   padding: 12px 14px;
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: var(--term);
   color: var(--term-fg);
   line-height: 1.5;

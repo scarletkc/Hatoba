@@ -222,13 +222,13 @@ function AttachmentChip({
             }
           }}
         >
-          <Icon name={icon} size={13} className={s.chipIcon} />
+          <Icon name={icon} size={14} className={s.chipIcon} />
           <span className={s.chipText}>{label}</span>
           {size && <span className={s.size}>{size}</span>}
           {badge && <span className={s.truncated}>{badge}</span>}
         </button>
         <button type="button" className={s.chipRemove} title={removeLabel} aria-label={removeLabel} onClick={onRemove}>
-          <Icon name="x" size={11} />
+          <Icon name="x" size={12} />
         </button>
       </div>
       {(hover || pinned) && (
@@ -394,11 +394,11 @@ function AttachmentCard({ icon, title, host, badge, body }: { icon: string; titl
   return (
     <div className={cx(s.card, open && s.cardOpen)} data-selection-open={open}>
       <button type="button" className={s.cardHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <Icon name={icon} size={13} className={s.chipIcon} />
+        <Icon name={icon} size={14} className={s.chipIcon} />
         <span className={s.cardTitle}>{title}</span>
         {host && <span className={s.cardHost}>{host}</span>}
         {badge && <span className={s.truncated}>{badge}</span>}
-        <DisclosureCaret open={open} size={11} className={s.caret} />
+        <DisclosureCaret open={open} size={12} className={s.caret} />
       </button>
       {open && <pre className={cx(s.cardBody, controlStyles.reveal, "selectable")}>{body}</pre>}
     </div>

@@ -338,7 +338,7 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
       {queued && <QueuedCard slotId={slotId} queued={queued} />}
       {failed.length > 0 && (
         <div className={s.mcpFailed} role="status">
-          <Icon name="warning-circle" size={13} className={s.fitIcon} />
+          <Icon name="warning-circle" size={14} className={s.fitIcon} />
           <span className={s.mcpFailedText}>
             {failed.length === 1 ? t("ai.mcp.failed", { name: failed[0].server.name }) : t("ai.mcp.failedMany", { n: failed.length })}
           </span>
@@ -357,7 +357,7 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
         />
         {fit.level !== "ok" && (
           <div className={cx(s.fit, fit.level === "over" && s.fitOver)} role="status">
-            <Icon name="warning" size={13} className={s.fitIcon} />
+            <Icon name="warning" size={14} className={s.fitIcon} />
             <span>
               {fit.level === "over"
                 ? t("ai.fit.over", { used: formatTokens(fit.tokens), total: formatTokens(fit.window) })
@@ -425,7 +425,7 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
               disabled={!canSide || resolving || menu.busy}
               onClick={() => void submit("side")}
             >
-              <Icon name="chat-teardrop-dots" size={15} />
+              <Icon name="chat-teardrop-dots" size={16} />
             </button>
           )}
           {busy ? (
@@ -476,7 +476,7 @@ function QueuedCard({ slotId, queued }: { slotId: string; queued: QueuedMessage 
   return (
     <div className={s.queued} role="group" aria-label={t("ai.queued")}>
       <div className={s.queuedHead}>
-        <Icon name="clock" size={13} className={s.queuedIcon} />
+        <Icon name="clock" size={14} className={s.queuedIcon} />
         <span className={s.queuedTitle}>{t("ai.queued")}</span>
         <LinkButton className={s.queuedEdit} title={t("ai.queued.editHint")} onClick={() => editQueued(slotId)}>
           {t("ai.queued.edit")}
@@ -564,7 +564,7 @@ function ModelPicker({ slotId, slot, value, openRef }: { slotId: string; slot: S
         disabled={entries.length === 0}
         onClick={() => ref.current && menu.openBelow(ref.current, true)}
       >
-        <Icon name="cube" size={13} className={s.modelIcon} />
+        <Icon name="cube" size={14} className={s.modelIcon} />
         {fit !== "icon" && <span className={s.modelName}>{name}</span>}
         {fit === "full" && level && <span className={s.modelEffort}>{level}</span>}
         {fit !== "icon" && <Icon name="caret-down" size={10} className={s.modelIcon} />}
@@ -691,7 +691,7 @@ function useModelFit(
 function ModelLabel({ ref, name, level }: { ref: RefObject<HTMLSpanElement | null>; name: string; level: string | null }) {
   return (
     <span ref={ref} className={cx(s.model, s.modelMeasure)} aria-hidden>
-      <Icon name="cube" size={13} className={s.modelIcon} />
+      <Icon name="cube" size={14} className={s.modelIcon} />
       <span className={s.modelName}>{name}</span>
       {level && <span className={s.modelEffort}>{level}</span>}
       <Icon name="caret-down" size={10} className={s.modelIcon} />

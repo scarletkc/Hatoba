@@ -265,7 +265,7 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
         aria-expanded={!!local.menu.anchor}
         onClick={(e) => local.open(e.currentTarget)}
       >
-        <Icon name="caret-down" size={11} />
+        <Icon name="caret-down" size={12} />
       </button>
       {local.menu.anchor && <Menu anchor={local.menu.anchor} entries={local.entries} onClose={local.menu.close} minWidth={220} />}
       <div className={s.drag} data-tauri-drag-region />

@@ -6,11 +6,11 @@
   padding: 10px 14px 14px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-7);
+  gap: var(--space-6);
 }
 
 .header {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--fg2);
 }
@@ -18,7 +18,7 @@
 .transfer {
   display: flex;
   flex-direction: column;
-  gap: var(--space-7);
+  gap: var(--space-6);
   transition: opacity 0.6s ease;
 }
 
@@ -29,7 +29,7 @@
 .top {
   display: flex;
   align-items: center;
-  gap: var(--space-7);
+  gap: var(--space-6);
   font-size: var(--text-sm);
 }
 
@@ -69,14 +69,14 @@
 
 .track {
   height: 4px;
-  border-radius: var(--radius-2xs);
+  border-radius: var(--radius-mark);
   background: var(--fill2);
   overflow: hidden;
 }
 
 .fill {
   height: 100%;
-  border-radius: var(--radius-2xs);
+  border-radius: var(--radius-mark);
   background: var(--accent);
   transition: width var(--motion-base) var(--ease-out);
 }

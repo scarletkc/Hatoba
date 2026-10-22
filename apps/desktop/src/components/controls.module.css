@@ -15,7 +15,7 @@
   height: var(--control-height);
   padding: 0 12px;
   border: 0;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: var(--btn);
   box-shadow: var(--shadow-btn);
   font-size: var(--text-md);
@@ -79,7 +79,7 @@
 
 .primary .icon {
   color: #ffffff;
-  font-size: var(--icon-13);
+  font-size: var(--icon-14);
 }
 
 .primary:hover:not(:disabled) {
@@ -104,14 +104,14 @@
 .small {
   height: var(--field-height);
   padding: 0 12px;
-  font-size: var(--text-control);
+  font-size: var(--text-sm);
 }
 
 .tiny {
   height: 22px;
   padding: 0 10px;
   font-size: var(--text-sm);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
 }
 
 .link {
@@ -150,10 +150,10 @@
   justify-content: center;
   flex: none;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: inherit;
-  font-size: var(--icon-15);
+  font-size: var(--icon-16);
 }
 
 .iconButton:hover:not(:disabled) {
@@ -176,7 +176,7 @@
   gap: var(--space-8);
   height: var(--field-height);
   padding: 0 8px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--field);
   box-shadow: 0 0 0 0.5px var(--fieldline);
   min-width: 0;
@@ -216,7 +216,7 @@
 
 .fieldMono {
   font-family: var(--font-mono);
-  font-size: var(--text-control);
+  font-size: var(--text-sm);
 }
 
 .fieldSecret input {
@@ -244,7 +244,7 @@
   width: 100%;
   min-height: 64px;
   padding: 9px 11px;
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: var(--field);
   box-shadow: 0 0 0 0.5px var(--fieldline);
   line-height: 1.55;
@@ -263,7 +263,7 @@
   display: inline-flex;
   width: fit-content;
   padding: 2px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: var(--fill);
   justify-self: start;
   /* Too narrow for its segments, it wraps them onto more rows rather than overflowing. */
@@ -276,7 +276,7 @@
   position: absolute;
   top: 0;
   left: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   background: var(--segon);
   box-shadow: var(--shadow-seg);
   pointer-events: none;
@@ -296,17 +296,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-5);
+  gap: var(--space-6);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   background: transparent;
-  font-size: var(--text-control);
+  font-size: var(--text-sm);
   color: var(--fg2);
   white-space: nowrap;
 }
 
 .segment i {
-  font-size: var(--icon-13);
+  font-size: var(--icon-14);
 }
 
 /* Each label is as wide as its selected weight, so selecting a segment never resizes the control. */
@@ -345,7 +345,7 @@
   flex: none;
   border: 0;
   padding: 0;
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: var(--fill2);
   transition: background-color var(--motion-fade) var(--ease-out);
 }
@@ -439,7 +439,7 @@
   height: var(--field-height);
   padding: 0 8px 0 10px;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--btn);
   box-shadow: var(--shadow-btn);
   min-width: 0;
@@ -465,7 +465,7 @@
 }
 
 .popupIcon {
-  font-size: var(--icon-13);
+  font-size: var(--icon-14);
   color: var(--fg2);
 }
 
@@ -520,12 +520,12 @@
 .tag {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-5);
+  gap: var(--space-6);
   height: 20px;
   padding: 0 7px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   background: var(--fill);
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   color: var(--fg2);
   white-space: nowrap;
 }
@@ -570,7 +570,7 @@
   border-radius: var(--radius-xs);
   background: var(--fill);
   font-family: var(--font-mono);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: var(--fg2);
   white-space: nowrap;
 }

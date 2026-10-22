@@ -71,7 +71,7 @@
   min-width: 80px;
   height: var(--control-height);
   padding: 0 9px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: var(--fill);
   color: var(--fg2);
   container-type: inline-size;
@@ -129,7 +129,7 @@
 }
 
 .group {
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: var(--group);
   box-shadow: inset 0 0 0 0.5px var(--line);
   container-type: inline-size;
@@ -186,13 +186,13 @@
 }
 
 .formError {
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   color: var(--red);
   margin-top: 4px;
 }
 
 .formHint {
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   color: var(--fg2);
 }
 
@@ -235,7 +235,7 @@
 .emptyIcon {
   width: 56px;
   height: 56px;
-  border-radius: var(--radius-icon);
+  border-radius: var(--radius-xl);
   background: var(--fill);
   display: flex;
   align-items: center;
@@ -285,7 +285,7 @@
   flex-wrap: wrap;
   gap: var(--space-4);
   padding: 3px 4px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--field);
   box-shadow: 0 0 0 0.5px var(--fieldline);
 }
@@ -297,10 +297,10 @@
 .tagChip {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-5);
+  gap: var(--space-6);
   height: 20px;
   padding: 0 5px 0 7px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   background: var(--fill2);
   font-size: var(--text-sm);
 }
@@ -322,7 +322,7 @@
   padding: 0 4px;
   background: transparent;
   outline: none;
-  font-size: var(--text-control);
+  font-size: var(--text-sm);
 }
 
 .tagInput input::placeholder {
@@ -332,9 +332,9 @@
 /* Callout (design §05 step 3 info box) */
 .callout {
   display: flex;
-  gap: var(--space-10);
+  gap: var(--space-8);
   padding: 12px 14px;
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: var(--group);
   box-shadow: inset 0 0 0 0.5px var(--line);
   line-height: 1.5;
@@ -355,7 +355,7 @@
   width: 44px;
   height: 44px;
   flex: none;
-  border-radius: var(--radius-window);
+  border-radius: var(--radius-xl);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -396,5 +396,5 @@
   max-width: 640px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-22);
+  gap: var(--space-20);
 }

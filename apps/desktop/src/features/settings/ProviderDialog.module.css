@@ -1,7 +1,7 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-18);
+  gap: var(--space-16);
 }
 
 .stack {
@@ -37,7 +37,7 @@
 }
 
 .hint {
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--fg2);
   text-wrap: pretty;
@@ -47,7 +47,7 @@
 .modelsBar {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-14);
+  gap: var(--space-12);
 }
 
 .modelsBar .hint {
@@ -98,7 +98,7 @@
 }
 
 .problem {
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--red);
 }
@@ -119,7 +119,7 @@
   align-items: flex-start;
   gap: var(--space-8);
   padding: 9px 12px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--red) 9%, transparent);
   font-size: var(--text-sm);
   line-height: 1.5;
@@ -143,7 +143,7 @@
 
 /* The fetched list */
 .picker {
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: var(--group);
   box-shadow: inset 0 0 0 0.5px var(--line);
   overflow: hidden;
@@ -152,7 +152,7 @@
 .pickerBar {
   display: flex;
   align-items: center;
-  gap: var(--space-10);
+  gap: var(--space-8);
   padding: 8px 10px;
   border-bottom: 0.5px solid var(--line);
 }
@@ -182,7 +182,7 @@
   min-height: 26px;
   padding: 2px 8px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   background: transparent;
   text-align: left;
 }

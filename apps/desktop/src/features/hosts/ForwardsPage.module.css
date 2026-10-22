@@ -29,7 +29,7 @@
   max-width: 680px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-18);
+  gap: var(--space-16);
   padding-bottom: 8px;
   align-self: flex-start;
 }
@@ -138,7 +138,7 @@
 .error {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-5);
+  gap: var(--space-6);
   font-size: var(--text-sm);
   color: var(--red);
 }

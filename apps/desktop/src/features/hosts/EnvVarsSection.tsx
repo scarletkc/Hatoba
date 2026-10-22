@@ -100,7 +100,7 @@ export function EnvVarsSection({
                 />
                 <IconButton
                   icon="x"
-                  size={13}
+                  size={14}
                   className={s.remove}
                   label={name ? t("hosts.env.remove", { name }) : t("hosts.env.removeBlank")}
                   onClick={() => onChange(rows.filter((r) => r.uid !== row.uid))}

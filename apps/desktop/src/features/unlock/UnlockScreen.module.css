@@ -12,7 +12,7 @@
 /* The Linux window chrome, same as .main in App.module.css. */
 :root[data-floating] .root {
   inset: var(--win-pad);
-  border-radius: var(--radius-window);
+  border-radius: var(--radius-xl);
   overflow: hidden;
   box-shadow: var(--shadow-window), 0 0 0 0.5px var(--winline);
 }
@@ -59,7 +59,7 @@
   align-items: center;
   gap: var(--space-8);
   padding: 0 4px 0 11px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--field);
   box-shadow: 0 0 0 0.5px var(--fieldline);
 }
@@ -120,7 +120,7 @@
   justify-content: center;
   background: var(--accent);
   color: #ffffff;
-  font-size: var(--icon-13);
+  font-size: var(--icon-14);
 }
 
 .go:disabled {
@@ -161,7 +161,7 @@
 .divider {
   display: flex;
   align-items: center;
-  gap: var(--space-10);
+  gap: var(--space-8);
   font-size: var(--text-xs);
   color: var(--fg2);
 }
@@ -179,15 +179,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-7);
+  gap: var(--space-6);
   border: 0;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--btn);
   box-shadow: var(--shadow-btn);
 }
 
 .biometric i {
-  font-size: var(--icon-17);
+  font-size: var(--icon-16);
   color: var(--accent);
 }
 
@@ -221,7 +221,7 @@
 
 .foot {
   padding: 0 24px 20px;
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   color: var(--fg2);
   display: flex;
   flex-direction: column;

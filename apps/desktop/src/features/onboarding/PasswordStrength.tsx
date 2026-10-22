@@ -144,7 +144,7 @@ export function NewPasswordFields({
           readOnly={disabled}
           invalid={mismatch}
           value={confirm}
-          trailing={matches ? <Icon name="check-circle" fill size={15} color="var(--green)" /> : undefined}
+          trailing={matches ? <Icon name="check-circle" fill size={16} color="var(--green)" /> : undefined}
           onChange={(e) => state.setConfirm(e.target.value)}
           onBlur={() => setConfirmTouched(true)}
           onKeyDown={enter}

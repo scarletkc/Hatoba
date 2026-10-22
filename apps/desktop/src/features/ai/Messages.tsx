@@ -375,7 +375,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
       {isEmpty && !slot.loading && empty}
       {slot.loading && entries.length === 0 && (
         <div className={s.status}>
-          <Spinner size={13} />
+          <Spinner size={14} />
           {t("ai.loading")}
         </div>
       )}
@@ -445,7 +445,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
       <TurnStatus slotId={slotId} slot={slot} />
       {slot.effortIgnored && (
         <div className={s.status} role="status">
-          <Icon name="info" size={13} />
+          <Icon name="info" size={14} />
           {t("ai.effortIgnored")}
         </div>
       )}
@@ -480,7 +480,7 @@ function CopyButton({ text }: { text: string }) {
     <IconButton
       icon={copied ? "check" : "copy"}
       label={t(copied ? "btn.copied" : "btn.copy")}
-      size={13}
+      size={14}
       className={s.messageAction}
       onClick={() => void writeClipboard(text).then(() => setCopied(true), () => toast(t("terminal.clipboardDenied"), "error"))}
     />
@@ -490,7 +490,7 @@ function CopyButton({ text }: { text: string }) {
 /** AI-43: copies the conversation up to this message into a new one, which opens in its place. */
 function ForkButton({ onFork }: { onFork: () => void }) {
   const t = useT();
-  return <IconButton icon="git-fork" label={t("ai.fork")} size={13} className={s.messageAction} onClick={onFork} />;
+  return <IconButton icon="git-fork" label={t("ai.fork")} size={14} className={s.messageAction} onClick={onFork} />;
 }
 
 /**
@@ -542,7 +542,7 @@ function UserMessage({
       <div className={s.userRow}>
         <div className={s.userActions}>
           {parts.typed && <CopyButton text={parts.typed} />}
-          {onResend && <IconButton icon="pencil-simple" label={t("ai.edit")} size={13} className={s.messageAction} onClick={() => setEditing(true)} />}
+          {onResend && <IconButton icon="pencil-simple" label={t("ai.edit")} size={14} className={s.messageAction} onClick={() => setEditing(true)} />}
           {onFork && <ForkButton onFork={onFork} />}
         </div>
         <div className={s.userStack}>
@@ -708,7 +708,7 @@ function EditMessage({
       />
       {untracked && (
         <div className={s.editWarning} role="note">
-          <Icon name="warning" size={13} />
+          <Icon name="warning" size={14} />
           <span>{t("ai.editFiles.untracked")}</span>
         </div>
       )}
@@ -812,9 +812,9 @@ function Reasoning({ text, active }: { text: string; active: boolean }) {
   return (
     <div className={s.reasoning}>
       <button type="button" className={s.reasoningHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <Icon name="brain" size={13} />
+        <Icon name="brain" size={14} />
         <span className={active ? s.shimmer : undefined}>{t(active ? "ai.reasoning.active" : "ai.reasoning")}</span>
-        <DisclosureCaret open={open} size={11} />
+        <DisclosureCaret open={open} size={12} />
       </button>
       {open && <div className={cx(s.reasoningBody, controlStyles.reveal, "selectable")}>{text}</div>}
     </div>
@@ -830,9 +830,9 @@ function SummaryBlock({ text, flash }: { text: string; flash?: boolean }) {
   return (
     <div className={cx(s.summary, flash && s.flash)}>
       <button type="button" className={s.summaryHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <Icon name="arrows-in-line-vertical" size={13} />
+        <Icon name="arrows-in-line-vertical" size={14} />
         <span>{t("ai.summary")}</span>
-        <DisclosureCaret open={open} size={11} />
+        <DisclosureCaret open={open} size={12} />
       </button>
       {open && (
         <div className={cx(s.summaryBody, controlStyles.reveal)}>
@@ -969,7 +969,7 @@ function ToolBlock({
         {revertible && (
           <IconButton
             icon="arrow-counter-clockwise"
-            size={13}
+            size={14}
             label={t("ai.revert.action")}
             title={busy ? t("ai.revert.busy") : t("ai.revert.action")}
             className={cx(s.toolHeadAction, revert.running && s.toolHeadActionOn)}
@@ -989,7 +989,7 @@ function ToolBlock({
             <StatusChip view={view} name={call.name} />
           )}
         </span>
-        <DisclosureCaret open={open} size={11} className={s.toolCaret} />
+        <DisclosureCaret open={open} size={12} className={s.toolCaret} />
       </div>
       {open && (
         <div className={cx(s.toolBody, controlStyles.reveal)}>
@@ -1045,7 +1045,7 @@ function AutoReason({ ask }: { ask: AutoAsk }) {
   const verdict = "verdict" in ask ? ask.verdict : null;
   return (
     <div className={s.autoReason} title={verdict ? answersText(t, verdict.answers) || undefined : undefined}>
-      <Icon name={MODE_ICON.auto} size={13} />
+      <Icon name={MODE_ICON.auto} size={14} />
       <span>
         {askText(t, ask)}
         {verdict?.failure === "unavailable" && (
@@ -1132,7 +1132,7 @@ function RevertChange({ slotId, change, busy, revert }: { slotId: string; change
       </div>
       {change.state === "unfinished" && (
         <div className={s.revertWarn}>
-          <Icon name="warning" size={13} />
+          <Icon name="warning" size={14} />
           <span>{t("ai.revert.unfinished")}</span>
         </div>
       )}
@@ -1711,7 +1711,7 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
   if (slot.remoteRunning)
     return (
       <div className={s.status}>
-        <Spinner size={13} />
+        <Spinner size={14} />
         {t("ai.status.remote")}
       </div>
     );
@@ -1730,7 +1730,7 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
             : "ai.status.waiting";
     return (
       <div className={s.status}>
-        <Spinner size={13} />
+        <Spinner size={14} />
         <span className={s.shimmer}>{t(key)}</span>
       </div>
     );
@@ -1738,7 +1738,7 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
   if (slot.compacting)
     return (
       <div className={s.status}>
-        <Spinner size={13} />
+        <Spinner size={14} />
         {t("ai.status.compacting")}
       </div>
     );
@@ -1752,7 +1752,7 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
     case "stopped":
       return (
         <div className={s.status}>
-          <Icon name="stop-circle" size={13} />
+          <Icon name="stop-circle" size={14} />
           {t("ai.outcome.stopped")}
         </div>
       );
@@ -1793,11 +1793,11 @@ function SideBubble({ slotId, q }: { slotId: string; q: SideQuestion }) {
         </span>
         <span className={s.gap} />
         {running ? (
-          <IconButton icon="stop" label={t("ai.side.stop")} size={13} className={s.messageAction} onClick={() => stopSideQuestion(slotId)} />
+          <IconButton icon="stop" label={t("ai.side.stop")} size={14} className={s.messageAction} onClick={() => stopSideQuestion(slotId)} />
         ) : (
           q.phase === "done" && q.answer.trim() && <CopyButton text={q.answer} />
         )}
-        <IconButton icon="x" label={t("btn.close")} size={13} className={s.messageAction} onClick={() => dismissSideQuestion(slotId)} />
+        <IconButton icon="x" label={t("btn.close")} size={14} className={s.messageAction} onClick={() => dismissSideQuestion(slotId)} />
       </div>
       {parts.attachments.map((a, i) => (
         <AttachmentCardFor key={i} attachment={a} />
@@ -1806,13 +1806,13 @@ function SideBubble({ slotId, q }: { slotId: string; q: SideQuestion }) {
       {q.answer && <Markdown text={q.answer} streaming={q.phase === "streaming"} />}
       {(q.phase === "waiting" || q.phase === "thinking") && (
         <div className={s.status}>
-          <Spinner size={13} />
+          <Spinner size={14} />
           <span className={s.shimmer}>{t(q.phase === "thinking" ? "ai.reasoning.active" : "ai.status.waiting")}</span>
         </div>
       )}
       {q.phase === "stopped" && (
         <div className={s.status}>
-          <Icon name="stop-circle" size={13} />
+          <Icon name="stop-circle" size={14} />
           {t("ai.outcome.stopped")}
         </div>
       )}
@@ -1839,7 +1839,7 @@ function SideBubble({ slotId, q }: { slotId: string; q: SideQuestion }) {
 function Banner({ icon, tone, text, detail, action }: { icon: string; tone: "warn" | "error"; text: string; detail?: string; action?: ReactNode }) {
   return (
     <div className={cx(s.banner, tone === "error" ? s.bannerError : s.bannerWarn)} role="status">
-      <Icon name={icon} size={15} className={s.bannerIcon} />
+      <Icon name={icon} size={16} className={s.bannerIcon} />
       <div className={s.bannerMain}>
         <div>{text}</div>
         {detail && <div className={cx(s.bannerDetail, "selectable")}>{detail}</div>}

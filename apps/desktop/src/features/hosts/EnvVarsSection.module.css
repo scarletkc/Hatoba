@@ -25,7 +25,7 @@
 }
 
 .problem {
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--red);
   overflow-wrap: anywhere;
@@ -63,7 +63,7 @@
 
 .hint {
   padding-left: 2px;
-  font-size: var(--text-caption);
+  font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--fg2);
 }
