@@ -65,26 +65,7 @@
   color: var(--fg3);
 }
 
-/* Rows: mono rule over its state · auto-start switch · start / stop · edit / delete. */
-
-/* A narrow row puts the switch and the buttons under a rule that would be narrower than 160px. */
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-4) var(--space-12);
-  min-height: 40px;
-  padding: 6px 8px 6px 14px;
-  min-width: 0;
-}
-
-.body {
-  flex: 1 1 160px;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
+/* Rows (ListRow): mono rule over its state · auto-start switch · start / stop · edit / delete. */
 
 .rule {
   min-width: 0;
@@ -93,21 +74,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* Running: the address to copy. Failed: why. */
-.status {
-  display: flex;
-  align-items: center;
-  gap: var(--space-5);
-  min-width: 0;
-  font-size: var(--text-xs);
-  color: var(--fg2);
-}
-
-.running {
-  flex: none;
-  color: var(--green);
 }
 
 .address {
@@ -136,21 +102,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.failed {
-  align-items: flex-start;
-  color: var(--red);
-}
-
-.failed > i {
-  flex: none;
-  margin-top: 1px;
-}
-
-.failure {
-  line-height: 1.4;
-  overflow-wrap: anywhere;
 }
 
 .toggle {

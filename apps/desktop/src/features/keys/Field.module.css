@@ -16,17 +16,3 @@
   font-size: var(--text-sm);
   font-weight: 500;
 }
-
-.hint {
-  font-size: var(--text-caption);
-  line-height: 1.45;
-  color: var(--fg2);
-  text-wrap: pretty;
-}
-
-.error {
-  font-size: var(--text-caption);
-  line-height: 1.45;
-  color: var(--red);
-  text-wrap: pretty;
-}

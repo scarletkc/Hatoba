@@ -413,6 +413,7 @@
   color: var(--fg3);
 }
 
+/* The keys of a send_input call, as chips (Chip's look, on a kbd). */
 .chip {
   flex: none;
   display: inline-flex;
@@ -427,25 +428,9 @@
   white-space: nowrap;
 }
 
-.chipOk {
-  color: var(--green);
-  background: color-mix(in srgb, var(--green) 12%, transparent);
-}
-
 .chipBad {
   color: var(--red);
   background: color-mix(in srgb, var(--red) 12%, transparent);
-}
-
-.chipWarn {
-  color: var(--orange);
-  background: color-mix(in srgb, var(--orange) 13%, transparent);
-}
-
-/* AI-47: Auto ran the call without asking; the tint of the Auto mode switch. */
-.chipAuto {
-  color: var(--accent);
-  background: var(--accenttint);
 }
 
 /* AI-47: what the judge decided, at the top of the block of a call Auto decided. */

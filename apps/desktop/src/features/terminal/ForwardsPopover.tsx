@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { errorMessage } from "@/app/errors";
 import { Icon, Spinner } from "@/components/controls";
 import { overlayStyles, toast, type MenuAnchor } from "@/components/overlay";
+import { ListRow } from "@/components/patterns";
 import { forwardDest, hostPort } from "@/features/hosts/address";
 import { forwardFailure, runningForward, useHostConnection } from "@/features/hosts/connections";
 import { startForward, stopForward, useHostForwardRules } from "@/features/hosts/forwards";
@@ -147,30 +148,34 @@ function ForwardRow({
   const dest = forwardDest(t, f, active);
 
   return (
-    <div className={s.row}>
-      {/* A starting forward turns its state icon into a spinner, so the row keeps its height. */}
-      <span
-        className={cx(s.state, running && s.stateRunning, failed && !starting && s.stateFailed)}
-        role={starting ? "status" : undefined}
-        aria-label={starting ? t("terminal.fwd.starting") : undefined}
-        title={starting ? t("terminal.fwd.starting") : undefined}
-      >
-        {starting ? <Spinner size={13} /> : <Icon name={running ? "check-circle" : failed ? "warning-circle" : "circle"} fill={running || failed} />}
-      </span>
-      <div className={s.body}>
-        {running && !remote ? (
-          <button type="button" className={cx(s.address, s.addressCopy)} title={t("terminal.fwd.copy", { addr: local })} onClick={() => onCopy(local)}>
-            {local}
-          </button>
-        ) : (
-          <span className={s.address}>{remote ? t("terminal.fwd.onServer", { addr: local }) : local}</span>
-        )}
-        <span className={s.dest}>{kind === "dynamic" ? t("terminal.fwd.socks") : `→ ${dest}`}</span>
-        {failed && <span className={s.error}>{error}</span>}
-      </div>
-      <button type="button" className={s.action} disabled={busy !== null} onClick={running ? onStop : onStart}>
-        {running ? t("terminal.fwd.stop") : failed ? t("btn.retry") : t("terminal.fwd.start")}
-      </button>
-    </div>
+    <ListRow
+      size="sm"
+      leading={
+        // A starting forward turns its state icon into a spinner, so the row keeps its height.
+        <span
+          className={cx(s.state, running && s.stateRunning, failed && !starting && s.stateFailed)}
+          role={starting ? "status" : undefined}
+          aria-label={starting ? t("terminal.fwd.starting") : undefined}
+          title={starting ? t("terminal.fwd.starting") : undefined}
+        >
+          {starting ? <Spinner size={13} /> : <Icon name={running ? "check-circle" : failed ? "warning-circle" : "circle"} fill={running || failed} />}
+        </span>
+      }
+      status={failed && <span className={s.error}>{error}</span>}
+      trailing={
+        <button type="button" className={s.action} disabled={busy !== null} onClick={running ? onStop : onStart}>
+          {running ? t("terminal.fwd.stop") : failed ? t("btn.retry") : t("terminal.fwd.start")}
+        </button>
+      }
+    >
+      {running && !remote ? (
+        <button type="button" className={cx(s.address, s.addressCopy)} title={t("terminal.fwd.copy", { addr: local })} onClick={() => onCopy(local)}>
+          {local}
+        </button>
+      ) : (
+        <span className={s.address}>{remote ? t("terminal.fwd.onServer", { addr: local }) : local}</span>
+      )}
+      <span className={s.dest}>{kind === "dynamic" ? t("terminal.fwd.socks") : `→ ${dest}`}</span>
+    </ListRow>
   );
 }

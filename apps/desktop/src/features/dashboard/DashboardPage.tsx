@@ -4,6 +4,7 @@ import { useApp, type HostFilter } from "@/app/store";
 import { Button, Icon, IconButton, LinkButton, Segmented, Spinner } from "@/components/controls";
 import { EmptyState, PageHeader, Tag } from "@/components/layout";
 import { Menu, PopupSelect, useMenu, type MenuEntry } from "@/components/overlay";
+import { Card } from "@/components/patterns";
 import { OsIcon } from "@/features/hosts/OsIcon";
 import { applyFilter, sortHosts } from "@/features/hosts/order";
 import { usePrefs } from "@/features/settings/shared";
@@ -511,7 +512,8 @@ const HostCard = memo(function HostCard({ host, readout, leftOut, view }: ItemPr
   const status = statusLine(t, readout, reading, stale, now);
   const target = `${host.username ? `${host.username}@` : ""}${host.address}:${host.port}`;
   return (
-    <div
+    <Card
+      interactive
       className={cx(s.card, leftOut && s.cardLeftOut)}
       onClick={() => view.onOpen(host.id)}
       onContextMenu={(e) => view.onContext(e, host)}
@@ -552,7 +554,7 @@ const HostCard = memo(function HostCard({ host, readout, leftOut, view }: ItemPr
           )}
         </>
       )}
-    </div>
+    </Card>
   );
 });
 

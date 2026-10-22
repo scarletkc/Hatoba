@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ErrorText, HintText } from "@/components/patterns";
 import s from "./Field.module.css";
 
 /** Label above a control with an optional hint / error line (the design's wizard + dialog fields). */
@@ -29,13 +30,7 @@ export function Field({
         {aside}
       </div>
       {children}
-      {error ? (
-        <div className={s.error} role="alert">
-          {error}
-        </div>
-      ) : (
-        hint && <div className={s.hint}>{hint}</div>
-      )}
+      {error ? <ErrorText>{error}</ErrorText> : hint && <HintText>{hint}</HintText>}
     </div>
   );
 }

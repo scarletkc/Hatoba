@@ -85,6 +85,21 @@ button {
   transition-duration: var(--motion-hover);
 }
 
+/* Pressed looks show at once, as native controls do; releasing fades back to the hover look. */
+:where(
+    button:active,
+    a:active,
+    [role="button"]:active,
+    [role="tab"]:active,
+    [role="option"]:active,
+    [role="listitem"]:active,
+    [role="radio"]:active,
+    [role="checkbox"]:active,
+    [role="switch"]:active
+  ) {
+  transition-duration: 0s;
+}
+
 input,
 textarea,
 [contenteditable="true"],

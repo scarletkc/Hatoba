@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
-import { Button, Icon, IconButton, Spinner, Switch } from "@/components/controls";
+import { Button, Icon, IconButton, Switch } from "@/components/controls";
 import { EmptyState, Group, PageHeader, Section } from "@/components/layout";
 import { confirm, toast } from "@/components/overlay";
+import { ListRow, StatusLine } from "@/components/patterns";
 import { writeClipboard } from "@/features/terminal/clipboard";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { ForwardInput, ForwardView, HostView, RunningForwardView } from "@/ipc/types";
-import { cx } from "@/lib/cx";
 import { forwardDest, forwardRule, hostPort } from "./address";
 import { ForwardDialog } from "./ForwardDialog";
 import { forwardFailure, runningForward, useConnections } from "./connections";
@@ -206,72 +206,68 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                       const failed = forwardFailure(conn, f.id);
                       const failure = address === null ? (failures[f.id] ?? (failed && errorMessage(t, failed))) : null;
                       const bind = hostPort(f.bind_address, f.bind_port || t("hosts.fwd.autoPort"));
+                      const status = running ? (
+                        <StatusLine tone="success">
+                          <RunningAddress running={running} onCopy={(a) => void copy(a)} />
+                        </StatusLine>
+                      ) : starting.has(f.id) ? (
+                        <StatusLine tone="progress">{t("terminal.fwd.starting")}</StatusLine>
+                      ) : (
+                        failure && <StatusLine tone="error">{failure}</StatusLine>
+                      );
                       return (
-                        <div key={f.id} className={s.row}>
-                          <div className={s.body}>
-                            <span className={s.rule} title={label}>
-                              {f.kind === "remote" ? t("terminal.fwd.onServer", { addr: bind }) : bind}
-                              {f.kind === "dynamic" ? (
-                                <span className={s.arrow}>{t("terminal.fwd.socks")}</span>
-                              ) : (
-                                <>
-                                  <span className={s.arrow}>→</span>
-                                  {forwardDest(t, f)}
-                                </>
-                              )}
-                            </span>
-                            {running && (
-                              <span className={s.status}>
-                                <Icon name="check-circle" fill size={13} className={s.running} />
-                                <RunningAddress running={running} onCopy={(a) => void copy(a)} />
+                        <ListRow
+                          key={f.id}
+                          status={status}
+                          trailing={
+                            <>
+                              <label className={s.auto}>
+                                {t("hosts.fwd.autoStart")}
+                                <Switch
+                                  checked={f.auto_start}
+                                  disabled={pending.has(f.id)}
+                                  label={t("hosts.fwd.autoStartFor", { rule: label })}
+                                  onChange={(on) => void setAutoStart(f, on)}
+                                />
+                              </label>
+                              <Button
+                                size="xs"
+                                className={s.toggle}
+                                disabled={pending.has(f.id) || starting.has(f.id) || stopping.has(f.id)}
+                                onClick={() => void (address !== null ? stop(f) : start(f))}
+                              >
+                                {address !== null ? t("terminal.fwd.stop") : failure ? t("btn.retry") : t("terminal.fwd.start")}
+                              </Button>
+                              <span className={s.actions}>
+                                <IconButton
+                                  icon="pencil-simple"
+                                  label={t("btn.edit")}
+                                  disabled={pending.has(f.id)}
+                                  onClick={() => setDialog({ forward: f })}
+                                />
+                                <IconButton
+                                  icon="trash"
+                                  label={t("btn.delete")}
+                                  className={s.remove}
+                                  disabled={pending.has(f.id)}
+                                  onClick={() => void remove(f)}
+                                />
                               </span>
+                            </>
+                          }
+                        >
+                          <span className={s.rule} title={label}>
+                            {f.kind === "remote" ? t("terminal.fwd.onServer", { addr: bind }) : bind}
+                            {f.kind === "dynamic" ? (
+                              <span className={s.arrow}>{t("terminal.fwd.socks")}</span>
+                            ) : (
+                              <>
+                                <span className={s.arrow}>→</span>
+                                {forwardDest(t, f)}
+                              </>
                             )}
-                            {!running && starting.has(f.id) && (
-                              <span className={s.status}>
-                                <Spinner size={13} />
-                                {t("terminal.fwd.starting")}
-                              </span>
-                            )}
-                            {failure && !starting.has(f.id) && (
-                              <span className={cx(s.status, s.failed)}>
-                                <Icon name="warning-circle" fill size={13} />
-                                <span className={s.failure}>{failure}</span>
-                              </span>
-                            )}
-                          </div>
-                          <label className={s.auto}>
-                            {t("hosts.fwd.autoStart")}
-                            <Switch
-                              checked={f.auto_start}
-                              disabled={pending.has(f.id)}
-                              label={t("hosts.fwd.autoStartFor", { rule: label })}
-                              onChange={(on) => void setAutoStart(f, on)}
-                            />
-                          </label>
-                          <Button
-                            size="xs"
-                            className={s.toggle}
-                            disabled={pending.has(f.id) || starting.has(f.id) || stopping.has(f.id)}
-                            onClick={() => void (address !== null ? stop(f) : start(f))}
-                          >
-                            {address !== null ? t("terminal.fwd.stop") : failure ? t("btn.retry") : t("terminal.fwd.start")}
-                          </Button>
-                          <span className={s.actions}>
-                            <IconButton
-                              icon="pencil-simple"
-                              label={t("btn.edit")}
-                              disabled={pending.has(f.id)}
-                              onClick={() => setDialog({ forward: f })}
-                            />
-                            <IconButton
-                              icon="trash"
-                              label={t("btn.delete")}
-                              className={s.remove}
-                              disabled={pending.has(f.id)}
-                              onClick={() => void remove(f)}
-                            />
                           </span>
-                        </div>
+                        </ListRow>
                       );
                     })}
                   </Group>

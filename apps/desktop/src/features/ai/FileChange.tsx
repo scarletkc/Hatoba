@@ -1,5 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
 import { Icon, Spinner } from "@/components/controls";
+import { Chip } from "@/components/patterns";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { diffLines, diffStats, withContext } from "./diff";
@@ -70,10 +71,10 @@ export function FileChange({ state, replaceAll }: { state: FilePreviewState; rep
       )}
       {!preview.error && (
         <div className={ms.inputNotes}>
-          {preview.before === null && <span className={cx(ms.chip, ms.chipOk)}>{t("ai.approval.newFile")}</span>}
-          {replaceAll && <span className={cx(ms.chip, ms.chipWarn)}>{t("ai.approval.replaceAll")}</span>}
-          {preview.crlf && <span className={ms.chip}>{t("ai.approval.crlf")}</span>}
-          {(path.escaped || escaped) && <span className={cx(ms.chip, ms.chipWarn)}>{t("ai.approval.escaped")}</span>}
+          {preview.before === null && <Chip tone="success">{t("ai.approval.newFile")}</Chip>}
+          {replaceAll && <Chip tone="warning">{t("ai.approval.replaceAll")}</Chip>}
+          {preview.crlf && <Chip>{t("ai.approval.crlf")}</Chip>}
+          {(path.escaped || escaped) && <Chip tone="warning">{t("ai.approval.escaped")}</Chip>}
         </div>
       )}
       {preview.error ? (

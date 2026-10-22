@@ -2,6 +2,7 @@ import { Fragment, memo, useEffect, useId, useLayoutEffect, useMemo, useRef, use
 import { useApp } from "@/app/store";
 import { Button, controlStyles, DisclosureCaret, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
 import { toast } from "@/components/overlay";
+import { Chip } from "@/components/patterns";
 import { readClipboard, writeClipboard } from "@/features/terminal/clipboard";
 import { formatDateTime, formatMessageTime, useT, useToday, type MessageKey } from "@/i18n";
 import type { AiAutoVerdict, AiEntryView, AiFileChange, AiFilePreview, AiFileRevert, AiToolCall, HostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
@@ -851,40 +852,37 @@ function StatusChip({ view, name }: { view: CallView; name: string }) {
       const { status, content } = view.entry;
       if (status === "ok") {
         const code = toolKind(name) === "run_command" ? exitStatusOf(content) : null;
-        if (code !== null && code !== 0) return <span className={cx(s.chip, s.chipBad)}>{t("ai.call.exit", { code })}</span>;
+        if (code !== null && code !== 0) return <Chip tone="error">{t("ai.call.exit", { code })}</Chip>;
         return (
-          <span className={cx(s.chip, s.chipOk)}>
-            <Icon name="check" size={11} />
+          <Chip tone="success" icon="check">
             {code === 0 ? t("ai.call.exit", { code }) : t("ai.call.done")}
-          </span>
+          </Chip>
         );
       }
-      if (status === "error") return <span className={cx(s.chip, s.chipBad)}>{t("ai.call.error")}</span>;
-      if (status === "rejected") return <span className={cx(s.chip, s.chipWarn)}>{t("ai.call.rejected")}</span>;
-      return <span className={s.chip}>{t("ai.call.cancelled")}</span>;
+      if (status === "error") return <Chip tone="error">{t("ai.call.error")}</Chip>;
+      if (status === "rejected") return <Chip tone="warning">{t("ai.call.rejected")}</Chip>;
+      return <Chip>{t("ai.call.cancelled")}</Chip>;
     }
     case "running":
       return (
-        <span className={s.chip}>
-          <Spinner size={11} />
+        <Chip busy>
           {t("ai.call.running")}
-        </span>
+        </Chip>
       );
     case "judging":
       // AI-47: Auto asks its judge whether the call can run without the card.
       return (
-        <span className={s.chip} title={t("ai.call.judgingHint")}>
-          <Spinner size={11} />
+        <Chip busy title={t("ai.call.judgingHint")}>
           {t("ai.call.judging")}
-        </span>
+        </Chip>
       );
     case "approval":
-      return <span className={cx(s.chip, s.chipWarn)}>{t("ai.call.approval")}</span>;
+      return <Chip tone="warning">{t("ai.call.approval")}</Chip>;
     case "queued":
     case "streaming":
-      return <span className={s.chip}>{t("ai.call.queued")}</span>;
+      return <Chip>{t("ai.call.queued")}</Chip>;
     case "none":
-      return <span className={s.chip}>{t("ai.call.notRun")}</span>;
+      return <Chip>{t("ai.call.notRun")}</Chip>;
   }
 }
 
@@ -963,10 +961,9 @@ function ToolBlock({
           <span className={s.toolName}>{toolLabel(t, shown.name, shown.arguments)}</span>
           <span className={s.toolSummary}>{summary}</span>
           {auto?.decision === "run" && (
-            <span className={cx(s.chip, s.chipAuto)} title={answersText(t, auto.answers) || t("ai.auto.ran")}>
-              <Icon name={MODE_ICON.auto} size={11} />
+            <Chip tone="accent" icon={MODE_ICON.auto} title={answersText(t, auto.answers) || t("ai.auto.ran")}>
               {t("ai.call.auto")}
-            </span>
+            </Chip>
           )}
         </button>
         {revertible && (
@@ -985,10 +982,9 @@ function ToolBlock({
         )}
         <span id={statusId} className={s.toolStatus}>
           {change?.state === "reverted" ? (
-            <span className={s.chip}>
-              <Icon name="arrow-counter-clockwise" size={11} />
+            <Chip icon="arrow-counter-clockwise">
               {t("ai.revert.reverted")}
-            </span>
+            </Chip>
           ) : (
             <StatusChip view={view} name={call.name} />
           )}
@@ -1261,9 +1257,9 @@ function McpDetails({ mcp }: { mcp: McpToolInfo }) {
       {hints.length > 0 && (
         <div className={s.hints} title={t("ai.approval.hints")} aria-label={t("ai.approval.hints")}>
           {hints.map((h) => (
-            <span key={h.key} className={cx(s.chip, h.warn && a[h.key] && s.chipBad)}>
+            <Chip key={h.key} tone={h.warn && a[h.key] ? "error" : "neutral"}>
               {t(a[h.key] ? h.yes : h.no)}
-            </span>
+            </Chip>
           ))}
         </div>
       )}
@@ -1288,8 +1284,8 @@ function ShownInput({ text, command, terminal }: { text: string; command?: boole
     <>
       {(multiline || shown.escaped) && (
         <div className={s.inputNotes}>
-          {multiline && <span className={cx(s.chip, s.chipWarn)}>{t("ai.approval.lines", { n: shown.lines.length })}</span>}
-          {shown.escaped && <span className={cx(s.chip, s.chipWarn)}>{t("ai.approval.escaped")}</span>}
+          {multiline && <Chip tone="warning">{t("ai.approval.lines", { n: shown.lines.length })}</Chip>}
+          {shown.escaped && <Chip tone="warning">{t("ai.approval.escaped")}</Chip>}
         </div>
       )}
       <pre className={cx(s.pre, s.whole, command && s.command, "selectable")}>
@@ -1323,7 +1319,7 @@ function Workdir({ path }: { path: string }) {
       <Icon name="folder-simple" size={12} className={s.workdirIcon} />
       <span className={s.workdirLabel}>{t("ai.approval.workdir")}</span>
       <span className={cx(s.workdirPath, "selectable")}>{shown.lines.join("↵")}</span>
-      {shown.escaped && <span className={cx(s.chip, s.chipWarn)}>{t("ai.approval.escaped")}</span>}
+      {shown.escaped && <Chip tone="warning">{t("ai.approval.escaped")}</Chip>}
     </div>
   );
 }
@@ -1452,7 +1448,7 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
         <Icon name={TOOL_ICON[kind]} size={14} className={s.toolIcon} />
         <span className={s.toolName}>{label}</span>
         <span className={s.gap} />
-        <span className={cx(s.chip, s.chipWarn)}>{t("ai.call.approval")}</span>
+        <Chip tone="warning">{t("ai.call.approval")}</Chip>
       </div>
       {kind === "mcp" ? (
         mcp && (
