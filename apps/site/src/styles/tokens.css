@@ -27,8 +27,10 @@
   --link: #0d4590;
   --code-bg: #e9eff8;
   --code-fg: var(--ink);
-  /* The focus ring: a deeper sea, which stands out from every paper surface (3:1 or more). */
-  --focus-ring: #1683c4;
+  /* The focus ring: a deeper sea, which stands out from every paper surface (3:1 or more). The
+     night band sets its own; paper inside it, such as a menu, sets this one back. */
+  --focus-ring-paper: #1683c4;
+  --focus-ring: var(--focus-ring-paper);
 
   /* Code in the docs, which Shiki's css-variables theme colours. */
   --astro-code-foreground: var(--code-fg);
@@ -135,6 +137,7 @@
   --duration-slow: 400ms;
   --duration-scene: 800ms; /* the sea making room for the demo */
   --duration-entrance: 1400ms; /* the window rising out of the sea */
+  --duration-spin: 800ms; /* one turn of a spinner, which keeps turning under reduced motion */
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-emphasized: cubic-bezier(0.2, 0.7, 0.15, 1);
 
@@ -161,7 +164,8 @@
     --line: #22325c;
     --link: #6cc4f2;
     --code-bg: #182651;
-    --focus-ring: var(--sea);
+    --focus-ring-paper: var(--sea);
+    --focus-ring: var(--focus-ring-paper);
 
     --accent: var(--sea);
     --accent-hover: var(--sea-light);
