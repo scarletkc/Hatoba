@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { translate, type MessageKey, type Params } from "@/i18n";
 import type { ForwardView } from "@/ipc/types";
-import { forwardDest, forwardRule, reachableAddress } from "./address";
+import { forwardDest, forwardLabel, forwardRule, reachableAddress } from "./address";
 
 describe("where a forward is reached on this computer", () => {
   it("is localhost for the addresses localhost names and wildcard ones", () => {
@@ -22,6 +22,7 @@ describe("a forward as one line", () => {
   const forward = (patch: Partial<ForwardView>): ForwardView => ({
     id: "f1",
     host_id: "h1",
+    name: "",
     kind: "local",
     bind_address: "127.0.0.1",
     bind_port: 5433,
@@ -43,8 +44,13 @@ describe("a forward as one line", () => {
     expect(forwardRule(t, forward({ kind: "dynamic", bind_port: 1080, dest_host: "", dest_port: 0 }))).toBe("127.0.0.1:1080 (SOCKS proxy)");
   });
 
+  it("calls a named forward by its name, and another by its rule", () => {
+    expect(forwardLabel(t, forward({ name: "Postgres" }))).toBe("Postgres");
+    expect(forwardLabel(t, forward({}))).toBe("127.0.0.1:5433 → db.internal:5432");
+  });
+
   it("names a running forward's destination as it started", () => {
-    const running = (dest: string) => ({ forward_id: "f", kind: "local" as const, port: 5433, address: "localhost:5433", dest });
+    const running = (dest: string) => ({ forward_id: "f", name: "", kind: "local" as const, port: 5433, address: "localhost:5433", dest });
     // Edited to a loopback destination since it started: it still leads to db.internal.
     expect(forwardDest(t, forward({ dest_host: "127.0.0.1" }), running("db.internal:5432"))).toBe("db.internal:5432");
     expect(forwardDest(t, forward({}), running("[::1]:5432"))).toBe("[::1]:5432 on the server");

@@ -451,7 +451,10 @@ fn summary(item: &Item, hosts: &dyn Fn(&str) -> Option<String>) -> Vec<(&'static
             ("fingerprint", k.fingerprint.clone()),
         ],
         Item::KnownHost(k) => vec![("fingerprint", k.fingerprint.clone())],
-        Item::Forward(f) => vec![("bind_port", f.bind_port.to_string())],
+        Item::Forward(f) => vec![
+            ("name", f.name.clone()),
+            ("bind_port", f.bind_port.to_string()),
+        ],
         Item::Snippet(s) => vec![("name", s.name.clone())],
         // Never the password.
         Item::Proxy(p) => vec![

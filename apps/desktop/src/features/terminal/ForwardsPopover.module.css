@@ -50,6 +50,15 @@
   color: var(--red);
 }
 
+/* A named forward's first line, level with the link button beside it. */
+.name {
+  font-size: var(--text-sm);
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .address {
   align-self: flex-start;
   max-width: 100%;
@@ -78,6 +87,27 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Under a name: where it listens and where it leads, on one line in the destination's size. */
+.detail {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+/* The address stays whole where it fits; the destination gives way first. */
+.detail .address {
+  flex: none;
+  max-width: 70%;
+  align-self: auto;
+  font-size: var(--text-xs);
+  line-height: inherit;
+}
+
+.detail .dest {
+  min-width: 0;
 }
 
 .error {

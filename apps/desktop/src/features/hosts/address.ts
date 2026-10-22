@@ -26,6 +26,11 @@ export function forwardRule(
   }
 }
 
+/** What a forward is called where one line names it: its name, else its rule. */
+export function forwardLabel(t: (key: MessageKey, params?: Params) => string, f: ForwardView): string {
+  return f.name || forwardRule(t, f);
+}
+
 /**
  * Where a forward leads. A local one's loopback destination is the server's own, named so beside the address it listens
  * on here, which is often the same `127.0.0.1:port`. A running forward is named as it started, before any edit to its

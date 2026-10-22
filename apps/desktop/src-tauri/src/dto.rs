@@ -1386,6 +1386,8 @@ impl From<ForwardKind> for hatoba_core::model::ForwardKind {
 pub struct ForwardView {
     pub id: String,
     pub host_id: String,
+    /// Empty for a forward named by its rule.
+    pub name: String,
     pub kind: ForwardKind,
     pub bind_address: String,
     pub bind_port: u16,
@@ -1400,6 +1402,8 @@ pub struct ForwardView {
 pub struct ForwardInput {
     pub id: Option<String>,
     pub host_id: String,
+    /// Trimmed; empty for none.
+    pub name: String,
     pub kind: ForwardKind,
     pub bind_address: String,
     pub bind_port: u16,
@@ -1421,6 +1425,8 @@ pub struct ForwardOptions {
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct RunningForwardView {
     pub forward_id: String,
+    /// Its rule's name, kept current while it runs; empty for none.
+    pub name: String,
     pub kind: ForwardKind,
     /// The port it actually listens on (differs from `bind_port` when that was 0), on the server
     /// for a remote forward.

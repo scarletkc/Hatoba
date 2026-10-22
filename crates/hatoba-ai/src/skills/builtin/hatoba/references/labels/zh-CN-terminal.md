@@ -168,6 +168,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Host | 主机 |
 | Choose a host. | 请选择主机。 |
 | Edit Port Forward | 编辑端口转发 |
+| Name | 名称 |
 | Add | 添加 |
 | Type | 类型 |
 | Local | 本地 |

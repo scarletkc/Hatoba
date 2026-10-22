@@ -66,7 +66,7 @@ const connected = (ports: number[] | null, at = ++version): ConnectionsEvent => 
         {
           host_id: "h1",
           host_name: "db",
-          forwards: ports.map((p) => ({ forward_id: `f${p}`, kind: "local", port: p, address: `localhost:${p}`, dest: "127.0.0.1:5432" })),
+          forwards: ports.map((p) => ({ forward_id: `f${p}`, name: "", kind: "local", port: p, address: `localhost:${p}`, dest: "127.0.0.1:5432" })),
           failed: [],
         },
       ]
@@ -77,6 +77,7 @@ const current = () => getConnections().find((x) => x.host_id === "h1");
 const rule = (id: string, bind_port: number): ForwardView => ({
   id,
   host_id: "h1",
+  name: "",
   kind: "local",
   bind_address: "127.0.0.1",
   bind_port,

@@ -1653,6 +1653,8 @@ export type FileEntry = {
 export type ForwardInput = {
 	id: string | null,
 	host_id: string,
+	/**  Trimmed; empty for none. */
+	name: string,
 	kind: ForwardKind,
 	bind_address: string,
 	bind_port: number,
@@ -1687,6 +1689,8 @@ export type ForwardOptions = {
 export type ForwardView = {
 	id: string,
 	host_id: string,
+	/**  Empty for a forward named by its rule. */
+	name: string,
 	kind: ForwardKind,
 	bind_address: string,
 	bind_port: number,
@@ -2242,6 +2246,8 @@ export type RightClick = "copy_paste" | "menu";
 /**  A forward running on its host's connection. */
 export type RunningForwardView = {
 	forward_id: string,
+	/**  Its rule's name, kept current while it runs; empty for none. */
+	name: string,
 	kind: ForwardKind,
 	/**
 	 *  The port it actually listens on (differs from `bind_port` when that was 0), on the server

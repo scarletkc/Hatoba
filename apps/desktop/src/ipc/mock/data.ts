@@ -260,10 +260,10 @@ export const KEYS: KeyView[] = [
 ];
 
 export const FORWARDS: ForwardView[] = [
-  { id: "f-pg", host_id: "h-db-osaka-01", kind: "local", bind_address: "127.0.0.1", bind_port: 15432, dest_host: "127.0.0.1", dest_port: 5432, auto_start: true },
-  { id: "f-grafana", host_id: "h-api-tokyo", kind: "local", bind_address: "127.0.0.1", bind_port: 3000, dest_host: "grafana.internal", dest_port: 3000, auto_start: false },
-  { id: "f-webhook", host_id: "h-api-tokyo", kind: "remote", bind_address: "localhost", bind_port: 8080, dest_host: "localhost", dest_port: 5173, auto_start: false },
-  { id: "f-socks", host_id: "h-api-tokyo", kind: "dynamic", bind_address: "127.0.0.1", bind_port: 1080, dest_host: "", dest_port: 0, auto_start: false },
+  { id: "f-pg", host_id: "h-db-osaka-01", name: "Postgres", kind: "local", bind_address: "127.0.0.1", bind_port: 15432, dest_host: "127.0.0.1", dest_port: 5432, auto_start: true },
+  { id: "f-grafana", host_id: "h-api-tokyo", name: "Grafana dashboards", kind: "local", bind_address: "127.0.0.1", bind_port: 3000, dest_host: "grafana.internal", dest_port: 3000, auto_start: false },
+  { id: "f-webhook", host_id: "h-api-tokyo", name: "", kind: "remote", bind_address: "localhost", bind_port: 8080, dest_host: "localhost", dest_port: 5173, auto_start: false },
+  { id: "f-socks", host_id: "h-api-tokyo", name: "", kind: "dynamic", bind_address: "127.0.0.1", bind_port: 1080, dest_host: "", dest_port: 0, auto_start: false },
 ];
 
 export const SETTINGS: SettingsView = {

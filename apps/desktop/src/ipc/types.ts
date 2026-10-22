@@ -519,6 +519,8 @@ export type ForwardKind = "local" | "remote" | "dynamic";
 export interface ForwardView {
   id: string;
   host_id: string;
+  /** What it is for; empty when it is named by its rule. */
+  name: string;
   kind: ForwardKind;
   bind_address: string;
   /** 0 = pick a free port (the server picks for a remote forward). */
@@ -533,6 +535,8 @@ export interface ForwardView {
 export interface ForwardInput {
   id: string | null;
   host_id: string;
+  /** Trimmed; empty for none. */
+  name: string;
   kind: ForwardKind;
   bind_address: string;
   bind_port: number;
@@ -550,6 +554,8 @@ export interface ForwardOptions {
 /** A forward running on its host's connection. */
 export interface RunningForwardView {
   forward_id: string;
+  /** Its rule's name, kept current while it runs; empty for none. */
+  name: string;
   kind: ForwardKind;
   /** Where it listens: on the server for a remote forward. */
   port: number;

@@ -65,7 +65,17 @@
   color: var(--fg3);
 }
 
-/* Rows (ListRow): mono rule over its state · auto-start switch · start / stop · edit / delete. */
+/* Rows (ListRow): the name, if any, over the mono rule and its state · auto-start switch · start / stop · edit /
+   delete. */
+
+.name {
+  min-width: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .rule {
   min-width: 0;
@@ -74,6 +84,12 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Under a name, the rule reads as its detail. */
+.ruleDetail {
+  font-size: var(--text-xs);
+  color: var(--fg2);
 }
 
 .address {

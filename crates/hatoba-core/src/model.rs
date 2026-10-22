@@ -491,6 +491,8 @@ pub enum ForwardKind {
 pub struct PortForward {
     /// The [`Host`] this forward belongs to.
     pub host_id: String,
+    /// What the forward is for; empty when it has none, and it is named by its rule.
+    pub name: String,
     /// Direction.
     #[zeroize(skip)]
     pub kind: ForwardKind,

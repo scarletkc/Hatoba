@@ -168,6 +168,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Host | ホスト |
 | Choose a host. | ホストを選択してください。 |
 | Edit Port Forward | ポートフォワーディングを編集 |
+| Name | 名前 |
 | Add | 追加 |
 | Type | 種類 |
 | Local | ローカル |

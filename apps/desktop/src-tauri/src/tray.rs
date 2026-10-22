@@ -267,20 +267,19 @@ mod imp {
         for host in &shown.hosts {
             for forward in &host.forwards {
                 entries.push(format!(
-                    "{}:{} {} {}  {}",
+                    "{}:{} {} {}",
                     host.host_id,
                     forward.forward_id,
                     forward.address,
-                    host.host_name,
-                    addresses(shown, forward)
+                    submenu_label(shown, host, forward)
                 ));
             }
         }
         entries
     }
 
-    /// The heading, a submenu for each running forward, named by its host and addresses, and a
-    /// separator; nothing while none runs.
+    /// The heading, a submenu for each running forward (see [`submenu_label`]), and a separator;
+    /// nothing while none runs.
     fn forward_items(app: &AppHandle, forwards: &Shown) -> tauri::Result<Vec<MenuItemKind<Wry>>> {
         if forwards.hosts.iter().all(|h| h.forwards.is_empty()) {
             return Ok(Vec::new());
@@ -291,7 +290,7 @@ mod imp {
             for forward in &host.forwards {
                 let stop_id = format!("{FORWARD_STOP}{}:{}", host.host_id, forward.forward_id);
                 let stop = MenuItem::with_id(app, stop_id, &forwards.stop, true, None::<&str>)?;
-                let label = format!("{}  {}", host.host_name, addresses(forwards, forward));
+                let label = submenu_label(forwards, host, forward);
                 // A remote forward's address is on the server: nothing here connects to it.
                 let entry = if forward.kind == ForwardKind::Remote {
                     Submenu::with_items(app, label, true, &[&stop])?
@@ -307,6 +306,20 @@ mod imp {
             app,
         )?));
         Ok(items)
+    }
+
+    /// A running forward's submenu: its host's name, its own if it has one, and its addresses.
+    fn submenu_label(
+        forwards: &Shown,
+        host: &HostConnectionView,
+        forward: &RunningForwardView,
+    ) -> String {
+        let addresses = addresses(forwards, forward);
+        if forward.name.is_empty() {
+            format!("{}  {addresses}", host.host_name)
+        } else {
+            format!("{} · {}  {addresses}", host.host_name, forward.name)
+        }
     }
 
     /// Where a running forward listens and where it leads.
@@ -434,6 +447,43 @@ mod imp {
                 refresh_close_action(&state);
                 assert_eq!(close_action(), action);
             }
+        }
+
+        #[test]
+        fn a_named_forward_shows_its_name_after_its_host() {
+            let shown = Shown {
+                update: false,
+                heading: String::new(),
+                copy: String::new(),
+                stop: String::new(),
+                on_server: "{addr} on the server".to_owned(),
+                socks: "SOCKS proxy".to_owned(),
+                version: 0,
+                hosts: Vec::new(),
+                built: None,
+            };
+            let host = HostConnectionView {
+                host_id: "h1".to_owned(),
+                host_name: "db".to_owned(),
+                forwards: Vec::new(),
+                failed: Vec::new(),
+            };
+            let forward = |name: &str| RunningForwardView {
+                forward_id: "f1".to_owned(),
+                name: name.to_owned(),
+                kind: ForwardKind::Local,
+                port: 15432,
+                address: "localhost:15432".to_owned(),
+                dest: "127.0.0.1:5432".to_owned(),
+            };
+            assert_eq!(
+                submenu_label(&shown, &host, &forward("Postgres")),
+                "db · Postgres  localhost:15432 → 127.0.0.1:5432"
+            );
+            assert_eq!(
+                submenu_label(&shown, &host, &forward("")),
+                "db  localhost:15432 → 127.0.0.1:5432"
+            );
         }
     }
 }

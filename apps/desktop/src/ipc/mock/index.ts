@@ -168,6 +168,7 @@ export function createMockApi(): HatobaApi {
   const runForward = (c: MockConnection, f: ForwardView): number => {
     const port = f.bind_port || 49152 + Math.floor(Math.random() * 1000);
     c.forwards.set(f.id, {
+      name: f.name,
       kind: f.kind,
       port,
       address: f.kind === "remote" ? hostPort(f.bind_address, port) : reachableAddress(f.bind_address, port),
@@ -1002,11 +1003,18 @@ export function createMockApi(): HatobaApi {
       const f: ForwardView = {
         ...input,
         id: input.id ?? id("f"),
+        name: input.name.trim(),
         bind_address: input.bind_address || (input.kind === "remote" ? "localhost" : "127.0.0.1"),
         ...(input.kind === "dynamic" && { dest_host: "", dest_port: 0 }),
       };
       forwards = input.id ? forwards.map((x) => (x.id === f.id ? f : x)) : [...forwards, f];
       touch();
+      // A running forward takes its rule's name.
+      const running = connections.get(f.host_id)?.forwards.get(f.id);
+      if (running && running.name !== f.name) {
+        running.name = f.name;
+        connectionsChanged();
+      }
       return f;
     },
     forward_delete: async (fid) => {

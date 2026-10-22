@@ -10,10 +10,10 @@ import { api, toAppError } from "@/ipc/api";
 import type { ForwardKind, ForwardView } from "@/ipc/types";
 import s from "./ForwardDialog.module.css";
 
-type FieldKey = "host_id" | "bind_address" | "bind_port" | "dest_host" | "dest_port";
+type FieldKey = "name" | "host_id" | "bind_address" | "bind_port" | "dest_host" | "dest_port";
 type Errors = Partial<Record<FieldKey, string>>;
 
-const FIELDS: readonly string[] = ["host_id", "bind_address", "bind_port", "dest_host", "dest_port"];
+const FIELDS: readonly string[] = ["name", "host_id", "bind_address", "bind_port", "dest_host", "dest_port"];
 const LABEL_COLUMN = "120px minmax(0,1fr)";
 const KINDS: readonly ForwardKind[] = ["local", "remote", "dynamic"];
 
@@ -39,9 +39,9 @@ const exposesPort = (address: string) => {
 const defaultBind = (kind: ForwardKind) => (kind === "remote" ? "localhost" : "127.0.0.1");
 
 /**
- * Add / edit one forward: local (FWD-01), remote (FWD-03) or dynamic SOCKS (FWD-04), and whether it starts with the
- * connection (FWD-02), saved straight to the backend. A new one chooses its host, at first `defaultHostId`; an
- * edited one stays on `hostId`.
+ * Add / edit one forward: its optional name (FWD-06), local (FWD-01), remote (FWD-03) or dynamic SOCKS (FWD-04), and
+ * whether it starts with the connection (FWD-02), saved straight to the backend. A new one chooses its host, at first
+ * `defaultHostId`; an edited one stays on `hostId`.
  */
 export function ForwardDialog({
   hostId,
@@ -58,7 +58,7 @@ export function ForwardDialog({
 }) {
   const t = useT();
   const hosts = useVaultData((st) => st.hosts);
-  const ids = { form: useId(), bind: useId(), bindPort: useId(), dest: useId(), destPort: useId() };
+  const ids = { form: useId(), name: useId(), bind: useId(), bindPort: useId(), dest: useId(), destPort: useId() };
   const bindPortRef = useRef<HTMLInputElement>(null);
   const [chosenHost, setChosenHost] = useState<string | null>(
     hostId ?? (hosts.some((h) => h.id === defaultHostId) ? defaultHostId : null),
@@ -70,6 +70,7 @@ export function ForwardDialog({
         .map((h) => ({ value: h.id, label: h.name, hint: `${h.username ? `${h.username}@` : ""}${h.address}:${h.port}` })),
     [hosts],
   );
+  const [name, setName] = useState(forward?.name ?? "");
   const [kind, setKind] = useState<ForwardKind>(forward?.kind ?? "local");
   const [bindAddress, setBindAddress] = useState(forward?.bind_address ?? defaultBind("local"));
   const [bindPort, setBindPort] = useState(forward ? String(forward.bind_port) : "");
@@ -98,7 +99,7 @@ export function ForwardDialog({
     // An address left at one kind's default moves to the next one's.
     if (bindAddress.trim() === defaultBind(kind)) setBindAddress(defaultBind(next));
     setKind(next);
-    setErrors((e) => ({ host_id: e.host_id }));
+    setErrors((e) => ({ name: e.name, host_id: e.host_id }));
     setGeneral(null);
   };
 
@@ -113,6 +114,7 @@ export function ForwardDialog({
   };
 
   const fieldIds: Partial<Record<FieldKey, string>> = {
+    name: ids.name,
     bind_address: ids.bind,
     bind_port: ids.bindPort,
     dest_host: ids.dest,
@@ -137,6 +139,7 @@ export function ForwardDialog({
       const saved = await api.forward_save({
         id: forward?.id ?? null,
         host_id: chosenHost!,
+        name: name.trim(),
         kind,
         bind_address: bindAddress.trim(),
         bind_port: Number(bindPort),
@@ -201,6 +204,18 @@ export function ForwardDialog({
           </div>
         )}
         <Group>
+          <FormRow label={t("hosts.fwd.f.name")} htmlFor={ids.name} columns={LABEL_COLUMN} error={errors.name}>
+            <TextField
+              id={ids.name}
+              value={name}
+              invalid={!!errors.name}
+              placeholder={t("hosts.fwd.f.namePlaceholder")}
+              onChange={(e) => {
+                setName(e.target.value);
+                clear("name");
+              }}
+            />
+          </FormRow>
           {hostId === null && (
             <FormRow label={t("hosts.fwd.f.host")} columns={LABEL_COLUMN} error={errors.host_id}>
               <PopupSelect<string | null>

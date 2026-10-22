@@ -14,6 +14,7 @@ Forwards belong to a host. They are saved in the vault and sync like other items
 
 Other labels: **Edit Port Forward**, **Add**, **Delete**.
 
+- **Name** is optional: a word or two on what the rule is for, such as "Postgres". A named rule shows its name with the rule under it, on the page, in the popover and in the tray menu, and the delete confirmation names it; a rule without one shows only the rule. Renaming a running rule renames it at once, and it keeps running.
 - A local rule reads `local address:port → destination:port`, with a loopback destination such as `127.0.0.1` shown "on the server", a remote one `address:port on the server → destination:port`, and a SOCKS one `local address:port` followed by "SOCKS proxy". An edited rule stays on its host, and can change its type. Use the pencil to edit and the bin to delete (with confirmation; with Cloud Sync on it is removed on other devices too). Deleting a running rule stops it, also when it is deleted on another device.
 - **Local address** (local and SOCKS rules) is the address Hatoba listens on, and its port. `127.0.0.1` is reachable from this computer only. `0.0.0.0` exposes the port to the whole network, and the dialog warns about it. A port of 0 picks a free port automatically (shown as **auto**).
 - **Server address** (remote rules) is the address the server listens on, and its port. It starts as `localhost`, the server's own loopback, as with `ssh -R`. Whether another address such as `0.0.0.0` lets other machines reach the port is up to the server's `GatewayPorts` setting; OpenSSH's default keeps the port on loopback, and the dialog says so. A port of 0 lets the server pick one. Ports below 1024 usually need root on the server.
@@ -33,7 +34,7 @@ Other labels: **Edit Port Forward**, **Add**, **Delete**.
 ## Keep running in the background
 
 - Forwards keep running with the window minimized to the tray (Settings → General → **Close Button**) and behind the lock screen, until they are stopped, the connection ends, or Hatoba quits. With **Disconnect all sessions when locked** (Settings → Security) they stop when the vault locks.
-- On Windows and Linux the tray menu lists them under **Port Forwarding**, each as the host's name with its rule as running (`localhost:<port> → destination`, `address on the server → destination`, or `localhost:<port>` and "SOCKS proxy"). Its submenu has **Stop**, and **Copy Address** for a local or SOCKS rule.
+- On Windows and Linux the tray menu lists them under **Port Forwarding**, each as the host's name, the rule's name if it has one, and the rule as running (`localhost:<port> → destination`, `address on the server → destination`, or `localhost:<port>` and "SOCKS proxy"). Its submenu has **Stop**, and **Copy Address** for a local or SOCKS rule.
 - When the connection is lost (the server or the network goes away), its forwards stop and Hatoba says so: a message in the window while Hatoba is the active window, otherwise a system notification titled with the host's name, "Port forwarding stopped." and the reason. Clicking the notification opens the **Port Forwarding** page at the host's rules to start them again. The host's terminal tabs show the disconnect too. Hatoba does not reconnect on its own.
 
 ## Typical use

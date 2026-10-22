@@ -146,6 +146,22 @@ function ForwardRow({
   const remote = kind === "remote";
   const local = active?.address ?? hostPort(f.bind_address, f.bind_port || t("terminal.fwd.autoPort"));
   const dest = forwardDest(t, f, active);
+  // Under a name, the addresses share one line as its detail.
+  const named = f.name !== "";
+  const address =
+    running && !remote ? (
+      <button
+        type="button"
+        className={cx(s.address, s.addressCopy)}
+        title={t("terminal.fwd.copy", { addr: local })}
+        onClick={() => onCopy(local)}
+      >
+        {local}
+      </button>
+    ) : (
+      <span className={s.address}>{remote ? t("terminal.fwd.onServer", { addr: local }) : local}</span>
+    );
+  const to = <span className={s.dest}>{kind === "dynamic" ? t("terminal.fwd.socks") : `→ ${dest}`}</span>;
 
   return (
     <ListRow
@@ -168,14 +184,22 @@ function ForwardRow({
         </LinkButton>
       }
     >
-      {running && !remote ? (
-        <button type="button" className={cx(s.address, s.addressCopy)} title={t("terminal.fwd.copy", { addr: local })} onClick={() => onCopy(local)}>
-          {local}
-        </button>
+      {named ? (
+        <>
+          <span className={s.name} title={f.name}>
+            {f.name}
+          </span>
+          <span className={s.detail}>
+            {address}
+            {to}
+          </span>
+        </>
       ) : (
-        <span className={s.address}>{remote ? t("terminal.fwd.onServer", { addr: local }) : local}</span>
+        <>
+          {address}
+          {to}
+        </>
       )}
-      <span className={s.dest}>{kind === "dynamic" ? t("terminal.fwd.socks") : `→ ${dest}`}</span>
     </ListRow>
   );
 }

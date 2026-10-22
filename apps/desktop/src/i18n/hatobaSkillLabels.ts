@@ -177,7 +177,7 @@ export const AREAS: Area[] = [
       "references/port-forwarding.md": {
         "Create or edit a rule": [
           "sidebar.forwards", "hosts.fwd.empty", "hosts.fwd.add", "hosts.fwd.dialog.addTitle", "hosts.fwd.f.host",
-          "hosts.fwd.err.hostRequired", "hosts.fwd.dialog.editTitle",
+          "hosts.fwd.err.hostRequired", "hosts.fwd.dialog.editTitle", "hosts.fwd.f.name",
           "hosts.fwd.dialog.add", "hosts.fwd.f.kind", "hosts.fwd.kind.local", "hosts.fwd.kind.remote",
           "hosts.fwd.kind.dynamic", "hosts.fwd.f.local", "hosts.fwd.f.server", "hosts.f.port", "hosts.fwd.f.dest",
           "hosts.fwd.f.autoStart", "hosts.fwd.autoStart", "hosts.fwd.autoPort", "terminal.fwd.onServer",

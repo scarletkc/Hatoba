@@ -9,7 +9,8 @@ import { writeClipboard } from "@/features/terminal/clipboard";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { ForwardInput, ForwardView, HostView, RunningForwardView } from "@/ipc/types";
-import { forwardDest, forwardRule, hostPort } from "./address";
+import { cx } from "@/lib/cx";
+import { forwardDest, forwardLabel, forwardRule, hostPort } from "./address";
 import { ForwardDialog } from "./ForwardDialog";
 import { forwardFailure, runningForward, useConnections } from "./connections";
 import { dropForwardRule, putForwardRule, startForward, stopForward, useForwardRules } from "./forwards";
@@ -18,6 +19,7 @@ import s from "./ForwardsPage.module.css";
 const toInput = (f: ForwardView, patch: Partial<ForwardInput> = {}): ForwardInput => ({
   id: f.id,
   host_id: f.host_id,
+  name: f.name,
   kind: f.kind,
   bind_address: f.bind_address,
   bind_port: f.bind_port,
@@ -84,7 +86,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
   const setFailure = (id: string, message: string | null) =>
     setFailures(({ [id]: _old, ...rest }) => (message === null ? rest : { ...rest, [id]: message }));
 
-  const rule = (f: ForwardView) => forwardRule(t, f);
+  const label = (f: ForwardView) => forwardLabel(t, f);
 
   const setAutoStart = async (f: ForwardView, auto_start: boolean) => {
     markPending(f.id, true);
@@ -101,7 +103,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
 
   const remove = async (f: ForwardView) => {
     const ok = await confirm({
-      title: t("hosts.fwd.removeTitle", { rule: rule(f) }),
+      title: t("hosts.fwd.removeTitle", { rule: label(f) }),
       confirmLabel: t("btn.delete"),
       danger: true,
     });
@@ -197,7 +199,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                 <Section title={<HostTitle host={host} />}>
                   <Group>
                     {forwards.map((f) => {
-                      const label = rule(f);
+                      const rule = forwardRule(t, f);
                       const running = runningForward(conn, f.id);
                       const address = running?.address ?? null;
                       const failed = forwardFailure(conn, f.id);
@@ -223,7 +225,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                                 <Switch
                                   checked={f.auto_start}
                                   disabled={pending.has(f.id)}
-                                  label={t("hosts.fwd.autoStartFor", { rule: label })}
+                                  label={t("hosts.fwd.autoStartFor", { rule: label(f) })}
                                   onChange={(on) => void setAutoStart(f, on)}
                                 />
                               </label>
@@ -253,7 +255,12 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                             </>
                           }
                         >
-                          <span className={s.rule} title={label}>
+                          {f.name && (
+                            <span className={s.name} title={f.name}>
+                              {f.name}
+                            </span>
+                          )}
+                          <span className={cx(s.rule, f.name && s.ruleDetail)} title={rule}>
                             {f.kind === "remote" ? t("terminal.fwd.onServer", { addr: bind }) : bind}
                             {f.kind === "dynamic" ? (
                               <span className={s.arrow}>{t("terminal.fwd.socks")}</span>
