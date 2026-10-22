@@ -108,6 +108,7 @@
 
 /* Hint and error lines under a field. */
 .hint,
+.warning,
 .error {
   font-size: var(--text-sm);
   line-height: 1.45;
@@ -115,8 +116,24 @@
   text-wrap: pretty;
 }
 
+.warning {
+  color: var(--orange);
+}
+
 .error {
   color: var(--red);
+}
+
+.messageIcon {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+}
+
+.messageIcon > i {
+  flex: none;
+  margin-top: 2px;
+  font-size: var(--icon-14);
 }
 
 /* Chips: short labels and states in a line of text. */

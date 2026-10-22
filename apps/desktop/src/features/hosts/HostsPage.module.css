@@ -195,24 +195,9 @@
   gap: var(--space-4);
 }
 
+/* A small IconButton, shown on the row under the pointer or selected. */
 .forget {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--fg2);
-  font-size: var(--text-sm);
   opacity: 0;
-}
-
-.forget:hover {
-  background: var(--fill);
-  color: var(--fg);
 }
 
 .row:hover .forget,

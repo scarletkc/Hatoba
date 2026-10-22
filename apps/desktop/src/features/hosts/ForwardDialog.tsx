@@ -4,6 +4,7 @@ import { errorMessage } from "@/app/errors";
 import { Button, Checkbox, Icon, Segmented, TextField } from "@/components/controls";
 import { FormRow, Group } from "@/components/layout";
 import { FooterSpacer, PopupSelect, Sheet, SheetHeader, type SelectOption } from "@/components/overlay";
+import { ErrorText, HintText, WarningText } from "@/components/patterns";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { ForwardKind, ForwardView } from "@/ipc/types";
@@ -255,16 +256,11 @@ export function ForwardDialog({
                 />
               </div>
               {bindError ? (
-                <div className={s.error} role="alert">
-                  {bindError}
-                </div>
+                <ErrorText>{bindError}</ErrorText>
               ) : exposed ? (
-                <div className={s.warn}>
-                  <Icon name="warning" size={14} />
-                  {t(remote ? "hosts.fwd.f.gatewayPorts" : "hosts.fwd.f.exposedWarn")}
-                </div>
+                <WarningText>{t(remote ? "hosts.fwd.f.gatewayPorts" : "hosts.fwd.f.exposedWarn")}</WarningText>
               ) : (
-                kind === "dynamic" && <div className={s.hint}>{t("hosts.fwd.f.socksHint")}</div>
+                kind === "dynamic" && <HintText>{t("hosts.fwd.f.socksHint")}</HintText>
               )}
             </div>
           </FormRow>
@@ -298,11 +294,9 @@ export function ForwardDialog({
                   />
                 </div>
                 {destError ? (
-                  <div className={s.error} role="alert">
-                    {destError}
-                  </div>
+                  <ErrorText>{destError}</ErrorText>
                 ) : (
-                  <div className={s.hint}>{t(remote ? "hosts.fwd.f.destHintRemote" : "hosts.fwd.f.destHint")}</div>
+                  <HintText>{t(remote ? "hosts.fwd.f.destHintRemote" : "hosts.fwd.f.destHint")}</HintText>
                 )}
               </div>
             </FormRow>

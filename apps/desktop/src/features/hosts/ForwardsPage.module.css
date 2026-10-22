@@ -131,14 +131,3 @@
   color: var(--fg2);
 }
 
-.remove:hover:not(:disabled) {
-  color: var(--red);
-}
-
-.error {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-6);
-  font-size: var(--text-sm);
-  color: var(--red);
-}

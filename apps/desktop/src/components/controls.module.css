@@ -164,6 +164,17 @@
   color: var(--fg3);
 }
 
+.iconButtonSmall {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-xs);
+  font-size: var(--icon-12);
+}
+
+.iconButtonDanger:hover:not(:disabled) {
+  color: var(--red);
+}
+
 .iconButtonActive {
   background: var(--fill2);
   color: var(--accent);

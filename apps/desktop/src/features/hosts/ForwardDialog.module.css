@@ -22,29 +22,8 @@
   gap: var(--space-4);
 }
 
-.hint {
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--fg2);
-}
-
-.warn {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-6);
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--orange);
-}
-
 .warn i {
   margin-top: 2px;
-}
-
-.error {
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--red);
 }
 
 .general {

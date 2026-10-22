@@ -5,6 +5,7 @@ import { useApp, type HostFilter } from "@/app/store";
 import { Button, Icon, IconButton, LinkButton, Segmented, StatusDot, TextArea, TextField } from "@/components/controls";
 import { EmptyState, FormRow, Group, Section, TagInput } from "@/components/layout";
 import { PopupSelect, confirm, toast, type SelectOption } from "@/components/overlay";
+import { HintText, WarningText } from "@/components/patterns";
 import { InstructionsField } from "@/features/ai/InstructionsField";
 import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
 import { useT } from "@/i18n";
@@ -341,16 +342,14 @@ export function HostEditPage({
         <span className={s.crumbSep}>/</span>
         <span className={s.crumbName}>{form.name.trim() || t("hosts.newHost")}</span>
         <div className={s.spacer} />
-        <button
-          type="button"
+        <IconButton
+          icon="star"
+          fill={form.favorite}
           className={cx(s.favButton, form.favorite && s.favOn)}
           aria-pressed={form.favorite}
-          title={form.favorite ? t("hosts.menu.unfavorite") : t("hosts.menu.favorite")}
-          aria-label={form.favorite ? t("hosts.menu.unfavorite") : t("hosts.menu.favorite")}
+          label={form.favorite ? t("hosts.menu.unfavorite") : t("hosts.menu.favorite")}
           onClick={() => patch({ favorite: !form.favorite })}
-        >
-          <Icon name="star" fill={form.favorite} />
-        </button>
+        />
         <Button onClick={goBack}>{t("btn.cancel")}</Button>
         <Button variant="primary" busy={saving} onClick={() => void save()}>
           {t("btn.save")}
@@ -405,10 +404,7 @@ export function HostEditPage({
                     onChange={(e) => patch({ username: e.target.value }, "username")}
                   />
                   {userTouched && !form.username.trim() && !errors.username && (
-                    <div className={s.warn}>
-                      <Icon name="warning" size={14} />
-                      {t("hosts.f.userWarn")}
-                    </div>
+                    <WarningText className={s.warn}>{t("hosts.f.userWarn")}</WarningText>
                   )}
                 </div>
               </FormRow>
@@ -486,7 +482,7 @@ export function HostEditPage({
 
               {form.authKind === "ask" && (
                 <FormRow label="">
-                  <span className={s.hint}>{t("hosts.f.askHint")}</span>
+                  <HintText>{t("hosts.f.askHint")}</HintText>
                 </FormRow>
               )}
             </Group>
@@ -524,7 +520,7 @@ export function HostEditPage({
                     minWidth={340}
                     onChange={(jumpHostId) => patch({ jumpHostId }, "jump")}
                   />
-                  <span className={s.jumpHint}>{t("hosts.f.jumpHint")}</span>
+                  <HintText>{t("hosts.f.jumpHint")}</HintText>
                 </div>
               </FormRow>
               <FormRow label={t("hosts.f.proxy")} top error={errors.proxy}>
@@ -545,7 +541,7 @@ export function HostEditPage({
                     </div>
                     <LinkButton onClick={() => useApp.getState().openSettings(true, "proxies")}>{t("hosts.f.manageProxies")}</LinkButton>
                   </div>
-                  {form.jumpHostId && <span className={s.jumpHint}>{t("hosts.f.proxyJumpHint")}</span>}
+                  {form.jumpHostId && <HintText>{t("hosts.f.proxyJumpHint")}</HintText>}
                 </div>
               </FormRow>
             </Group>
@@ -571,7 +567,7 @@ export function HostEditPage({
 
           <Section title={t("hosts.edit.sec.ai")}>
             <div className={s.aiNotes}>
-              <span className={s.hint}>{t("hosts.f.aiNotesHint")}</span>
+              <HintText>{t("hosts.f.aiNotesHint")}</HintText>
               <InstructionsField
                 id="host-aiNotes"
                 label={t("hosts.f.aiNotes")}

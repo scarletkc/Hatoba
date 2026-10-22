@@ -4,6 +4,7 @@ import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { Button, Checkbox, Icon, Spinner } from "@/components/controls";
 import { FooterSpacer, Sheet, SheetHeader, toast } from "@/components/overlay";
+import { ErrorText } from "@/components/patterns";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { ImportPreview, ImportSource } from "@/ipc/types";
@@ -157,10 +158,7 @@ export function ImportDialog({ source, onClose }: { source: ImportSource; onClos
         subtitle={location && (!app || (items && items.length > 0)) ? t("hosts.import.subtitle", { path: location }) : undefined}
       />
       {error && (
-        <div className={s.error} role="alert">
-          <Icon name="warning-circle" size={16} />
-          {error}
-        </div>
+        <ErrorText icon="warning-circle">{error}</ErrorText>
       )}
       {!items && !error && (
         <div className={s.note}>
