@@ -1,0 +1,132 @@
+/* The development-only component gallery (Gallery.tsx). */
+
+.page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--win);
+  color: var(--fg);
+}
+
+.toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  height: var(--titlebar-height);
+  padding: 0 16px;
+  border-bottom: 0.5px solid var(--line);
+}
+
+.title {
+  flex: 1;
+  font-weight: 600;
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-left: 0.5px solid var(--line);
+}
+
+.specimens {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 24px 24px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-28);
+  background: var(--win);
+  color: var(--fg);
+  min-height: 100vh;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-14);
+}
+
+.blockTitle {
+  margin: 0;
+  padding-bottom: 6px;
+  border-bottom: 0.5px solid var(--line);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.line {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: var(--space-16);
+  align-items: start;
+}
+
+.label {
+  padding-top: 5px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--fg2);
+}
+
+.items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-10);
+  min-height: var(--control-height);
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.framed {
+  border-radius: var(--radius-panel);
+  box-shadow: inset 0 0 0 0.5px var(--line2);
+  overflow: hidden;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-12);
+}
+
+.cards > * {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* A stand-in for a status bar popover around dense rows. */
+.popover {
+  width: 320px;
+  padding: 5px;
+  border-radius: var(--radius-popover);
+  background: var(--sheet);
+  box-shadow: var(--shadow-popover);
+  font-size: var(--text-md);
+}
