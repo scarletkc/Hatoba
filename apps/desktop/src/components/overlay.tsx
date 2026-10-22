@@ -151,7 +151,8 @@ export function Menu({
   // menu would be squeezed, wrap and measure taller than it ends up, and sit that much too high.
   const [pos, setPos] = useState({ left: 0, top: anchor.y, transformOrigin: "left top" });
   const [focus, setFocus] = useState(-1);
-  const items = entries.flatMap((e, i) => (e.kind === "separator" || e.kind === "header" ? [] : [i]));
+  // What the arrow keys move through: a disabled item is passed over, as in a native menu.
+  const items = entries.flatMap((e, i) => (e.kind === "separator" || e.kind === "header" || (isItem(e) && e.disabled) ? [] : [i]));
   const hasCheck = entries.some((x) => isItem(x) && x.checked !== undefined);
   const hasIcon = entries.some((x) => isItem(x) && x.icon !== undefined);
   const locked = useOverlaysLocked() && !whileLocked;

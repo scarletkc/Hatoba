@@ -153,6 +153,25 @@ describe("Menu", () => {
     expect(onSelect).toHaveBeenCalledWith("日本語");
   });
 
+  it("passes over disabled items with the arrow keys", () => {
+    const onSelect = vi.fn();
+    render(
+      <Menu
+        anchor={{ x: 0, y: 0 }}
+        onClose={() => {}}
+        entries={[
+          { label: "Copy", disabled: true, onSelect: () => onSelect("Copy") },
+          { label: "Paste", onSelect: () => onSelect("Paste") },
+          { kind: "separator" },
+          { label: "Select All", disabled: true, onSelect: () => onSelect("Select All") },
+        ]}
+      />,
+    );
+    key("ArrowUp");
+    key("Enter");
+    expect(onSelect).toHaveBeenCalledWith("Paste");
+  });
+
   it("drops the highlight when the pointer leaves the item", () => {
     const onSelect = vi.fn();
     render(<Menu anchor={{ x: 0, y: 0 }} onClose={() => {}} entries={[{ label: "Item", onSelect }]} />);
