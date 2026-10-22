@@ -150,47 +150,6 @@
   color: var(--fg2);
 }
 
-.empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-8);
-  padding: 32px 24px;
-  text-align: center;
-}
-
-.emptyIcon {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 4px;
-  border-radius: var(--radius-lg);
-  background: var(--accenttint);
-  color: var(--accent);
-}
-
-.emptyTitle {
-  font-size: var(--text-lg);
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.emptyBody {
-  max-width: 300px;
-  font-size: var(--text-sm);
-  line-height: 1.55;
-  color: var(--fg2);
-  text-wrap: pretty;
-}
-
-.empty :global(button) {
-  margin-top: 6px;
-}
-
 /* AI-35: the drop target while text files are dragged over the panel. */
 .drop {
   position: absolute;

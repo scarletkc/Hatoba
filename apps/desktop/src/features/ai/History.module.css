@@ -21,54 +21,10 @@
 }
 
 /* AI-24: the search field; the field shows focus with its ring. */
+/* A SearchField across the top of the list. */
 .search {
   flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-  height: 28px;
   margin: 8px 10px 2px;
-  padding: 0 4px 0 8px;
-  border-radius: var(--radius-sm);
-  background: var(--field);
-  box-shadow: 0 0 0 0.5px var(--fieldline);
-}
-
-.search:focus-within {
-  box-shadow: var(--focus-ring);
-}
-
-.searchIcon {
-  flex: none;
-  color: var(--fg2);
-}
-
-.searchInput {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  font-size: var(--text-md);
-  outline: none;
-}
-
-.searchInput:focus-visible {
-  outline: none;
-}
-
-.searchInput::placeholder {
-  color: var(--fg3);
-}
-
-.searchInput::-webkit-search-cancel-button {
-  display: none;
-}
-
-/* Muted, as a field's own controls are. */
-.searchClear {
-  color: var(--fg3);
 }
 
 .list {
@@ -235,21 +191,3 @@
   text-align: center;
 }
 
-.empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-6);
-  padding: 48px 20px;
-  text-align: center;
-}
-
-.emptyIcon {
-  color: var(--fg3);
-  margin-bottom: 4px;
-}
-
-.emptyTitle {
-  font-size: var(--text-md);
-  font-weight: 600;
-}

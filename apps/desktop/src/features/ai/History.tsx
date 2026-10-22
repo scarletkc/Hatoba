@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { Icon, IconButton, LinkButton } from "@/components/controls";
+import { EmptyState, SearchField } from "@/components/layout";
 import { confirm, Menu, useMenu, type MenuEntry } from "@/components/overlay";
 import { StatusLine } from "@/components/patterns";
 import { formatRelative, useT } from "@/i18n";
@@ -116,7 +117,7 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
         <IconButton small icon="caret-left" label={t("btn.back")} size={14} onClick={onClose} />
         <span className={s.title}>{t("ai.history")}</span>
       </div>
-      <SearchField value={query} onChange={setQuery} />
+      <SearchField fill value={query} onChange={setQuery} placeholder={t("ai.search")} clearLabel={t("ai.search.clear")} className={s.search} />
       {searching ? (
         <SearchResults search={search} query={query.trim()} history={history} hosts={hosts} currentId={currentId} onOpen={openHit} onRetry={retrySearch} />
       ) : (
@@ -135,10 +136,7 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
             </div>
           )}
           {list?.length === 0 && !failed && (
-            <div className={s.empty}>
-              <Icon name="chats" size={26} className={s.emptyIcon} />
-              <div className={s.emptyTitle}>{t("ai.history.empty")}</div>
-            </div>
+            <EmptyState compact icon="chats" title={t("ai.history.empty")} />
           )}
           {list?.map((c) => {
             const place = conversationPlace(c, hosts);
@@ -208,49 +206,6 @@ function Activity({ id }: { id: string }) {
     <span className={cx(s.activity, activity === "waiting" ? s.activityWaiting : s.activityRunning)} title={label} aria-label={label} role="img">
       <Icon name={activity === "waiting" ? "hand-palm" : "sparkle"} fill={activity === "waiting"} size={12} />
     </span>
-  );
-}
-
-/** The search field above the list; Esc clears it. */
-function SearchField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const t = useT();
-  const ref = useRef<HTMLInputElement>(null);
-  return (
-    <div className={s.search}>
-      <Icon name="magnifying-glass" size={14} className={s.searchIcon} />
-      <input
-        ref={ref}
-        className={s.searchInput}
-        type="search"
-        value={value}
-        placeholder={t("ai.search")}
-        aria-label={t("ai.search")}
-        spellCheck={false}
-        autoComplete="off"
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape" && value) {
-            e.preventDefault();
-            e.stopPropagation();
-            onChange("");
-          }
-        }}
-      />
-      {value && (
-        <IconButton
-          small
-          icon="x-circle"
-          fill
-          size={14}
-          label={t("ai.search.clear")}
-          className={s.searchClear}
-          onClick={() => {
-            onChange("");
-            ref.current?.focus();
-          }}
-        />
-      )}
-    </div>
   );
 }
 

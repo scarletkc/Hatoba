@@ -3,6 +3,7 @@ import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { useTabs, type SessionTab } from "@/app/tabs";
 import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
+import { EmptyState } from "@/components/layout";
 import { reconnectSession } from "@/features/terminal/connect";
 import { shellName } from "@/features/terminal/localShells";
 import { useT } from "@/i18n";
@@ -301,15 +302,12 @@ function Notices({ slotId, slot, tab, tabHost, hosts }: { slotId: string; slot: 
 function EmptyConversation({ tab, host }: { tab: SessionTab | undefined; host: HostView | undefined }) {
   const t = useT();
   return (
-    <div className={s.empty}>
-      <div className={s.emptyIcon}>
-        <Icon name="sparkle" size={20} />
-      </div>
-      <div className={s.emptyTitle}>
-        {tab ? t("ai.empty.title", { host: tab.local ? t("terminal.local.thisComputer") : (host?.name ?? tab.title) }) : t("ai.empty.homeTitle")}
-      </div>
-      <div className={s.emptyBody}>{tab ? t("ai.empty.body") : t("ai.empty.homeBody")}</div>
-    </div>
+    <EmptyState
+      compact
+      icon="sparkle"
+      title={tab ? t("ai.empty.title", { host: tab.local ? t("terminal.local.thisComputer") : (host?.name ?? tab.title) }) : t("ai.empty.homeTitle")}
+      body={tab ? t("ai.empty.body") : t("ai.empty.homeBody")}
+    />
   );
 }
 
@@ -317,16 +315,17 @@ function EmptyConversation({ tab, host }: { tab: SessionTab | undefined; host: H
 function NoProvider({ none }: { none: boolean }) {
   const t = useT();
   return (
-    <div className={s.empty}>
-      <div className={s.emptyIcon}>
-        <Icon name="plug" size={20} />
-      </div>
-      <div className={s.emptyTitle}>{none ? t("ai.noProvider.title") : t("ai.noModels.title")}</div>
-      {!none && <div className={s.emptyBody}>{t("ai.noModels.body")}</div>}
-      <Button variant="primary" size="sm" icon="gear-six" onClick={() => useApp.getState().openSettings(true, "ai")}>
-        {t("ai.noProvider.open")}
-      </Button>
-    </div>
+    <EmptyState
+      compact
+      icon="plug"
+      title={none ? t("ai.noProvider.title") : t("ai.noModels.title")}
+      body={none ? undefined : t("ai.noModels.body")}
+      actions={
+        <Button variant="primary" size="sm" icon="gear-six" onClick={() => useApp.getState().openSettings(true, "ai")}>
+          {t("ai.noProvider.open")}
+        </Button>
+      }
+    />
   );
 }
 

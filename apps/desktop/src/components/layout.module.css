@@ -101,6 +101,17 @@
   color: var(--fg2);
 }
 
+.searchFill {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Muted, as a field's own controls are. */
+.searchClear {
+  margin-right: -5px;
+  color: var(--fg3);
+}
+
 .searchKbd {
   font-size: var(--text-xs);
   color: var(--fg3);
@@ -265,6 +276,32 @@
   justify-content: center;
   gap: var(--space-8);
   margin-top: 20px;
+}
+
+.emptyCompact {
+  padding: 32px 24px;
+}
+
+.emptyCompact .emptyIcon {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-lg);
+  font-size: var(--icon-20);
+}
+
+.emptyCompact .emptyTitle {
+  font-size: var(--text-lg);
+  overflow-wrap: anywhere;
+}
+
+.emptyCompact .emptyBody {
+  max-width: 300px;
+  font-size: var(--text-sm);
+}
+
+.emptyCompact .emptyActions {
+  margin-top: 14px;
 }
 
 .emptyFoot {

@@ -3,7 +3,7 @@ import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { tagColor } from "@/lib/tags";
-import { Icon, controlStyles } from "./controls";
+import { Icon, IconButton, controlStyles } from "./controls";
 import l from "./layout.module.css";
 
 export { l as layoutStyles };
@@ -47,10 +47,18 @@ export const SearchField = forwardRef<
     onBlur?: () => void;
     /** A list of suggestions under the field: its element id, whether it shows, and the active option's id. */
     popup?: { id: string; open: boolean; active?: string };
+    /** Shows a clear button with this label while the field has text. */
+    clearLabel?: string;
+    /** Takes the whole width of its row, as in a side panel. */
+    fill?: boolean;
+    className?: string;
   }
->(function SearchField({ value, onChange, placeholder, shortcut, width, onFocus, onBlur, popup }, ref) {
+>(function SearchField({ value, onChange, placeholder, shortcut, width, onFocus, onBlur, popup, clearLabel, fill, className }, ref) {
   return (
-    <label className={l.search} style={width ? ({ "--search-width": `${width}px` } as CSSProperties) : undefined}>
+    <label
+      className={cx(l.search, fill && l.searchFill, className)}
+      style={width ? ({ "--search-width": `${width}px` } as CSSProperties) : undefined}
+    >
       <Icon name="magnifying-glass" />
       <input
         ref={ref}
@@ -58,6 +66,7 @@ export const SearchField = forwardRef<
         value={value}
         placeholder={placeholder}
         spellCheck={false}
+        aria-label={placeholder}
         role={popup ? "combobox" : undefined}
         aria-autocomplete={popup ? "list" : undefined}
         aria-expanded={popup ? popup.open : undefined}
@@ -68,12 +77,27 @@ export const SearchField = forwardRef<
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Escape" && value) {
+            e.preventDefault();
             e.stopPropagation();
             onChange("");
           }
         }}
       />
       {shortcut && !value && <span className={l.searchKbd}>{shortcut}</span>}
+      {clearLabel && value && (
+        <IconButton
+          small
+          fill
+          icon="x-circle"
+          size={14}
+          label={clearLabel}
+          className={l.searchClear}
+          onClick={(e) => {
+            onChange("");
+            e.currentTarget.parentElement?.querySelector("input")?.focus();
+          }}
+        />
+      )}
     </label>
   );
 });
@@ -157,15 +181,18 @@ export function EmptyState({
   body,
   actions,
   foot,
+  compact,
 }: {
   icon: string;
   title: ReactNode;
   body?: ReactNode;
   actions?: ReactNode;
   foot?: ReactNode;
+  /** Sized for a side panel or a popover rather than a page. */
+  compact?: boolean;
 }) {
   return (
-    <div className={l.empty}>
+    <div className={cx(l.empty, compact && l.emptyCompact)}>
       <div className={l.emptyIcon}>
         <Icon name={icon} />
       </div>
