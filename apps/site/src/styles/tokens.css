@@ -1,0 +1,160 @@
+/*
+ * The site's design tokens: every colour, text size, space, radius, shadow and duration the pages
+ * use. Stylesheets and components take their values from here, and tokens.test.ts fails on a raw
+ * value elsewhere: add a step here when none fits, rather than a one-off.
+ *
+ * The palette is the night sea of the app icon (app-icon.svg): the night band frames every page,
+ * and the content between sits on plain paper.
+ */
+:root {
+  /* The icon's colours, the same in both schemes. */
+  --night: #0d1735;
+  --night-deep: #091027;
+  --harbor: #24408a;
+  --sea: #22a6e8;
+  --sea-light: #4bb8ee;
+  --deep: #0d4590;
+  --deep-dark: #0b3a7a;
+  --foam: #e3eeff;
+  --white: #ffffff;
+
+  /* Paper: the page between the night bands. */
+  --paper: #ffffff;
+  --mist: #f1f5fb;
+  --ink: #0f1d3d;
+  --ink-2: #4b5a7a;
+  --line: #d9e1ee;
+  --link: #0d4590;
+  --code-bg: #e9eff8;
+  --code-fg: var(--ink);
+
+  /* The solid button on paper, and the white one on the night band. */
+  --accent: var(--deep);
+  --accent-hover: var(--deep-dark);
+  --on-accent: var(--white);
+  --pier: var(--white);
+  --pier-hover: var(--foam);
+  --on-pier: var(--night);
+
+  /* Text, lines and fills on the night band, all from the foam. */
+  --on-night: var(--white);
+  --on-night-2: rgb(227 238 255 / 0.74);
+  --on-night-line: rgb(227 238 255 / 0.35);
+  --on-night-line-strong: rgb(227 238 255 / 0.75);
+  --on-night-hover: rgb(227 238 255 / 0.12);
+  --on-night-current: rgb(227 238 255 / 0.16);
+
+  /* The sea at the foot of the night band. */
+  --sea-surface: rgb(34 166 232 / 0.9);
+  --sea-shallow: rgb(26 132 210 / 0.95);
+
+  /* An app window, and what dims it. */
+  --window-bg: #1c1d21;
+  --window-edge: rgb(255 255 255 / 0.08);
+  --scrim: rgb(9 16 39 / 0.22);
+
+  /* Shadows, all cast by the night. */
+  --shadow-window: 0 0 0 1px var(--window-edge), 0 30px 80px rgb(5 12 40 / 0.45), 0 8px 24px rgb(5 12 40 / 0.25);
+  --shadow-popover: 0 16px 40px rgb(5 12 40 / 0.28);
+  --shadow-float: 0 12px 32px rgb(5 12 40 / 0.45);
+
+  /* Type. */
+  --cjk: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC";
+  --font: "Archivo Variable", "Archivo Fallback", var(--cjk), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --text-xs: 13px; /* checksums, badges, copy buttons */
+  --text-sm: 14px; /* captions, tables, code blocks */
+  --text-md: 15px; /* navigation, footer, side notes */
+  --text-button: 16px;
+  --text-body: 17px;
+  --text-lg: 19px; /* lead paragraphs, list terms, small headings */
+  --text-xl: 21px; /* the wordmark in the header and footer */
+  --text-2xl: 26px; /* headings inside the docs */
+  --text-lead: clamp(19px, 2.1vw, 22px);
+  --text-title: clamp(32px, 4.4vw, 48px); /* a docs page */
+  --text-h2: clamp(30px, 4vw, 44px); /* a section */
+  --text-h1: clamp(40px, 6.4vw, 72px); /* a page, and the closing call */
+  --text-wordmark: clamp(76px, 16vw, 184px);
+
+  --leading-body: 1.7;
+  --leading-tight: 1.25;
+  --leading-snug: 1.5;
+
+  /* Space, in px. */
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-6: 6px;
+  --space-8: 8px;
+  --space-10: 10px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-40: 40px;
+  --space-48: 48px;
+  --space-56: 56px;
+  --space-64: 64px;
+  --space-72: 72px;
+  --space-96: 96px;
+  --space-120: 120px;
+  /* Between the sections of a page, and between text and its picture. */
+  --space-section: clamp(72px, 10vw, 128px);
+  --space-split: clamp(32px, 6vw, 88px);
+  /* Above a page's title in the night band, and between the night band's content and its sea. */
+  --space-page-top: clamp(40px, 7vw, 80px);
+  --space-above-sea: clamp(40px, 6vw, 72px);
+
+  /* Radii. */
+  --radius-sm: 4px; /* inline code, focus rings */
+  --radius-md: 8px; /* menu items, code blocks, list links */
+  --radius-lg: 12px; /* windows, menus */
+  --radius-full: 999px; /* buttons, pills */
+
+  /* Motion. Colour and opacity changes use --duration-fast; reduced motion keeps them and drops movement. */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 400ms;
+  --duration-scene: 800ms; /* the sea making room for the demo */
+  --duration-entrance: 1400ms; /* the window rising out of the sea */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0.7, 0.15, 1);
+
+  /* The height of the waves at the sea's surface (wave.svg), which a page leaves room for. */
+  --wave-height: 36px;
+
+  /* Layout. */
+  --gutter: 24px;
+  --max: 1180px;
+
+  color-scheme: light;
+}
+
+:root:lang(ja) {
+  --cjk: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans CJK JP", "Source Han Sans JP";
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0b1430;
+    --mist: #0f1a3b;
+    --ink: #e6eefc;
+    --ink-2: #a5b4d2;
+    --line: #22325c;
+    --link: #6cc4f2;
+    --code-bg: #182651;
+
+    --accent: var(--sea);
+    --accent-hover: var(--sea-light);
+    --on-accent: var(--night);
+
+    color-scheme: dark;
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --gutter: 16px;
+  }
+}

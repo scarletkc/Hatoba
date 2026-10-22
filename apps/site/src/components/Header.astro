@@ -55,7 +55,7 @@ const link = (target: string) => ({ href: target, "aria-current": current === ta
       </li>
     </ul>
   </nav>
-  {edge && <Sea depth="2px" class="header-sea" />}
+  {edge && <Sea depth="var(--edge-depth)" class="header-sea" />}
 </header>
 
 <script>
@@ -80,7 +80,8 @@ const link = (target: string) => ({ href: target, "aria-current": current === ta
   }
 
   .site-header.edge {
-    padding-bottom: 38px;
+    --edge-depth: 2px;
+    padding-bottom: calc(var(--edge-depth) + var(--wave-height));
   }
 
   /* Above the strip of sea, which comes later in the header, so the language menu opens over it. */
@@ -90,28 +91,28 @@ const link = (target: string) => ({ href: target, "aria-current": current === ta
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--space-16);
     min-height: 72px;
   }
 
   .brand {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-10);
     text-decoration: none;
     font-weight: 800;
-    font-size: 21px;
+    font-size: var(--text-xl);
     letter-spacing: -0.01em;
   }
 
   .brand img {
-    border-radius: 8px;
+    border-radius: var(--radius-md);
   }
 
   .links {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-4);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -121,23 +122,23 @@ const link = (target: string) => ({ href: target, "aria-current": current === ta
   .lang summary {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-8);
     min-height: 40px;
-    padding: 0 12px;
-    border-radius: 999px;
+    padding: 0 var(--space-12);
+    border-radius: var(--radius-full);
     color: var(--on-night);
-    font-size: 15px;
+    font-size: var(--text-md);
     font-weight: 500;
     text-decoration: none;
   }
 
   .links a:hover,
   .lang summary:hover {
-    background: rgb(227 238 255 / 0.1);
+    background: var(--on-night-hover);
   }
 
   .links a[aria-current="page"] {
-    background: rgb(227 238 255 / 0.14);
+    background: var(--on-night-current);
   }
 
   .lang {
@@ -160,19 +161,19 @@ const link = (target: string) => ({ href: target, "aria-current": current === ta
     top: calc(100% + 6px);
     min-width: 160px;
     margin: 0;
-    padding: 6px;
+    padding: var(--space-6);
     list-style: none;
     background: var(--paper);
     border: 1px solid var(--line);
-    border-radius: 12px;
-    box-shadow: 0 16px 40px rgb(5 12 40 / 0.28);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-popover);
   }
 
   .lang ul a {
     display: flex;
     width: 100%;
     color: var(--ink);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
   }
 
   .lang ul a:hover {
@@ -192,7 +193,7 @@ const link = (target: string) => ({ href: target, "aria-current": current === ta
 
     .links a,
     .lang summary {
-      padding: 0 10px;
+      padding: 0 var(--space-10);
     }
   }
 

@@ -1,6 +1,6 @@
 /*
  * Hatoba's site: the night sea of the app icon (a pier standing in seigaiha water) frames the page,
- * and the content between sits on plain paper. Colors come from app-icon.svg.
+ * and the content between sits on plain paper. The values come from tokens.css.
  */
 
 /*
@@ -92,60 +92,6 @@
   line-gap-override: 0%;
   unicode-range: U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F, U+A720-A7FF, U+FEFF, U+FFFD;
 }
-:root {
-  --night: #0d1735;
-  --night-deep: #091027;
-  --harbor: #24408a;
-  --sea: #22a6e8;
-  --deep: #0d4590;
-  --foam: #e3eeff;
-
-  --paper: #ffffff;
-  --mist: #f1f5fb;
-  --ink: #0f1d3d;
-  --ink-2: #4b5a7a;
-  --line: #d9e1ee;
-  --link: #0d4590;
-  --code-bg: #e9eff8;
-
-  --on-night: #ffffff;
-  --on-night-2: rgb(227 238 255 / 0.74);
-
-  --cjk: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC";
-  --font: "Archivo Variable", "Archivo Fallback", var(--cjk), system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-
-  --gutter: 24px;
-  --max: 1180px;
-  --radius: 12px;
-  --body-leading: 1.7;
-
-  color-scheme: light;
-}
-
-:root:lang(ja) {
-  --cjk: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans CJK JP", "Source Han Sans JP";
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #0b1430;
-    --mist: #0f1a3b;
-    --ink: #e6eefc;
-    --ink-2: #a5b4d2;
-    --line: #22325c;
-    --link: #6cc4f2;
-    --code-bg: #182651;
-    color-scheme: dark;
-  }
-}
-
-@media (max-width: 640px) {
-  :root {
-    --gutter: 16px;
-  }
-}
-
 *,
 *::before,
 *::after {
@@ -154,7 +100,7 @@
 
 html {
   -webkit-text-size-adjust: 100%;
-  scroll-padding-top: 24px;
+  scroll-padding-top: var(--space-24);
 }
 
 body {
@@ -162,8 +108,8 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font);
-  font-size: 17px;
-  line-height: var(--body-leading);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
   font-variation-settings: normal;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -189,7 +135,7 @@ a:hover {
 :focus-visible {
   outline: 2px solid var(--sea);
   outline-offset: 3px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 code {
@@ -197,7 +143,7 @@ code {
   font-size: 0.88em;
   background: var(--code-bg);
   padding: 0.12em 0.36em;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   overflow-wrap: anywhere;
 }
 
@@ -206,7 +152,7 @@ h2,
 h3 {
   margin: 0;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: var(--leading-tight);
   letter-spacing: 0;
   text-wrap: balance;
 }
@@ -232,17 +178,17 @@ p {
 
 .skip {
   position: absolute;
-  left: 12px;
+  left: var(--space-12);
   top: -48px;
   z-index: 10;
   background: var(--paper);
   color: var(--ink);
-  padding: 8px 14px;
-  border-radius: 8px;
+  padding: var(--space-8) var(--space-16);
+  border-radius: var(--radius-md);
 }
 
 .skip:focus {
-  top: 12px;
+  top: var(--space-12);
 }
 
 /*
@@ -254,22 +200,24 @@ p {
   letter-spacing: -0.01em;
 }
 
-/* Buttons: the white of the pier on the night sea, or the deep blue of the water on paper. */
+/* Buttons: the white of the pier on the night sea, or the deep blue of the water on paper (the sea in the dark). */
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-10);
   min-height: 48px;
-  padding: 0 22px;
-  border-radius: 999px;
+  padding: 0 var(--space-24);
+  border-radius: var(--radius-full);
   font: inherit;
   font-weight: 600;
-  font-size: 16px;
+  font-size: var(--text-button);
   line-height: 1.2;
   text-decoration: none;
   border: 1px solid transparent;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
 }
 
 .btn:hover {
@@ -281,41 +229,30 @@ p {
 }
 
 .btn-pier {
-  background: #ffffff;
-  color: var(--night);
+  background: var(--pier);
+  color: var(--on-pier);
 }
 
 .btn-pier:hover {
-  background: var(--foam);
+  background: var(--pier-hover);
 }
 
 .btn-outline {
   color: var(--on-night);
-  border-color: rgb(227 238 255 / 0.35);
+  border-color: var(--on-night-line);
 }
 
 .btn-outline:hover {
-  border-color: rgb(227 238 255 / 0.75);
+  border-color: var(--on-night-line-strong);
 }
 
 .btn-deep {
-  background: var(--deep);
-  color: #ffffff;
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .btn-deep:hover {
-  background: #0b3a7a;
-}
-
-@media (prefers-color-scheme: dark) {
-  .btn-deep {
-    background: var(--sea);
-    color: var(--night);
-  }
-
-  .btn-deep:hover {
-    background: #4bb8ee;
-  }
+  background: var(--accent-hover);
 }
 
 /* The night band that heads every page. */
@@ -331,13 +268,10 @@ p {
 
 /* A screenshot of the app, framed as its window. */
 .window {
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  background: #1c1d21;
-  box-shadow:
-    0 0 0 1px rgb(255 255 255 / 0.08),
-    0 30px 80px rgb(5 12 40 / 0.45),
-    0 8px 24px rgb(5 12 40 / 0.25);
+  background: var(--window-bg);
+  box-shadow: var(--shadow-window);
 }
 
 .window img {

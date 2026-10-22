@@ -43,7 +43,7 @@ const description =
         )
       }
     </div>
-    <Sea depth="20px" />
+    <Sea depth="var(--head-sea)" />
   </section>
 
   <div class="container platforms">
@@ -155,31 +155,32 @@ const description =
 
 <style>
   .head {
-    padding: clamp(40px, 7vw, 80px) 0 calc(56px + clamp(40px, 6vw, 64px));
+    --head-sea: 20px;
+    padding: var(--space-page-top) 0 calc(var(--head-sea) + var(--wave-height) + var(--space-above-sea));
     overflow: hidden;
   }
 
   h1 {
-    font-size: clamp(40px, 7vw, 76px);
+    font-size: var(--text-h1);
   }
 
   .released,
   .preview {
-    margin-top: 16px;
+    margin-top: var(--space-16);
     color: var(--on-night-2);
-    font-size: 18px;
+    font-size: var(--text-lg);
   }
 
   .released a,
   .preview a {
-    margin-left: 6px;
+    margin-left: var(--space-6);
   }
 
   /* The visitor's platform comes first. */
   .platforms {
     display: flex;
     flex-direction: column;
-    padding: 24px 0;
+    padding: var(--space-24) 0;
   }
 
   :global(html[data-os="linux"]) #linux,
@@ -191,8 +192,8 @@ const description =
   .platform {
     display: grid;
     grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
-    gap: 24px 64px;
-    padding: 48px 0;
+    gap: var(--space-24) var(--space-64);
+    padding: var(--space-48) 0;
     border-bottom: 1px solid var(--line);
     scroll-margin-top: 16px;
   }
@@ -201,20 +202,20 @@ const description =
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px 12px;
+    gap: var(--space-8) var(--space-12);
   }
 
   h2 {
-    font-size: clamp(30px, 4vw, 40px);
+    font-size: var(--text-h2);
   }
 
   .this-device {
     display: none;
-    padding: 2px 10px;
-    border-radius: 999px;
+    padding: var(--space-2) var(--space-10);
+    border-radius: var(--radius-full);
     background: var(--code-bg);
     color: var(--link);
-    font-size: 13px;
+    font-size: var(--text-xs);
     font-weight: 600;
   }
 
@@ -225,13 +226,13 @@ const description =
   }
 
   .requirements {
-    margin-top: 12px;
+    margin-top: var(--space-12);
     color: var(--ink-2);
   }
 
   .files {
     display: grid;
-    gap: 28px;
+    gap: var(--space-32);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -240,10 +241,10 @@ const description =
   .name {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 12px;
+    gap: var(--space-4) var(--space-12);
     align-items: baseline;
-    margin-top: 12px;
-    font-size: 15px;
+    margin-top: var(--space-12);
+    font-size: var(--text-md);
     color: var(--ink-2);
   }
 
@@ -257,29 +258,29 @@ const description =
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 6px 10px;
-    margin-top: 6px;
-    font-size: 13px;
+    gap: var(--space-6) var(--space-10);
+    margin-top: var(--space-6);
+    font-size: var(--text-xs);
     color: var(--ink-2);
   }
 
   .hash {
-    font-size: 12.5px;
+    font-size: var(--text-xs);
     word-break: break-all;
   }
 
   .copy {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-6);
     min-height: 32px;
-    padding: 0 10px;
+    padding: 0 var(--space-10);
     border: 1px solid var(--line);
-    border-radius: 999px;
+    border-radius: var(--radius-full);
     background: none;
     color: var(--ink-2);
     font: inherit;
-    font-size: 13px;
+    font-size: var(--text-xs);
     cursor: pointer;
   }
 
@@ -314,31 +315,31 @@ const description =
   }
 
   h3 {
-    margin-top: 32px;
-    font-size: 17px;
+    margin-top: var(--space-32);
+    font-size: var(--text-body);
   }
 
   .steps {
-    margin-top: 8px;
+    margin-top: var(--space-8);
     max-width: 44em;
   }
 
   .command {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-top: 12px;
+    gap: var(--space-12);
+    margin-top: var(--space-12);
   }
 
   .command pre {
     flex: 1;
     min-width: 0;
     margin: 0;
-    padding: 12px 16px;
-    border-radius: 10px;
+    padding: var(--space-12) var(--space-16);
+    border-radius: var(--radius-md);
     background: var(--code-bg);
     overflow-x: auto;
-    font-size: 14px;
+    font-size: var(--text-sm);
   }
 
   .command pre code {
@@ -349,16 +350,16 @@ const description =
 
   .more {
     display: grid;
-    gap: 12px;
-    padding: 16px 0 96px;
+    gap: var(--space-12);
+    padding: var(--space-16) 0 var(--space-96);
     color: var(--ink-2);
   }
 
   .more ul {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 24px;
-    margin: 8px 0 0;
+    gap: var(--space-8) var(--space-24);
+    margin: var(--space-8) 0 0;
     padding: 0;
     list-style: none;
   }

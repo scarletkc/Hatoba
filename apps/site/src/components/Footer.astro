@@ -44,26 +44,26 @@ const t = messages(locale);
   .site-footer {
     background: var(--night-deep);
     color: var(--on-night-2);
-    font-size: 15px;
-    padding: 56px 0 64px;
+    font-size: var(--text-md);
+    padding: var(--space-56) 0 var(--space-64);
   }
 
   .inner {
     display: grid;
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 2fr) auto;
-    gap: 32px 48px;
+    gap: var(--space-32) var(--space-48);
     align-items: start;
   }
 
   .name {
     color: var(--on-night);
     font-weight: 800;
-    font-size: 21px;
-    margin-bottom: 4px;
+    font-size: var(--text-xl);
+    margin-bottom: var(--space-4);
   }
 
   .license {
-    margin-top: 16px;
+    margin-top: var(--space-16);
   }
 
   a {
@@ -84,12 +84,12 @@ const t = messages(locale);
 
   .links {
     columns: 2;
-    column-gap: 32px;
+    column-gap: var(--space-32);
   }
 
   .links li,
   .languages li {
-    padding: 4px 0;
+    padding: var(--space-4) 0;
   }
 
   .languages a[aria-current="true"] {
