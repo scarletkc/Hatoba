@@ -22,10 +22,6 @@
   gap: var(--space-4);
 }
 
-.warn i {
-  margin-top: 2px;
-}
-
 .general {
   display: flex;
   align-items: flex-start;

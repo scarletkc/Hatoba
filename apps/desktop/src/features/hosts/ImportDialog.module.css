@@ -96,10 +96,6 @@
   line-height: 1.55;
 }
 
-.error i {
-  margin-top: 1px;
-}
-
 .keys {
   display: flex;
   flex-direction: column;
