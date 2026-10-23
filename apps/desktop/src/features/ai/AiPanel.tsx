@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { useTabs, type SessionTab } from "@/app/tabs";
@@ -30,6 +30,7 @@ import { hostInfo, MessageList } from "./Messages";
 import { chats, conversationModel, hasModels } from "./models";
 import { connectionFor, movedFrom, placeLabel } from "./place";
 import { sideRunning } from "./side";
+import { aiTextScale } from "./textSize";
 import { blankSlot, HOME_SLOT, offersHomeConversation, useAi, type Slot } from "./store";
 import { approvalOf } from "./turn";
 import s from "./AiPanel.module.css";
@@ -129,7 +130,9 @@ export function AiPanel({ slotId }: { slotId: string }) {
     <aside
       ref={panelRef}
       className={s.panel}
-      style={{ width: dragWidth ?? clampWidth(prefWidth || PANEL_DEFAULT_WIDTH) }}
+      // TERM-13: the zoom keys change the text size here, which the conversation and input take.
+      data-zoom="ai"
+      style={{ width: dragWidth ?? clampWidth(prefWidth || PANEL_DEFAULT_WIDTH), "--text-scale": aiTextScale(catalog.settings?.text_size) } as CSSProperties}
       aria-label={t("ai.title")}
       onKeyDown={onKeyDown}
       {...drop.handlers}

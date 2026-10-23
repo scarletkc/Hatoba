@@ -4,6 +4,20 @@
  * Components only reference these variables, never raw colors.
  */
 
+/* Text sizes. Feature styles use these, never raw px (styles.test.ts). An element marked
+   [data-text-scale] works them out again with the --text-scale it inherits: the AI panel's
+   conversation and input take Settings → AI → Text Size that way (TERM-13). */
+:root,
+[data-text-scale] {
+  --text-2xs: calc(10px * var(--text-scale, 1)); /* tiny counts and previews only */
+  --text-xs: calc(11px * var(--text-scale, 1));
+  --text-sm: calc(12px * var(--text-scale, 1));
+  --text-md: calc(13px * var(--text-scale, 1));
+  --text-lg: calc(15px * var(--text-scale, 1));
+  --text-xl: calc(17px * var(--text-scale, 1));
+  --text-title: calc(20px * var(--text-scale, 1));
+}
+
 :root {
   /* Typography (WIN-02: Segoe UI Variable / Cascadia Mono on Windows, SF on macOS) */
   --font-sans: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont,
@@ -11,15 +25,6 @@
     Helvetica, Arial, sans-serif;
   --font-mono: "Cascadia Mono", Consolas, ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono",
     "Microsoft YaHei UI", "Yu Gothic UI", monospace;
-
-  /* Text sizes. Feature styles use these, never raw px (styles.test.ts). */
-  --text-2xs: 10px; /* tiny counts and previews only */
-  --text-xs: 11px;
-  --text-sm: 12px;
-  --text-md: 13px;
-  --text-lg: 15px;
-  --text-xl: 17px;
-  --text-title: 20px;
 
   /* Icon glyph sizes (Phosphor is a font, so these set font-size) */
   --icon-10: 10px;

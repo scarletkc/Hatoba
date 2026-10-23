@@ -1070,6 +1070,8 @@ export type AiSettingsPatch = {
 	send_terminal_screen?: boolean | null,
 	judge_model?: AiModelRef | null,
 	memory?: boolean | null,
+	/**  Kept within 11 to 24. */
+	text_size?: number | null,
 };
 
 /**  The synced `Settings.ai` (§5.1). */
@@ -1099,6 +1101,8 @@ export type AiSettingsView = {
 	judge_model: AiModelRef | null,
 	/**  Conversations start with the memories, and the assistant saves them (AI-53). */
 	memory: boolean,
+	/**  The AI panel's conversation and input text size in px, 11 to 24 (TERM-13). */
+	text_size: number,
 };
 
 /**  The answer to a side question (AI-42), which nothing stores. */

@@ -1,5 +1,7 @@
 import { useEffect } from "react";
 import { toast } from "@/components/overlay";
+import { useAi } from "@/features/ai/store";
+import { AI_TEXT_SIZE_DEFAULT, AI_TEXT_SIZE_MAX, AI_TEXT_SIZE_MIN } from "@/features/ai/textSize";
 import { defaultTerminalSettings, FONT_SIZE_MAX, FONT_SIZE_MIN, useTermSettings } from "@/features/terminal/theme";
 import { t } from "@/i18n";
 import { api } from "@/ipc/api";
@@ -10,11 +12,12 @@ import { matchZoom, type ZoomAction } from "./shortcuts";
 import { useApp } from "./store";
 import { showZoomHud } from "./ZoomHud";
 
-export type ZoomTarget = "terminal" | "interface";
+export type ZoomTarget = "terminal" | "ai" | "interface";
 
-/** What a zoom at `el` changes (TERM-13): the terminal font in a terminal, else the interface. */
+/** What a zoom at `el` changes (TERM-13): the terminal font in a terminal, the AI text in the AI panel, else the interface. */
 export function zoomTarget(el: Element | null): ZoomTarget {
   if (el?.closest(".xterm")) return "terminal";
+  if (el?.closest("[data-zoom='ai']")) return "ai";
   return "interface";
 }
 
@@ -25,10 +28,10 @@ export function nextZoom(current: number, action: ZoomAction, max: number): numb
   return Math.min(next ?? current, max);
 }
 
-/** The next terminal font size from `current`. */
-export function nextFontSize(current: number, action: ZoomAction, platform: Platform): number {
-  if (action === "reset") return defaultTerminalSettings(platform).font_size;
-  return Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, current + (action === "in" ? 1 : -1)));
+/** The next size from `current`, one px a step within `min` and `max`. */
+export function nextSize(current: number, action: ZoomAction, { min, max, reset }: { min: number; max: number; reset: number }): number {
+  if (action === "reset") return reset;
+  return Math.min(max, Math.max(min, current + (action === "in" ? 1 : -1)));
 }
 
 /**
@@ -54,6 +57,7 @@ function latestSaver<V>(save: (v: V) => Promise<unknown>): (v: V) => void {
 }
 
 const saveFontSize = latestSaver((font_size: number) => api.settings_save({ terminal: { font_size } }));
+const saveAiTextSize = latestSaver((text_size: number) => api.ai_settings_save({ text_size }));
 
 async function zoomInterface(action: ZoomAction) {
   const app = useApp.getState();
@@ -65,7 +69,8 @@ async function zoomInterface(action: ZoomAction) {
 /** Every terminal tab takes the new size, which is the synced Settings → Terminal → Font Size. */
 function zoomTerminal(action: ZoomAction, el: Element | null, platform: Platform) {
   const { settings } = useTermSettings.getState();
-  const font_size = nextFontSize(settings.font_size, action, platform);
+  const reset = defaultTerminalSettings(platform).font_size;
+  const font_size = nextSize(settings.font_size, action, { min: FONT_SIZE_MIN, max: FONT_SIZE_MAX, reset });
   if (font_size !== settings.font_size) {
     useTermSettings.setState({ settings: { ...settings, font_size } });
     saveFontSize(font_size);
@@ -74,9 +79,28 @@ function zoomTerminal(action: ZoomAction, el: Element | null, platform: Platform
   showZoomHud(`${font_size} px`, term?.getBoundingClientRect() ?? null);
 }
 
+/** The panel's conversation and input take the new size, which is the synced Settings → AI → Text Size. */
+function zoomAiText(action: ZoomAction, el: Element | null) {
+  const { catalog } = useAi.getState();
+  const settings = catalog.settings;
+  if (!settings) return;
+  const text_size = nextSize(settings.text_size, action, { min: AI_TEXT_SIZE_MIN, max: AI_TEXT_SIZE_MAX, reset: AI_TEXT_SIZE_DEFAULT });
+  if (text_size !== settings.text_size) {
+    useAi.setState({ catalog: { ...catalog, settings: { ...settings, text_size } } });
+    saveAiTextSize(text_size);
+  }
+  showZoomHud(`${text_size} px`, el?.closest("[data-zoom='ai']")?.getBoundingClientRect() ?? null);
+}
+
 function zoom(action: ZoomAction, el: Element | null, platform: Platform) {
-  if (zoomTarget(el) === "terminal") zoomTerminal(action, el, platform);
-  else zoomInterface(action).catch((e) => toast(errorMessage(t, e), "error"));
+  switch (zoomTarget(el)) {
+    case "terminal":
+      return zoomTerminal(action, el, platform);
+    case "ai":
+      return zoomAiText(action, el);
+    case "interface":
+      return void zoomInterface(action).catch((e) => toast(errorMessage(t, e), "error"));
+  }
 }
 
 /** Wheel pixels per zoom step: a mouse notch is about 100, a touchpad pinch many small deltas. */

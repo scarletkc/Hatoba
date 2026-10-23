@@ -1150,6 +1150,8 @@ export interface AiSettingsView {
   judge_model: AiModelRef | null;
   /** Conversations start with the memories, and the assistant saves them (AI-53). */
   memory: boolean;
+  /** The AI panel's conversation and input text size in px, 11 to 24 (TERM-13). */
+  text_size: number;
 }
 
 /** What `ai_settings_save` changes, like {@link SettingsPatch}; null clears a field that can be empty. */

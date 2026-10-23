@@ -2,44 +2,6 @@
   width: 220px;
 }
 
-.stepper {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px;
-  border-radius: var(--radius-sm);
-  background: var(--fill);
-}
-
-.stepper button {
-  width: 28px;
-  height: 22px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--fg2);
-  font-size: var(--icon-12);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.stepper button:hover:not(:disabled) {
-  background: var(--segon);
-  box-shadow: var(--shadow-seg);
-  color: var(--fg);
-}
-
-.stepper button:disabled {
-  color: var(--fg3);
-}
-
-.stepValue {
-  min-width: 34px;
-  text-align: center;
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-}
-
 /* Live preview of font, size and cursor */
 .preview {
   padding: 12px 14px;

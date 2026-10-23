@@ -334,7 +334,7 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
   };
 
   return (
-    <div className={s.composer}>
+    <div className={s.composer} data-text-scale>
       {queued && <QueuedCard slotId={slotId} queued={queued} />}
       {failed.length > 0 && (
         <div className={s.mcpFailed} role="status">

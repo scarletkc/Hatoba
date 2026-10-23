@@ -293,6 +293,37 @@ export function Segmented<V extends string>({
   );
 }
 
+/** A number with − and + buttons, one step each (Settings → Terminal → Font Size, Settings → AI → Text Size). */
+export function Stepper({
+  value,
+  min,
+  max,
+  downLabel,
+  upLabel,
+  onChange,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  downLabel: string;
+  upLabel: string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className={s.stepper}>
+      <button type="button" aria-label={downLabel} title={downLabel} disabled={value <= min} onClick={() => onChange(value - 1)}>
+        <Icon name="minus" />
+      </button>
+      <span className={s.stepValue} aria-live="polite">
+        {value}
+      </span>
+      <button type="button" aria-label={upLabel} title={upLabel} disabled={value >= max} onClick={() => onChange(value + 1)}>
+        <Icon name="plus" />
+      </button>
+    </div>
+  );
+}
+
 export function Switch({
   checked,
   onChange,

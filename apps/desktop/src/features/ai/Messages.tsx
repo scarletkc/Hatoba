@@ -371,7 +371,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
   const busy = running || slot.compacting || slot.loading || slot.reverting;
 
   return (
-    <div ref={ref} className={s.list} onScroll={bottom.onScroll} onWheel={bottom.onWheel} onKeyDown={bottom.onKeyDown}>
+    <div ref={ref} className={s.list} data-text-scale onScroll={bottom.onScroll} onWheel={bottom.onWheel} onKeyDown={bottom.onKeyDown}>
       {isEmpty && !slot.loading && empty}
       {slot.loading && entries.length === 0 && (
         <StatusLine tone="progress">{t("ai.loading")}</StatusLine>

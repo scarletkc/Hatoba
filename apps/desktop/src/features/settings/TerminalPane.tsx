@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/app/store";
-import { Icon, Segmented, TextField } from "@/components/controls";
+import { Segmented, Stepper, TextField } from "@/components/controls";
 import { Group } from "@/components/layout";
 import { PopupSelect } from "@/components/overlay";
 import { loadLocalShells, shellName } from "@/features/terminal/localShells";
@@ -142,35 +142,5 @@ function LocalShellRow({ shells, value, onChange }: { shells: LocalShellView[]; 
         onChange={(id) => onChange(id === "" ? null : id)}
       />
     </SettingRow>
-  );
-}
-
-function Stepper({
-  value,
-  min,
-  max,
-  downLabel,
-  upLabel,
-  onChange,
-}: {
-  value: number;
-  min: number;
-  max: number;
-  downLabel: string;
-  upLabel: string;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <div className={s.stepper}>
-      <button type="button" aria-label={downLabel} title={downLabel} disabled={value <= min} onClick={() => onChange(value - 1)}>
-        <Icon name="minus" />
-      </button>
-      <span className={s.stepValue} aria-live="polite">
-        {value}
-      </span>
-      <button type="button" aria-label={upLabel} title={upLabel} disabled={value >= max} onClick={() => onChange(value + 1)}>
-        <Icon name="plus" />
-      </button>
-    </div>
   );
 }

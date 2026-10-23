@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useVaultData } from "@/app/data";
-import { Button, Icon, IconButton, Segmented, Switch, controlStyles } from "@/components/controls";
+import { Button, Icon, IconButton, Segmented, Stepper, Switch, controlStyles } from "@/components/controls";
 import { Group, layoutStyles } from "@/components/layout";
 import { Menu, PopupSelect, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { HintText, ListRow, StatusLine } from "@/components/patterns";
@@ -9,6 +9,7 @@ import { EFFORTS, effortKey } from "@/features/ai/effort";
 import { answersText, verdictText } from "@/features/ai/autoText";
 import { InstructionsField } from "@/features/ai/InstructionsField";
 import { judgeChosen } from "@/features/ai/models";
+import { AI_TEXT_SIZE_MAX, AI_TEXT_SIZE_MIN } from "@/features/ai/textSize";
 import { byteCount, INSTRUCTIONS_MAX_BYTES } from "@/features/ai/instructions";
 import { toolLabel } from "@/features/ai/tools";
 import { useT, type MessageKey } from "@/i18n";
@@ -268,6 +269,23 @@ export function AiPane() {
                 label={t("aiSettings.screen.row")}
                 checked={data.settings.send_terminal_screen}
                 onChange={(send_terminal_screen) => void saveSettings({ send_terminal_screen })}
+              />
+            </SettingRow>
+          </Group>
+        </section>
+      )}
+      {data && (
+        <section className={layoutStyles.section}>
+          <div className={layoutStyles.sectionTitle}>{t("aiSettings.panel")}</div>
+          <Group>
+            <SettingRow label={t("aiSettings.textSize")} hint={t("aiSettings.textSize.hint")}>
+              <Stepper
+                value={data.settings.text_size}
+                min={AI_TEXT_SIZE_MIN}
+                max={AI_TEXT_SIZE_MAX}
+                downLabel={t("aiSettings.textSize.down")}
+                upLabel={t("aiSettings.textSize.up")}
+                onChange={(text_size) => void saveSettings({ text_size })}
               />
             </SettingRow>
           </Group>

@@ -1,4 +1,5 @@
 import { byteCount, INSTRUCTIONS_MAX_BYTES } from "@/features/ai/instructions";
+import { AI_TEXT_SIZE_DEFAULT, AI_TEXT_SIZE_MAX, AI_TEXT_SIZE_MIN } from "@/features/ai/textSize";
 import type { HatobaApi } from "../api";
 import { applyPatch } from "./patch";
 import type {
@@ -174,6 +175,7 @@ export function createAiSettingsMock(): AiSettingsApi {
     // AI-47: Auto mode's judge, a fast model of a configured provider.
     judge_model: providers.length && !flags.has("nojudge") ? { provider_id: "p-anthropic", model_id: "claude-haiku-5-5" } : null,
     memory: true,
+    text_size: AI_TEXT_SIZE_DEFAULT,
   };
 
   let allowances: AiAllowance[] = [];
@@ -427,7 +429,9 @@ export function createAiSettingsMock(): AiSettingsApi {
       const chosen = patch.default_model && providers.find((p) => p.id === patch.default_model?.provider_id);
       if (chosen && chosen.protocol === "system_one")
         throw { code: "invalid_input", detail: "a System One model cannot chat", field: "default_model" } satisfies AppError;
-      settings = applyPatch(settings, structuredClone(patch));
+      // Like Rust (TERM-13).
+      const text_size = patch.text_size === undefined ? {} : { text_size: Math.min(AI_TEXT_SIZE_MAX, Math.max(AI_TEXT_SIZE_MIN, patch.text_size)) };
+      settings = applyPatch(settings, structuredClone({ ...patch, ...text_size }));
     },
     // AI-47: Test beside the judge, with fixed answers (`JUDGE_SAMPLES`); like Rust, the judge must be listed.
     ai_judge_test: async (judge) => {

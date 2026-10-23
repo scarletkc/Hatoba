@@ -12,9 +12,10 @@ use hatoba_ai::models::{TestFailure, TestOutcome};
 use hatoba_ai::provider::{ProviderConfig, validate_base_url};
 use hatoba_ai::web::SearchConfig;
 use hatoba_core::model::{
-    AiAuthHeader as CoreAuthHeader, AiConversation, AiModel as CoreModel, AiModelRef as CoreRef,
-    AiProtocol as CoreProtocol, AiProvider, AiSettings, Item, MAX_CUSTOM_INSTRUCTIONS_BYTES,
-    MAX_ITEM_PLAINTEXT_BYTES, SETTINGS_ID, SearchKind as CoreSearchKind, SearchProvider,
+    AI_TEXT_SIZE_MAX, AI_TEXT_SIZE_MIN, AiAuthHeader as CoreAuthHeader, AiConversation,
+    AiModel as CoreModel, AiModelRef as CoreRef, AiProtocol as CoreProtocol, AiProvider,
+    AiSettings, Item, MAX_CUSTOM_INSTRUCTIONS_BYTES, MAX_ITEM_PLAINTEXT_BYTES, SETTINGS_ID,
+    SearchKind as CoreSearchKind, SearchProvider,
 };
 use hatoba_core::{SnapshotKey, Vault};
 use tauri::ipc::Channel;
@@ -172,6 +173,7 @@ fn ai_settings_view(s: &AiSettings) -> AiSettingsView {
         send_terminal_screen: s.send_terminal_screen,
         judge_model: s.judge_model.as_ref().map(model_ref_view),
         memory: s.memory,
+        text_size: s.text_size,
     }
 }
 
@@ -897,6 +899,9 @@ pub(crate) fn save_ai_settings(v: &mut Vault, patch: &AiSettingsPatch) -> AppRes
             .unwrap_or(current.send_terminal_screen),
         judge_model,
         memory: patch.memory.unwrap_or(current.memory),
+        text_size: patch.text_size.map_or(current.text_size, |size| {
+            size.clamp(AI_TEXT_SIZE_MIN, AI_TEXT_SIZE_MAX)
+        }),
     };
     if ai == settings.ai {
         return Ok(false);
@@ -1789,6 +1794,16 @@ mod tests {
         save_ai_settings(&mut v, &forgetful).unwrap();
         assert!(!ai_settings_view(&v.settings().ai).memory);
         assert!(!v.settings().ai.send_terminal_screen);
+
+        // TERM-13: and so is the text size, kept within its range.
+        assert_eq!(ai_settings_view(&v.settings().ai).text_size, 13);
+        save_ai_settings(&mut v, &patch(|p| p.text_size = Some(16))).unwrap();
+        assert_eq!(v.settings().ai.text_size, 16);
+        save_ai_settings(&mut v, &patch(|p| p.text_size = Some(99))).unwrap();
+        assert_eq!(v.settings().ai.text_size, 24);
+        save_ai_settings(&mut v, &patch(|p| p.text_size = Some(1))).unwrap();
+        assert_eq!(v.settings().ai.text_size, 11);
+        assert!(!v.settings().ai.memory);
 
         // AI-14: and so is native search, on until turned off.
         assert!(ai_settings_view(&v.settings().ai).native_search);

@@ -1278,7 +1278,16 @@ pub struct AiSettings {
     /// Conversations start with the memories, and the assistant can save and delete them (AI-53).
     /// On by default, also for settings written before it existed.
     pub memory: bool,
+    /// The size of the AI panel's conversation and input text, in px (TERM-13), from
+    /// [`AI_TEXT_SIZE_MIN`] to [`AI_TEXT_SIZE_MAX`]. [`AI_TEXT_SIZE_DEFAULT`] for settings written
+    /// before it existed.
+    pub text_size: u32,
 }
+
+/// The AI panel's text sizes (TERM-13), in px.
+pub const AI_TEXT_SIZE_MIN: u32 = 11;
+pub const AI_TEXT_SIZE_MAX: u32 = 24;
+pub const AI_TEXT_SIZE_DEFAULT: u32 = 13;
 
 /// The longest [`AiSettings::custom_instructions`], in bytes of UTF-8 (AI-36). Plain text this long
 /// fits the settings item; text whose JSON is much longer (many quotes or backslashes) may not,
@@ -1297,6 +1306,7 @@ impl Default for AiSettings {
             send_terminal_screen: true,
             judge_model: None,
             memory: true,
+            text_size: AI_TEXT_SIZE_DEFAULT,
         }
     }
 }
@@ -2296,7 +2306,8 @@ mod tests {
                 "custom_instructions": "Answer in English.",
                 "send_terminal_screen": true,
                 "judge_model": {"provider_id": "p2", "model_id": "jev-latest"},
-                "memory": true
+                "memory": true,
+                "text_size": 13
             })
         );
         assert_eq!(
@@ -2307,7 +2318,8 @@ mod tests {
                 "native_search": true,
                 "builtin_skill_enabled": true,
                 "send_terminal_screen": true,
-                "memory": true
+                "memory": true,
+                "text_size": 13
             })
         );
 
@@ -2356,6 +2368,8 @@ mod tests {
         assert!(ai.memory);
         let forgetful = read(json!({"type": "settings", "ai": {"memory": false}}));
         assert!(!forgetful.as_settings().unwrap().ai.memory);
+        // And those written before the AI text size (TERM-13) have the default.
+        assert_eq!(ai.text_size, AI_TEXT_SIZE_DEFAULT);
         let memory = read(json!({"type": "ai_memory", "name": "web-1", "extra": 1}));
         assert_eq!(
             memory,

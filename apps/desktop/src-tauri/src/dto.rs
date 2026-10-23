@@ -1725,6 +1725,8 @@ pub struct AiSettingsView {
     pub judge_model: Option<AiModelRef>,
     /// Conversations start with the memories, and the assistant saves them (AI-53).
     pub memory: bool,
+    /// The AI panel's conversation and input text size in px, 11 to 24 (TERM-13).
+    pub text_size: u32,
 }
 
 /// What `ai_settings_save` changes in `Settings.ai`, like [`SettingsPatch`]: a field left out keeps
@@ -1746,6 +1748,8 @@ pub struct AiSettingsPatch {
     #[specta(type = Option<AiModelRef>)]
     pub judge_model: Clearable<AiModelRef>,
     pub memory: Option<bool>,
+    /// Kept within 11 to 24.
+    pub text_size: Option<u32>,
 }
 
 /// A patch field that `null` clears.
