@@ -6,6 +6,10 @@ import type { TerminalSettings } from "@/ipc/types";
 import { defaultRightClick, defaultTerminalFont, type Platform } from "@/lib/platform";
 import { DEFAULT_SCHEME, schemeFor, type TermMode, type TermScheme } from "./schemes";
 
+/** The terminal font sizes Settings and the zoom keys offer (TERM-06, TERM-13). */
+export const FONT_SIZE_MIN = 10;
+export const FONT_SIZE_MAX = 24;
+
 /** Used until `settings_get` answers, and when it fails. */
 export function defaultTerminalSettings(platform: Platform): TerminalSettings {
   return {

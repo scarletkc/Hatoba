@@ -27,6 +27,8 @@ import { ResizeHandles } from "./ResizeHandles";
 import { useVaultData } from "./data";
 import { useLaunches } from "./launch";
 import { useShortcuts, type ShortcutAction } from "./shortcuts";
+import { useZoomKeys } from "./zoomKeys";
+import { ZoomHud } from "./ZoomHud";
 import { Sidebar } from "./Sidebar";
 import { useApp, type HostFilter, type Page } from "./store";
 import { useTabs } from "./tabs";
@@ -45,6 +47,7 @@ export function App() {
 
   useGlobalEvents();
   useWindowChrome();
+  useZoomKeys(platform);
   useAiLifecycle();
   useActivityPing(phase === "unlocked");
   useAutoUpdateCheck(phase === "unlocked");
@@ -63,6 +66,7 @@ export function App() {
         <ConfirmHost />
         <ClosePrompt />
         <ToastHost />
+        <ZoomHud />
         <ContextMenuHost platform={platform} />
         <ResizeHandles platform={platform} />
       </>
@@ -84,6 +88,7 @@ export function App() {
       <ConfirmHost />
       <ClosePrompt />
       <ToastHost />
+      <ZoomHud />
       <ContextMenuHost platform={platform} />
       <ResizeHandles platform={platform} />
     </>

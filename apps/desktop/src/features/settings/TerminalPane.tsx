@@ -4,6 +4,7 @@ import { Icon, Segmented, TextField } from "@/components/controls";
 import { Group } from "@/components/layout";
 import { PopupSelect } from "@/components/overlay";
 import { loadLocalShells, shellName } from "@/features/terminal/localShells";
+import { FONT_SIZE_MAX, FONT_SIZE_MIN } from "@/features/terminal/theme";
 import { useT } from "@/i18n";
 import type { LocalShellView, TerminalSettings } from "@/ipc/types";
 import { isImeEvent } from "@/lib/ime";
@@ -11,8 +12,6 @@ import { defaultTerminalFont } from "@/lib/platform";
 import { Pane, SettingRow, usePrefs, type PaneProps } from "./shared";
 import s from "./TerminalPane.module.css";
 
-const SIZE_MIN = 10;
-const SIZE_MAX = 24;
 const SCROLLBACK = [1000, 5000, 10000, 50000];
 
 /** Settings → Terminal (TERM-05 / TERM-06): font, cursor and scrollback, and the local tabs' shell (LOCAL-02). */
@@ -77,8 +76,8 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
         <SettingRow label={t("settings.term.size")}>
           <Stepper
             value={term.font_size}
-            min={SIZE_MIN}
-            max={SIZE_MAX}
+            min={FONT_SIZE_MIN}
+            max={FONT_SIZE_MAX}
             downLabel={t("settings.term.sizeDown")}
             upLabel={t("settings.term.sizeUp")}
             onChange={(font_size) => updateTerminal({ font_size })}
