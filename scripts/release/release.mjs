@@ -168,9 +168,9 @@ export function releaseTarget(version, root = ROOT) {
 }
 
 /**
- * The commit to release: where the release pull request set the version that HEAD records, which is
- * the oldest commit since then on HEAD's first-parent history to change Cargo.toml. Commits merged
- * after it go into the next release.
+ * The commit to release: where the release pull request set the version that HEAD records, the oldest
+ * commit since then on HEAD's first-parent history to change Cargo.toml, or a later one that changed
+ * the version's release note, such as a fix to it. Commits merged after it go into the next release.
  */
 export function releaseCommit(version, root = ROOT) {
   const manifest = VERSION_FILES.find((file) => file.path === "Cargo.toml");
@@ -180,7 +180,8 @@ export function releaseCommit(version, root = ROOT) {
     found = sha;
   }
   if (found === null) throw new Error(`No commit on HEAD's history sets version ${version} in ${manifest.path}.`);
-  return found;
+  const noted = git(["log", "--first-parent", "-1", "--format=%H", "HEAD", "--", `${NOTES_DIR}/${version}.md`], root);
+  return noted && git(["rev-list", "--count", `${found}..${noted}`], root) !== "0" ? noted : found;
 }
 
 /**
@@ -362,11 +363,15 @@ async function github(path, { allowMissing = false } = {}) {
 
 async function gate(repository, root = ROOT) {
   const sha = git(["rev-parse", "HEAD"], root);
-  const { workflow_runs: runs } = await github(`${repository}/actions/workflows/ci.yml/runs?status=success&per_page=100`);
+  // The release commit's own run first, which the latest runs may no longer include.
+  const runs = [
+    ...(await github(`${repository}/actions/workflows/ci.yml/runs?status=success&head_sha=${sha}`)).workflow_runs,
+    ...(await github(`${repository}/actions/workflows/ci.yml/runs?status=success&per_page=100`)).workflow_runs,
+  ];
   const passed = runs.find((run) => ciCovers(run.head_sha, sha, root));
   if (!passed) {
     throw new Error(
-      `CI has not passed on ${sha.slice(0, 7)}, or on an earlier commit that differs from it only in files CI skips. Wait for CI on this commit to pass, or run CI on this branch from the Actions tab, then rerun this workflow.`,
+      `CI has not passed on the release commit ${sha.slice(0, 7)}, or on an earlier commit that differs from it only in files CI skips. Wait for CI on it to pass, or rerun the failed jobs of its CI run, then rerun this workflow.`,
     );
   }
   console.log(`CI passed on ${passed.head_sha.slice(0, 7)}: ${passed.html_url}`);

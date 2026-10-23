@@ -132,24 +132,28 @@ test("refuses a release tag that points to another commit", (t) => {
   assert.deepEqual(releaseTarget("0.2.0", repo.root), { tag: "v0.2.0", sha: head });
 });
 
-test("releases the commit that set the version, not those merged after it", (t) => {
+test("releases the commit that set the version or last changed its note, not those merged after it", (t) => {
   const repo = repository(t);
   const commit = (subject, version, members = "[]") => {
-    writeFileSync(join(repo.root, "Cargo.toml"), `[workspace]
-members = ${members}
-
-[workspace.package]
-version = "${version}"
-`);
+    writeFileSync(join(repo.root, "Cargo.toml"), `[workspace]\nmembers = ${members}\n\n[workspace.package]\nversion = "${version}"\n`);
     repo.run("add", "--all");
     repo.run("commit", "--quiet", "-m", subject);
     return repo.run("rev-parse", "HEAD");
   };
-  commit("Initial commit", "0.1.0");
+  const first = commit("Initial commit", "0.1.0");
+  assert.equal(releaseCommit("0.1.0", repo.root), first);
+  repo.note("0.1.0", "## First\n\nThe first release.\n");
+  const noted = commit("docs: the first release note (#2)", "0.1.0");
+  assert.equal(releaseCommit("0.1.0", repo.root), noted);
+  repo.note("0.2.0", "## Second\n\nMore.\n");
   const prepared = commit("chore(release): prepare v0.2.0 (#3)", "0.2.0");
   repo.commit("fix: later (#4)");
   commit("build: add a crate (#5)", "0.2.0", '["app"]');
   assert.equal(releaseCommit("0.2.0", repo.root), prepared);
+  repo.note("0.2.0", "## Second\n\nMore, spelled right.\n");
+  const fixed = commit("docs: fix the 0.2.0 note (#6)", "0.2.0", '["app"]');
+  repo.commit("fix: after the note (#7)");
+  assert.equal(releaseCommit("0.2.0", repo.root), fixed);
   assert.throws(() => releaseCommit("0.3.0", repo.root), /No commit on HEAD's history sets version 0\.3\.0/);
 });
 

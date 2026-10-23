@@ -59,7 +59,7 @@ Commit the changes, open a pull request titled `chore(release): prepare vX.Y.Z`,
 
 ## Publish
 
-1. In **Actions → Release → Run workflow**, choose `main`. The workflow releases the release pull request's commit, where `main` got the version it records (`releaseCommit` in `release.mjs`), not the latest commit: what is merged after the release pull request goes into the next release. The installers are built from that commit, and the release tags it.
+1. In **Actions → Release → Run workflow**, choose `main`. The workflow releases the release pull request's commit, where `main` got the version it records, or a later commit that changed that version's release note, such as a fix to it (`releaseCommit` in `release.mjs`). It does not release the latest commit: what is merged after them goes into the next release. The installers are built from that commit, and the release tags it.
 2. **Preflight** runs the script tests and checks that:
    - the version files agree, and `vX.Y.Z` does not point to another commit
    - the release note is valid, or an earlier release exists to list changes from

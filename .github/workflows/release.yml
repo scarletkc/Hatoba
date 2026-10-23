@@ -35,8 +35,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # The release commit, where the release pull request set the version: what is merged after it
-      # goes into the next release. The steps below and the other jobs use that commit.
+      # The release commit, where the release pull request set the version, or a later fix to the
+      # version's release note: what is merged after it goes into the next release. The steps below
+      # and the other jobs use that commit.
       - id: commit
         run: |
           sha=$(node scripts/release/release.mjs commit)
