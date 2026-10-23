@@ -1,8 +1,8 @@
-/* Measured on macOS 26 against the native buttons: 14 window pixels across, 23 apart, the first
-   18 from the left edge and 11 from the top, at every interface zoom. */
+/* Where the native buttons are, as measured on macOS 26 (platform/window.rs): 14 window pixels across, 23 apart,
+   the first 18 from the left edge, and centered 22 from the top, at every interface zoom. */
 .lights {
   position: fixed;
-  top: calc(11 * var(--window-px));
+  top: calc(15 * var(--window-px));
   left: calc(18 * var(--window-px));
   z-index: 2147483647;
   display: flex;
