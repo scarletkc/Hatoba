@@ -2,12 +2,14 @@
 (() => {
   const box = document.getElementById("box");
   const native = window.devicePixelRatio;
+  const own = Object.getOwnPropertyDescriptor(window, "devicePixelRatio");
   let override;
   try {
     Object.defineProperty(window, "devicePixelRatio", { configurable: true, get: () => native * 7 });
     const seen = window.devicePixelRatio;
-    delete window.devicePixelRatio;
-    override = { seen, restored: window.devicePixelRatio };
+    if (own) Object.defineProperty(window, "devicePixelRatio", own);
+    else delete window.devicePixelRatio;
+    override = { seen, restored: window.devicePixelRatio, own: own ? Object.keys(own) : null };
   } catch (e) {
     override = String(e);
   }
