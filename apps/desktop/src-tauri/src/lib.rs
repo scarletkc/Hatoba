@@ -262,6 +262,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             dto::ForwardsLostEvent,
             dto::McpServerStatus,
             dto::WindowChromeEvent,
+            dto::ZoomView,
             dto::LaunchEvent,
             dto::CliActivityEvent,
             dto::ClosePromptEvent,
@@ -348,6 +349,23 @@ pub fn run() {
                 // WIN-10: whether a tray shows when the close button is clicked.
                 #[cfg(target_os = "linux")]
                 tray::refresh_host();
+            }
+            // TERM-13: another screen may allow less zoom, or more of the device's preference.
+            tauri::WindowEvent::Moved(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
+                if window.label() == platform::window::MAIN =>
+            {
+                let app = window.app_handle();
+                let Some(webview) = app.get_webview_window(platform::window::MAIN) else {
+                    return;
+                };
+                let percent = || {
+                    let state = app.state::<state::AppState>();
+                    let prefs = state.vault().local_prefs().ok().flatten();
+                    prefs.map_or(100, |j| dto::LocalPrefs::from_stored(&j).ui_zoom)
+                };
+                if let Some(zoom) = platform::window::follow_screen(&webview, percent) {
+                    let _ = tauri_specta::Event::emit(&zoom, app);
+                }
             }
             // AI-35: the AI panel may read the files of the last drop, and no others.
             tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {

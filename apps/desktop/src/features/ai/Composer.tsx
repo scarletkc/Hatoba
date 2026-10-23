@@ -103,13 +103,14 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
     el.scrollTop = el.scrollHeight;
   }, [focusTick]);
 
-  // Grow with the text up to a few lines.
+  // Grow with the text up to a few lines, also when Text Size changes them (TERM-13).
+  const textSize = useAi((st) => st.catalog.settings?.text_size);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 168)}px`;
-  }, [slot.draft]);
+  }, [slot.draft, textSize]);
 
   // AI-20 and AI-35: the context in use, and whether the next message with its attachments fits.
   const ctxWindow = findModel(providers, model)?.model.context_window ?? null;

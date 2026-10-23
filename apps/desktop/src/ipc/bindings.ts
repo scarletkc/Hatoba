@@ -594,6 +594,7 @@ export const events = {
 	vaultLocked: makeEvent<VaultLockedEvent>("vault://locked"),
 	windowChrome: makeEvent<WindowChromeEvent>("window://chrome"),
 	windowClosePrompt: makeEvent<ClosePromptEvent>("window://close-prompt"),
+	windowZoom: makeEvent<ZoomView>("window://zoom"),
 };
 
 /* Types */
@@ -2700,7 +2701,10 @@ export type WorkerUpdateKind =
 /**  A newer `api` than this app speaks: sync is paused until Hatoba is updated. */
 "app_required";
 
-/**  The interface zoom in effect (TERM-13). */
+/**
+ *  The interface zoom in effect (TERM-13). Also sent as `window://zoom` when the window moves to a
+ *  screen that changes it.
+ */
 export type ZoomView = {
 	/**  The zoom applied, in percent. */
 	zoom: number,

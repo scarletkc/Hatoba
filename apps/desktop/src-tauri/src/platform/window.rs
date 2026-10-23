@@ -132,6 +132,7 @@ fn zoom_limit(width: f64, height: f64) -> u32 {
 /// it is smaller, keeping it inside that screen's work area.
 pub fn apply_zoom(window: &WebviewWindow, percent: u32) -> tauri::Result<ZoomView> {
     let monitor = window.current_monitor()?;
+    *ZOOM_SCREEN.lock().unwrap_or_else(|e| e.into_inner()) = monitor.as_ref().map(screen_key);
     let max = monitor
         .as_ref()
         .map_or(ZOOM_STEPS[ZOOM_STEPS.len() - 1], |m| {
@@ -146,6 +147,37 @@ pub fn apply_zoom(window: &WebviewWindow, percent: u32) -> tauri::Result<ZoomVie
         grow_to(window, monitor.as_ref(), (min_w, min_h))?;
     }
     Ok(ZoomView { zoom, max })
+}
+
+/// The screen the zoom limit was last worked out for: its work area and scale.
+static ZOOM_SCREEN: std::sync::Mutex<Option<(i32, i32, u32, u32, u64)>> =
+    std::sync::Mutex::new(None);
+
+fn screen_key(m: &Monitor) -> (i32, i32, u32, u32, u64) {
+    let area = m.work_area();
+    (
+        area.position.x,
+        area.position.y,
+        area.size.width,
+        area.size.height,
+        m.scale_factor().to_bits(),
+    )
+}
+
+/// TERM-13: once the main window is on another screen, or its screen changed scale, zooms it again
+/// from `percent`, the device's preference, under that screen's limit: a window zoomed on a large
+/// screen and moved to a smaller one would otherwise keep a minimum size that does not fit there.
+/// Returns the new zoom, which the page learns from `window://zoom`; `None` while on the same screen.
+pub fn follow_screen(window: &WebviewWindow, percent: impl FnOnce() -> u32) -> Option<ZoomView> {
+    let key = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .map(|m| screen_key(&m));
+    if key.is_none() || *ZOOM_SCREEN.lock().unwrap_or_else(|e| e.into_inner()) == key {
+        return None;
+    }
+    apply_zoom(window, percent()).ok()
 }
 
 fn grow_to(

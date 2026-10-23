@@ -21,6 +21,7 @@ import { UnlockScreen } from "@/features/unlock/UnlockScreen";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { SyncState } from "@/ipc/types";
+import { applyZoom } from "@/lib/zoom";
 import { ClosePrompt, useTrayMenu } from "./ClosePrompt";
 import { ContextMenuHost } from "./ContextMenu";
 import { ResizeHandles } from "./ResizeHandles";
@@ -257,6 +258,10 @@ function useGlobalEvents() {
           void useVaultData.getState().reload();
           useApp.getState().refreshSynced();
         }
+      }),
+      api.listen("window://zoom", (zoom) => {
+        useApp.setState({ zoom });
+        applyZoom(zoom.zoom);
       }),
       api
         .listen("window://chrome", ({ floating }) => useApp.setState({ floating }))

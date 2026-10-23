@@ -1772,6 +1772,8 @@ export interface EventMap {
   /** An MCP server started, stopped, failed or relisted its tools (AI-32). */
   "ai://mcp-status": McpServerStatus;
   "window://chrome": WindowChromeEvent;
+  /** TERM-13: the window moved to a screen that changes the interface zoom. */
+  "window://zoom": ZoomView;
   /** Another launch handed its command line to this window (HOST-13); `launch_take` returns it. */
   "app://launch": null;
   /** WIN-10: the close button asks whether to hide the window to the tray or quit. */

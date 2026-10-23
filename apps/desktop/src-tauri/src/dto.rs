@@ -1098,8 +1098,10 @@ impl Default for LocalPrefs {
     }
 }
 
-/// The interface zoom in effect (TERM-13).
-#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+/// The interface zoom in effect (TERM-13). Also sent as `window://zoom` when the window moves to a
+/// screen that changes it.
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq, tauri_specta::Event)]
+#[tauri_specta(event_name = "window://zoom")]
 pub struct ZoomView {
     /// The zoom applied, in percent.
     pub zoom: u32,
