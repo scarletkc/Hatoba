@@ -82,7 +82,7 @@ export async function openLocalTerminal(shell?: LocalShellView): Promise<void> {
 export async function reconnectSession(tabId: string): Promise<void> {
   const session = getSession(tabId);
   if (!session || session.status === "connecting") return;
-  // A quick connection saved as a host since (Save as Host…) reconnects as that host.
+  // A quick connection saved as a host since (Save as Host) reconnects as that host.
   if (session.local) {
     await session.reconnect(async () => NONE);
     return;

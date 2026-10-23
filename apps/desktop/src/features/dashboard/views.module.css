@@ -41,6 +41,12 @@
   opacity: 1;
 }
 
+/* With several hosts selected on the hosts page, only under the pointer. */
+[data-several] .cardSel:not(:hover) .connect:not(.connectShown),
+[data-several] .rowSel:not(:hover) .connect:not(.connectShown) {
+  opacity: 0;
+}
+
 .cardLast {
   color: var(--fg2);
 }

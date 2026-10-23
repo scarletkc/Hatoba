@@ -98,7 +98,7 @@ export function moves(c: Recorded, tab: TabSource, device = ""): boolean {
  * name it: `from`, the conversation's host (empty when it was deleted since) or target, or with neither, a fork's
  * `origin` (AI-43), and `to`, the tab's.
  * Null when Rust writes none: the message does not move the conversation, it was nowhere (a home tab chat), the
- * move is between a target and the saved host with its address, port, and user (as after Save as Host…), the
+ * move is between a target and the saved host with its address, port, and user (as after Save as Host), the
  * tab's saved host was deleted, or both have one name.
  */
 export function movedFrom(

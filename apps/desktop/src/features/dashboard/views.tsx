@@ -47,7 +47,8 @@ export interface View {
   /** Some listed host has tags, so every card keeps a line for them and the cards line up. */
   tagRow: boolean;
   connectLabel: string;
-  onSelect(id: string): void;
+  /** A click on a host, whose Shift and Ctrl (⌘ on macOS) pick several. */
+  onSelect(e: MouseEvent, id: string): void;
   onConnect(id: string): void;
   onContext(e: MouseEvent, host: HostView): void;
 }
@@ -310,7 +311,7 @@ export const HostCard = memo(function HostCard({ host, selected, readout, leftOu
       aria-selected={selected}
       data-id={host.id}
       className={cx(s.card, selected && s.cardSel, stats && leftOut && s.cardLeftOut)}
-      onClick={() => view.onSelect(host.id)}
+      onClick={(e) => view.onSelect(e, host.id)}
       onDoubleClick={() => view.onConnect(host.id)}
       onContextMenu={(e) => view.onContext(e, host)}
     >
@@ -453,7 +454,7 @@ export const StatsRow = memo(function StatsRow({ host, selected, readout, leftOu
       data-id={host.id}
       className={cx(s.row, s.grid, selected && s.rowSel, leftOut && s.cardLeftOut, stale && s.staleRow)}
       style={gridOf(columns)}
-      onClick={() => view.onSelect(host.id)}
+      onClick={(e) => view.onSelect(e, host.id)}
       onDoubleClick={() => view.onConnect(host.id)}
       onContextMenu={(e) => view.onContext(e, host)}
     >

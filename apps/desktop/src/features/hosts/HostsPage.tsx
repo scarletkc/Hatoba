@@ -32,7 +32,7 @@ import type { GroupView, HostView, ImportSource, LocalPrefs, QuickTarget } from 
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { copyText } from "@/lib/native";
-import { shortcutLabel } from "@/lib/platform";
+import { isMac, shortcutLabel } from "@/lib/platform";
 import { GroupDialog, deleteGroup } from "./GroupDialog";
 import { IMPORT_APPS, ImportDialog } from "./ImportDialog";
 import { OsIcon } from "./OsIcon";
@@ -48,6 +48,7 @@ import {
 import { applyFilter, sortHosts } from "./order";
 import { useRecentTargets } from "./recent";
 import { buildHostIndex, searchHosts } from "./search";
+import { ALONE, pickHost, type PickKeys } from "./selection";
 import { LIST_SORTS, STATS_SORTS, isListSort, useHostsUi, type HostSort, type ListSort } from "./ui";
 import s from "./HostsPage.module.css";
 
@@ -87,7 +88,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   const tagList = useVaultData((st) => st.tags);
   const tabs = useTabs((st) => st.tabs);
   const recents = useRecentTargets((st) => st.targets);
-  const { selectedId, sort, favorites, tags: pickedTags, select, setSort, setFavorites, setTags, clearFilters } = useHostsUi();
+  const { selection, sort, favorites, tags: pickedTags, select, setSort, setFavorites, setTags, clearFilters } = useHostsUi();
   const view = prefs.hosts_view;
   const stats = prefs.hosts_stats;
   const readouts = useReadoutMap();
@@ -97,7 +98,8 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   const deferredQuery = useDeferredValue(query);
   const [probe, setProbe] = useState<Record<string, boolean>>({});
   const [importing, setImporting] = useState<ImportSource | null>(null);
-  const [ctxHost, setCtxHost] = useState<HostView | null>(null);
+  /** The hosts the row menu acts on: the one right-clicked, or every selected host it is one of. */
+  const [ctxIds, setCtxIds] = useState<string[]>([]);
   const [ctxGroup, setCtxGroup] = useState<GroupView | null>(null);
   const [editingGroup, setEditingGroup] = useState<GroupView | "new" | null>(null);
   const [detail, setDetail] = useState<string | null>(null);
@@ -165,7 +167,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   const problem = parsed && !parsed.ok ? parsed.problem : null;
   const notice = parsed?.ok ? parsed.notice : undefined;
 
-  const hostName = useMemo(() => new Map(hosts.map((h) => [h.id, h.name])), [hosts]);
+  const hostById = useMemo(() => new Map(hosts.map((h) => [h.id, h])), [hosts]);
   // Each group button's count, worked out once per reload rather than on every batch of readings.
   const groupCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -193,32 +195,65 @@ export function HostsPage({ group: requested }: { group: string | null }) {
     [hiddenColumns, tableWidth],
   );
 
-  const rowIds = useMemo(() => [...quickRows.map((r) => r.id), ...visible.map((h) => h.id)], [quickRows, visible]);
-  // The typed target, or the saved host it is, is selected until the user picks another row; otherwise
-  // the best saved host is, even with recent targets listed above it.
+  const hostIds = useMemo(() => visible.map((h) => h.id), [visible]);
+  const rowIds = useMemo(() => [...quickRows.map((r) => r.id), ...hostIds], [quickRows, hostIds]);
+  // The typed target, or the saved host it is, is selected until the user picks rows; otherwise a search selects
+  // its best saved host, even with recent targets listed above it. Picked rows the list does not show are not
+  // selected, so nothing acts on a host out of sight.
   const preferred = exact?.id ?? (quickRows[0]?.id === TYPED_ROW ? TYPED_ROW : null);
-  const effectiveId = useMemo(() => {
-    const picked = pickedFor === deferredQuery;
-    if (selectedId && rowIds.includes(selectedId) && (picked || (!preferred && !problem))) return selectedId;
+  const selected = useMemo(() => {
+    const listed = new Set(rowIds);
+    const shown = selection.filter((id) => listed.has(id));
+    if (pickedFor === deferredQuery || (shown.length > 0 && !preferred && !problem)) return shown;
     // An ssh command quick connect cannot run selects nothing, so Enter does not connect a saved
     // host with other settings than the ones typed.
-    if (problem) return null;
-    return preferred ?? visible[0]?.id ?? quickRows[0]?.id ?? null;
-  }, [rowIds, selectedId, preferred, problem, pickedFor, deferredQuery, visible, quickRows]);
+    if (problem || !searching) return [];
+    const best = preferred ?? visible[0]?.id ?? quickRows[0]?.id;
+    return best ? [best] : [];
+  }, [rowIds, selection, preferred, problem, pickedFor, deferredQuery, searching, visible, quickRows]);
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+  /** The row the arrow keys move on from, and Space shows. */
+  const focusId = selected.length > 0 ? selected[selected.length - 1] : null;
+  const several = selected.length > 1;
 
   // The row callbacks read these through a ref, so they stay stable and memoized rows skip re-rendering.
-  const latest = useRef({ deferredQuery, quickRows });
+  const latest = useRef({ deferredQuery, quickRows, hostIds, selected });
   useLayoutEffect(() => {
-    latest.current = { deferredQuery, quickRows };
+    latest.current = { deferredQuery, quickRows, hostIds, selected };
   });
+  /** The host Shift picks from: the one last picked without it. */
+  const anchor = useRef<string | null>(null);
 
-  const pick = useCallback(
-    (id: string) => {
+  const pickRows = useCallback(
+    (ids: string[]) => {
       setPickedFor(latest.current.deferredQuery);
-      select(id);
+      select(ids);
     },
     [select],
   );
+
+  /** Picks a saved host with Shift and Ctrl (⌘ on macOS) as `keys` say, or any row alone. */
+  const pickWith = useCallback(
+    (id: string, keys: PickKeys) => {
+      const { hostIds, selected } = latest.current;
+      const from = anchor.current ?? selected[selected.length - 1] ?? id;
+      anchor.current = keys.range ? from : id;
+      pickRows(pickHost(hostIds, selected, from, id, keys));
+    },
+    [pickRows],
+  );
+
+  const pick = useCallback((id: string) => pickWith(id, ALONE), [pickWith]);
+
+  const clickHost = useCallback(
+    (e: MouseEvent, id: string) => pickWith(id, { range: e.shiftKey, add: isMac(platform) ? e.metaKey : e.ctrlKey }),
+    [pickWith, platform],
+  );
+
+  const selectNone = () => {
+    anchor.current = null;
+    pickRows([]);
+  };
 
   // Recent targets under the empty field (HOST-12).
   const suggestions = query.trim() ? [] : unsavedRecents;
@@ -312,20 +347,36 @@ export function HostsPage({ group: requested }: { group: string | null }) {
         void connectTarget(quick.target);
         return;
       }
-      select(id);
+      anchor.current = id;
+      select([id]);
       void connectHost(id);
     },
     [select],
   );
 
+  /**
+   * A tab on each host, one host after another, so the passwords asked before connecting come one at a time; the
+   * host key and sign-in questions asked while connecting wait in line on their own.
+   */
+  const connectAll = async (ids: string[]) => {
+    for (const id of ids) await connectHost(id);
+  };
+
   const onContext = useCallback(
     (e: MouseEvent, host: HostView) => {
       e.preventDefault();
-      select(host.id);
-      setCtxHost(host);
+      const { hostIds, selected } = latest.current;
+      // On one of several selected hosts, the menu acts on all of them; on another host, it selects that one.
+      if (selected.length > 1 && selected.includes(host.id)) {
+        const picked = new Set(selected);
+        setCtxIds(hostIds.filter((id) => picked.has(id)));
+      } else {
+        pick(host.id);
+        setCtxIds([host.id]);
+      }
       openRowMenu({ x: e.clientX, y: e.clientY });
     },
-    [select, openRowMenu],
+    [pick, openRowMenu],
   );
 
   // Each card's last connection, made only without resource usage, so a batch of readings leaves every card's
@@ -356,11 +407,11 @@ export function HostsPage({ group: requested }: { group: string | null }) {
       stats,
       tagRow,
       connectLabel: t("hosts.connect"),
-      onSelect: pick,
+      onSelect: clickHost,
       onConnect: connect,
       onContext,
     }),
-    [t, now, interval, alerts, groupMap, stats, tagRow, pick, connect, onContext],
+    [t, now, interval, alerts, groupMap, stats, tagRow, clickHost, connect, onContext],
   );
 
   const openGroupMenu = (e: MouseEvent, g: GroupView) => {
@@ -371,41 +422,46 @@ export function HostsPage({ group: requested }: { group: string | null }) {
 
   const fail = (e: unknown) => toast(errorMessage(t, e), "error");
 
-  const toggleFavorite = async (host: HostView) => {
+  const markFavorite = async (list: HostView[], favorite: boolean) => {
     try {
-      await api.host_set_favorite(host.id, !host.favorite);
-      await useVaultData.getState().reload();
+      for (const host of list) if (host.favorite !== favorite) await api.host_set_favorite(host.id, favorite);
     } catch (e) {
       fail(e);
     }
+    // Also after a failure, as the hosts before it changed.
+    await useVaultData.getState().reload().catch(fail);
   };
 
   const duplicate = async (host: HostView) => {
     try {
       const copy = await api.host_duplicate(host.id);
       await useVaultData.getState().reload();
-      select(copy.id);
+      anchor.current = copy.id;
+      select([copy.id]);
       toast(t("hosts.duplicated", { name: copy.name }), "success");
     } catch (e) {
       fail(e);
     }
   };
 
-  const remove = async (host: HostView) => {
+  const remove = async (list: HostView[]) => {
+    if (list.length === 0) return;
+    const one = list.length === 1 ? list[0] : null;
     const ok = await confirm({
-      title: t("hosts.deleteTitle", { name: host.name }),
+      title: one ? t("hosts.deleteTitle", { name: one.name }) : t("hosts.deleteManyTitle", { n: list.length }),
       body: t("hosts.deleteBody"),
       confirmLabel: t("btn.delete"),
       danger: true,
     });
     if (!ok) return;
     try {
-      await api.host_delete(host.id);
-      await useVaultData.getState().reload();
-      toast(t("hosts.deleted", { name: host.name }));
+      for (const host of list) await api.host_delete(host.id);
+      toast(one ? t("hosts.deleted", { name: one.name }) : t("hosts.deletedMany", { n: list.length }));
     } catch (e) {
       fail(e);
     }
+    // Also after a failure, as the hosts before it are gone.
+    await useVaultData.getState().reload().catch(fail);
   };
 
   const copyAddress = async (host: HostView) => {
@@ -450,7 +506,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
     {
       label: host.favorite ? t("hosts.menu.unfavorite") : t("hosts.menu.favorite"),
       icon: "star",
-      onSelect: () => void toggleFavorite(host),
+      onSelect: () => void markFavorite([host], !host.favorite),
     },
     { label: t("hosts.menu.copyAddress"), icon: "clipboard-text", onSelect: () => void copyAddress(host) },
     ...(host.has_password
@@ -458,8 +514,24 @@ export function HostsPage({ group: requested }: { group: string | null }) {
       : []),
     ...statsEntries(host),
     { kind: "separator" },
-    { label: t("hosts.menu.delete"), icon: "trash", danger: true, onSelect: () => void remove(host) },
+    { label: t("hosts.menu.delete"), icon: "trash", danger: true, onSelect: () => void remove([host]) },
   ];
+
+  /** The menu of several selected hosts: what applies to all of them at once. */
+  const severalEntries = (list: HostView[]): MenuEntry[] => {
+    const favorite = list.every((h) => h.favorite);
+    return [
+      { label: t("hosts.menu.connect"), icon: "plugs-connected", onSelect: () => void connectAll(list.map((h) => h.id)) },
+      {
+        label: favorite ? t("hosts.menu.unfavorite") : t("hosts.menu.favorite"),
+        icon: "star",
+        onSelect: () => void markFavorite(list, !favorite),
+      },
+      { kind: "separator" },
+      { label: t("hosts.menu.delete"), icon: "trash", danger: true, onSelect: () => void remove(list) },
+    ];
+  };
+  const ctxHosts = ctxIds.flatMap((id) => hostById.get(id) ?? []);
 
   const groupEntries = (g: GroupView): MenuEntry[] => [
     { label: t("sidebar.renameGroup"), icon: "pencil-simple", onSelect: () => setEditingGroup(g) },
@@ -489,11 +561,12 @@ export function HostsPage({ group: requested }: { group: string | null }) {
     return Math.max(1, getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean).length);
   };
 
-  const move = (delta: number) => {
+  /** Moves the selection by `delta` rows; with `range`, over the saved hosts from the anchor on. */
+  const move = (delta: number, range: boolean) => {
     if (rowIds.length === 0) return;
-    const i = effectiveId ? rowIds.indexOf(effectiveId) : -1;
+    const i = focusId ? rowIds.indexOf(focusId) : -1;
     const next = rowIds[Math.max(0, Math.min(rowIds.length - 1, i + delta))];
-    pick(next);
+    pickWith(next, { range: range && hostIds.includes(next), add: false });
     requestAnimationFrame(() =>
       listRef.current?.querySelector(`[data-id="${CSS.escape(next)}"]`)?.scrollIntoView({ block: "nearest" }),
     );
@@ -526,19 +599,35 @@ export function HostsPage({ group: requested }: { group: string | null }) {
         return;
       }
     }
-    const amongCards = view === "cards" && !quickRows.some((r) => r.id === effectiveId);
+    const amongCards = view === "cards" && !quickRows.some((r) => r.id === focusId);
+    const mod = isMac(platform) ? e.metaKey : e.ctrlKey;
+    const selectedHosts = () => visible.filter((h) => selectedSet.has(h.id));
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       const step = amongCards ? cardsPerRow() : 1;
-      move(e.key === "ArrowDown" ? step : -step);
+      move(e.key === "ArrowDown" ? step : -step, e.shiftKey);
     } else if (onList && amongCards && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
       e.preventDefault();
-      move(e.key === "ArrowRight" ? 1 : -1);
-    } else if (onList && e.key === " " && stats && effectiveId && hosts.some((h) => h.id === effectiveId)) {
+      move(e.key === "ArrowRight" ? 1 : -1, e.shiftKey);
+    } else if (onList && e.key === " " && stats && focusId && hosts.some((h) => h.id === focusId)) {
       // Space shows the selected host's detail, as Quick Look does.
       e.preventDefault();
-      setDetail(effectiveId);
-    } else if (e.key === "Enter" && effectiveId === TYPED_ROW) {
+      setDetail(focusId);
+    } else if (onList && mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "a") {
+      // Every listed host, the one the arrows move on from still last.
+      e.preventDefault();
+      anchor.current = focusId;
+      pickRows(focusId && hostIds.includes(focusId) ? [...hostIds.filter((id) => id !== focusId), focusId] : hostIds);
+    } else if (onList && e.key === "Escape" && selected.length > 0) {
+      e.preventDefault();
+      selectNone();
+    } else if (onList && (e.key === "Delete" || (isMac(platform) && e.metaKey && e.key === "Backspace"))) {
+      e.preventDefault();
+      void remove(selectedHosts());
+    } else if (e.key === "Enter" && several) {
+      e.preventDefault();
+      void connectAll(selectedHosts().map((h) => h.id));
+    } else if (e.key === "Enter" && focusId === TYPED_ROW) {
       e.preventDefault();
       // The list may still show an earlier keystroke: connect what the field says now.
       const typed = parseQuickConnect(query);
@@ -546,9 +635,9 @@ export function HostsPage({ group: requested }: { group: string | null }) {
       const saved = savedHostFor(hosts, typed.target);
       if (saved) connect(saved.id);
       else void connectTarget(typed.target);
-    } else if (e.key === "Enter" && effectiveId) {
+    } else if (e.key === "Enter" && focusId) {
       e.preventDefault();
-      connect(effectiveId);
+      connect(focusId);
     } else if (onList && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && e.key !== " ") {
       // Type to search.
       searchRef.current?.focus();
@@ -792,7 +881,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
         <QuickRow
           key={r.id}
           item={r}
-          selected={r.id === effectiveId}
+          selected={selectedSet.has(r.id)}
           connectLabel={t("hosts.connect")}
           hint={r.recent ? t("hosts.quick.recent") : t("hosts.quick.notSaved")}
           removeLabel={t("hosts.quick.forget")}
@@ -841,7 +930,25 @@ export function HostsPage({ group: requested }: { group: string | null }) {
     );
   } else {
     body = (
-      <div ref={listRef} className={s.scroll} tabIndex={0} role="listbox" aria-label={title}>
+      <div
+        ref={listRef}
+        className={s.scroll}
+        tabIndex={0}
+        role="listbox"
+        aria-label={title}
+        aria-multiselectable
+        data-several={several || undefined}
+        onMouseDown={(e) => {
+          // Shift+click picks hosts rather than selecting their text.
+          if (!e.shiftKey) return;
+          e.preventDefault();
+          listRef.current?.focus({ preventScroll: true });
+        }}
+        onClick={(e) => {
+          // A click beside the rows selects none.
+          if (!(e.target as Element).closest('[role="option"], button')) selectNone();
+        }}
+      >
         {view === "list" &&
           (stats ? (
             <StatsHead
@@ -868,7 +975,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
                 <StatsRow
                   key={h.id}
                   host={h}
-                  selected={h.id === effectiveId}
+                  selected={selectedSet.has(h.id)}
                   readout={readouts[h.id]}
                   leftOut={leftOutBy(h, groupMap)}
                   columns={columns}
@@ -878,16 +985,16 @@ export function HostsPage({ group: requested }: { group: string | null }) {
                 <HostRow
                   key={h.id}
                   host={h}
-                  selected={h.id === effectiveId}
-                  jumpName={h.jump_host_id ? (hostName.get(h.jump_host_id) ?? null) : null}
+                  selected={selectedSet.has(h.id)}
+                  jumpName={h.jump_host_id ? (hostById.get(h.jump_host_id)?.name ?? null) : null}
                   status={tabStatus.get(h.id)}
                   online={probe[h.id]}
                   now={now}
                   locale={t.locale}
                   connectLabel={t("hosts.connect")}
                   failedLabel={t("hosts.failed")}
-                  viaTitle={h.jump_host_id ? t("hosts.viaTitle", { name: hostName.get(h.jump_host_id) ?? "" }) : ""}
-                  onSelect={pick}
+                  viaTitle={h.jump_host_id ? t("hosts.viaTitle", { name: hostById.get(h.jump_host_id)?.name ?? "" }) : ""}
+                  onSelect={clickHost}
                   onConnect={connect}
                   onContext={onContext}
                 />
@@ -902,7 +1009,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
                 <HostCard
                   key={h.id}
                   host={h}
-                  selected={h.id === effectiveId}
+                  selected={selectedSet.has(h.id)}
                   readout={stats ? readouts[h.id] : undefined}
                   leftOut={stats ? leftOutBy(h, groupMap) : null}
                   list={listStates?.get(h.id) ?? NO_LIST}
@@ -968,7 +1075,13 @@ export function HostsPage({ group: requested }: { group: string | null }) {
           }))}
         />
       )}
-      {rowMenu.anchor && ctxHost && <Menu anchor={rowMenu.anchor} onClose={rowMenu.close} entries={menuEntries(ctxHost)} />}
+      {rowMenu.anchor && ctxHosts.length > 0 && (
+        <Menu
+          anchor={rowMenu.anchor}
+          onClose={rowMenu.close}
+          entries={ctxHosts.length === 1 ? menuEntries(ctxHosts[0]) : severalEntries(ctxHosts)}
+        />
+      )}
       {detailHost && (
         <HostDetail
           host={detailHost}
@@ -996,7 +1109,7 @@ interface RowProps {
   connectLabel: string;
   failedLabel: string;
   viaTitle: string;
-  onSelect: (id: string) => void;
+  onSelect: (e: MouseEvent, id: string) => void;
   onConnect: (id: string) => void;
   onContext: (e: MouseEvent, host: HostView) => void;
 }
@@ -1029,7 +1142,7 @@ const HostRow = memo(function HostRow({
       aria-selected={selected}
       data-id={host.id}
       className={cx(s.row, s.cols, selected && s.rowSel)}
-      onClick={() => onSelect(host.id)}
+      onClick={(e) => onSelect(e, host.id)}
       onDoubleClick={() => onConnect(host.id)}
       onContextMenu={(e) => onContext(e, host)}
     >
