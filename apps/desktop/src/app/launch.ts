@@ -17,7 +17,7 @@ function runLaunch(args: string[]) {
       void connectTarget(action.target);
       break;
     case "search":
-      useApp.getState().navigate({ kind: "hosts", filter: { kind: "all" } });
+      useApp.getState().navigate({ kind: "hosts", group: null });
       useTabs.getState().activate("home");
       useApp.getState().focusSearch(action.text);
       break;

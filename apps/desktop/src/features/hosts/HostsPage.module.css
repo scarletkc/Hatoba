@@ -39,6 +39,212 @@
   overflow-y: auto;
 }
 
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
+  gap: var(--space-12);
+  padding: 8px 24px 16px;
+}
+
+/* ───────── Title, filters and groups ───────── */
+
+/* A group's page: the way back to every host, the group, and its menu. */
+.crumbs {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.crumb {
+  border: 0;
+  padding: 0 4px;
+  margin-left: -4px;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--fg2);
+  font: inherit;
+  font-weight: 500;
+}
+
+.crumb:hover {
+  background: var(--fill);
+  color: var(--fg);
+}
+
+.crumbSep {
+  font-size: var(--icon-14);
+  color: var(--fg3);
+}
+
+.crumbHere {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* New Host and its chevron, joined. */
+.split {
+  display: inline-flex;
+}
+
+.split > :first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.splitCaret {
+  padding: 0 7px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  box-shadow: inset 1px 0 0 color-mix(in srgb, #fff 28%, transparent);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6);
+  padding: 0 24px 10px;
+  flex: none;
+}
+
+.toolbarGap {
+  flex: 1;
+}
+
+/* Favorites and Tags: a filter that is on stands out in the accent color. */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--fill);
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+
+.toggle:hover {
+  background: var(--fill2);
+}
+
+.toggle i {
+  font-size: var(--icon-14);
+  color: var(--fg2);
+}
+
+.toggleOn,
+.toggleOn:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+
+.toggleOn i {
+  color: var(--accent);
+}
+
+.toggleCount {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.toggle .toggleCaret {
+  font-size: var(--icon-12);
+}
+
+.tagChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 4px 0 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: none;
+}
+
+.tagChip:hover {
+  background: var(--fill);
+}
+
+.tagChipX {
+  font-size: var(--icon-12);
+  color: var(--fg2);
+}
+
+.statsSwitch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin: 0 4px 0 6px;
+  font-size: var(--text-sm);
+  color: var(--fg);
+  white-space: nowrap;
+}
+
+/* Every group in a row that scrolls sideways, so many groups never push the hosts down. */
+.groupBar {
+  display: flex;
+  gap: var(--space-8);
+  padding: 2px 24px 12px;
+  overflow-x: auto;
+  flex: none;
+  scrollbar-width: none;
+}
+
+.groupTile {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex: none;
+  max-width: 220px;
+  height: 34px;
+  padding: 0 12px 0 10px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--group);
+  box-shadow: inset 0 0 0 0.5px var(--line2);
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+
+.groupTile:hover {
+  background: var(--fill);
+}
+
+.groupIcon {
+  font-size: var(--icon-16);
+  color: var(--accent);
+  flex: none;
+}
+
+.groupName {
+  min-width: 0;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.groupCount {
+  color: var(--fg2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A narrow page shows the view switch as icons, their titles naming them. */
+@container (max-width: 620px) {
+  .viewSwitch [role="radio"] > span {
+    display: none;
+  }
+
+  .viewSwitch [role="radio"] {
+    padding: 0 10px;
+  }
+}
+
 .scroll:focus-visible {
   outline: none;
 }

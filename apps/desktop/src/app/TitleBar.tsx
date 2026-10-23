@@ -16,6 +16,7 @@ import { useVaultData } from "./data";
 import { useApp } from "./store";
 import { useTabDrag } from "./tabDrag";
 import { useTabs, type TabStatus } from "./tabs";
+import { useOfferedUpdate } from "./update";
 import s from "./TitleBar.module.css";
 
 /** Area that drags the window; double-click toggles maximize (handled by Tauri). */
@@ -182,6 +183,35 @@ function useOpenNewTabs(list: RefObject<HTMLDivElement | null>, tabs: { id: stri
   }, [list, tabs]);
 }
 
+/**
+ * Lock and Settings, which act on the whole app, in the title bar every tab shares. Lock stays farthest from the
+ * AI button and the window controls, as it can end every session (SEC-03).
+ */
+function AppButtons() {
+  const t = useT();
+  const platform = useApp((st) => st.info.platform);
+  const updateAvailable = useOfferedUpdate() !== null;
+  const lockLabel = `${t("sidebar.lock")} (${shortcutLabel(platform, "Ctrl+Shift+L", "⌘L")})`;
+  const settingsLabel = `${updateAvailable ? t("sidebar.settingsUpdate") : t("sidebar.settings")} (${shortcutLabel(platform, "Ctrl+,", "⌘,")})`;
+  return (
+    <>
+      <button type="button" className={s.barButton} title={lockLabel} aria-label={lockLabel} onClick={() => void useApp.getState().lock()}>
+        <Icon name="lock-simple" size={16} />
+      </button>
+      <button
+        type="button"
+        className={s.barButton}
+        title={settingsLabel}
+        aria-label={settingsLabel}
+        onClick={() => useApp.getState().openSettings(true, updateAvailable ? "about" : undefined)}
+      >
+        <Icon name="gear-six" size={16} />
+        {updateAvailable && <span className={s.updateDot} />}
+      </button>
+    </>
+  );
+}
+
 /** Tab bar merged with the title bar (design TabBar + WIN-01). */
 export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
   homeLabel: string;
@@ -191,7 +221,6 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
 }) {
   const t = useT();
   const { tabs, active, activate } = useTabs();
-  const collapsed = useApp((st) => st.sidebarCollapsed);
   const platform = useApp((st) => st.info.platform);
   const local = useLocalMenu(onNewTab);
   const drag = useTabDrag(tabs);
@@ -200,12 +229,7 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
 
   return (
     <div className={s.tabbar} data-tauri-drag-region>
-      {collapsed && platform === "macos" && <span style={{ width: 70, flex: "none" }} data-tauri-drag-region />}
-      {collapsed && (
-        <button type="button" className={s.newTab} title={t("window.toggleSidebar")} aria-label={t("window.toggleSidebar")} onClick={() => useApp.getState().toggleSidebar()}>
-          <Icon name="sidebar-simple" size={16} />
-        </button>
-      )}
+      {platform === "macos" && <span style={{ width: 70, flex: "none" }} data-tauri-drag-region />}
       <div ref={list} className={s.tabs} role="tablist">
         <button
           type="button"
@@ -269,6 +293,7 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
       </button>
       {local.menu.anchor && <Menu anchor={local.menu.anchor} entries={local.entries} onClose={local.menu.close} minWidth={220} />}
       <div className={s.drag} data-tauri-drag-region />
+      <AppButtons />
       <AiPanelButton className={s.aiButton} activeClassName={s.aiButtonOn} dotClassName={s.aiDot} />
       <WindowControls />
     </div>

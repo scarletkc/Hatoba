@@ -208,7 +208,7 @@ function TooLargeNotice({ item }: { item: TooLargeItem }) {
   if (item.item_type === "host") {
     text = t("sync.tooLarge.host", { name: item.item_name });
     action = (
-      <LinkButton onClick={() => navigate({ kind: "host-edit", hostId: item.item_id, groupId: null, back: { kind: "all" } })}>
+      <LinkButton onClick={() => navigate({ kind: "host-edit", hostId: item.item_id, groupId: null, back: null })}>
         {t("hosts.editHost")}
       </LinkButton>
     );

@@ -59,7 +59,7 @@ export function KeyDetail({
     }
   };
 
-  const editHost = (hostId: string) => useApp.getState().navigate({ kind: "host-edit", hostId, groupId: null, back: { kind: "all" } });
+  const editHost = (hostId: string) => useApp.getState().navigate({ kind: "host-edit", hostId, groupId: null, back: null });
 
   return (
     <aside className={s.panel} aria-label={keyView.name}>

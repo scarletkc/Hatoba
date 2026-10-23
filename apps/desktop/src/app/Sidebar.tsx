@@ -1,72 +1,51 @@
-import { useEffect, useState, type MouseEvent } from "react";
-import { Button, Icon, TextField } from "@/components/controls";
-import { Dialog, Menu, confirm, toast, useMenu } from "@/components/overlay";
+import { useEffect } from "react";
+import { Button, Icon } from "@/components/controls";
 import { openExternal } from "@/features/sync/external";
 import { formatRelative, useT } from "@/i18n";
-import { api } from "@/ipc/api";
-import type { GroupView, SyncStatus } from "@/ipc/types";
+import type { SyncStatus } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { REPO_URL, bugReportUrl } from "@/lib/github";
-import { tagColor } from "@/lib/tags";
 import { useVaultData } from "./data";
-import { errorMessage } from "./errors";
 import { useStarPrompt, useStarPromptDue } from "./star";
-import { useApp, type HostFilter, type Page } from "./store";
+import { useApp, type Page } from "./store";
 import { useTabs } from "./tabs";
-import { TitlebarDrag } from "./TitleBar";
 import { useOfferedUpdate } from "./update";
 import st from "./Sidebar.module.css";
 
-type Key = "dashboard" | "all" | "favorites" | "recent" | "forwards" | `group:${string}` | `tag:${string}` | "keys" | "sync";
+type Key = "hosts" | "forwards" | "keys";
 
 function pageKey(page: Page): Key | null {
   switch (page.kind) {
     case "hosts":
-    case "host-edit": {
-      if (page.kind === "host-edit" && page.fromDashboard) return "dashboard";
-      const f: HostFilter = page.kind === "hosts" ? page.filter : page.back;
-      if (f.kind === "group") return `group:${f.id}`;
-      if (f.kind === "tag") return `tag:${f.name}`;
-      return f.kind;
-    }
+    case "host-edit":
+      return "hosts";
     case "keys":
       return "keys";
-    case "sync":
-      return "sync";
     case "forwards":
       return "forwards";
-    case "dashboard":
-      return "dashboard";
+    case "sync":
+      return null;
   }
 }
 
+/**
+ * The home tab's navigation: the places that hold data, and the sync status, which opens Cloud Sync. Groups, tags
+ * and favorites narrow the hosts page itself; Lock and Settings are in the title bar.
+ */
 export function Sidebar() {
   const t = useT();
-  const { page, navigate, info, sync, lock, openSettings } = useApp();
-  const updateAvailable = useOfferedUpdate() !== null;
-  const settingsLabel = updateAvailable ? t("sidebar.settingsUpdate") : t("sidebar.settings");
-  const activateHome = () => useTabs.getState().activate("home");
-  const { hosts, groups, tags, keys } = useVaultData();
+  const { page, navigate, sync } = useApp();
+  const hosts = useVaultData((s) => s.hosts);
+  const keys = useVaultData((s) => s.keys);
   const active = pageKey(page);
-  const groupMenu = useMenu();
-  const [menuGroup, setMenuGroup] = useState<GroupView | null>(null);
-  const [editing, setEditing] = useState<GroupView | "new" | null>(null);
 
-  const go = (p: Page) => {
-    navigate(p);
-    activateHome();
-  };
-  const hostsWith = (f: HostFilter) => go({ kind: "hosts", filter: f });
-  const favorites = hosts.filter((h) => h.favorite).length;
-
-  const item = (key: Key, icon: string, label: string, count: number | null, onClick: () => void, onContext?: (e: MouseEvent) => void) => (
+  const item = (key: Key, icon: string, label: string, count: number | null, target: Page) => (
     <button
       key={key}
       type="button"
       className={cx(st.item, active === key && st.itemActive)}
       aria-current={active === key ? "page" : undefined}
-      onClick={onClick}
-      onContextMenu={onContext}
+      onClick={() => navigate(target)}
     >
       <Icon name={icon} className={st.itemIcon} />
       <span className={st.itemLabel}>{label}</span>
@@ -74,154 +53,19 @@ export function Sidebar() {
     </button>
   );
 
-  const deleteGroup = async (g: GroupView) => {
-    if (!(await confirm({ title: t("sidebar.deleteGroup"), body: t("sidebar.deleteGroupConfirm", { name: g.name }), confirmLabel: t("btn.delete"), danger: true })))
-      return;
-    try {
-      await api.group_delete(g.id);
-      if (active === `group:${g.id}`) hostsWith({ kind: "all" });
-      await useVaultData.getState().reload();
-    } catch (e) {
-      toast(errorMessage(t, e), "error");
-    }
-  };
-
   return (
     <nav className={st.sidebar} aria-label="Hatoba">
-      <TitlebarDrag className={st.header}>
-        {info.platform === "macos" && <span className={st.traffic} />}
-        <span style={{ flex: 1 }} data-tauri-drag-region />
-        <button
-          type="button"
-          className={cx(st.footerButton, st.settingsButton)}
-          title={settingsLabel}
-          aria-label={settingsLabel}
-          onClick={() => openSettings(true, updateAvailable ? "about" : undefined)}
-        >
-          <Icon name="gear-six" size={16} />
-          {updateAvailable && <span className={st.updateDot} />}
-        </button>
-        <button type="button" className={st.footerButton} title={t("window.toggleSidebar")} aria-label={t("window.toggleSidebar")} onClick={() => useApp.getState().toggleSidebar()}>
-          <Icon name="sidebar-simple" size={16} />
-        </button>
-      </TitlebarDrag>
-
       <div className={st.list}>
-        {item("dashboard", "gauge", t("dashboard.title"), null, () =>
-          go({ kind: "dashboard", filter: page.kind === "dashboard" ? page.filter : { kind: "all" } }),
-        )}
-        {item("all", "hard-drives", t("sidebar.all"), hosts.length, () => hostsWith({ kind: "all" }))}
-        {item("favorites", "star", t("sidebar.favorites"), favorites, () => hostsWith({ kind: "favorites" }))}
-        {item("recent", "clock-counter-clockwise", t("sidebar.recent"), null, () => hostsWith({ kind: "recent" }))}
-        {item("forwards", "arrows-left-right", t("sidebar.forwards"), null, () => go({ kind: "forwards", hostId: null }))}
-
-        <div className={st.heading}>
-          <span>{t("sidebar.groups")}</span>
-          <button type="button" className={st.headingButton} title={t("sidebar.newGroup")} aria-label={t("sidebar.newGroup")} onClick={() => setEditing("new")}>
-            <Icon name="plus" />
-          </button>
-        </div>
-        {groups.length === 0 && <div className={st.note}>{t("sidebar.noGroups")}</div>}
-        {groups.map((g) =>
-          item(
-            `group:${g.id}`,
-            "folder-simple",
-            g.name,
-            hosts.filter((h) => h.group_id === g.id).length,
-            () => hostsWith({ kind: "group", id: g.id }),
-            (e) => {
-              e.preventDefault();
-              setMenuGroup(g);
-              groupMenu.openAt({ x: e.clientX, y: e.clientY });
-            },
-          ),
-        )}
-
-        {tags.length > 0 && <div className={st.heading}><span>{t("sidebar.tags")}</span></div>}
-        {tags.map((tag) => (
-          <button
-            key={tag.name}
-            type="button"
-            className={cx(st.item, active === `tag:${tag.name}` && st.itemActive)}
-            onClick={() => hostsWith({ kind: "tag", name: tag.name })}
-          >
-            <span className={st.itemDotWrap}>
-              <span className={st.itemDot} style={{ background: tagColor(tag.name) }} />
-            </span>
-            <span className={st.itemLabel}>{tag.name}</span>
-            <span className={st.itemCount}>{tag.count}</span>
-          </button>
-        ))}
-
-        <div className={st.heading}><span>{t("sidebar.vault")}</span></div>
-        {item("keys", "key", t("sidebar.keys"), keys.length, () => go({ kind: "keys" }))}
-        {item("sync", "cloud", t("sidebar.sync"), null, () => go({ kind: "sync" }))}
+        {item("hosts", "hard-drives", t("hosts.title"), hosts.length, { kind: "hosts", group: null })}
+        {item("forwards", "arrows-left-right", t("sidebar.forwards"), null, { kind: "forwards", hostId: null })}
+        {item("keys", "key", t("sidebar.keys"), keys.length, { kind: "keys" })}
       </div>
 
       <StarPrompt />
       <div className={st.footer}>
-        <SyncFooter status={sync} onClick={() => go({ kind: "sync" })} />
-        <button type="button" className={st.footerButton} title={t("sidebar.lock")} aria-label={t("sidebar.lock")} onClick={() => void lock()}>
-          <Icon name="lock-simple" />
-        </button>
+        <SyncFooter status={sync} active={page.kind === "sync"} onClick={() => navigate({ kind: "sync" })} />
       </div>
-
-      {groupMenu.anchor && menuGroup && (
-        <Menu
-          anchor={groupMenu.anchor}
-          onClose={groupMenu.close}
-          entries={[
-            { label: t("sidebar.renameGroup"), icon: "pencil-simple", onSelect: () => setEditing(menuGroup) },
-            { kind: "separator" },
-            { label: t("sidebar.deleteGroup"), icon: "trash", danger: true, onSelect: () => void deleteGroup(menuGroup) },
-          ]}
-        />
-      )}
-      {editing && <GroupDialog group={editing === "new" ? null : editing} count={groups.length} onClose={() => setEditing(null)} />}
     </nav>
-  );
-}
-
-function GroupDialog({ group, count, onClose }: { group: GroupView | null; count: number; onClose: () => void }) {
-  const t = useT();
-  const [name, setName] = useState(group?.name ?? "");
-  const [busy, setBusy] = useState(false);
-  const save = async () => {
-    if (!name.trim()) return;
-    setBusy(true);
-    try {
-      await api.group_save({ id: group?.id ?? null, name: name.trim(), parent_id: group?.parent_id ?? null, sort: group?.sort ?? count });
-      await useVaultData.getState().reload();
-      onClose();
-    } catch (e) {
-      toast(errorMessage(t, e), "error");
-      setBusy(false);
-    }
-  };
-  return (
-    <Dialog
-      title={group ? t("sidebar.renameGroup") : t("sidebar.newGroup")}
-      icon="folder-simple"
-      onClose={onClose}
-      actions={
-        <>
-          <Button onClick={onClose}>{t("btn.cancel")}</Button>
-          <Button variant="primary" busy={busy} disabled={!name.trim()} onClick={() => void save()}>
-            {t("btn.save")}
-          </Button>
-        </>
-      }
-    >
-      <form
-        style={{ marginTop: 14 }}
-        onSubmit={(e) => {
-          e.preventDefault();
-          void save();
-        }}
-      >
-        <TextField large autoFocus value={name} placeholder={t("sidebar.groupName")} aria-label={t("sidebar.groupName")} maxLength={64} onChange={(e) => setName(e.target.value)} />
-      </form>
-    </Dialog>
   );
 }
 
@@ -247,7 +91,7 @@ function StarPrompt() {
       <div className={st.starHead}>
         <Icon name="star" fill className={st.starIcon} />
         <span className={st.starTitle}>{t("sidebar.star.title")}</span>
-        <button type="button" className={st.headingButton} title={t("btn.close")} aria-label={t("btn.close")} onClick={finish}>
+        <button type="button" className={st.starClose} title={t("btn.close")} aria-label={t("btn.close")} onClick={finish}>
           <Icon name="x" />
         </button>
       </div>
@@ -264,11 +108,11 @@ function StarPrompt() {
   );
 }
 
-function SyncFooter({ status, onClick }: { status: SyncStatus | null; onClick: () => void }) {
+function SyncFooter({ status, active, onClick }: { status: SyncStatus | null; active: boolean; onClick: () => void }) {
   const t = useT();
   const view = syncFooterView(t, status);
   return (
-    <button type="button" className={st.syncButton} onClick={onClick}>
+    <button type="button" className={cx(st.syncButton, active && st.syncButtonActive)} aria-current={active ? "page" : undefined} onClick={onClick}>
       <Icon name={view.icon} className={cx(st.syncIcon, view.spin && st.spin)} color={view.color} />
       <span className={st.syncText}>
         <div className={st.syncTitle}>{view.title}</div>

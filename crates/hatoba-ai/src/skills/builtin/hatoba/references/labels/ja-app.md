@@ -246,12 +246,12 @@ The labels that these files name in English, as the interface shows them in Japa
 
 | en | ja |
 |---|---|
-| Leave Out of Dashboard | ダッシュボードから除外 |
-| Include in Dashboard | ダッシュボードに含める |
-| Leave Group Out of Dashboard | グループをダッシュボードから除外 |
-| Include Group in Dashboard | グループをダッシュボードに含める |
+| Don’t Read Usage | 使用状況を読み取らない |
+| Read Usage | 使用状況を読み取る |
+| Don’t Read the Group’s Usage | グループの使用状況を読み取らない |
+| Read the Group’s Usage | グループの使用状況を読み取る |
 | Show | 表示 |
-| Left Out | 除外中 |
+| Not Read | 読み取りなし |
 
 ## `references/command-line.md`
 

@@ -246,12 +246,12 @@ The labels that these files name in English, as the interface shows them in Simp
 
 | en | zh-CN |
 |---|---|
-| Leave Out of Dashboard | 不在仪表盘中显示 |
-| Include in Dashboard | 在仪表盘中显示 |
-| Leave Group Out of Dashboard | 不在仪表盘中显示此分组 |
-| Include Group in Dashboard | 在仪表盘中显示此分组 |
+| Don’t Read Usage | 不读取资源占用 |
+| Read Usage | 读取资源占用 |
+| Don’t Read the Group’s Usage | 不读取此分组的资源占用 |
+| Read the Group’s Usage | 读取此分组的资源占用 |
 | Show | 显示 |
-| Left Out | 未纳入 |
+| Not Read | 不读取 |
 
 ## `references/command-line.md`
 

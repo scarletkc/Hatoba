@@ -138,6 +138,36 @@
 }
 
 /* AI panel toggle (§9) and the per-tab assistant state (AI-07) */
+.barButton {
+  position: relative;
+  width: 30px;
+  height: 28px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg2);
+}
+
+.barButton:hover {
+  background: var(--fill);
+}
+
+/* A newer release was found; the button opens Settings → About. */
+.updateDot {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--win);
+}
+
 .aiButton {
   position: relative;
   width: 30px;

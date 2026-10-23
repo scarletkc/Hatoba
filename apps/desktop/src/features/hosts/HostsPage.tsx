@@ -12,20 +12,28 @@ import {
 } from "react";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
-import { useApp, type HostFilter } from "@/app/store";
+import { useApp } from "@/app/store";
 import { useTabs, type TabStatus } from "@/app/tabs";
-import { Button, Icon, IconButton, LinkButton } from "@/components/controls";
+import { Button, Icon, IconButton, LinkButton, Segmented, Switch } from "@/components/controls";
 import { EmptyState, PageHeader, SearchField, Tag, layoutStyles } from "@/components/layout";
 import { Menu, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
+import { dashboardSwitch, retryHost, setShownOnDashboard } from "@/features/dashboard/actions";
+import { HostDetail } from "@/features/dashboard/HostDetail";
+import { DASHBOARD_COLUMNS, leftOutBy, shownOnDashboard, sortForDashboard, type DashboardColumn } from "@/features/dashboard/logic";
+import { useDashboardWatch, useReadoutMap } from "@/features/dashboard/readings";
+import { HostCard, StatsHead, StatsRow, canRetry, fitStatsColumns, useWidth, type Alerts, type ListState, type View } from "@/features/dashboard/views";
 import { durationLabel } from "@/features/settings/durations";
+import { usePrefs } from "@/features/settings/shared";
 import { connectHost, connectTarget } from "@/features/terminal/connect";
-import { formatRelative, useT, type Locale } from "@/i18n";
+import { useDocumentVisible } from "@/features/terminal/stats";
+import { formatRelative, useT, type Locale, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { HostView, ImportSource, QuickTarget } from "@/ipc/types";
+import type { GroupView, HostView, ImportSource, QuickTarget } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { copyText } from "@/lib/native";
 import { shortcutLabel } from "@/lib/platform";
+import { GroupDialog, deleteGroup } from "./GroupDialog";
 import { IMPORT_APPS, ImportDialog } from "./ImportDialog";
 import { OsIcon } from "./OsIcon";
 import {
@@ -40,7 +48,7 @@ import {
 import { applyFilter, sortHosts } from "./order";
 import { useRecentTargets } from "./recent";
 import { buildHostIndex, searchHosts } from "./search";
-import { useHostsUi, type HostSort } from "./ui";
+import { LIST_SORTS, STATS_SORTS, isListSort, useHostsUi, type HostSort, type HostsView, type ListSort } from "./ui";
 import s from "./HostsPage.module.css";
 
 const PROBE_INTERVAL_MS = 60_000;
@@ -61,23 +69,34 @@ interface QuickRowItem {
   recent: QuickTarget | null;
 }
 
-export function HostsPage({ filter }: { filter: HostFilter }) {
+/**
+ * Every saved host, or a group's (HOST-03), narrowed to favorites and tags, as a list or cards. With resource usage
+ * on, the listed hosts are read in the background as the dashboard did (HOST-14).
+ */
+export function HostsPage({ group }: { group: string | null }) {
   const t = useT();
   const platform = useApp((st) => st.info.platform);
   const hostProbe = useApp((st) => st.prefs.host_probe);
   const searchTick = useApp((st) => st.searchFocusTick);
   const navigate = useApp((st) => st.navigate);
+  const [prefs, savePrefs] = usePrefs();
   const hosts = useVaultData((st) => st.hosts);
   const groups = useVaultData((st) => st.groups);
+  const tagList = useVaultData((st) => st.tags);
   const tabs = useTabs((st) => st.tabs);
   const recents = useRecentTargets((st) => st.targets);
-  const { selectedId, sort, select, setSort } = useHostsUi();
+  const { selectedId, sort, favorites, tags: pickedTags, view, stats, select, setSort, setFavorites, setTags, setView, setStats } = useHostsUi();
+  const readouts = useReadoutMap();
+  const docVisible = useDocumentVisible();
 
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [probe, setProbe] = useState<Record<string, boolean>>({});
   const [importing, setImporting] = useState<ImportSource | null>(null);
   const [ctxHost, setCtxHost] = useState<HostView | null>(null);
+  const [ctxGroup, setCtxGroup] = useState<GroupView | null>(null);
+  const [editingGroup, setEditingGroup] = useState<GroupView | "new" | null>(null);
+  const [detail, setDetail] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [searchFocused, setSearchFocused] = useState(false);
   const [suggestDismissed, setSuggestDismissed] = useState(false);
@@ -86,39 +105,45 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   const [pickedFor, setPickedFor] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const cardsRef = useRef<HTMLDivElement>(null);
   const rowMenu = useMenu();
   const openRowMenu = rowMenu.openAt;
+  const groupMenu = useMenu();
   const sortMenu = useMenu();
   const sortButton = useRef<HTMLButtonElement>(null);
+  const tagsMenu = useMenu();
+  const tagsButton = useRef<HTMLButtonElement>(null);
+  const columnsMenu = useMenu();
+  const columnsButton = useRef<HTMLButtonElement>(null);
   const importMenu = useMenu();
   const importButton = useRef<HTMLButtonElement>(null);
+  const newMenu = useMenu();
+  const newMenuButton = useRef<HTMLButtonElement>(null);
 
-  const title = useMemo(() => {
-    switch (filter.kind) {
-      case "all":
-        return t("sidebar.all");
-      case "favorites":
-        return t("sidebar.favorites");
-      case "recent":
-        return t("sidebar.recent");
-      case "group":
-        return groups.find((g) => g.id === filter.id)?.name ?? t("sidebar.groups");
-      case "tag":
-        return filter.name;
-    }
-  }, [filter, groups, t]);
+  const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
+  const scope = group ? groupMap.get(group) : undefined;
+  const title = scope?.name ?? t("hosts.title");
+  // Tags no host has any more drop out of the filter.
+  const activeTags = useMemo(() => pickedTags.filter((tag) => tagList.some((x) => x.name === tag)), [pickedTags, tagList]);
+  const filtering = favorites || activeTags.length > 0;
 
   // Filter + sort only when inputs change; typing in the search box touches neither.
-  const base = useMemo(() => sortHosts(applyFilter(hosts, filter), sort, t.locale), [hosts, filter, sort, t.locale]);
+  const filtered = useMemo(() => applyFilter(hosts, { group, favorites, tags: activeTags }), [hosts, group, favorites, activeTags]);
+  const listSort: ListSort = isListSort(sort) ? sort : "recent";
+  const base = useMemo(() => sortHosts(filtered, listSort, t.locale), [filtered, listSort, t.locale]);
   const index = useMemo(() => buildHostIndex(base), [base]);
   // HOST-12: `user@host` and `ssh …` input is also a target to connect to. The list is then
   // filtered by its destination, without the ssh syntax around it.
   const parsed = useMemo(() => parseQuickConnect(deferredQuery), [deferredQuery]);
   const searchText = parsed ? parsed.search : deferredQuery;
+  const searching = deferredQuery.trim() !== "";
   const found = useMemo(() => searchHosts(index, searchText), [index, searchText]);
+  // HOST-14: a resource order sorts again with each reading; a search keeps its ranking.
+  const statsSort = stats && !isListSort(sort) && !searching ? sort : null;
+  const ordered = useMemo(() => (statsSort ? sortForDashboard(found, statsSort, readouts, t.locale) : found), [found, statsSort, readouts, t.locale]);
   // A typed target that is a saved host connects as that host, with its key and jump host.
   const exact = useMemo(() => (parsed?.ok ? savedHostFor(hosts, parsed.target) : undefined), [parsed, hosts]);
-  const visible = useMemo(() => (exact && !found.includes(exact) ? [exact, ...found] : found), [exact, found]);
+  const visible = useMemo(() => (exact && !ordered.includes(exact) ? [exact, ...ordered] : ordered), [exact, ordered]);
   // Recent targets that have been saved as hosts since show as those hosts.
   const unsavedRecents = useMemo(() => recents.filter((r) => !savedHostFor(hosts, r)), [recents, hosts]);
   const quickRows = useMemo(() => {
@@ -143,6 +168,19 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     for (const tab of tabs) if (tab.hostId) m.set(tab.hostId, tab.status);
     return m;
   }, [tabs]);
+
+  // HOST-14: the listed hosts are read while resource usage shows; the search does not change which.
+  const interval = prefs.dashboard_interval_secs;
+  const watched = useMemo(() => filtered.filter((h) => shownOnDashboard(h, groupMap)).map((h) => h.id), [filtered, groupMap]);
+  useDashboardWatch(watched, interval, stats && docVisible);
+  const { dashboard_cpu_alert: cpuAlert, dashboard_mem_alert: memAlert, dashboard_disk_alert: diskAlert } = prefs;
+  const alerts: Alerts = useMemo(() => ({ cpu: cpuAlert, mem: memAlert, disk: diskAlert }), [cpuAlert, memAlert, diskAlert]);
+  const hiddenColumns = prefs.dashboard_hidden_columns;
+  const [measureTable, tableWidth] = useWidth();
+  const columns = useMemo(
+    () => fitStatsColumns(DASHBOARD_COLUMNS.filter((c) => !hiddenColumns.includes(c)), tableWidth),
+    [hiddenColumns, tableWidth],
+  );
 
   const rowIds = useMemo(() => [...quickRows.map((r) => r.id), ...visible.map((h) => h.id)], [quickRows, visible]);
   // The typed target, or the saved host it is, is selected until the user picks another row; otherwise
@@ -195,11 +233,11 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     void connectTarget(target);
   };
 
-  // Relative times ("2 min ago") refresh once a minute.
+  // Relative times ("2 min ago") refresh once a minute; with readings, old ones show as old within seconds.
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    const timer = window.setInterval(() => setNow(Date.now()), stats ? 5000 : 60_000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [stats]);
 
   // Ctrl+Shift+K focuses the search field (a page mounted by the shortcut handles the tick too).
   useEffect(() => {
@@ -214,7 +252,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
 
   useEffect(() => {
     if (searchTick === handledSearchTick) listRef.current?.focus({ preventScroll: true });
-    // Only on mount: don't steal focus when the filter changes.
+    // Only on mount: don't steal focus when the group changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -253,15 +291,8 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     };
   }, [probeKey, hostProbe]);
 
-  const newHost = useCallback(
-    () =>
-      navigate({ kind: "host-edit", hostId: null, groupId: filter.kind === "group" ? filter.id : null, back: filter }),
-    [navigate, filter],
-  );
-  const editHost = useCallback(
-    (id: string) => navigate({ kind: "host-edit", hostId: id, groupId: null, back: filter }),
-    [navigate, filter],
-  );
+  const newHost = useCallback(() => navigate({ kind: "host-edit", hostId: null, groupId: group, back: group }), [navigate, group]);
+  const editHost = useCallback((id: string) => navigate({ kind: "host-edit", hostId: id, groupId: null, back: group }), [navigate, group]);
 
   const connect = useCallback(
     (id: string) => {
@@ -285,6 +316,12 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     },
     [select, openRowMenu],
   );
+
+  const openGroupMenu = (e: MouseEvent, g: GroupView) => {
+    e.preventDefault();
+    setCtxGroup(g);
+    groupMenu.openAt({ x: e.clientX, y: e.clientY });
+  };
 
   const fail = (e: unknown) => toast(errorMessage(t, e), "error");
 
@@ -346,6 +383,20 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     }
   };
 
+  // HOST-14: with resource usage showing, the host's detail, Retry, and whether it is read.
+  const statsEntries = (host: HostView): MenuEntry[] => {
+    if (!stats) return [];
+    const r = readouts[host.id];
+    const included = shownOnDashboard(host, groupMap);
+    const toggle = dashboardSwitch(host, groupMap);
+    return [
+      { kind: "separator" },
+      ...(included ? [{ label: t("hosts.menu.details"), icon: "chart-line", hint: t("hosts.menu.detailsKey"), onSelect: () => setDetail(host.id) }] : []),
+      ...((canRetry(r) || r?.phase === "offline") && included ? [{ label: t("btn.retry"), icon: "arrow-clockwise", onSelect: () => retryHost(host.id) }] : []),
+      { label: t(toggle.key), icon: toggle.icon, onSelect: toggle.run },
+    ];
+  };
+
   const menuEntries = (host: HostView): MenuEntry[] => [
     { label: t("hosts.menu.connect"), icon: "plugs-connected", onSelect: () => connect(host.id) },
     { label: t("hosts.menu.edit"), icon: "pencil-simple", onSelect: () => editHost(host.id) },
@@ -359,11 +410,40 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     ...(host.has_password
       ? [{ label: t("hosts.menu.copyPassword"), icon: "password", onSelect: () => void copyPassword(host) }]
       : []),
+    ...statsEntries(host),
     { kind: "separator" },
     { label: t("hosts.menu.delete"), icon: "trash", danger: true, onSelect: () => void remove(host) },
   ];
 
-  const move = (delta: 1 | -1) => {
+  const groupEntries = (g: GroupView): MenuEntry[] => [
+    { label: t("sidebar.renameGroup"), icon: "pencil-simple", onSelect: () => setEditingGroup(g) },
+    ...(stats
+      ? [
+          g.dashboard
+            ? { label: t("dashboard.leaveOutGroup"), icon: "eye-slash", onSelect: () => void setShownOnDashboard(g.id, false) }
+            : { label: t("dashboard.includeGroup"), icon: "eye", onSelect: () => void setShownOnDashboard(g.id, true) },
+        ]
+      : []),
+    { kind: "separator" },
+    {
+      label: t("sidebar.deleteGroup"),
+      icon: "trash",
+      danger: true,
+      onSelect: () =>
+        void deleteGroup(t, g).then((deleted) => {
+          if (deleted && group === g.id) navigate({ kind: "hosts", group: null });
+        }),
+    },
+  ];
+
+  /** The number of cards in a row, for ↑/↓ in the cards view. */
+  const cardsPerRow = () => {
+    const el = cardsRef.current;
+    if (!el) return 1;
+    return Math.max(1, getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean).length);
+  };
+
+  const move = (delta: number) => {
     if (rowIds.length === 0) return;
     const i = effectiveId ? rowIds.indexOf(effectiveId) : -1;
     const next = rowIds[Math.max(0, Math.min(rowIds.length - 1, i + delta))];
@@ -373,7 +453,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     );
   };
 
-  // ↑/↓ move the selection, Enter connects (HOST-07). Works from the list and from the search field.
+  // ↑/↓ move the selection, Enter connects (HOST-07); among cards ←/→ too. Works from the list and from the search field.
   const onKeyDown = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement;
     const inSearch = target === searchRef.current;
@@ -400,9 +480,18 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
         return;
       }
     }
+    const amongCards = view === "cards" && !quickRows.some((r) => r.id === effectiveId);
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      move(e.key === "ArrowDown" ? 1 : -1);
+      const step = amongCards ? cardsPerRow() : 1;
+      move(e.key === "ArrowDown" ? step : -step);
+    } else if (onList && amongCards && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
+      e.preventDefault();
+      move(e.key === "ArrowRight" ? 1 : -1);
+    } else if (onList && e.key === " " && stats && effectiveId && hosts.some((h) => h.id === effectiveId)) {
+      // Space shows the selected host's detail, as Quick Look does.
+      e.preventDefault();
+      setDetail(effectiveId);
     } else if (e.key === "Enter" && effectiveId === TYPED_ROW) {
       e.preventDefault();
       // The list may still show an earlier keystroke: connect what the field says now.
@@ -420,10 +509,35 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     }
   };
 
-  const newButton = (
-    <Button variant="primary" icon="plus" onClick={newHost}>
-      {t("hosts.newHost")}
-    </Button>
+  // New Host, with New Group under the chevron beside it, as in Termius.
+  const newControls = (
+    <span className={s.split}>
+      <Button variant="primary" icon="plus" onClick={newHost}>
+        {t("hosts.newHost")}
+      </Button>
+      <Button
+        ref={newMenuButton}
+        variant="primary"
+        icon="caret-down"
+        className={s.splitCaret}
+        aria-label={t("hosts.newMenu")}
+        title={t("hosts.newMenu")}
+        aria-haspopup="menu"
+        aria-expanded={!!newMenu.anchor}
+        onClick={() => newMenuButton.current && newMenu.openBelow(newMenuButton.current, true)}
+      />
+      {newMenu.anchor && (
+        <Menu
+          anchor={newMenu.anchor}
+          onClose={newMenu.close}
+          minWidth={160}
+          entries={[
+            { label: t("hosts.newHost"), icon: "hard-drives", onSelect: newHost },
+            { label: t("sidebar.newGroup"), icon: "folder-simple-plus", onSelect: () => setEditingGroup("new") },
+          ]}
+        />
+      )}
+    </span>
   );
 
   // SSH-11, SSH-12, SSH-15: `~/.ssh/config`, then the other SSH clients.
@@ -456,7 +570,12 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
       )}
     </>
   );
-  const importDialog = importing && <ImportDialog source={importing} onClose={() => setImporting(null)} />;
+  const dialogs = (
+    <>
+      {importing && <ImportDialog source={importing} onClose={() => setImporting(null)} />}
+      {editingGroup && <GroupDialog group={editingGroup === "new" ? null : editingGroup} count={groups.length} onClose={() => setEditingGroup(null)} />}
+    </>
+  );
 
   const searchField = (
     <div className={s.searchWrap}>
@@ -494,7 +613,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     return (
       <div className={s.page} onKeyDown={onKeyDown}>
         <PageHeader title={title} search={searchField}>
-          {newButton}
+          {newControls}
         </PageHeader>
         <EmptyState
           icon="hard-drives"
@@ -502,7 +621,9 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
           body={t("hosts.empty.body")}
           actions={
             <>
-              {newButton}
+              <Button variant="primary" icon="plus" onClick={newHost}>
+                {t("hosts.newHost")}
+              </Button>
               {importControls}
             </>
           }
@@ -513,133 +634,343 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
             </>
           }
         />
-        {importDialog}
+        {dialogs}
       </div>
     );
   }
 
-  const sortLabels: Record<HostSort, string> = {
-    recent: t("hosts.sort.recent"),
-    name: t("hosts.sort.name"),
-    address: t("hosts.sort.address"),
-  };
+  const sortLabel = (k: HostSort) => t(isListSort(k) ? (`hosts.sort.${k}` as MessageKey) : (`dashboard.sort.${k}` as MessageKey));
+  const shownSort = stats ? sort : listSort;
 
-  const searching = deferredQuery.trim() !== "";
   const hasQuick = quickRows.length > 0 || problem !== null;
   const emptyBody = (() => {
-    if (base.length === 0 && hosts.length > 0 && !hasQuick && !exact) {
-      switch (filter.kind) {
-        case "favorites":
-          return { icon: "star", key: "hosts.emptyFav" } as const;
-        case "recent":
-          return { icon: "clock-counter-clockwise", key: "hosts.emptyRecent" } as const;
-        case "tag":
-          return { icon: "tag", key: "hosts.emptyTag" } as const;
-        default:
-          return { icon: "folder-simple", key: "hosts.emptyGroup" } as const;
-      }
-    }
-    return null;
+    if (base.length > 0 || hosts.length === 0 || hasQuick || exact) return null;
+    return filtering ? ("filter" as const) : ("group" as const);
   })();
+
+  // A group's page is a step down from every host, with the group's menu beside its name.
+  const titleNode = scope ? (
+    <span className={s.crumbs}>
+      <button type="button" className={s.crumb} onClick={() => navigate({ kind: "hosts", group: null })}>
+        {t("hosts.title")}
+      </button>
+      <Icon name="caret-right" className={s.crumbSep} />
+      <span className={s.crumbHere}>{scope.name}</span>
+      <IconButton icon="dots-three" label={t("dashboard.groupMenu")} onClick={(e) => openGroupMenu(e, scope)} />
+    </span>
+  ) : (
+    title
+  );
+
+  const toolbar = (
+    <div className={s.toolbar}>
+      <button type="button" className={cx(s.toggle, favorites && s.toggleOn)} aria-pressed={favorites} onClick={() => setFavorites(!favorites)}>
+        <Icon name="star" fill={favorites} />
+        {t("sidebar.favorites")}
+      </button>
+      <button
+        ref={tagsButton}
+        type="button"
+        className={cx(s.toggle, activeTags.length > 0 && s.toggleOn)}
+        aria-haspopup="menu"
+        aria-expanded={!!tagsMenu.anchor}
+        onClick={() => tagsButton.current && tagsMenu.openBelow(tagsButton.current)}
+      >
+        <Icon name="tag" />
+        {t("sidebar.tags")}
+        {activeTags.length > 0 && <span className={s.toggleCount}>{activeTags.length}</span>}
+        <Icon name="caret-down" className={s.toggleCaret} />
+      </button>
+      {activeTags.map((tag) => (
+        <button key={tag} type="button" className={s.tagChip} title={t("hosts.tags.remove", { tag })} onClick={() => setTags(activeTags.filter((x) => x !== tag))}>
+          <Tag name={tag} />
+          <Icon name="x" className={s.tagChipX} />
+        </button>
+      ))}
+      <span className={s.toolbarGap} />
+      <Button
+        ref={sortButton}
+        size="sm"
+        trailingIcon="caret-down"
+        aria-haspopup="menu"
+        aria-expanded={!!sortMenu.anchor}
+        aria-label={t("hosts.sort")}
+        onClick={() => sortButton.current && sortMenu.openBelow(sortButton.current, true)}
+      >
+        {sortLabel(shownSort)}
+      </Button>
+      {stats && view === "list" && (
+        <Button
+          ref={columnsButton}
+          size="sm"
+          icon="columns"
+          title={t("dashboard.columns")}
+          aria-label={t("dashboard.columns")}
+          aria-haspopup="menu"
+          aria-expanded={!!columnsMenu.anchor}
+          onClick={() => columnsButton.current && columnsMenu.openBelow(columnsButton.current, true)}
+        >
+          {t("dashboard.columns")}
+        </Button>
+      )}
+      <label className={s.statsSwitch} title={t("hosts.stats.hint")}>
+        <Switch checked={stats} label={t("hosts.stats")} onChange={setStats} />
+        <span>{t("hosts.stats")}</span>
+      </label>
+      <Segmented<HostsView>
+        ariaLabel={t("hosts.view")}
+        className={s.viewSwitch}
+        value={view}
+        options={[
+          { value: "list", label: t("hosts.view.list"), title: t("hosts.view.list"), icon: "rows" },
+          { value: "cards", label: t("dashboard.layout.cards"), title: t("dashboard.layout.cards"), icon: "squares-four" },
+        ]}
+        onChange={setView}
+      />
+    </div>
+  );
+
+  // At the top level, the groups to step into, as in Termius; every host is listed below them.
+  const groupBar = group === null && groups.length > 0 && (
+    <div className={s.groupBar} role="list" aria-label={t("sidebar.groups")}>
+      {groups.map((g) => (
+        <button
+          key={g.id}
+          type="button"
+          role="listitem"
+          className={s.groupTile}
+          onClick={() => navigate({ kind: "hosts", group: g.id })}
+          onContextMenu={(e) => openGroupMenu(e, g)}
+        >
+          <Icon name="folder-simple" className={s.groupIcon} />
+          <span className={s.groupName}>{g.name}</span>
+          <span className={s.groupCount}>{hosts.filter((h) => h.group_id === g.id).length}</span>
+        </button>
+      ))}
+    </div>
+  );
+
+  const listState = (h: HostView): ListState => {
+    const status = tabStatus.get(h.id);
+    const failed = status === "failed";
+    return {
+      dot: status === "connected" ? "var(--green)" : failed ? "var(--red)" : probe[h.id] ? "var(--green)" : "var(--fg3)",
+      last: failed ? t("hosts.failed") : h.last_connected_at ? formatRelative(t.locale, h.last_connected_at, now) : t("hosts.neverConnected"),
+      failed,
+    };
+  };
+
+  const itemView: View = {
+    t,
+    now,
+    interval,
+    alerts,
+    groups: groupMap,
+    stats,
+    connectLabel: t("hosts.connect"),
+    onSelect: pick,
+    onConnect: connect,
+    onContext,
+  };
+
+  const quickList = (
+    <>
+      {problem && <ProblemRow problem={problem} />}
+      {notice && <NoticeRow />}
+      {quickRows.map((r) => (
+        <QuickRow
+          key={r.id}
+          item={r}
+          selected={r.id === effectiveId}
+          connectLabel={t("hosts.connect")}
+          hint={r.recent ? t("hosts.quick.recent") : t("hosts.quick.notSaved")}
+          removeLabel={t("hosts.quick.forget")}
+          onSelect={pick}
+          onConnect={connect}
+          onRemove={(target) => void removeRecent(target)}
+        />
+      ))}
+    </>
+  );
+
+  let body;
+  if (emptyBody === "filter") {
+    body = (
+      <EmptyState
+        icon="funnel"
+        title={t("hosts.emptyFilter.title")}
+        body={t("hosts.emptyFilter.body")}
+        actions={
+          <Button
+            onClick={() => {
+              setFavorites(false);
+              setTags([]);
+            }}
+          >
+            {t("hosts.emptyFilter.clear")}
+          </Button>
+        }
+      />
+    );
+  } else if (emptyBody === "group") {
+    body = (
+      <EmptyState
+        icon="folder-simple"
+        title={t("hosts.emptyGroup.title")}
+        body={t("hosts.emptyGroup.body")}
+        actions={
+          <Button variant="primary" icon="plus" onClick={newHost}>
+            {t("hosts.newHost")}
+          </Button>
+        }
+      />
+    );
+  } else if (visible.length === 0 && searching && !hasQuick) {
+    body = (
+      <EmptyState
+        icon="magnifying-glass"
+        title={t("hosts.noResults.title")}
+        body={t("hosts.noResults.body", { q: deferredQuery.trim() })}
+        actions={<Button onClick={() => setQuery("")}>{t("hosts.noResults.clear")}</Button>}
+      />
+    );
+  } else {
+    body = (
+      <div ref={listRef} className={s.scroll} tabIndex={0} role="listbox" aria-label={title}>
+        {view === "list" &&
+          (stats ? (
+            <StatsHead columns={columns} t={t} measure={measureTable} />
+          ) : (
+            <div className={cx(layoutStyles.tableHead, s.cols, s.head)}>
+              <span className={s.headName}>{t("hosts.col.name")}</span>
+              <span>{t("hosts.col.address")}</span>
+              <span>{t("hosts.col.tags")}</span>
+              <span>{t("hosts.col.last")}</span>
+              <span />
+            </div>
+          ))}
+        {view === "list" ? (
+          <div className={s.rows}>
+            {quickList}
+            {visible.map((h) =>
+              stats ? (
+                <StatsRow
+                  key={h.id}
+                  host={h}
+                  selected={h.id === effectiveId}
+                  readout={readouts[h.id]}
+                  leftOut={leftOutBy(h, groupMap)}
+                  columns={columns}
+                  view={itemView}
+                />
+              ) : (
+                <HostRow
+                  key={h.id}
+                  host={h}
+                  selected={h.id === effectiveId}
+                  jumpName={h.jump_host_id ? (hostName.get(h.jump_host_id) ?? null) : null}
+                  status={tabStatus.get(h.id)}
+                  online={probe[h.id]}
+                  now={now}
+                  locale={t.locale}
+                  connectLabel={t("hosts.connect")}
+                  failedLabel={t("hosts.failed")}
+                  viaTitle={h.jump_host_id ? t("hosts.viaTitle", { name: hostName.get(h.jump_host_id) ?? "" }) : ""}
+                  onSelect={pick}
+                  onConnect={connect}
+                  onContext={onContext}
+                />
+              ),
+            )}
+          </div>
+        ) : (
+          <>
+            {(hasQuick || notice) && <div className={s.rows}>{quickList}</div>}
+            <div ref={cardsRef} className={s.cards}>
+              {visible.map((h) => (
+                <HostCard
+                  key={h.id}
+                  host={h}
+                  selected={h.id === effectiveId}
+                  readout={stats ? readouts[h.id] : undefined}
+                  leftOut={stats ? leftOutBy(h, groupMap) : null}
+                  list={listState(h)}
+                  view={itemView}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  const detailHost = detail ? hosts.find((h) => h.id === detail) : undefined;
+  const sortEntries: MenuEntry[] = [
+    ...LIST_SORTS.map((k) => ({ label: sortLabel(k), checked: shownSort === k, onSelect: () => setSort(k) })),
+    ...(stats ? [{ kind: "separator" } as const, ...STATS_SORTS.map((k) => ({ label: sortLabel(k), checked: sort === k, onSelect: () => setSort(k) }))] : []),
+  ];
 
   return (
     <div className={s.page} onKeyDown={onKeyDown}>
-      <PageHeader title={title} count={t("hosts.count", { n: visible.length })} search={searchField}>
-        <Button
-          ref={sortButton}
-          trailingIcon="caret-down"
-          aria-haspopup="menu"
-          aria-expanded={!!sortMenu.anchor}
-          aria-label={t("hosts.sort")}
-          onClick={() => sortButton.current && sortMenu.openBelow(sortButton.current, true)}
-        >
-          {sortLabels[sort]}
-        </Button>
+      <PageHeader title={titleNode} count={t("hosts.count", { n: visible.length })} search={searchField}>
         {importControls}
-        {newButton}
+        {newControls}
       </PageHeader>
+      {toolbar}
+      {groupBar}
+      {body}
 
-      {emptyBody ? (
-        <EmptyState
-          icon={emptyBody.icon}
-          title={t(`${emptyBody.key}.title` as "hosts.emptyFav.title")}
-          body={t(`${emptyBody.key}.body` as "hosts.emptyFav.body")}
-          actions={
-            filter.kind === "group" ? (
-              <Button variant="primary" icon="plus" onClick={newHost}>
-                {t("hosts.newHost")}
-              </Button>
-            ) : undefined
+      {sortMenu.anchor && <Menu anchor={sortMenu.anchor} onClose={sortMenu.close} minWidth={150} entries={sortEntries} />}
+      {tagsMenu.anchor && (
+        <Menu
+          anchor={tagsMenu.anchor}
+          onClose={tagsMenu.close}
+          minWidth={180}
+          entries={
+            tagList.length === 0
+              ? [{ label: t("hosts.tags.none"), disabled: true, onSelect: () => {} }]
+              : [
+                  ...tagList.map((tag) => ({
+                    label: tag.name,
+                    hint: String(tag.count),
+                    checked: activeTags.includes(tag.name),
+                    keepOpen: true,
+                    onSelect: () => setTags(activeTags.includes(tag.name) ? activeTags.filter((x) => x !== tag.name) : [...activeTags, tag.name]),
+                  })),
+                  ...(activeTags.length > 0 ? [{ kind: "separator" } as const, { label: t("hosts.tags.clear"), icon: "x", onSelect: () => setTags([]) }] : []),
+                ]
           }
         />
-      ) : visible.length === 0 && searching && !hasQuick ? (
-        <EmptyState
-          icon="magnifying-glass"
-          title={t("hosts.noResults.title")}
-          body={t("hosts.noResults.body", { q: deferredQuery.trim() })}
-          actions={<Button onClick={() => setQuery("")}>{t("hosts.noResults.clear")}</Button>}
-        />
-      ) : (
-        <div ref={listRef} className={s.scroll} tabIndex={0} role="listbox" aria-label={title}>
-          <div className={cx(layoutStyles.tableHead, s.cols, s.head)}>
-            <span className={s.headName}>{t("hosts.col.name")}</span>
-            <span>{t("hosts.col.address")}</span>
-            <span>{t("hosts.col.tags")}</span>
-            <span>{t("hosts.col.last")}</span>
-            <span />
-          </div>
-          <div className={s.rows}>
-            {problem && <ProblemRow problem={problem} />}
-            {notice && <NoticeRow />}
-            {quickRows.map((r) => (
-              <QuickRow
-                key={r.id}
-                item={r}
-                selected={r.id === effectiveId}
-                connectLabel={t("hosts.connect")}
-                hint={r.recent ? t("hosts.quick.recent") : t("hosts.quick.notSaved")}
-                removeLabel={t("hosts.quick.forget")}
-                onSelect={pick}
-                onConnect={connect}
-                onRemove={(target) => void removeRecent(target)}
-              />
-            ))}
-            {visible.map((h) => (
-              <HostRow
-                key={h.id}
-                host={h}
-                selected={h.id === effectiveId}
-                jumpName={h.jump_host_id ? (hostName.get(h.jump_host_id) ?? null) : null}
-                status={tabStatus.get(h.id)}
-                online={probe[h.id]}
-                now={now}
-                locale={t.locale}
-                connectLabel={t("hosts.connect")}
-                failedLabel={t("hosts.failed")}
-                viaTitle={h.jump_host_id ? t("hosts.viaTitle", { name: hostName.get(h.jump_host_id) ?? "" }) : ""}
-                onSelect={pick}
-                onConnect={connect}
-                onContext={onContext}
-              />
-            ))}
-          </div>
-        </div>
       )}
-
-      {sortMenu.anchor && (
+      {columnsMenu.anchor && (
         <Menu
-          anchor={sortMenu.anchor}
-          onClose={sortMenu.close}
-          minWidth={140}
-          entries={(Object.keys(sortLabels) as HostSort[]).map((k) => ({
-            label: sortLabels[k],
-            checked: sort === k,
-            onSelect: () => setSort(k),
+          anchor={columnsMenu.anchor}
+          onClose={columnsMenu.close}
+          minWidth={150}
+          entries={DASHBOARD_COLUMNS.map((c: DashboardColumn) => ({
+            label: t(`dashboard.col.${c}` as MessageKey),
+            checked: !hiddenColumns.includes(c),
+            keepOpen: true,
+            onSelect: () =>
+              savePrefs({ dashboard_hidden_columns: hiddenColumns.includes(c) ? hiddenColumns.filter((x) => x !== c) : [...hiddenColumns, c] }),
           }))}
         />
       )}
       {rowMenu.anchor && ctxHost && <Menu anchor={rowMenu.anchor} onClose={rowMenu.close} entries={menuEntries(ctxHost)} />}
-      {importDialog}
+      {groupMenu.anchor && ctxGroup && <Menu anchor={groupMenu.anchor} onClose={groupMenu.close} entries={groupEntries(ctxGroup)} />}
+      {detailHost && (
+        <HostDetail
+          host={detailHost}
+          readout={readouts[detailHost.id]}
+          shown={shownOnDashboard(detailHost, groupMap)}
+          groups={groupMap}
+          interval={interval}
+          alerts={alerts}
+          onClose={() => setDetail(null)}
+        />
+      )}
+      {dialogs}
     </div>
   );
 }
