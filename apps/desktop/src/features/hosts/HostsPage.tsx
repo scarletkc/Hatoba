@@ -347,13 +347,17 @@ export function HostsPage({ group: requested }: { group: string | null }) {
         void connectTarget(quick.target);
         return;
       }
+      anchor.current = id;
       select([id]);
       void connectHost(id);
     },
     [select],
   );
 
-  /** A tab on each host, one host after another, so the questions some hosts ask come one at a time. */
+  /**
+   * A tab on each host, one host after another, so the passwords asked before connecting come one at a time; the
+   * host key and sign-in questions asked while connecting wait in line on their own.
+   */
   const connectAll = async (ids: string[]) => {
     for (const id of ids) await connectHost(id);
   };
@@ -432,6 +436,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
     try {
       const copy = await api.host_duplicate(host.id);
       await useVaultData.getState().reload();
+      anchor.current = copy.id;
       select([copy.id]);
       toast(t("hosts.duplicated", { name: copy.name }), "success");
     } catch (e) {
