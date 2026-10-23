@@ -16,8 +16,8 @@ pub const MAIN: &str = "main";
 /// centers its tabs. They stand on the home tab's navigation rail, 96 pt wide on macOS, 18 pt from
 /// both its edges at 100% interface zoom and below. They stay put as the interface zooms in: the
 /// rail grows with what it holds above 100%, and the title bar with its tabs from 150%, so the
-/// lights keep to their left and top, as by a wider Finder sidebar. The tab bar starts past the rail.
-/// tao re-applies the position on every redraw and after leaving fullscreen.
+/// lights keep to their left and top, as by a wider Finder sidebar. The tab bar starts past the
+/// rail. tao re-applies the position on every redraw and after leaving fullscreen.
 #[cfg(target_os = "macos")]
 const TRAFFIC_LIGHT_X: f64 = 18.0;
 #[cfg(target_os = "macos")]
