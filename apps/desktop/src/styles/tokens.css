@@ -20,11 +20,13 @@
 
 :root {
   /* Typography (WIN-02: Segoe UI Variable / Cascadia Mono on Windows, SF on macOS) */
-  --font-sans: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont,
-    "SF Pro Text", "Microsoft YaHei UI", "PingFang SC", "Hiragino Sans GB", "Yu Gothic UI", "Helvetica Neue",
-    Helvetica, Arial, sans-serif;
-  --font-mono: "Cascadia Mono", Consolas, ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono",
-    "Microsoft YaHei UI", "Yu Gothic UI", monospace;
+  --font-sans:
+    "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Microsoft YaHei UI", "PingFang SC", "Hiragino Sans GB", "Yu Gothic UI", "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
+  --font-mono:
+    "Cascadia Mono", Consolas, ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "Microsoft YaHei UI",
+    "Yu Gothic UI", monospace;
 
   /* Icon glyph sizes (Phosphor is a font, so these set font-size) */
   --icon-10: 10px;
@@ -113,7 +115,8 @@
   --sheet: #ffffff;
   --winline: rgba(0, 0, 0, 0.22);
   --shadow: 0 30px 80px rgba(20, 24, 40, 0.22), 0 6px 18px rgba(20, 24, 40, 0.1);
-  --shadow-popover: 0 0 0 0.5px var(--winline), 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 10px rgba(0, 0, 0, 0.07),
+  --shadow-popover:
+    0 0 0 0.5px var(--winline), 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 10px rgba(0, 0, 0, 0.07),
     0 14px 36px rgba(0, 0, 0, 0.14);
   --shadow-btn: 0 0 0 0.5px var(--btnline), 0 1px 1.5px rgba(0, 0, 0, 0.05);
   --shadow-seg: 0 1px 2px rgba(0, 0, 0, 0.12), 0 0 0 0.5px var(--line);
@@ -217,21 +220,24 @@
   --win-pad-px: 22;
   --win-pad: calc(var(--win-pad-px) * var(--window-px));
   --win-resize: calc(8 * var(--window-px));
-  --shadow-window: 0 calc(6 * var(--window-px)) calc(16 * var(--window-px)) rgba(0, 0, 0, 0.24),
+  --shadow-window:
+    0 calc(6 * var(--window-px)) calc(16 * var(--window-px)) rgba(0, 0, 0, 0.24),
     0 var(--window-px) calc(4 * var(--window-px)) rgba(0, 0, 0, 0.16);
 }
 
 :root[data-platform="linux"][data-theme="dark"] {
-  --shadow-window: 0 calc(6 * var(--window-px)) calc(16 * var(--window-px)) rgba(0, 0, 0, 0.5),
+  --shadow-window:
+    0 calc(6 * var(--window-px)) calc(16 * var(--window-px)) rgba(0, 0, 0, 0.5),
     0 var(--window-px) calc(4 * var(--window-px)) rgba(0, 0, 0, 0.36);
 }
 
 /* CJK font order: Japanese UI should prefer Yu Gothic over YaHei for unified Han glyphs */
 :root:lang(ja) {
-  --font-sans: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont,
-    "SF Pro Text", "Yu Gothic UI", "Hiragino Sans", "Microsoft YaHei UI", "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "Cascadia Mono", Consolas, ui-monospace, "SF Mono", Menlo, "Yu Gothic UI", "Microsoft YaHei UI",
-    monospace;
+  --font-sans:
+    "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Yu Gothic UI", "Hiragino Sans", "Microsoft YaHei UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    "Cascadia Mono", Consolas, ui-monospace, "SF Mono", Menlo, "Yu Gothic UI", "Microsoft YaHei UI", monospace;
 }
 
 /* macOS keeps the design's native look (P1). The mono stack keeps CJK fallbacks for wide characters (TERM-02).
@@ -242,16 +248,19 @@
   /* The traffic lights (x = 18 to 78 pt) stand on the rail, 18 pt from both its edges at 100% interface zoom and
      below. Above 100% the rail grows with what it holds while they stay put, as by a wider Finder sidebar. */
   --rail-width: max(96px, calc(96 * var(--window-px)));
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue",
-    Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "PingFang SC", "Hiragino Sans GB",
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", Helvetica,
+    Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "PingFang SC", "Hiragino Sans GB",
     "Hiragino Sans", monospace;
 }
 
 /* The macOS block above has the same specificity as :root:lang(ja) and comes later, so Japanese needs its own rule. */
 :root[data-platform="macos"]:lang(ja) {
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", "PingFang SC", "Helvetica Neue",
-    Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "Hiragino Sans", "PingFang SC",
-    monospace;
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", "PingFang SC", "Helvetica Neue", Helvetica,
+    Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "Hiragino Sans", "PingFang SC", monospace;
 }

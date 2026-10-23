@@ -16,34 +16,64 @@ const t = messages(locale);
     <div class="about">
       <p class="name wide">Hatoba</p>
       <p>{t.meta.tagline}</p>
-      <p class="license"><Link variant="muted" href={LICENSE_URL}>{t.footer.license}</Link></p>
+      <p class="license">
+        <Link variant="muted" href={LICENSE_URL}>
+          {t.footer.license}
+        </Link>
+      </p>
     </div>
     <ul class="links">
-      <li><Link variant="muted" href={localePath(locale, "/download/")}>{t.nav.download}</Link></li>
-      <li><Link variant="muted" href="/docs/" hreflang="en">{t.nav.docs}</Link></li>
-      <li><Link variant="muted" href={RELEASES_URL}>{t.footer.releases}</Link></li>
-      <li><Link variant="muted" href={REPO_URL}>{t.nav.github}</Link></li>
-      <li><Link variant="muted" href={BUG_REPORT_URL}>{t.footer.report}</Link></li>
-      <li><Link variant="muted" href={SECURITY_URL}>{t.footer.security}</Link></li>
-      <li><Link variant="muted" href={CONTRIBUTING_URL}>{t.footer.contributing}</Link></li>
+      <li>
+        <Link variant="muted" href={localePath(locale, "/download/")}>
+          {t.nav.download}
+        </Link>
+      </li>
+      <li>
+        <Link variant="muted" href="/docs/" hreflang="en">
+          {t.nav.docs}
+        </Link>
+      </li>
+      <li>
+        <Link variant="muted" href={RELEASES_URL}>
+          {t.footer.releases}
+        </Link>
+      </li>
+      <li>
+        <Link variant="muted" href={REPO_URL}>
+          {t.nav.github}
+        </Link>
+      </li>
+      <li>
+        <Link variant="muted" href={BUG_REPORT_URL}>
+          {t.footer.report}
+        </Link>
+      </li>
+      <li>
+        <Link variant="muted" href={SECURITY_URL}>
+          {t.footer.security}
+        </Link>
+      </li>
+      <li>
+        <Link variant="muted" href={CONTRIBUTING_URL}>
+          {t.footer.contributing}
+        </Link>
+      </li>
     </ul>
     <ul class="languages" aria-label={t.nav.language}>
-      {
-        LOCALES.map((other) => (
-          <li>
-            <Link
-              variant="muted"
-              href={localePath(other)}
-              hreflang={LANG[other]}
-              lang={LANG[other]}
-              data-locale={other}
-              aria-current={other === locale ? "true" : undefined}
-            >
-              {LANGUAGE_NAME[other]}
-            </Link>
-          </li>
-        ))
-      }
+      {LOCALES.map((other) => (
+        <li>
+          <Link
+            variant="muted"
+            href={localePath(other)}
+            hreflang={LANG[other]}
+            lang={LANG[other]}
+            data-locale={other}
+            aria-current={other === locale ? "true" : undefined}
+          >
+            {LANGUAGE_NAME[other]}
+          </Link>
+        </li>
+      ))}
     </ul>
   </div>
 </footer>

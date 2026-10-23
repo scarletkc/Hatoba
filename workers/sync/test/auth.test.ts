@@ -95,7 +95,9 @@ describe("POST /v1/login", () => {
   it("purges expired sessions of other devices on login", async () => {
     await setupVault();
     await login("stale-device");
-    await env.DB.prepare("UPDATE sessions SET expires_at = ?").bind(Date.now() - 1000).run();
+    await env.DB.prepare("UPDATE sessions SET expires_at = ?")
+      .bind(Date.now() - 1000)
+      .run();
     await login("device-a");
     expect((await sessionRows()).map((row) => row.device_id)).toEqual(["device-a"]);
   });
@@ -140,7 +142,11 @@ describe("session handling", () => {
 
   it.each(protectedRoutes)("%s %s requires a session (401)", async (method, path) => {
     await setupVault();
-    const headerSets: Array<Record<string, string>> = [{}, { Authorization: "Bearer not-a-real-token" }, { Authorization: "Token abc" }];
+    const headerSets: Array<Record<string, string>> = [
+      {},
+      { Authorization: "Bearer not-a-real-token" },
+      { Authorization: "Token abc" },
+    ];
     for (const headers of headerSets) {
       const res = await call(path, { method, headers, json: method === "GET" || method === "DELETE" ? undefined : {} });
       expect(res.status, `${method} ${path} ${JSON.stringify(headers)}`).toBe(401);
@@ -150,7 +156,9 @@ describe("session handling", () => {
 
   it("rejects an expired session with 401", async () => {
     const token = await loggedIn();
-    await env.DB.prepare("UPDATE sessions SET expires_at = ?").bind(Date.now() - 1).run();
+    await env.DB.prepare("UPDATE sessions SET expires_at = ?")
+      .bind(Date.now() - 1)
+      .run();
     const res = await call("/v1/vault", { token });
     expect(res.status).toBe(401);
     expect(res.body.error).toBe("invalid_session");
@@ -252,7 +260,9 @@ describe("POST /v1/recover", () => {
   it("rejects an expired recovery session", async () => {
     await setupVault();
     const token = (await recover()).body.session_token as string;
-    await env.DB.prepare("UPDATE sessions SET expires_at = ?").bind(Date.now() - 1).run();
+    await env.DB.prepare("UPDATE sessions SET expires_at = ?")
+      .bind(Date.now() - 1)
+      .run();
     const res = await call("/v1/vault/password", {
       method: "PUT",
       token,

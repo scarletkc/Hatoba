@@ -10,7 +10,8 @@ export default defineMessages({
     "aiSettings.providers": "服务商",
     "aiSettings.providers.add": "添加服务商",
     "aiSettings.providers.empty.title": "还没有服务商",
-    "aiSettings.providers.empty.body": "添加 OpenAI Chat Completions、OpenAI Responses 或 Anthropic Messages 服务商，或者使用 ChatGPT 账户登录以使用你的 ChatGPT 套餐，就能使用 AI 助手。Ollama、LM Studio 等本地服务器也可以。",
+    "aiSettings.providers.empty.body":
+      "添加 OpenAI Chat Completions、OpenAI Responses 或 Anthropic Messages 服务商，或者使用 ChatGPT 账户登录以使用你的 ChatGPT 套餐，就能使用 AI 助手。Ollama、LM Studio 等本地服务器也可以。",
     "aiSettings.provider.models": "{n} 个模型",
     "aiSettings.provider.noModels": "没有模型",
     "aiSettings.provider.edit": "编辑 {name}",
@@ -30,21 +31,24 @@ export default defineMessages({
     "aiSettings.chatgpt.status.signed_in": "已在此设备登录",
     "aiSettings.chatgpt.status.signed_out": "未在此设备登录。在其他设备登录过的账户，也要在这台设备登录一次。",
     "aiSettings.chatgpt.status.ended": "登录已失效，请重新登录。",
-    "aiSettings.chatgpt.status.plan_disabled": "已登录，但没有允许 Hatoba 使用你的 ChatGPT 套餐。重新登录并允许后才能使用。",
+    "aiSettings.chatgpt.status.plan_disabled":
+      "已登录，但没有允许 Hatoba 使用你的 ChatGPT 套餐。重新登录并允许后才能使用。",
     "aiSettings.chatgpt.row.signed_out": "需要在此设备登录",
     "aiSettings.chatgpt.row.ended": "登录已失效",
     "aiSettings.chatgpt.row.plan_disabled": "未允许使用套餐",
     "aiSettings.chatgpt.signOut": "退出登录",
     "aiSettings.chatgpt.signedIn": "已登录 ChatGPT",
     "aiSettings.chatgpt.signedOut": "已在此设备退出 ChatGPT",
-    "aiSettings.chatgpt.signedOutUnconfirmed": "已在此设备退出，但 ChatGPT 没有确认结束会话。你可以在 ChatGPT 的设置里断开 Hatoba。",
+    "aiSettings.chatgpt.signedOutUnconfirmed":
+      "已在此设备退出，但 ChatGPT 没有确认结束会话。你可以在 ChatGPT 的设置里断开 Hatoba。",
     "aiSettings.chatgpt.manageUsage": "管理用量",
     "aiSettings.chatgpt.waiting.title": "在浏览器中继续",
     "aiSettings.chatgpt.waiting.body": "请在打开的浏览器窗口中登录 ChatGPT，完成后回到 Hatoba。",
     "aiSettings.chatgpt.waiting.inline": "正在等待浏览器中的登录…",
     "aiSettings.chatgpt.failed.title": "无法登录 ChatGPT",
     "aiSettings.chatgpt.welcome.title": "你正在使用 ChatGPT 套餐",
-    "aiSettings.chatgpt.welcome.body": "AI 助手通过这个服务商发出的请求会使用你的 ChatGPT 套餐。用量和限额可以在 ChatGPT 的设置里查看和管理。",
+    "aiSettings.chatgpt.welcome.body":
+      "AI 助手通过这个服务商发出的请求会使用你的 ChatGPT 套餐。用量和限额可以在 ChatGPT 的设置里查看和管理。",
     "aiSettings.chatgpt.welcome.ok": "知道了",
     "aiSettings.chatgpt.test.auth": "ChatGPT 没有接受这次登录。请重新登录。",
 
@@ -58,7 +62,8 @@ export default defineMessages({
     "aiSettings.f.baseUrl.responses": "地址要包含 API 版本，例如 https://api.openai.com/v1。",
     "aiSettings.f.baseUrl.anthropic": "填服务商为 Anthropic SDK 提供的地址，例如 https://api.anthropic.com。",
     "aiSettings.f.protocol.system_one": "仅用于自动批准模式的判定模型：这类模型回答判定问题，不能用来对话。",
-    "aiSettings.f.baseUrl.system_one": "支持 TypeSafe、OpenRouter 和 Cloudflare Workers AI，例如 https://api.typesafe.ai/v1。",
+    "aiSettings.f.baseUrl.system_one":
+      "支持 TypeSafe、OpenRouter 和 Cloudflare Workers AI，例如 https://api.typesafe.ai/v1。",
     "aiSettings.f.apiKey": "API 密钥",
     "aiSettings.f.apiKeyPlaceholder": "不需要密钥的本地服务器可以留空",
     "aiSettings.f.apiKeyNewPlaceholder": "输入新的 API 密钥",
@@ -69,7 +74,8 @@ export default defineMessages({
     "aiSettings.f.apiKeyCleared": "保存后会清除已保存的密钥",
     "aiSettings.f.apiKeyUndo": "撤销",
     "aiSettings.f.authHeader": "认证头",
-    "aiSettings.f.authHeader.hint": "大多数兼容 Anthropic 的服务使用 x-api-key，少数要求 Authorization: Bearer，请查看服务商的文档。",
+    "aiSettings.f.authHeader.hint":
+      "大多数兼容 Anthropic 的服务使用 x-api-key，少数要求 Authorization: Bearer，请查看服务商的文档。",
 
     "aiSettings.err.nameRequired": "请输入名称。",
     "aiSettings.err.urlRequired": "请输入基础 URL。",
@@ -127,10 +133,12 @@ export default defineMessages({
     "aiSettings.instructions.placeholder": "例如：用中文回答。我用 Debian 和 zsh，服务用 systemctl 管理。",
     "aiSettings.screen": "终端屏幕",
     "aiSettings.screen.row": "默认随每条消息发送",
-    "aiSettings.screen.hint": "AI 助手会看到发送消息时所连终端的最后 20 行；vim 等全屏程序运行时，则是整个屏幕。输入框的 + 菜单可为单个对话开启或关闭。",
+    "aiSettings.screen.hint":
+      "AI 助手会看到发送消息时所连终端的最后 20 行；vim 等全屏程序运行时，则是整个屏幕。输入框的 + 菜单可为单个对话开启或关闭。",
     "aiSettings.memory": "记忆",
     "aiSettings.memory.row": "跨对话记忆",
-    "aiSettings.memory.hint": "助手会记下以后用得上的内容，例如你的偏好和主机的情况。全局记忆每个新对话都会带上，主机记忆只带进在那台主机上的对话。记忆随保险库同步。",
+    "aiSettings.memory.hint":
+      "助手会记下以后用得上的内容，例如你的偏好和主机的情况。全局记忆每个新对话都会带上，主机记忆只带进在那台主机上的对话。记忆随保险库同步。",
     "aiSettings.memory.add": "添加记忆",
     "aiSettings.memory.deleteAll": "全部删除",
     "aiSettings.memory.deleteAllTitle": "删除全部 {n} 条记忆？",
@@ -168,7 +176,8 @@ export default defineMessages({
     "aiSettings.search.searxng": "SearXNG",
     "aiSettings.search.baseUrl": "实例地址",
     "aiSettings.search.err.urlRequired": "请输入实例地址。",
-    "aiSettings.search.baseUrlHint": "你自己的 SearXNG 实例，例如 https://searx.example.com。实例需要开启 JSON 输出格式。",
+    "aiSettings.search.baseUrlHint":
+      "你自己的 SearXNG 实例，例如 https://searx.example.com。实例需要开启 JSON 输出格式。",
     "aiSettings.search.apiKey": "API 密钥",
     "aiSettings.search.apiKeyPlaceholder": "输入 API 密钥",
     "aiSettings.search.test.ok": "搜索正常。",
@@ -185,7 +194,8 @@ export default defineMessages({
     "aiSettings.judge.rowHint": "判断手动批准会询问的调用，能否不经询问直接运行。",
     "aiSettings.judge.placeholder": "选择判定模型",
     "aiSettings.judge.none": "无",
-    "aiSettings.judge.hint": "自动批准模式下，需要询问的调用会连同你在对话中的要求先发给判定模型：只读或你要求的改动直接运行，其余照常询问。",
+    "aiSettings.judge.hint":
+      "自动批准模式下，需要询问的调用会连同你在对话中的要求先发给判定模型：只读或你要求的改动直接运行，其余照常询问。",
     "aiSettings.judge.test": "测试",
     "aiSettings.judge.test.running": "正在让判定模型判断示例调用…",
     "aiSettings.judge.test.summary": "{total} 个示例中有 {n} 个符合预期",
@@ -232,7 +242,8 @@ export default defineMessages({
     "aiSettings.skills.import.zip": "导入 .zip…",
     "aiSettings.skills.hint": "Agent Skills 格式的说明。助手需要时会读取。",
     "aiSettings.skills.empty.title": "还没有自己的技能",
-    "aiSettings.skills.empty.body": "添加技能，让助手知道某类任务该怎么做，例如你如何部署，或者检查 Web 服务器要看什么。可以在这里编写，也可以导入带有 SKILL.md 的文件夹或 .zip。",
+    "aiSettings.skills.empty.body":
+      "添加技能，让助手知道某类任务该怎么做，例如你如何部署，或者检查 Web 服务器要看什么。可以在这里编写，也可以导入带有 SKILL.md 的文件夹或 .zip。",
     "aiSettings.skills.fileCount": "{n} 个文件",
     "aiSettings.skills.noFiles": "只有 SKILL.md",
     "aiSettings.skills.builtin": "内置",
@@ -332,7 +343,8 @@ export default defineMessages({
     "aiSettings.mcp.export": "导出",
     "aiSettings.mcp.hint": "MCP 服务器为助手提供更多工具。请只添加你信任的服务器。",
     "aiSettings.mcp.empty.title": "还没有 MCP 服务器",
-    "aiSettings.mcp.empty.body": "添加服务器，让助手用上更多工具，或者导入你在 Claude Desktop、Claude Code、Cursor 或 VS Code 中已有的服务器。",
+    "aiSettings.mcp.empty.body":
+      "添加服务器，让助手用上更多工具，或者导入你在 Claude Desktop、Claude Code、Cursor 或 VS Code 中已有的服务器。",
     "aiSettings.mcp.loadFailed": "无法读取 MCP 服务器。",
     "aiSettings.mcp.state.stopped": "已停止",
     "aiSettings.mcp.state.starting": "正在启动…",
@@ -385,7 +397,8 @@ export default defineMessages({
     "aiSettings.mcp.transport.httpHint": "Streamable HTTP：连接到一个远程的 MCP 服务。",
     "aiSettings.mcp.f.command": "命令",
     "aiSettings.mcp.f.commandPlaceholder": "npx",
-    "aiSettings.mcp.f.commandHint": "要运行的程序。会像 shell 一样在 PATH 中查找，所以在 Windows 上 npx 能找到 npx.cmd。",
+    "aiSettings.mcp.f.commandHint":
+      "要运行的程序。会像 shell 一样在 PATH 中查找，所以在 Windows 上 npx 能找到 npx.cmd。",
     "aiSettings.mcp.f.commandLine": "这像是一整行命令。请在这里只填程序，每个参数单独占一行。",
     "aiSettings.mcp.f.split": "拆成参数",
     "aiSettings.mcp.f.splitFailed": "有引号没有闭合，请检查。",
@@ -430,7 +443,7 @@ export default defineMessages({
 
     "aiSettings.mcp.imp.title": "导入 MCP 服务器",
     "aiSettings.mcp.imp.subtitle": "粘贴 Claude Desktop、Claude Code、Cursor 或 VS Code 的 JSON，或者选择文件。",
-    "aiSettings.mcp.imp.placeholder": "{ \"mcpServers\": { … } }",
+    "aiSettings.mcp.imp.placeholder": '{ "mcpServers": { … } }',
     "aiSettings.mcp.imp.paste": "JSON",
     "aiSettings.mcp.imp.file": "选择文件…",
     "aiSettings.mcp.imp.fileFailed": "无法读取这个文件。",
@@ -455,14 +468,16 @@ export default defineMessages({
     "aiSettings.providers": "Providers",
     "aiSettings.providers.add": "Add Provider",
     "aiSettings.providers.empty.title": "No Providers Yet",
-    "aiSettings.providers.empty.body": "Add an OpenAI Chat Completions, OpenAI Responses or Anthropic Messages provider, or continue with ChatGPT to use your ChatGPT plan. Local servers such as Ollama and LM Studio work too.",
+    "aiSettings.providers.empty.body":
+      "Add an OpenAI Chat Completions, OpenAI Responses or Anthropic Messages provider, or continue with ChatGPT to use your ChatGPT plan. Local servers such as Ollama and LM Studio work too.",
     "aiSettings.provider.models": "{n} models",
     "aiSettings.provider.models_one": "1 model",
     "aiSettings.provider.noModels": "No models",
     "aiSettings.provider.edit": "Edit {name}",
     "aiSettings.provider.delete": "Delete {name}",
     "aiSettings.provider.deleteTitle": "Delete “{name}”?",
-    "aiSettings.provider.deleteBody": "Existing conversations stay, but you’ll need to pick another model to continue them.",
+    "aiSettings.provider.deleteBody":
+      "Existing conversations stay, but you’ll need to pick another model to continue them.",
     "aiSettings.provider.deleted": "Deleted “{name}”",
 
     "aiSettings.protocol.chat_completions": "OpenAI Chat Completions",
@@ -474,23 +489,28 @@ export default defineMessages({
     "aiSettings.chatgpt.kind": "ChatGPT Account",
     "aiSettings.chatgpt.account": "Account",
     "aiSettings.chatgpt.status.signed_in": "Signed in on this device",
-    "aiSettings.chatgpt.status.signed_out": "Not signed in on this device. An account signed in on another device needs a sign-in on this one too.",
+    "aiSettings.chatgpt.status.signed_out":
+      "Not signed in on this device. An account signed in on another device needs a sign-in on this one too.",
     "aiSettings.chatgpt.status.ended": "The sign-in has ended. Sign in again.",
-    "aiSettings.chatgpt.status.plan_disabled": "Signed in, but Hatoba isn’t allowed to use your ChatGPT plan. Sign in again and allow it.",
+    "aiSettings.chatgpt.status.plan_disabled":
+      "Signed in, but Hatoba isn’t allowed to use your ChatGPT plan. Sign in again and allow it.",
     "aiSettings.chatgpt.row.signed_out": "Sign in on this device",
     "aiSettings.chatgpt.row.ended": "Sign-in ended",
     "aiSettings.chatgpt.row.plan_disabled": "Plan use not allowed",
     "aiSettings.chatgpt.signOut": "Sign Out",
     "aiSettings.chatgpt.signedIn": "Signed in to ChatGPT",
     "aiSettings.chatgpt.signedOut": "Signed out of ChatGPT on this device",
-    "aiSettings.chatgpt.signedOutUnconfirmed": "Signed out on this device, but ChatGPT didn’t confirm ending the session. You can disconnect Hatoba in ChatGPT’s settings.",
+    "aiSettings.chatgpt.signedOutUnconfirmed":
+      "Signed out on this device, but ChatGPT didn’t confirm ending the session. You can disconnect Hatoba in ChatGPT’s settings.",
     "aiSettings.chatgpt.manageUsage": "Manage Usage",
     "aiSettings.chatgpt.waiting.title": "Continue in Your Browser",
-    "aiSettings.chatgpt.waiting.body": "Sign in to ChatGPT in the browser window that opened, then come back to Hatoba.",
+    "aiSettings.chatgpt.waiting.body":
+      "Sign in to ChatGPT in the browser window that opened, then come back to Hatoba.",
     "aiSettings.chatgpt.waiting.inline": "Waiting for the sign-in in your browser…",
     "aiSettings.chatgpt.failed.title": "Couldn’t Sign In to ChatGPT",
     "aiSettings.chatgpt.welcome.title": "You’re Using Your ChatGPT Plan",
-    "aiSettings.chatgpt.welcome.body": "The assistant’s requests through this provider use your ChatGPT plan. You can review usage and limits in ChatGPT’s settings.",
+    "aiSettings.chatgpt.welcome.body":
+      "The assistant’s requests through this provider use your ChatGPT plan. You can review usage and limits in ChatGPT’s settings.",
     "aiSettings.chatgpt.welcome.ok": "Got It",
     "aiSettings.chatgpt.test.auth": "ChatGPT didn’t accept the sign-in. Sign in again.",
 
@@ -502,9 +522,12 @@ export default defineMessages({
     "aiSettings.f.baseUrl": "Base URL",
     "aiSettings.f.baseUrl.chat_completions": "Include the API version, such as https://api.openai.com/v1.",
     "aiSettings.f.baseUrl.responses": "Include the API version, such as https://api.openai.com/v1.",
-    "aiSettings.f.baseUrl.anthropic": "Use the address the provider documents for Anthropic SDKs, such as https://api.anthropic.com.",
-    "aiSettings.f.protocol.system_one": "Only for the judge of Auto mode: these models answer its questions and can’t hold conversations.",
-    "aiSettings.f.baseUrl.system_one": "Works with TypeSafe, OpenRouter and Cloudflare Workers AI, such as https://api.typesafe.ai/v1.",
+    "aiSettings.f.baseUrl.anthropic":
+      "Use the address the provider documents for Anthropic SDKs, such as https://api.anthropic.com.",
+    "aiSettings.f.protocol.system_one":
+      "Only for the judge of Auto mode: these models answer its questions and can’t hold conversations.",
+    "aiSettings.f.baseUrl.system_one":
+      "Works with TypeSafe, OpenRouter and Cloudflare Workers AI, such as https://api.typesafe.ai/v1.",
     "aiSettings.f.apiKey": "API Key",
     "aiSettings.f.apiKeyPlaceholder": "Leave empty if the server needs none",
     "aiSettings.f.apiKeyNewPlaceholder": "Enter new API key",
@@ -515,7 +538,8 @@ export default defineMessages({
     "aiSettings.f.apiKeyCleared": "The saved key is removed when you save",
     "aiSettings.f.apiKeyUndo": "Undo",
     "aiSettings.f.authHeader": "Auth Header",
-    "aiSettings.f.authHeader.hint": "Most Anthropic-compatible services use x-api-key. A few expect Authorization: Bearer; check the provider’s documentation.",
+    "aiSettings.f.authHeader.hint":
+      "Most Anthropic-compatible services use x-api-key. A few expect Authorization: Bearer; check the provider’s documentation.",
 
     "aiSettings.err.nameRequired": "Enter a name.",
     "aiSettings.err.urlRequired": "Enter the base URL.",
@@ -556,10 +580,12 @@ export default defineMessages({
     "aiSettings.test.ok": "Connected.",
     "aiSettings.test.okModel": "Connected. {model} responded.",
     "aiSettings.test.okList": "Connected. The server returned its model list.",
-    "aiSettings.test.fail.auth": "The provider rejected the API key. Check the key, and for the Anthropic protocol the auth header.",
+    "aiSettings.test.fail.auth":
+      "The provider rejected the API key. Check the key, and for the Anthropic protocol the auth header.",
     "aiSettings.test.fail.network": "Couldn’t reach the server. Check the base URL and your network.",
     "aiSettings.test.fail.unknown_model": "The provider doesn’t know the model {model}. Check the model ID.",
-    "aiSettings.test.fail.invalid_url": "The base URL can’t be used. Check it, and leave out any user name or password.",
+    "aiSettings.test.fail.invalid_url":
+      "The base URL can’t be used. Check it, and leave out any user name or password.",
     "aiSettings.test.fail.other": "The provider returned an error.",
 
     "aiSettings.default": "Default Model",
@@ -570,13 +596,16 @@ export default defineMessages({
     "aiSettings.default.effortHint": "A model without this level uses its closest lower one.",
     "aiSettings.instructions": "Custom Instructions",
     "aiSettings.instructions.hint": "Sent with every request: answer language, tone, the systems you use.",
-    "aiSettings.instructions.placeholder": "For example: Answer in English. I use Debian and zsh, and manage services with systemctl.",
+    "aiSettings.instructions.placeholder":
+      "For example: Answer in English. I use Debian and zsh, and manage services with systemctl.",
     "aiSettings.screen": "Terminal Screen",
     "aiSettings.screen.row": "Send with Each Message by Default",
-    "aiSettings.screen.hint": "The assistant sees the last 20 lines of the attached terminal as they were when you sent the message, or the whole screen while a full-screen program such as vim runs. The + menu in the input area turns it on or off for one conversation.",
+    "aiSettings.screen.hint":
+      "The assistant sees the last 20 lines of the attached terminal as they were when you sent the message, or the whole screen while a full-screen program such as vim runs. The + menu in the input area turns it on or off for one conversation.",
     "aiSettings.memory": "Memory",
     "aiSettings.memory.row": "Remember across conversations",
-    "aiSettings.memory.hint": "The assistant saves what will help later, such as your preferences and facts about your hosts. Every new conversation starts with the global memories, and a conversation on a host with that host’s memories too. Memories sync with your vault.",
+    "aiSettings.memory.hint":
+      "The assistant saves what will help later, such as your preferences and facts about your hosts. Every new conversation starts with the global memories, and a conversation on a host with that host’s memories too. Memories sync with your vault.",
     "aiSettings.memory.add": "Add Memory",
     "aiSettings.memory.deleteAll": "Delete All",
     "aiSettings.memory.deleteAllTitle": "Delete all {n} memories?",
@@ -602,11 +631,13 @@ export default defineMessages({
     "aiSettings.memory.err.long_name": "The name can be at most {n} characters.",
     "aiSettings.memory.err.empty_content": "Enter what to remember.",
     "aiSettings.memory.err.taken": "Another memory here has this name.",
-    "aiSettings.memory.err.full": "These memories are full: together they hold at most {max} bytes. Shorten or delete some first.",
+    "aiSettings.memory.err.full":
+      "These memories are full: together they hold at most {max} bytes. Shorten or delete some first.",
 
     "aiSettings.search": "Web Search",
     "aiSettings.search.row": "Search provider",
-    "aiSettings.search.hint": "Lets the assistant search the web. Native Search is run by the current model’s provider.",
+    "aiSettings.search.hint":
+      "Lets the assistant search the web. Native Search is run by the current model’s provider.",
     "aiSettings.search.native": "Native Search",
     "aiSettings.search.none": "None",
     "aiSettings.search.brave": "Brave Search API",
@@ -614,7 +645,8 @@ export default defineMessages({
     "aiSettings.search.searxng": "SearXNG",
     "aiSettings.search.baseUrl": "Instance URL",
     "aiSettings.search.err.urlRequired": "Enter the instance URL.",
-    "aiSettings.search.baseUrlHint": "Your own SearXNG instance, such as https://searx.example.com. The instance must have the JSON format enabled.",
+    "aiSettings.search.baseUrlHint":
+      "Your own SearXNG instance, such as https://searx.example.com. The instance must have the JSON format enabled.",
     "aiSettings.search.apiKey": "API Key",
     "aiSettings.search.apiKeyPlaceholder": "Enter API key",
     "aiSettings.search.test.ok": "Search works.",
@@ -631,7 +663,8 @@ export default defineMessages({
     "aiSettings.judge.rowHint": "Decides whether a call that manual approval would ask about can run without asking.",
     "aiSettings.judge.placeholder": "Choose a judge",
     "aiSettings.judge.none": "None",
-    "aiSettings.judge.hint": "In Auto mode, a call that would ask goes to the judge first, with what you asked for in the conversation: a read or a change you asked for runs, and anything else asks as usual.",
+    "aiSettings.judge.hint":
+      "In Auto mode, a call that would ask goes to the judge first, with what you asked for in the conversation: a read or a change you asked for runs, and anything else asks as usual.",
     "aiSettings.judge.test": "Test",
     "aiSettings.judge.test.running": "Asking the judge about sample calls…",
     "aiSettings.judge.test.summary": "{n} of {total} as expected",
@@ -678,7 +711,8 @@ export default defineMessages({
     "aiSettings.skills.import.zip": "Import .zip…",
     "aiSettings.skills.hint": "Instructions in the Agent Skills format. The assistant reads one when it needs it.",
     "aiSettings.skills.empty.title": "No Skills of Your Own Yet",
-    "aiSettings.skills.empty.body": "Add a skill to tell the assistant how to handle a kind of task, such as how you deploy or what to check on a web server. Write one here, or import a folder or .zip that has a SKILL.md.",
+    "aiSettings.skills.empty.body":
+      "Add a skill to tell the assistant how to handle a kind of task, such as how you deploy or what to check on a web server. Write one here, or import a folder or .zip that has a SKILL.md.",
     "aiSettings.skills.fileCount": "{n} files",
     "aiSettings.skills.fileCount_one": "1 file",
     "aiSettings.skills.noFiles": "SKILL.md only",
@@ -688,7 +722,8 @@ export default defineMessages({
     "aiSettings.skills.builtin.title": "Built-in skill",
     "aiSettings.skills.builtin.subtitle": "The assistant reads it to answer questions about Hatoba itself.",
     "aiSettings.skills.builtin.loading": "Loading the built-in skill…",
-    "aiSettings.skills.reservedNote": "This name now belongs to the built-in skill, so the assistant doesn’t use this skill. Rename it to use it.",
+    "aiSettings.skills.reservedNote":
+      "This name now belongs to the built-in skill, so the assistant doesn’t use this skill. Rename it to use it.",
     "aiSettings.skills.loadFailed": "Couldn’t load the skills.",
     "aiSettings.skills.edit": "Edit {name}",
     "aiSettings.skills.enable": "Enable {name}",
@@ -756,7 +791,8 @@ export default defineMessages({
     "aiSettings.skills.imp.clashTitle": "A skill named “{name}” already exists",
     "aiSettings.skills.imp.reservedTitle": "“{name}” is the built-in skill’s name. Import it under another name.",
     "aiSettings.skills.imp.replace": "Replace it",
-    "aiSettings.skills.imp.replaceHint": "Overwrites the saved skill’s description, instructions, and files with the imported ones.",
+    "aiSettings.skills.imp.replaceHint":
+      "Overwrites the saved skill’s description, instructions, and files with the imported ones.",
     "aiSettings.skills.imp.rename": "Import under a new name",
     "aiSettings.skills.imp.newName": "New name",
     "aiSettings.skills.imp.submit": "Import",
@@ -765,11 +801,13 @@ export default defineMessages({
     "aiSettings.skills.imp.replaced": "Replaced “{name}”",
     "aiSettings.skills.issue.missing_skill_md": "There is no SKILL.md at the top of the folder or .zip.",
     "aiSettings.skills.issue.invalid_frontmatter": "The frontmatter of SKILL.md is not valid: {detail}",
-    "aiSettings.skills.issue.invalid_name": "The name “{name}” is not valid. Use 1 to 64 lowercase letters, digits, and hyphens.",
+    "aiSettings.skills.issue.invalid_name":
+      "The name “{name}” is not valid. Use 1 to 64 lowercase letters, digits, and hyphens.",
     "aiSettings.skills.issue.missing_description": "SKILL.md has no description.",
     "aiSettings.skills.issue.description_too_long": "The description has {chars} characters. The limit is {max}.",
     "aiSettings.skills.issue.file_too_large": "{path} is {size}. The limit is {max}.",
-    "aiSettings.skills.issue.unsafe_path": "The path “{path}” can’t be used: it leaves the skill folder, is repeated, or is too long.",
+    "aiSettings.skills.issue.unsafe_path":
+      "The path “{path}” can’t be used: it leaves the skill folder, is repeated, or is too long.",
     "aiSettings.skills.issue.too_many_files": "The skill has {count} files. The limit is {max}.",
     "aiSettings.skills.issue.too_large": "The skill is {bytes} in total. The limit is {max}.",
 
@@ -779,7 +817,8 @@ export default defineMessages({
     "aiSettings.mcp.export": "Export",
     "aiSettings.mcp.hint": "MCP servers add tools to the assistant. Add only servers you trust.",
     "aiSettings.mcp.empty.title": "No MCP Servers",
-    "aiSettings.mcp.empty.body": "Add a server to give the assistant more tools, or import the servers you already use in Claude Desktop, Claude Code, Cursor, or VS Code.",
+    "aiSettings.mcp.empty.body":
+      "Add a server to give the assistant more tools, or import the servers you already use in Claude Desktop, Claude Code, Cursor, or VS Code.",
     "aiSettings.mcp.loadFailed": "Couldn’t load the MCP servers.",
     "aiSettings.mcp.state.stopped": "Stopped",
     "aiSettings.mcp.state.starting": "Starting…",
@@ -830,12 +869,15 @@ export default defineMessages({
     "aiSettings.mcp.f.transport": "Type",
     "aiSettings.mcp.transport.stdio": "Command",
     "aiSettings.mcp.transport.http": "HTTP",
-    "aiSettings.mcp.transport.stdioHint": "stdio: runs a program on this device and talks to it over its standard input and output.",
+    "aiSettings.mcp.transport.stdioHint":
+      "stdio: runs a program on this device and talks to it over its standard input and output.",
     "aiSettings.mcp.transport.httpHint": "Streamable HTTP: connects to an MCP service at a URL.",
     "aiSettings.mcp.f.command": "Command",
     "aiSettings.mcp.f.commandPlaceholder": "npx",
-    "aiSettings.mcp.f.commandHint": "The program to run. It’s looked up on PATH the way a shell does, so npx finds npx.cmd on Windows.",
-    "aiSettings.mcp.f.commandLine": "This looks like a whole command line. Put only the program here, and each argument on its own row.",
+    "aiSettings.mcp.f.commandHint":
+      "The program to run. It’s looked up on PATH the way a shell does, so npx finds npx.cmd on Windows.",
+    "aiSettings.mcp.f.commandLine":
+      "This looks like a whole command line. Put only the program here, and each argument on its own row.",
     "aiSettings.mcp.f.split": "Split Into Arguments",
     "aiSettings.mcp.f.splitFailed": "A quote isn’t closed. Check the command.",
     "aiSettings.mcp.f.args": "Arguments",
@@ -878,8 +920,9 @@ export default defineMessages({
     "aiSettings.mcp.err.rejected": "The server settings were rejected:",
 
     "aiSettings.mcp.imp.title": "Import MCP Servers",
-    "aiSettings.mcp.imp.subtitle": "Paste the JSON from Claude Desktop, Claude Code, Cursor, or VS Code, or choose the file.",
-    "aiSettings.mcp.imp.placeholder": "{ \"mcpServers\": { … } }",
+    "aiSettings.mcp.imp.subtitle":
+      "Paste the JSON from Claude Desktop, Claude Code, Cursor, or VS Code, or choose the file.",
+    "aiSettings.mcp.imp.placeholder": '{ "mcpServers": { … } }',
     "aiSettings.mcp.imp.paste": "JSON",
     "aiSettings.mcp.imp.file": "Choose File…",
     "aiSettings.mcp.imp.fileFailed": "Couldn’t read that file.",
@@ -887,7 +930,8 @@ export default defineMessages({
     "aiSettings.mcp.imp.back": "Back",
     "aiSettings.mcp.imp.found": "Servers to Add",
     "aiSettings.mcp.imp.exists": "A server with this name exists. Importing adds another.",
-    "aiSettings.mcp.imp.stdioNote": "A stdio server runs its command on this device with your privileges. Check each command line before you import.",
+    "aiSettings.mcp.imp.stdioNote":
+      "A stdio server runs its command on this device with your privileges. Check each command line before you import.",
     "aiSettings.mcp.imp.envNames": "Environment variables: {names}",
     "aiSettings.mcp.imp.headerNames": "Headers: {names}",
     "aiSettings.mcp.imp.skipped": "Skipped",
@@ -906,7 +950,8 @@ export default defineMessages({
     "aiSettings.providers": "プロバイダー",
     "aiSettings.providers.add": "プロバイダーを追加",
     "aiSettings.providers.empty.title": "プロバイダーがありません",
-    "aiSettings.providers.empty.body": "OpenAI Chat Completions、OpenAI Responses、Anthropic Messages のいずれかのプロバイダーを追加するか、ChatGPT で続行して ChatGPT プランを使うと、アシスタントを使えます。Ollama や LM Studio などのローカルサーバーも使えます。",
+    "aiSettings.providers.empty.body":
+      "OpenAI Chat Completions、OpenAI Responses、Anthropic Messages のいずれかのプロバイダーを追加するか、ChatGPT で続行して ChatGPT プランを使うと、アシスタントを使えます。Ollama や LM Studio などのローカルサーバーも使えます。",
     "aiSettings.provider.models": "{n} 個のモデル",
     "aiSettings.provider.noModels": "モデルなし",
     "aiSettings.provider.edit": "{name} を編集",
@@ -924,23 +969,28 @@ export default defineMessages({
     "aiSettings.chatgpt.kind": "ChatGPT アカウント",
     "aiSettings.chatgpt.account": "アカウント",
     "aiSettings.chatgpt.status.signed_in": "このデバイスでサインイン済み",
-    "aiSettings.chatgpt.status.signed_out": "このデバイスではサインインしていません。別のデバイスでサインインしたアカウントも、このデバイスで一度サインインが必要です。",
+    "aiSettings.chatgpt.status.signed_out":
+      "このデバイスではサインインしていません。別のデバイスでサインインしたアカウントも、このデバイスで一度サインインが必要です。",
     "aiSettings.chatgpt.status.ended": "サインインの有効期限が切れました。もう一度サインインしてください。",
-    "aiSettings.chatgpt.status.plan_disabled": "サインイン済みですが、Hatoba が ChatGPT プランを使うことは許可されていません。もう一度サインインして許可してください。",
+    "aiSettings.chatgpt.status.plan_disabled":
+      "サインイン済みですが、Hatoba が ChatGPT プランを使うことは許可されていません。もう一度サインインして許可してください。",
     "aiSettings.chatgpt.row.signed_out": "このデバイスでサインインが必要",
     "aiSettings.chatgpt.row.ended": "サインインの期限切れ",
     "aiSettings.chatgpt.row.plan_disabled": "プランの使用が未許可",
     "aiSettings.chatgpt.signOut": "サインアウト",
     "aiSettings.chatgpt.signedIn": "ChatGPT にサインインしました",
     "aiSettings.chatgpt.signedOut": "このデバイスで ChatGPT からサインアウトしました",
-    "aiSettings.chatgpt.signedOutUnconfirmed": "このデバイスではサインアウトしましたが、ChatGPT はセッションの終了を確認できませんでした。ChatGPT の設定で Hatoba の接続を解除できます。",
+    "aiSettings.chatgpt.signedOutUnconfirmed":
+      "このデバイスではサインアウトしましたが、ChatGPT はセッションの終了を確認できませんでした。ChatGPT の設定で Hatoba の接続を解除できます。",
     "aiSettings.chatgpt.manageUsage": "使用量を管理",
     "aiSettings.chatgpt.waiting.title": "ブラウザで続行",
-    "aiSettings.chatgpt.waiting.body": "開いたブラウザのウィンドウで ChatGPT にサインインしてから、Hatoba に戻ってください。",
+    "aiSettings.chatgpt.waiting.body":
+      "開いたブラウザのウィンドウで ChatGPT にサインインしてから、Hatoba に戻ってください。",
     "aiSettings.chatgpt.waiting.inline": "ブラウザでのサインインを待っています…",
     "aiSettings.chatgpt.failed.title": "ChatGPT にサインインできませんでした",
     "aiSettings.chatgpt.welcome.title": "ChatGPT プランを使用しています",
-    "aiSettings.chatgpt.welcome.body": "このプロバイダーを通じたアシスタントのリクエストには ChatGPT プランが使われます。使用量と上限は ChatGPT の設定で確認、管理できます。",
+    "aiSettings.chatgpt.welcome.body":
+      "このプロバイダーを通じたアシスタントのリクエストには ChatGPT プランが使われます。使用量と上限は ChatGPT の設定で確認、管理できます。",
     "aiSettings.chatgpt.welcome.ok": "OK",
     "aiSettings.chatgpt.test.auth": "ChatGPT がサインインを受け付けませんでした。もう一度サインインしてください。",
 
@@ -952,9 +1002,12 @@ export default defineMessages({
     "aiSettings.f.baseUrl": "ベース URL",
     "aiSettings.f.baseUrl.chat_completions": "API バージョンを含めます。例: https://api.openai.com/v1",
     "aiSettings.f.baseUrl.responses": "API バージョンを含めます。例: https://api.openai.com/v1",
-    "aiSettings.f.baseUrl.anthropic": "プロバイダーが Anthropic SDK 向けに案内している URL を入力します。例: https://api.anthropic.com",
-    "aiSettings.f.protocol.system_one": "自動承認モードの判定モデル専用です。判定の質問に答えるモデルで、会話には使えません。",
-    "aiSettings.f.baseUrl.system_one": "TypeSafe、OpenRouter、Cloudflare Workers AI に対応しています。例: https://api.typesafe.ai/v1",
+    "aiSettings.f.baseUrl.anthropic":
+      "プロバイダーが Anthropic SDK 向けに案内している URL を入力します。例: https://api.anthropic.com",
+    "aiSettings.f.protocol.system_one":
+      "自動承認モードの判定モデル専用です。判定の質問に答えるモデルで、会話には使えません。",
+    "aiSettings.f.baseUrl.system_one":
+      "TypeSafe、OpenRouter、Cloudflare Workers AI に対応しています。例: https://api.typesafe.ai/v1",
     "aiSettings.f.apiKey": "API キー",
     "aiSettings.f.apiKeyPlaceholder": "キー不要のサーバーなら空のままにできます",
     "aiSettings.f.apiKeyNewPlaceholder": "新しい API キーを入力",
@@ -965,7 +1018,8 @@ export default defineMessages({
     "aiSettings.f.apiKeyCleared": "保存すると、保存済みのキーが削除されます",
     "aiSettings.f.apiKeyUndo": "元に戻す",
     "aiSettings.f.authHeader": "認証ヘッダー",
-    "aiSettings.f.authHeader.hint": "Anthropic 互換サービスの多くは x-api-key を使いますが、Authorization: Bearer を求めるものもあります。プロバイダーのドキュメントを確認してください。",
+    "aiSettings.f.authHeader.hint":
+      "Anthropic 互換サービスの多くは x-api-key を使いますが、Authorization: Bearer を求めるものもあります。プロバイダーのドキュメントを確認してください。",
 
     "aiSettings.err.nameRequired": "名前を入力してください。",
     "aiSettings.err.urlRequired": "ベース URL を入力してください。",
@@ -980,7 +1034,8 @@ export default defineMessages({
     "aiSettings.models.fetch": "モデル一覧を取得",
     "aiSettings.models.addPlaceholder": "モデル ID を入力して Enter",
     "aiSettings.models.add": "追加",
-    "aiSettings.models.empty": "モデルがありません。モデル ID を入力するか、プロバイダーのモデル一覧を取得してください。",
+    "aiSettings.models.empty":
+      "モデルがありません。モデル ID を入力するか、プロバイダーのモデル一覧を取得してください。",
     "aiSettings.models.col.id": "モデル ID",
     "aiSettings.models.col.name": "表示名",
     "aiSettings.models.col.context": "コンテキスト",
@@ -1006,10 +1061,12 @@ export default defineMessages({
     "aiSettings.test.ok": "接続できました。",
     "aiSettings.test.okModel": "接続できました。{model} が応答しました。",
     "aiSettings.test.okList": "接続できました。モデル一覧を取得できました。",
-    "aiSettings.test.fail.auth": "プロバイダーが API キーを拒否しました。キーを確認してください。Anthropic プロトコルでは認証ヘッダーも確認してください。",
+    "aiSettings.test.fail.auth":
+      "プロバイダーが API キーを拒否しました。キーを確認してください。Anthropic プロトコルでは認証ヘッダーも確認してください。",
     "aiSettings.test.fail.network": "サーバーに接続できません。ベース URL とネットワークを確認してください。",
     "aiSettings.test.fail.unknown_model": "プロバイダーがモデル {model} を認識しません。モデル ID を確認してください。",
-    "aiSettings.test.fail.invalid_url": "ベース URL は使えません。URL を確認し、ユーザー名やパスワードを含めないでください。",
+    "aiSettings.test.fail.invalid_url":
+      "ベース URL は使えません。URL を確認し、ユーザー名やパスワードを含めないでください。",
     "aiSettings.test.fail.other": "プロバイダーがエラーを返しました。",
 
     "aiSettings.default": "既定のモデル",
@@ -1020,13 +1077,16 @@ export default defineMessages({
     "aiSettings.default.effortHint": "このレベルがないモデルでは、それより低い最も近いレベルを使います。",
     "aiSettings.instructions": "カスタム指示",
     "aiSettings.instructions.hint": "リクエストのたびに送信されます：回答の言語、口調、使っているシステムなど。",
-    "aiSettings.instructions.placeholder": "例：日本語で回答してください。Debian と zsh を使っていて、サービスは systemctl で管理しています。",
+    "aiSettings.instructions.placeholder":
+      "例：日本語で回答してください。Debian と zsh を使っていて、サービスは systemctl で管理しています。",
     "aiSettings.screen": "ターミナル画面",
     "aiSettings.screen.row": "既定でメッセージごとに送信",
-    "aiSettings.screen.hint": "送信した時点の、接続中のターミナルの最後の 20 行がアシスタントに送られます。vim などの全画面プログラムの実行中は画面全体です。入力欄の + メニューで会話ごとにオン・オフできます。",
+    "aiSettings.screen.hint":
+      "送信した時点の、接続中のターミナルの最後の 20 行がアシスタントに送られます。vim などの全画面プログラムの実行中は画面全体です。入力欄の + メニューで会話ごとにオン・オフできます。",
     "aiSettings.memory": "メモリ",
     "aiSettings.memory.row": "会話をまたいで覚える",
-    "aiSettings.memory.hint": "アシスタントは好みやホストの情報など、後で役立つことを保存します。グローバルのメモリは新しい会話すべてに、ホストのメモリはそのホストでの会話だけに読み込まれます。メモリは保管庫と一緒に同期されます。",
+    "aiSettings.memory.hint":
+      "アシスタントは好みやホストの情報など、後で役立つことを保存します。グローバルのメモリは新しい会話すべてに、ホストのメモリはそのホストでの会話だけに読み込まれます。メモリは保管庫と一緒に同期されます。",
     "aiSettings.memory.add": "メモリを追加",
     "aiSettings.memory.deleteAll": "すべて削除",
     "aiSettings.memory.deleteAllTitle": "{n} 件のメモリをすべて削除しますか？",
@@ -1052,11 +1112,13 @@ export default defineMessages({
     "aiSettings.memory.err.long_name": "名前は {n} 文字までです。",
     "aiSettings.memory.err.empty_content": "覚える内容を入力してください。",
     "aiSettings.memory.err.taken": "ここに同じ名前のメモリがあります。",
-    "aiSettings.memory.err.full": "ここのメモリがいっぱいです。合わせて {max} バイトまでです。先に短くするか削除してください。",
+    "aiSettings.memory.err.full":
+      "ここのメモリがいっぱいです。合わせて {max} バイトまでです。先に短くするか削除してください。",
 
     "aiSettings.search": "Web 検索",
     "aiSettings.search.row": "検索プロバイダー",
-    "aiSettings.search.hint": "アシスタントが Web を検索できるようにします。ネイティブ検索は、使用中のモデルのプロバイダーが行います。",
+    "aiSettings.search.hint":
+      "アシスタントが Web を検索できるようにします。ネイティブ検索は、使用中のモデルのプロバイダーが行います。",
     "aiSettings.search.native": "ネイティブ検索",
     "aiSettings.search.none": "なし",
     "aiSettings.search.brave": "Brave Search API",
@@ -1064,13 +1126,15 @@ export default defineMessages({
     "aiSettings.search.searxng": "SearXNG",
     "aiSettings.search.baseUrl": "インスタンスの URL",
     "aiSettings.search.err.urlRequired": "インスタンスの URL を入力してください。",
-    "aiSettings.search.baseUrlHint": "自分で運用している SearXNG インスタンスです。例: https://searx.example.com。JSON 形式を有効にしておく必要があります。",
+    "aiSettings.search.baseUrlHint":
+      "自分で運用している SearXNG インスタンスです。例: https://searx.example.com。JSON 形式を有効にしておく必要があります。",
     "aiSettings.search.apiKey": "API キー",
     "aiSettings.search.apiKeyPlaceholder": "API キーを入力",
     "aiSettings.search.test.ok": "検索できました。",
     "aiSettings.search.test.fail.auth": "検索サービスが API キーを拒否しました。",
     "aiSettings.search.test.fail.network": "検索サービスに接続できません。アドレスとネットワークを確認してください。",
-    "aiSettings.search.test.fail.invalid_url": "インスタンスの URL が正しくありません。確認してもう一度お試しください。",
+    "aiSettings.search.test.fail.invalid_url":
+      "インスタンスの URL が正しくありません。確認してもう一度お試しください。",
     "aiSettings.search.test.fail.other": "検索サービスがエラーを返しました。",
     "aiSettings.search.remove": "設定を削除",
     "aiSettings.search.removeTitle": "{name} の設定を削除しますか？",
@@ -1081,7 +1145,8 @@ export default defineMessages({
     "aiSettings.judge.rowHint": "手動承認なら確認する呼び出しを、確認せずに実行してよいかを判定します。",
     "aiSettings.judge.placeholder": "判定モデルを選択",
     "aiSettings.judge.none": "なし",
-    "aiSettings.judge.hint": "自動承認モードでは、確認が必要な呼び出しを会話での依頼とあわせて先に判定モデルに送ります。読み取りや依頼された変更はそのまま実行し、それ以外は通常どおり確認します。",
+    "aiSettings.judge.hint":
+      "自動承認モードでは、確認が必要な呼び出しを会話での依頼とあわせて先に判定モデルに送ります。読み取りや依頼された変更はそのまま実行し、それ以外は通常どおり確認します。",
     "aiSettings.judge.test": "テスト",
     "aiSettings.judge.test.running": "判定モデルにサンプルの呼び出しを判定させています…",
     "aiSettings.judge.test.summary": "{total} 件中 {n} 件が期待どおり",
@@ -1110,7 +1175,8 @@ export default defineMessages({
     "aiSettings.device": "このデバイス",
     "aiSettings.mode": "既定の権限モード",
     "aiSettings.mode.hint": "新しい会話はこのモードで始まります。",
-    "aiSettings.mode.hintNoJudge": "新しい会話はこのモードで始まります。自動承認には、先に判定モデルを選ぶ必要があります。",
+    "aiSettings.mode.hintNoJudge":
+      "新しい会話はこのモードで始まります。自動承認には、先に判定モデルを選ぶ必要があります。",
     "aiSettings.mode.manual": "手動承認",
     "aiSettings.mode.auto": "自動承認",
     "aiSettings.mode.bypass": "承認をバイパス",
@@ -1128,7 +1194,8 @@ export default defineMessages({
     "aiSettings.skills.import.zip": ".zip をインポート…",
     "aiSettings.skills.hint": "Agent Skills 形式の指示です。アシスタントは必要なときに読み込みます。",
     "aiSettings.skills.empty.title": "独自のスキルはまだありません",
-    "aiSettings.skills.empty.body": "スキルを追加すると、デプロイの手順や Web サーバーで確認する点など、特定の作業の進め方をアシスタントに伝えられます。ここで作成するか、SKILL.md を含むフォルダーまたは .zip をインポートしてください。",
+    "aiSettings.skills.empty.body":
+      "スキルを追加すると、デプロイの手順や Web サーバーで確認する点など、特定の作業の進め方をアシスタントに伝えられます。ここで作成するか、SKILL.md を含むフォルダーまたは .zip をインポートしてください。",
     "aiSettings.skills.fileCount": "{n} 個のファイル",
     "aiSettings.skills.noFiles": "SKILL.md のみ",
     "aiSettings.skills.builtin": "組み込み",
@@ -1137,7 +1204,8 @@ export default defineMessages({
     "aiSettings.skills.builtin.title": "組み込みスキル",
     "aiSettings.skills.builtin.subtitle": "アシスタントは Hatoba 自体についての質問に答えるときにこれを読みます。",
     "aiSettings.skills.builtin.loading": "組み込みスキルを読み込んでいます…",
-    "aiSettings.skills.reservedNote": "この名前は組み込みスキルのものになったため、アシスタントはこのスキルを使いません。名前を変更すると使えるようになります。",
+    "aiSettings.skills.reservedNote":
+      "この名前は組み込みスキルのものになったため、アシスタントはこのスキルを使いません。名前を変更すると使えるようになります。",
     "aiSettings.skills.loadFailed": "スキルを読み込めませんでした。",
     "aiSettings.skills.edit": "{name} を編集",
     "aiSettings.skills.enable": "{name} を有効にする",
@@ -1201,7 +1269,8 @@ export default defineMessages({
     "aiSettings.skills.imp.collapseAll": "すべて折りたたむ",
     "aiSettings.skills.imp.frontmatter": "エクスポート用にのみ残される、その他の frontmatter フィールド: {keys}。",
     "aiSettings.skills.imp.skipped": "スキップされたファイル",
-    "aiSettings.skills.imp.skippedBody": "これらのファイルはテキストではありません。Hatoba がインポートするのは UTF-8 のテキストだけです。",
+    "aiSettings.skills.imp.skippedBody":
+      "これらのファイルはテキストではありません。Hatoba がインポートするのは UTF-8 のテキストだけです。",
     "aiSettings.skills.imp.clashTitle": "「{name}」というスキルがすでにあります",
     "aiSettings.skills.imp.reservedTitle": "「{name}」は組み込みスキルの名前です。別の名前でインポートしてください。",
     "aiSettings.skills.imp.replace": "置き換える",
@@ -1214,11 +1283,13 @@ export default defineMessages({
     "aiSettings.skills.imp.replaced": "「{name}」を置き換えました",
     "aiSettings.skills.issue.missing_skill_md": "フォルダーまたは .zip の最上位に SKILL.md がありません。",
     "aiSettings.skills.issue.invalid_frontmatter": "SKILL.md の frontmatter が正しくありません: {detail}",
-    "aiSettings.skills.issue.invalid_name": "名前「{name}」は使えません。小文字の英字、数字、ハイフンで 1〜64 文字にしてください。",
+    "aiSettings.skills.issue.invalid_name":
+      "名前「{name}」は使えません。小文字の英字、数字、ハイフンで 1〜64 文字にしてください。",
     "aiSettings.skills.issue.missing_description": "SKILL.md に説明がありません。",
     "aiSettings.skills.issue.description_too_long": "説明が {chars} 文字あります。上限は {max} 文字です。",
     "aiSettings.skills.issue.file_too_large": "{path} は {size} あります。上限は {max} です。",
-    "aiSettings.skills.issue.unsafe_path": "パス「{path}」は使えません。スキルのフォルダーの外を指しているか、重複しているか、長すぎます。",
+    "aiSettings.skills.issue.unsafe_path":
+      "パス「{path}」は使えません。スキルのフォルダーの外を指しているか、重複しているか、長すぎます。",
     "aiSettings.skills.issue.too_many_files": "スキルに {count} 個のファイルがあります。上限は {max} 個です。",
     "aiSettings.skills.issue.too_large": "スキルの合計サイズは {bytes} です。上限は {max} です。",
 
@@ -1226,9 +1297,11 @@ export default defineMessages({
     "aiSettings.mcp.add": "サーバーを追加",
     "aiSettings.mcp.import": "インポート",
     "aiSettings.mcp.export": "エクスポート",
-    "aiSettings.mcp.hint": "MCP サーバーは、アシスタントに使えるツールを追加します。信頼できるサーバーだけを追加してください。",
+    "aiSettings.mcp.hint":
+      "MCP サーバーは、アシスタントに使えるツールを追加します。信頼できるサーバーだけを追加してください。",
     "aiSettings.mcp.empty.title": "MCP サーバーがありません",
-    "aiSettings.mcp.empty.body": "サーバーを追加してアシスタントのツールを増やすか、Claude Desktop、Claude Code、Cursor、VS Code ですでに使っているサーバーをインポートしてください。",
+    "aiSettings.mcp.empty.body":
+      "サーバーを追加してアシスタントのツールを増やすか、Claude Desktop、Claude Code、Cursor、VS Code ですでに使っているサーバーをインポートしてください。",
     "aiSettings.mcp.loadFailed": "MCP サーバーを読み込めませんでした。",
     "aiSettings.mcp.state.stopped": "停止中",
     "aiSettings.mcp.state.starting": "起動中…",
@@ -1281,8 +1354,10 @@ export default defineMessages({
     "aiSettings.mcp.transport.httpHint": "Streamable HTTP: URL にある MCP サービスに接続します。",
     "aiSettings.mcp.f.command": "コマンド",
     "aiSettings.mcp.f.commandPlaceholder": "npx",
-    "aiSettings.mcp.f.commandHint": "実行するプログラムです。シェルと同じように PATH から探すため、Windows では npx で npx.cmd が見つかります。",
-    "aiSettings.mcp.f.commandLine": "コマンドライン全体のようです。ここにはプログラムだけを入力し、引数は 1 行ずつ分けてください。",
+    "aiSettings.mcp.f.commandHint":
+      "実行するプログラムです。シェルと同じように PATH から探すため、Windows では npx で npx.cmd が見つかります。",
+    "aiSettings.mcp.f.commandLine":
+      "コマンドライン全体のようです。ここにはプログラムだけを入力し、引数は 1 行ずつ分けてください。",
     "aiSettings.mcp.f.split": "引数に分割",
     "aiSettings.mcp.f.splitFailed": "閉じられていない引用符があります。コマンドを確認してください。",
     "aiSettings.mcp.f.args": "引数",
@@ -1325,8 +1400,9 @@ export default defineMessages({
     "aiSettings.mcp.err.rejected": "サーバーの設定が受け付けられませんでした:",
 
     "aiSettings.mcp.imp.title": "MCP サーバーをインポート",
-    "aiSettings.mcp.imp.subtitle": "Claude Desktop、Claude Code、Cursor、VS Code の JSON を貼り付けるか、ファイルを選んでください。",
-    "aiSettings.mcp.imp.placeholder": "{ \"mcpServers\": { … } }",
+    "aiSettings.mcp.imp.subtitle":
+      "Claude Desktop、Claude Code、Cursor、VS Code の JSON を貼り付けるか、ファイルを選んでください。",
+    "aiSettings.mcp.imp.placeholder": '{ "mcpServers": { … } }',
     "aiSettings.mcp.imp.paste": "JSON",
     "aiSettings.mcp.imp.file": "ファイルを選択…",
     "aiSettings.mcp.imp.fileFailed": "このファイルを読み込めませんでした。",
@@ -1334,7 +1410,8 @@ export default defineMessages({
     "aiSettings.mcp.imp.back": "戻る",
     "aiSettings.mcp.imp.found": "追加されるサーバー",
     "aiSettings.mcp.imp.exists": "同じ名前のサーバーがあります。インポートすると別のサーバーとして追加されます。",
-    "aiSettings.mcp.imp.stdioNote": "stdio サーバーは、このデバイス上であなたの権限でコマンドを実行します。インポートする前に、各コマンドラインを確認してください。",
+    "aiSettings.mcp.imp.stdioNote":
+      "stdio サーバーは、このデバイス上であなたの権限でコマンドを実行します。インポートする前に、各コマンドラインを確認してください。",
     "aiSettings.mcp.imp.envNames": "環境変数: {names}",
     "aiSettings.mcp.imp.headerNames": "ヘッダー: {names}",
     "aiSettings.mcp.imp.skipped": "スキップ",

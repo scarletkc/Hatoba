@@ -30,7 +30,9 @@ export function ProxiesPane() {
     { value: null, label: t("settings.proxy.none") },
     ...proxies.map((p) => ({ value: p.id, label: p.name, hint: proxySummary(p) })),
     // Deleted on another device: shown until another choice is made.
-    ...(defaultId && !proxies.some((p) => p.id === defaultId) ? [{ value: defaultId, label: t("settings.proxy.missing") }] : []),
+    ...(defaultId && !proxies.some((p) => p.id === defaultId)
+      ? [{ value: defaultId, label: t("settings.proxy.missing") }]
+      : []),
   ];
 
   const remove = async (p: ProxyView) => {
@@ -98,7 +100,12 @@ export function ProxiesPane() {
           )}
           {proxies.map((p) => (
             <div key={p.id} className={s.row}>
-              <button type="button" className={s.main} title={t("settings.proxy.edit", { name: p.name })} onClick={() => setDialog({ proxy: p })}>
+              <button
+                type="button"
+                className={s.main}
+                title={t("settings.proxy.edit", { name: p.name })}
+                onClick={() => setDialog({ proxy: p })}
+              >
                 <span className={s.icon} aria-hidden>
                   <Icon name="globe" />
                 </span>
@@ -119,7 +126,13 @@ export function ProxiesPane() {
                 </span>
                 <Icon name="caret-right" className={s.caret} />
               </button>
-              <IconButton icon="trash" label={t("settings.proxy.delete", { name: p.name })} className={s.delete} danger onClick={() => void remove(p)} />
+              <IconButton
+                icon="trash"
+                label={t("settings.proxy.delete", { name: p.name })}
+                className={s.delete}
+                danger
+                onClick={() => void remove(p)}
+              />
             </div>
           ))}
         </div>

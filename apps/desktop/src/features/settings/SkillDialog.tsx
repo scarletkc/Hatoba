@@ -150,7 +150,8 @@ export function SkillDialog({
   // An empty field is only a problem once the user tried to save; everything else shows as it is typed.
   const nameProblem = problems.name && (submitted || problems.name !== "empty") ? problems.name : null;
   const nameError = nameProblem ? t(`aiSettings.skills.err.${nameProblemKey(nameProblem)}`) : null;
-  const descProblem = problems.description && (submitted || problems.description !== "empty") ? problems.description : null;
+  const descProblem =
+    problems.description && (submitted || problems.description !== "empty") ? problems.description : null;
   const descLength = descriptionLength(draft.description);
   const bodyBytes = byteLength(draft.body);
 
@@ -277,7 +278,11 @@ export function SkillDialog({
                       file={file}
                       open={open.has(file.uid)}
                       autoFocus={focusUid === file.uid}
-                      problem={submitted || (problems.files[i] !== "path_empty" && problems.files[i] !== null) ? problems.files[i] : null}
+                      problem={
+                        submitted || (problems.files[i] !== "path_empty" && problems.files[i] !== null)
+                          ? problems.files[i]
+                          : null
+                      }
                       onToggle={() => toggleFile(file.uid)}
                       onChange={(p) => patchFile(file.uid, p)}
                       onRemove={() => removeFile(file.uid)}
@@ -286,12 +291,18 @@ export function SkillDialog({
                 </div>
               )}
             </Group>
-            {problems.tooManyFiles && <ErrorText className={s.problem}>{t("aiSettings.skills.err.tooManyFiles", { max: SKILL_MAX_FILES })}</ErrorText>}
+            {problems.tooManyFiles && (
+              <ErrorText className={s.problem}>
+                {t("aiSettings.skills.err.tooManyFiles", { max: SKILL_MAX_FILES })}
+              </ErrorText>
+            )}
             {problems.tooLarge && <ErrorText className={s.problem}>{t("aiSettings.skills.err.tooLarge")}</ErrorText>}
           </Section>
 
           {detail && detail.frontmatter_keys.length > 0 && (
-            <HintText className={s.note}>{t("aiSettings.skills.frontmatter", { keys: detail.frontmatter_keys.join(", ") })}</HintText>
+            <HintText className={s.note}>
+              {t("aiSettings.skills.frontmatter", { keys: detail.frontmatter_keys.join(", ") })}
+            </HintText>
           )}
 
           {rejected && (

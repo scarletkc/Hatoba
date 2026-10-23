@@ -1,6 +1,14 @@
 import { create } from "zustand";
 import { api } from "@/ipc/api";
-import type { AppInfo, LocalPrefs, QuickTarget, SyncStatus, VaultLockedEvent, VaultStatus, ZoomView } from "@/ipc/types";
+import type {
+  AppInfo,
+  LocalPrefs,
+  QuickTarget,
+  SyncStatus,
+  VaultLockedEvent,
+  VaultStatus,
+  ZoomView,
+} from "@/ipc/types";
 import { detectLocale, setLocale, type Locale } from "@/i18n";
 import { applyZoom } from "@/lib/zoom";
 
@@ -131,7 +139,8 @@ export const useApp = create<AppState>((set, get) => ({
   },
   setSync: (sync) => set({ sync }),
   setPhase: (phase) => set({ phase }),
-  openSettings: (settingsOpen, tab, section) => set({ settingsOpen, settingsTab: tab ?? null, settingsSection: section ?? null }),
+  openSettings: (settingsOpen, tab, section) =>
+    set({ settingsOpen, settingsTab: tab ?? null, settingsSection: section ?? null }),
   focusSearch: (text) => set((s) => ({ searchFocusTick: s.searchFocusTick + 1, searchFocusText: text ?? null })),
   refreshSynced: () => set((s) => ({ syncTick: s.syncTick + 1 })),
   lock: async () => {

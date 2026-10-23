@@ -23,14 +23,36 @@ describe("readStoredPrefs", () => {
       }),
     ).toEqual(PREFS);
 
-    const prefs = readStoredPrefs(JSON.stringify({ language: "ja", ai_permission_mode: "auto", ai_panel_width: 520, default_proxy_id: "px1", host_probe: false }));
-    expect(prefs).toEqual({ ...PREFS, language: "ja", ai_permission_mode: "auto", ai_panel_width: 520, default_proxy_id: "px1", host_probe: false });
+    const prefs = readStoredPrefs(
+      JSON.stringify({
+        language: "ja",
+        ai_permission_mode: "auto",
+        ai_panel_width: 520,
+        default_proxy_id: "px1",
+        host_probe: false,
+      }),
+    );
+    expect(prefs).toEqual({
+      ...PREFS,
+      language: "ja",
+      ai_permission_mode: "auto",
+      ai_panel_width: 520,
+      default_proxy_id: "px1",
+      host_probe: false,
+    });
   });
 
   it("falls back to the default for a value this build does not know", () => {
     // A mode or language a build of another branch stored, a broken number, and a pref it dropped.
     const prefs = readStoredPrefs(
-      JSON.stringify({ ai_permission_mode: "ask_twice", language: "ko", ai_panel_width: -1, auto_lock_minutes: "15", ai_tool_call_limit: 40, ai_bypass_confirmed: true }),
+      JSON.stringify({
+        ai_permission_mode: "ask_twice",
+        language: "ko",
+        ai_panel_width: -1,
+        auto_lock_minutes: "15",
+        ai_tool_call_limit: 40,
+        ai_bypass_confirmed: true,
+      }),
     );
     expect(prefs).toEqual({ ...PREFS, ai_bypass_confirmed: true });
   });

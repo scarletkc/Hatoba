@@ -5,18 +5,34 @@ const key = (init: KeyboardEventInit & { code?: string }) => new KeyboardEvent("
 
 describe("matchShortcut (WIN-04)", () => {
   it("uses Ctrl+Shift for app shortcuts on Windows", () => {
-    expect(matchShortcut(key({ key: "K", code: "KeyK", ctrlKey: true, shiftKey: true }), "windows", true)).toBe("search");
-    expect(matchShortcut(key({ key: "T", code: "KeyT", ctrlKey: true, shiftKey: true }), "windows", true)).toBe("newTab");
-    expect(matchShortcut(key({ key: "W", code: "KeyW", ctrlKey: true, shiftKey: true }), "windows", true)).toBe("closeTab");
+    expect(matchShortcut(key({ key: "K", code: "KeyK", ctrlKey: true, shiftKey: true }), "windows", true)).toBe(
+      "search",
+    );
+    expect(matchShortcut(key({ key: "T", code: "KeyT", ctrlKey: true, shiftKey: true }), "windows", true)).toBe(
+      "newTab",
+    );
+    expect(matchShortcut(key({ key: "W", code: "KeyW", ctrlKey: true, shiftKey: true }), "windows", true)).toBe(
+      "closeTab",
+    );
     expect(matchShortcut(key({ key: "L", code: "KeyL", ctrlKey: true, shiftKey: true }), "windows", true)).toBe("lock");
-    expect(matchShortcut(key({ key: "A", code: "KeyA", ctrlKey: true, shiftKey: true }), "windows", true)).toBe("aiPanel");
-    expect(matchShortcut(key({ key: "A", code: "KeyA", ctrlKey: true, shiftKey: true }), "linux", false)).toBe("aiPanel");
+    expect(matchShortcut(key({ key: "A", code: "KeyA", ctrlKey: true, shiftKey: true }), "windows", true)).toBe(
+      "aiPanel",
+    );
+    expect(matchShortcut(key({ key: "A", code: "KeyA", ctrlKey: true, shiftKey: true }), "linux", false)).toBe(
+      "aiPanel",
+    );
   });
 
   it("opens a local terminal with Ctrl+Shift+`, ⌃⇧` on macOS (LOCAL-01)", () => {
-    expect(matchShortcut(key({ key: "~", code: "Backquote", ctrlKey: true, shiftKey: true }), "windows", true)).toBe("newLocal");
-    expect(matchShortcut(key({ key: "~", code: "Backquote", ctrlKey: true, shiftKey: true }), "linux", false)).toBe("newLocal");
-    expect(matchShortcut(key({ key: "~", code: "Backquote", ctrlKey: true, shiftKey: true }), "macos", true)).toBe("newLocal");
+    expect(matchShortcut(key({ key: "~", code: "Backquote", ctrlKey: true, shiftKey: true }), "windows", true)).toBe(
+      "newLocal",
+    );
+    expect(matchShortcut(key({ key: "~", code: "Backquote", ctrlKey: true, shiftKey: true }), "linux", false)).toBe(
+      "newLocal",
+    );
+    expect(matchShortcut(key({ key: "~", code: "Backquote", ctrlKey: true, shiftKey: true }), "macos", true)).toBe(
+      "newLocal",
+    );
     expect(matchShortcut(key({ key: "`", code: "Backquote", ctrlKey: true }), "windows", true)).toBeNull();
   });
 
@@ -58,10 +74,14 @@ describe("matchShortcut (WIN-04)", () => {
   });
 
   it("toggles the AI panel with Ctrl+Shift+A / ⌘⇧A (§9.1)", () => {
-    expect(matchShortcut(key({ key: "A", code: "KeyA", metaKey: true, shiftKey: true }), "macos", true)).toBe("aiPanel");
+    expect(matchShortcut(key({ key: "A", code: "KeyA", metaKey: true, shiftKey: true }), "macos", true)).toBe(
+      "aiPanel",
+    );
     expect(matchShortcut(key({ key: "a", code: "KeyA", metaKey: true }), "macos", true)).toBeNull();
     expect(matchShortcut(key({ key: "A", code: "KeyA", ctrlKey: true, shiftKey: true }), "macos", true)).toBeNull();
-    expect(matchShortcut(key({ key: "A", code: "KeyA", ctrlKey: true, shiftKey: true, altKey: true }), "windows", true)).toBeNull();
+    expect(
+      matchShortcut(key({ key: "A", code: "KeyA", ctrlKey: true, shiftKey: true, altKey: true }), "windows", true),
+    ).toBeNull();
   });
 });
 

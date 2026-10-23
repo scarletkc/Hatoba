@@ -56,7 +56,8 @@ export function forkPoints(entries: AiEntryView[]): Set<string> {
   const points = new Set<string>();
   for (const [i, e] of entries.entries()) {
     if (e.entry_id.startsWith("~")) continue;
-    if (e.role === "user" || (e.role === "assistant" && e.tool_calls.every((_, c) => pairs.has(`${i}:${c}`)))) points.add(e.entry_id);
+    if (e.role === "user" || (e.role === "assistant" && e.tool_calls.every((_, c) => pairs.has(`${i}:${c}`))))
+      points.add(e.entry_id);
   }
   return points;
 }
@@ -78,7 +79,10 @@ export function forkModel(entries: AiEntryView[], entryId: string): AiModelRef |
 const FORK_MARKS = LOCALES.flatMap((locale) => {
   const escape = (text: string) => text.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const numbered = escape(translate(locale, "ai.fork.titleNumbered", { title: "", n: "#" })).replace("#", "\\d+");
-  return [new RegExp(`\\s*${escape(translate(locale, "ai.fork.title", { title: "" }))}$`), new RegExp(`\\s*${numbered}$`)];
+  return [
+    new RegExp(`\\s*${escape(translate(locale, "ai.fork.title", { title: "" }))}$`),
+    new RegExp(`\\s*${numbered}$`),
+  ];
 });
 
 /**
@@ -89,7 +93,8 @@ const FORK_MARKS = LOCALES.flatMap((locale) => {
 export function forkTitle(t: Tr, title: string, taken: Iterable<string>): string {
   const base = withoutMarks(title.trim()) || t("ai.untitled");
   const used = new Set(taken);
-  const titled = (title: string, n: number) => (n === 1 ? t("ai.fork.title", { title }) : t("ai.fork.titleNumbered", { title, n }));
+  const titled = (title: string, n: number) =>
+    n === 1 ? t("ai.fork.title", { title }) : t("ai.fork.titleNumbered", { title, n });
   for (let n = 1; ; n++) {
     const room = MAX_TITLE_CHARS - [...titled("", n)].length;
     const candidate = titled([...base].slice(0, room).join("").trimEnd(), n);

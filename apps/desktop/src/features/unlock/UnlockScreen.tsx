@@ -89,17 +89,27 @@ export function UnlockScreen() {
       // shows after a click on the button.
       if (auto && err.code === "biometric_unavailable") return;
       // The backend turned off an enrolment that no longer opens; the refresh removes the button.
-      if (err.code === "biometric_stale") void useApp.getState().refreshVault().catch(() => null);
+      if (err.code === "biometric_stale")
+        void useApp
+          .getState()
+          .refreshVault()
+          .catch(() => null);
       // The PIN no longer unlocks (too many wrong ones, or the app restarted): the field asks for
       // the master password, under the reason.
       if (err.code === "pin_unavailable" || (err.code === "wrong_pin" && !err.attempts_left)) {
         setUsePassword(true);
         setPassword("");
-        void useApp.getState().refreshVault().catch(() => null);
+        void useApp
+          .getState()
+          .refreshVault()
+          .catch(() => null);
       }
       if (err.code === "throttled" && err.retry_at) setRetryAt(err.retry_at);
       else if (err.code === "wrong_password") {
-        const v = await useApp.getState().refreshVault().catch(() => null);
+        const v = await useApp
+          .getState()
+          .refreshVault()
+          .catch(() => null);
         if (v?.retry_at) setRetryAt(v.retry_at);
       }
       setError(errorMessage(t, e, { biometric: platform === "macos" ? "Touch ID" : "Windows Hello" }));
@@ -146,7 +156,8 @@ export function UnlockScreen() {
   const prompted = useRef(false);
   const autoPrompt = useRef(() => {});
   autoPrompt.current = () => {
-    if (prompted.current || busy || recovering || !document.hasFocus() || document.visibilityState !== "visible") return;
+    if (prompted.current || busy || recovering || !document.hasFocus() || document.visibilityState !== "visible")
+      return;
     prompted.current = true;
     void unlockBiometric(true);
   };
@@ -216,7 +227,12 @@ export function UnlockScreen() {
             >
               <Icon name={revealed ? "eye-slash" : "eye"} />
             </button>
-            <button type="submit" className={s.go} aria-label={t("vault.unlock.submit")} disabled={!password || busy || throttled}>
+            <button
+              type="submit"
+              className={s.go}
+              aria-label={t("vault.unlock.submit")}
+              disabled={!password || busy || throttled}
+            >
               {busy ? <Spinner size={14} /> : <Icon name="arrow-right" />}
             </button>
           </div>
@@ -236,19 +252,13 @@ export function UnlockScreen() {
 
         <div className={s.links}>
           {pinMode ? (
-            <LinkButton onClick={() => switchMode(true)}>
-              {t("vault.unlock.usePassword")}
-            </LinkButton>
+            <LinkButton onClick={() => switchMode(true)}>{t("vault.unlock.usePassword")}</LinkButton>
           ) : (
             <>
               {vault?.pin_unlock && (
-                <LinkButton onClick={() => switchMode(false)}>
-                  {t("vault.unlock.usePin")}
-                </LinkButton>
+                <LinkButton onClick={() => switchMode(false)}>{t("vault.unlock.usePin")}</LinkButton>
               )}
-              <LinkButton onClick={() => setRecovering(true)}>
-                {t("vault.unlock.forgot")}
-              </LinkButton>
+              <LinkButton onClick={() => setRecovering(true)}>{t("vault.unlock.forgot")}</LinkButton>
             </>
           )}
         </div>

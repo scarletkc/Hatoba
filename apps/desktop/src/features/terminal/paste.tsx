@@ -9,7 +9,9 @@ const PREVIEW_COLUMNS = 90;
 export function confirmMultilinePaste(text: string): Promise<boolean> {
   const lines = text.split(/\r\n|\r|\n/);
   if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop(); // a final newline isn't another line
-  const shown = lines.slice(0, PREVIEW_LINES).map((l) => (l.length > PREVIEW_COLUMNS ? `${l.slice(0, PREVIEW_COLUMNS)}…` : l));
+  const shown = lines
+    .slice(0, PREVIEW_LINES)
+    .map((l) => (l.length > PREVIEW_COLUMNS ? `${l.slice(0, PREVIEW_COLUMNS)}…` : l));
   const hidden = lines.length - shown.length;
   return confirm({
     title: t("terminal.paste.title"),

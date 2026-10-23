@@ -66,7 +66,14 @@ const connected = (ports: number[] | null, at = ++version): ConnectionsEvent => 
         {
           host_id: "h1",
           host_name: "db",
-          forwards: ports.map((p) => ({ forward_id: `f${p}`, name: "", kind: "local", port: p, address: `localhost:${p}`, dest: "127.0.0.1:5432" })),
+          forwards: ports.map((p) => ({
+            forward_id: `f${p}`,
+            name: "",
+            kind: "local",
+            port: p,
+            address: `localhost:${p}`,
+            dest: "127.0.0.1:5432",
+          })),
           failed: [],
         },
       ]
@@ -124,7 +131,10 @@ describe("the hosts' shared connections (SSH-16)", () => {
 
   it("keeps why a forward failed to start on the connection", () => {
     const busy: AppError = { code: "ssh", ssh_kind: "io", detail: "address in use" };
-    emit("ssh://connections", { version: ++version, connections: [{ host_id: "h1", host_name: "db", forwards: [], failed: [{ forward_id: "f1", error: busy }] }] });
+    emit("ssh://connections", {
+      version: ++version,
+      connections: [{ host_id: "h1", host_name: "db", forwards: [], failed: [{ forward_id: "f1", error: busy }] }],
+    });
     expect(forwardFailure(current(), "f1")).toEqual(busy);
     expect(forwardFailure(current(), "f2")).toBeNull();
   });
@@ -149,7 +159,11 @@ describe("starting a forward (FWD-05)", () => {
   it("asks for the password when the host's connection closed after it was skipped", async () => {
     ui.host = host("ask");
     ipc.start
-      .mockRejectedValueOnce({ code: "invalid_input", field: "password", detail: "a password is required for this host" })
+      .mockRejectedValueOnce({
+        code: "invalid_input",
+        field: "password",
+        detail: "a password is required for this host",
+      })
       .mockResolvedValueOnce(15432);
     ui.password.mockResolvedValue("pw");
     expect(await startForward("h1", "f15432")).toBe(15432);
@@ -162,7 +176,9 @@ describe("starting a forward (FWD-05)", () => {
       .mockResolvedValueOnce(15432);
     ui.secret.mockResolvedValue("secret");
     expect(await startForward("h1", "f15432")).toBe(15432);
-    expect(ui.secret).toHaveBeenCalledWith(expect.objectContaining({ kind: "passphrase", hostName: "db", wrong: false }));
+    expect(ui.secret).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "passphrase", hostName: "db", wrong: false }),
+    );
     expect(ipc.start).toHaveBeenLastCalledWith("h1", "f15432", { password: null, passphrase: "secret" });
   });
 
@@ -186,7 +202,11 @@ describe("the saved forwards", () => {
 });
 
 describe("a lost connection", () => {
-  const lost: ForwardsLostEvent = { host_id: "h1", host_name: "db", error: { code: "ssh", ssh_kind: "disconnected", detail: "connection closed" } };
+  const lost: ForwardsLostEvent = {
+    host_id: "h1",
+    host_name: "db",
+    error: { code: "ssh", ssh_kind: "disconnected", detail: "connection closed" },
+  };
 
   it("is told in a toast while the window has the focus", async () => {
     emit("ssh://forwards-lost", lost);

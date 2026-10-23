@@ -108,7 +108,11 @@ export function D1Step({
       footer={
         <>
           <Button onClick={onBack}>{t("btn.back")}</Button>
-          <Button variant="primary" disabled={!canContinue} onClick={() => onNext(config(form.databaseId), form.initialized)}>
+          <Button
+            variant="primary"
+            disabled={!canContinue}
+            onClick={() => onNext(config(form.databaseId), form.initialized)}
+          >
             {t("btn.continue")}
           </Button>
         </>
@@ -149,7 +153,13 @@ export function D1Step({
             </ErrorText>
           )}
           <div className={s.testRow}>
-            <Button size="sm" icon="seal-check" busy={verify.status === "testing"} disabled={!canVerify} onClick={() => void runVerify()}>
+            <Button
+              size="sm"
+              icon="seal-check"
+              busy={verify.status === "testing"}
+              disabled={!canVerify}
+              onClick={() => void runVerify()}
+            >
               {t("sync.d1.verify")}
             </Button>
             {verifiedLine && (
@@ -162,7 +172,13 @@ export function D1Step({
 
         <Field
           label={t("sync.database")}
-          hint={form.initialized ? t("sync.d1.hasVault") : verified && form.databases.length === 0 ? t("sync.d1.noDb") : undefined}
+          hint={
+            form.initialized
+              ? t("sync.d1.hasVault")
+              : verified && form.databases.length === 0
+                ? t("sync.d1.noDb")
+                : undefined
+          }
         >
           <PopupSelect
             ariaLabel={t("sync.database")}

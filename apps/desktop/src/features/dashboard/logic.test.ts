@@ -66,9 +66,20 @@ const host = (id: string, patch: Partial<HostView> = {}): HostView => ({
   ...patch,
 });
 
-const group = (id: string, sort: number, dashboard = true): GroupView => ({ id, name: id, parent_id: null, sort, dashboard });
+const group = (id: string, sort: number, dashboard = true): GroupView => ({
+  id,
+  name: id,
+  parent_id: null,
+  sort,
+  dashboard,
+});
 
-const reads = (...readings: StatsReading[]): HostReadout => ({ ...NO_READOUT, phase: "reading", online: true, history: readings });
+const reads = (...readings: StatsReading[]): HostReadout => ({
+  ...NO_READOUT,
+  phase: "reading",
+  online: true,
+  history: readings,
+});
 
 describe("dashboard events (HOST-14)", () => {
   const T0 = Date.UTC(2026, 9, 12, 12);
@@ -118,7 +129,12 @@ describe("dashboard events (HOST-14)", () => {
   it("holds a host that needs the user and clears the hold once it reads", () => {
     const held = apply([
       { kind: "probe", host_id: "h", online: true },
-      { kind: "held", host_id: "h", hold: "sign_in_failed", error: { code: "ssh", detail: "denied", ssh_kind: "auth_failed" } },
+      {
+        kind: "held",
+        host_id: "h",
+        hold: "sign_in_failed",
+        error: { code: "ssh", detail: "denied", ssh_kind: "auth_failed" },
+      },
     ])!;
     expect(held.phase).toBe("held");
     expect(held.hold).toBe("sign_in_failed");
@@ -160,7 +176,8 @@ describe("dashboard view", () => {
       c: { ...NO_READOUT, phase: "offline", online: false },
       d: reads(reading(1, { cpu_percent: 20 })),
     };
-    const order = (sort: Parameters<typeof sortForDashboard>[1]) => sortForDashboard(hosts, sort, readouts, "en").map((h) => h.id);
+    const order = (sort: Parameters<typeof sortForDashboard>[1]) =>
+      sortForDashboard(hosts, sort, readouts, "en").map((h) => h.id);
     expect(order("cpu")).toEqual(["b", "a", "d", "c"]);
     expect(order("list")).toEqual(["a", "b", "c", "d"]);
     // Problems first.

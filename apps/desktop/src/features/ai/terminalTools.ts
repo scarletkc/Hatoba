@@ -146,6 +146,9 @@ export async function sendInput(
         content: `The output did not go quiet within ${waitSeconds} s, so the command may still be running. Output so far:\n\n${output}`,
       };
     case "disconnected":
-      return { status: "error", content: `The terminal tab disconnected while waiting. Output before that:\n\n${output}` };
+      return {
+        status: "error",
+        content: `The terminal tab disconnected while waiting. Output before that:\n\n${output}`,
+      };
   }
 }

@@ -32,7 +32,12 @@ import {
 const stdioServer = (extra: Partial<McpServerView> = {}): McpServerView => ({
   id: "m1",
   name: "filesystem",
-  transport: { kind: "stdio", command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Users\\kc\\My Docs"], env_keys: ["API_TOKEN"] },
+  transport: {
+    kind: "stdio",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Users\\kc\\My Docs"],
+    env_keys: ["API_TOKEN"],
+  },
   always_ask: false,
   enabled: true,
   always_allow: false,
@@ -91,7 +96,11 @@ describe("splitCommandLine", () => {
   });
 
   it("groups quoted words", () => {
-    expect(splitCommandLine('node "My Docs/server.js" \'two words\'')).toEqual(["node", "My Docs/server.js", "two words"]);
+    expect(splitCommandLine("node \"My Docs/server.js\" 'two words'")).toEqual([
+      "node",
+      "My Docs/server.js",
+      "two words",
+    ]);
     expect(splitCommandLine('echo ""')).toEqual(["echo", ""]);
     expect(splitCommandLine('echo "say \\"hi\\""')).toEqual(["echo", 'say "hi"']);
     expect(splitCommandLine('a"b c"d')).toEqual(["ab cd"]);
@@ -131,16 +140,34 @@ describe("looksLikeCommandLine", () => {
 describe("environment and header rows", () => {
   it("flags missing, invalid, and repeated names and a missing value", () => {
     const rows = [row("TOKEN", "x"), row("token", "y"), row("", "z"), row("A=B", "v"), row("NEW", "")];
-    expect(validateSecretRows(rows, "env")).toEqual([null, { key: "duplicate" }, { key: "empty" }, { key: "invalid" }, { value: "missing" }]);
+    expect(validateSecretRows(rows, "env")).toEqual([
+      null,
+      { key: "duplicate" },
+      { key: "empty" },
+      { key: "invalid" },
+      { value: "missing" },
+    ]);
   });
 
   it("checks header names as HTTP tokens", () => {
-    expect(validateSecretRows([row("Authorization", "Bearer x"), row("X-Api-Key", "k")], "header")).toEqual([null, null]);
-    expect(validateSecretRows([row("Bad Header", "x"), row("a:b", "x")], "header")).toEqual([{ key: "invalid" }, { key: "invalid" }]);
+    expect(validateSecretRows([row("Authorization", "Bearer x"), row("X-Api-Key", "k")], "header")).toEqual([
+      null,
+      null,
+    ]);
+    expect(validateSecretRows([row("Bad Header", "x"), row("a:b", "x")], "header")).toEqual([
+      { key: "invalid" },
+      { key: "invalid" },
+    ]);
   });
 
   it("shows an empty name or value only once the user tried to save", () => {
-    const problems: (SecretRowProblem | null)[] = [null, { key: "empty" }, { value: "missing" }, { key: "duplicate", value: "missing" }, { key: "invalid" }];
+    const problems: (SecretRowProblem | null)[] = [
+      null,
+      { key: "empty" },
+      { value: "missing" },
+      { key: "duplicate", value: "missing" },
+      { key: "invalid" },
+    ];
     expect(shownRowProblems(problems, false)).toEqual([null, null, null, { key: "duplicate" }, { key: "invalid" }]);
     expect(shownRowProblems(problems, true)).toEqual(problems);
   });
@@ -185,13 +212,26 @@ describe("environment and header rows", () => {
 describe("the form", () => {
   it("starts empty as a stdio server", () => {
     const f = initialMcpForm(null);
-    expect(f).toMatchObject({ name: "", kind: "stdio", command: "", args: [], env: [], url: "", headers: [], alwaysAsk: false });
+    expect(f).toMatchObject({
+      name: "",
+      kind: "stdio",
+      command: "",
+      args: [],
+      env: [],
+      url: "",
+      headers: [],
+      alwaysAsk: false,
+    });
   });
 
   it("is filled from a stdio server, with its saved variables as Saved rows", () => {
     const f = initialMcpForm(stdioServer({ always_ask: true }));
     expect(f).toMatchObject({ name: "filesystem", kind: "stdio", command: "npx", alwaysAsk: true });
-    expect(f.args.map((a) => a.value)).toEqual(["-y", "@modelcontextprotocol/server-filesystem", "C:\\Users\\kc\\My Docs"]);
+    expect(f.args.map((a) => a.value)).toEqual([
+      "-y",
+      "@modelcontextprotocol/server-filesystem",
+      "C:\\Users\\kc\\My Docs",
+    ]);
     expect(f.env).toMatchObject([{ key: "API_TOKEN", saved: true, draft: { mode: "keep" } }]);
     expect(f.headers).toEqual([]);
   });
@@ -203,7 +243,12 @@ describe("the form", () => {
     expect(f.env).toEqual([]);
   });
 
-  const valid = (extra: Partial<McpForm> = {}): McpForm => ({ ...initialMcpForm(null), name: "fs", command: "npx", ...extra });
+  const valid = (extra: Partial<McpForm> = {}): McpForm => ({
+    ...initialMcpForm(null),
+    name: "fs",
+    command: "npx",
+    ...extra,
+  });
 
   it("accepts a complete stdio server and a complete http server", () => {
     expect(hasMcpProblems(validateMcpForm(valid()))).toBe(false);
@@ -240,7 +285,12 @@ describe("the form", () => {
   });
 
   it("builds the input for a stdio server, dropping empty arguments and blank rows", () => {
-    const f = valid({ command: " npx ", args: argRows(["-y", "", "server"]), env: [row("TOKEN", "abc"), newSecretRow()], alwaysAsk: true });
+    const f = valid({
+      command: " npx ",
+      args: argRows(["-y", "", "server"]),
+      env: [row("TOKEN", "abc"), newSecretRow()],
+      alwaysAsk: true,
+    });
     expect(mcpFormToInput(null, f)).toEqual({
       id: null,
       name: "fs",
@@ -259,26 +309,37 @@ describe("the form", () => {
     });
   });
 
-  const httpInput = (rows: SecretRow[]) => mcpFormToInput(null, valid({ kind: "http", url: "https://x.test/mcp", headers: rows })).transport;
+  const httpInput = (rows: SecretRow[]) =>
+    mcpFormToInput(null, valid({ kind: "http", url: "https://x.test/mcp", headers: rows })).transport;
 
   it("puts Bearer in front of an Authorization value without a space", () => {
-    expect(httpInput([row("Authorization", " github_pat_x ")])).toMatchObject({ headers: [{ key: "Authorization", value: "Bearer github_pat_x" }] });
-    expect(httpInput([row("authorization", "lin_api_x")])).toMatchObject({ headers: [{ key: "authorization", value: "Bearer lin_api_x" }] });
+    expect(httpInput([row("Authorization", " github_pat_x ")])).toMatchObject({
+      headers: [{ key: "Authorization", value: "Bearer github_pat_x" }],
+    });
+    expect(httpInput([row("authorization", "lin_api_x")])).toMatchObject({
+      headers: [{ key: "authorization", value: "Bearer lin_api_x" }],
+    });
   });
 
   it("puts Bearer in front of a token that replaces a saved Authorization value", () => {
     const f = initialMcpForm(httpServer());
     const headers = f.headers.map((r) => ({ ...r, draft: { mode: "replace" as const, value: "new_token" } }));
-    expect(mcpFormToInput("m2", { ...f, headers }).transport).toMatchObject({ headers: [{ key: "Authorization", value: "Bearer new_token" }] });
+    expect(mcpFormToInput("m2", { ...f, headers }).transport).toMatchObject({
+      headers: [{ key: "Authorization", value: "Bearer new_token" }],
+    });
   });
 
   it("leaves an Authorization value with a scheme, a kept value, other headers, and variables as they are", () => {
     expect(httpInput([row("Authorization", "Bearer x")])).toMatchObject({ headers: [{ value: "Bearer x" }] });
     expect(httpInput([row("Authorization", "Basic abc")])).toMatchObject({ headers: [{ value: "Basic abc" }] });
     expect(httpInput([row("Authorization", "token abc")])).toMatchObject({ headers: [{ value: "token abc" }] });
-    expect(httpInput(savedSecretRows(["Authorization"]))).toMatchObject({ headers: [{ key: "Authorization", value: null }] });
+    expect(httpInput(savedSecretRows(["Authorization"]))).toMatchObject({
+      headers: [{ key: "Authorization", value: null }],
+    });
     expect(httpInput([row("X-Api-Key", "abc")])).toMatchObject({ headers: [{ key: "X-Api-Key", value: "abc" }] });
-    expect(mcpFormToInput(null, valid({ env: [row("Authorization", "abc")] })).transport).toMatchObject({ env: [{ key: "Authorization", value: "abc" }] });
+    expect(mcpFormToInput(null, valid({ env: [row("Authorization", "abc")] })).transport).toMatchObject({
+      env: [{ key: "Authorization", value: "abc" }],
+    });
   });
 
   it("keeps the other transport's rows out of the input", () => {
@@ -292,19 +353,29 @@ describe("servers, state, and Always allow", () => {
     name: `mcp__fs__${name}`,
     tool: name,
     description: "",
-    annotations: { title: null, read_only_hint: null, destructive_hint: null, idempotent_hint: null, open_world_hint: null },
+    annotations: {
+      title: null,
+      read_only_hint: null,
+      destructive_hint: null,
+      idempotent_hint: null,
+      open_world_hint: null,
+    },
     always_allow: false,
     ...extra,
   });
 
   it("summarizes the transport on one line", () => {
-    expect(transportSummary(stdioServer().transport)).toBe('npx -y @modelcontextprotocol/server-filesystem "C:\\Users\\kc\\My Docs"');
+    expect(transportSummary(stdioServer().transport)).toBe(
+      'npx -y @modelcontextprotocol/server-filesystem "C:\\Users\\kc\\My Docs"',
+    );
     expect(transportSummary(httpServer().transport)).toBe("https://api.example.com/mcp");
   });
 
   it("treats a server without a status as stopped", () => {
     expect(serverState(undefined)).toBe("stopped");
-    expect(serverState({ server_id: "m1", state: "failed", error: "x", stderr: [], tools: [], prompts: [], resources: [] })).toBe("failed");
+    expect(
+      serverState({ server_id: "m1", state: "failed", error: "x", stderr: [], tools: [], prompts: [], resources: [] }),
+    ).toBe("failed");
   });
 
   it("allows a tool on its own or with the whole server", () => {
@@ -333,12 +404,9 @@ describe("servers, state, and Always allow", () => {
     });
     expect(annotationKeys(a({}))).toEqual([]);
     expect(annotationKeys(a({ read_only_hint: true, destructive_hint: false }))).toEqual(["read_only"]);
-    expect(annotationKeys(a({ open_world_hint: true, destructive_hint: true, idempotent_hint: true, read_only_hint: true }))).toEqual([
-      "read_only",
-      "destructive",
-      "idempotent",
-      "open_world",
-    ]);
+    expect(
+      annotationKeys(a({ open_world_hint: true, destructive_hint: true, idempotent_hint: true, read_only_hint: true })),
+    ).toEqual(["read_only", "destructive", "idempotent", "open_world"]);
   });
 
   it("replaces a server in place or adds it", () => {

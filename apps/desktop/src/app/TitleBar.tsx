@@ -63,7 +63,13 @@ export function WindowControls() {
 
   return (
     <div className={cx(s.caption, !focused && s.captionInactive)}>
-      <button type="button" className={s.captionButton} title={t("window.minimize")} aria-label={t("window.minimize")} onClick={() => void currentWindow().then((w) => w?.minimize())}>
+      <button
+        type="button"
+        className={s.captionButton}
+        title={t("window.minimize")}
+        aria-label={t("window.minimize")}
+        onClick={() => void currentWindow().then((w) => w?.minimize())}
+      >
         {glyph(s.glyphMin)}
       </button>
       <button
@@ -80,7 +86,13 @@ export function WindowControls() {
       >
         {maximized ? glyph(s.glyphRestore) : glyph(s.glyphMax)}
       </button>
-      <button type="button" className={cx(s.captionButton, s.captionClose)} title={t("window.close")} aria-label={t("window.close")} onClick={() => void currentWindow().then((w) => w?.close())}>
+      <button
+        type="button"
+        className={cx(s.captionButton, s.captionClose)}
+        title={t("window.close")}
+        aria-label={t("window.close")}
+        onClick={() => void currentWindow().then((w) => w?.close())}
+      >
         {glyph(s.glyphClose)}
       </button>
     </div>
@@ -142,7 +154,12 @@ function useLocalMenu(onNewTab: () => void) {
             onSelect: () => void openLocalTerminal(shell),
           }))),
     { kind: "separator" },
-    { label: t("tabs.hosts"), icon: "hard-drives", hint: shortcutLabel(platform, "Ctrl+Shift+T", "⌘T"), onSelect: onNewTab },
+    {
+      label: t("tabs.hosts"),
+      icon: "hard-drives",
+      hint: shortcutLabel(platform, "Ctrl+Shift+T", "⌘T"),
+      onSelect: onNewTab,
+    },
   ];
   return { menu, open, entries };
 }
@@ -154,7 +171,12 @@ function AiActivity({ slotId }: { slotId: string }) {
   if (activity === "idle") return null;
   const label = t(activity === "waiting" ? "ai.tabWaiting" : "ai.tabRunning");
   return (
-    <span className={cx(s.tabAi, activity === "waiting" ? s.tabAiWaiting : s.tabAiRunning)} title={label} aria-label={label} role="img">
+    <span
+      className={cx(s.tabAi, activity === "waiting" ? s.tabAiWaiting : s.tabAiRunning)}
+      title={label}
+      aria-label={label}
+      role="img"
+    >
       <Icon name={activity === "waiting" ? "hand-palm" : "sparkle"} fill={activity === "waiting"} />
     </span>
   );
@@ -187,7 +209,13 @@ function useOpenNewTabs(list: RefObject<HTMLDivElement | null>, tabs: { id: stri
     for (const id of ids) {
       if (before.has(id)) continue;
       const el = list.current.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(id)}"]`);
-      el?.animate?.([{ maxWidth: "0px", opacity: 0 }, { maxWidth: "200px", opacity: 1 }], { duration, easing });
+      el?.animate?.(
+        [
+          { maxWidth: "0px", opacity: 0 },
+          { maxWidth: "200px", opacity: 1 },
+        ],
+        { duration, easing },
+      );
     }
   }, [list, tabs]);
 }
@@ -204,7 +232,13 @@ function AppButtons() {
   const settingsLabel = `${updateAvailable ? t("sidebar.settingsUpdate") : t("sidebar.settings")} (${shortcutLabel(platform, "Ctrl+,", "⌘,")})`;
   return (
     <>
-      <button type="button" className={s.barButton} title={lockLabel} aria-label={lockLabel} onClick={() => void useApp.getState().lock()}>
+      <button
+        type="button"
+        className={s.barButton}
+        title={lockLabel}
+        aria-label={lockLabel}
+        onClick={() => void useApp.getState().lock()}
+      >
         <Icon name="lock-simple" size={16} />
       </button>
       <button
@@ -222,10 +256,7 @@ function AppButtons() {
 }
 
 /** Tab bar merged with the title bar (design TabBar + WIN-01). */
-export function TabBar({ onNewTab, onCloseTab }: {
-  onNewTab: () => void;
-  onCloseTab: (id: string) => void;
-}) {
+export function TabBar({ onNewTab, onCloseTab }: { onNewTab: () => void; onCloseTab: (id: string) => void }) {
   const t = useT();
   const { tabs, active, activate } = useTabs();
   const local = useLocalMenu(onNewTab);
@@ -283,7 +314,13 @@ export function TabBar({ onNewTab, onCloseTab }: {
           </button>
         ))}
       </div>
-      <button type="button" className={s.newTab} title={t("tabs.newTab")} aria-label={t("tabs.newTab")} onClick={onNewTab}>
+      <button
+        type="button"
+        className={s.newTab}
+        title={t("tabs.newTab")}
+        aria-label={t("tabs.newTab")}
+        onClick={onNewTab}
+      >
         <Icon name="plus" />
       </button>
       <button
@@ -297,7 +334,9 @@ export function TabBar({ onNewTab, onCloseTab }: {
       >
         <Icon name="caret-down" size={12} />
       </button>
-      {local.menu.anchor && <Menu anchor={local.menu.anchor} entries={local.entries} onClose={local.menu.close} minWidth={220} />}
+      {local.menu.anchor && (
+        <Menu anchor={local.menu.anchor} entries={local.entries} onClose={local.menu.close} minWidth={220} />
+      )}
       <div className={s.drag} data-tauri-drag-region />
       <AppButtons />
       <AiPanelButton className={s.aiButton} activeClassName={s.aiButtonOn} dotClassName={s.aiDot} />

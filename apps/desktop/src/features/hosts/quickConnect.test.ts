@@ -6,7 +6,18 @@ const target = (address: string, port: number, username: string | null) => ({ ad
 
 describe("parseQuickConnect", () => {
   it("leaves plain searches alone", () => {
-    for (const q of ["", "prod", "prod api", "10.0.0.5", "db:5432", "ssh", "sshd", "deploy@", "@host", "prod deploy@db"])
+    for (const q of [
+      "",
+      "prod",
+      "prod api",
+      "10.0.0.5",
+      "db:5432",
+      "ssh",
+      "sshd",
+      "deploy@",
+      "@host",
+      "prod deploy@db",
+    ])
       expect(parseQuickConnect(q), q).toBeNull();
   });
 
@@ -16,7 +27,9 @@ describe("parseQuickConnect", () => {
       target: target("43.206.11.8", 22, "deploy"),
       search: "deploy@43.206.11.8",
     });
-    expect(parseQuickConnect("  root@db.internal:2222 ")?.ok && parseQuickConnect("root@db.internal:2222")).toMatchObject({
+    expect(
+      parseQuickConnect("  root@db.internal:2222 ")?.ok && parseQuickConnect("root@db.internal:2222"),
+    ).toMatchObject({
       target: target("db.internal", 2222, "root"),
     });
     // The last "@" separates the user, as in ssh.
@@ -47,7 +60,9 @@ describe("parseQuickConnect", () => {
   it("reads IPv6 addresses", () => {
     expect(parseQuickConnect("root@[2001:db8::1]:2222")).toMatchObject({ target: target("2001:db8::1", 2222, "root") });
     expect(parseQuickConnect("root@[fe80::1%eth0]")).toMatchObject({ target: target("fe80::1%eth0", 22, "root") });
-    expect(parseQuickConnect("ssh -p 2222 root@2001:db8::1")).toMatchObject({ target: target("2001:db8::1", 2222, "root") });
+    expect(parseQuickConnect("ssh -p 2222 root@2001:db8::1")).toMatchObject({
+      target: target("2001:db8::1", 2222, "root"),
+    });
     expect(parseQuickConnect("ssh [::1]")).toMatchObject({ target: target("::1", 22, null) });
     expect(parseQuickConnect("root@[::1")).toBeNull();
   });
@@ -59,20 +74,34 @@ describe("parseQuickConnect", () => {
       search: "root@db",
     });
     expect(parseQuickConnect("ssh -J jump root@db")).toMatchObject({ problem: { kind: "option", option: "-J" } });
-    expect(parseQuickConnect("ssh -R 9000:localhost:9000 root@db")).toMatchObject({ problem: { kind: "option", option: "-R" } });
+    expect(parseQuickConnect("ssh -R 9000:localhost:9000 root@db")).toMatchObject({
+      problem: { kind: "option", option: "-R" },
+    });
     expect(parseQuickConnect("ssh -D 1080 root@db")).toMatchObject({ problem: { kind: "option", option: "-D" } });
     // Forwarding that is ignored does not hide another option's problem.
-    expect(parseQuickConnect("ssh -A -L 8080:localhost:80 root@db")).toMatchObject({ ok: false, problem: { kind: "option", option: "-L" } });
+    expect(parseQuickConnect("ssh -A -L 8080:localhost:80 root@db")).toMatchObject({
+      ok: false,
+      problem: { kind: "option", option: "-L" },
+    });
     // The value of an option in a group is not mistaken for the destination.
-    expect(parseQuickConnect("ssh -vi key root@db")).toMatchObject({ problem: { kind: "option", option: "-i" }, search: "root@db" });
-    expect(parseQuickConnect("root@db -L 8080:localhost:80")).toMatchObject({ problem: { kind: "option", option: "-L" } });
+    expect(parseQuickConnect("ssh -vi key root@db")).toMatchObject({
+      problem: { kind: "option", option: "-i" },
+      search: "root@db",
+    });
+    expect(parseQuickConnect("root@db -L 8080:localhost:80")).toMatchObject({
+      problem: { kind: "option", option: "-L" },
+    });
     expect(parseQuickConnect("ssh root@db uptime -p")).toMatchObject({ problem: { kind: "command" } });
     expect(parseQuickConnect("ssh -p 70000 root@db")).toMatchObject({ problem: { kind: "port" } });
     expect(parseQuickConnect("root@db:http")).toMatchObject({ problem: { kind: "port" }, search: "root@db" });
   });
 
   it("ignores options that change nothing, also in groups", () => {
-    expect(parseQuickConnect("ssh -v -4 -C root@db")).toEqual({ ok: true, target: target("db", 22, "root"), search: "root@db" });
+    expect(parseQuickConnect("ssh -v -4 -C root@db")).toEqual({
+      ok: true,
+      target: target("db", 22, "root"),
+      search: "root@db",
+    });
     expect(parseQuickConnect("ssh -tt root@db -q")).toMatchObject({ ok: true, target: target("db", 22, "root") });
     expect(parseQuickConnect("ssh -6vp2222 root@db")).toMatchObject({ ok: true, target: target("db", 2222, "root") });
     expect(parseQuickConnect("ssh -Cl deploy db")).toMatchObject({ ok: true, target: target("db", 22, "deploy") });
@@ -85,15 +114,36 @@ describe("parseQuickConnect", () => {
       search: "user@host",
       notice: "forwarding",
     });
-    expect(parseQuickConnect("ssh -X user@host")).toMatchObject({ ok: true, target: target("host", 22, "user"), notice: "forwarding" });
-    expect(parseQuickConnect("ssh -AY -p 2222 host")).toMatchObject({ ok: true, target: target("host", 2222, null), notice: "forwarding" });
-    expect(parseQuickConnect("ssh -4Av root@db")).toMatchObject({ ok: true, target: target("db", 22, "root"), notice: "forwarding" });
+    expect(parseQuickConnect("ssh -X user@host")).toMatchObject({
+      ok: true,
+      target: target("host", 22, "user"),
+      notice: "forwarding",
+    });
+    expect(parseQuickConnect("ssh -AY -p 2222 host")).toMatchObject({
+      ok: true,
+      target: target("host", 2222, null),
+      notice: "forwarding",
+    });
+    expect(parseQuickConnect("ssh -4Av root@db")).toMatchObject({
+      ok: true,
+      target: target("db", 22, "root"),
+      notice: "forwarding",
+    });
     // Turning forwarding off needs no note.
     expect(parseQuickConnect("ssh -ax root@db")).not.toHaveProperty("notice");
   });
 
   it("waits for an ssh command to be complete", () => {
-    for (const q of ["ssh ", "ssh -p", "ssh -p 2222", "ssh -l deploy", "ssh -i", "ssh -vp", "ssh root@", "ssh bad!host"])
+    for (const q of [
+      "ssh ",
+      "ssh -p",
+      "ssh -p 2222",
+      "ssh -l deploy",
+      "ssh -i",
+      "ssh -vp",
+      "ssh root@",
+      "ssh bad!host",
+    ])
       expect(parseQuickConnect(q), q).toBeNull();
   });
 });
@@ -109,7 +159,11 @@ describe("formatTarget", () => {
 describe("savedHostFor", () => {
   const host = (id: string, address: string, port: number, username: string) =>
     ({ id, address, port, username }) as HostView;
-  const hosts = [host("a", "DB.internal", 22, "root"), host("b", "db.internal", 22, "deploy"), host("c", "web", 2222, "deploy")];
+  const hosts = [
+    host("a", "DB.internal", 22, "root"),
+    host("b", "db.internal", 22, "deploy"),
+    host("c", "web", 2222, "deploy"),
+  ];
 
   it("matches address, port and user", () => {
     expect(savedHostFor(hosts, target("db.internal", 22, "deploy"))?.id).toBe("b");

@@ -3,7 +3,9 @@ import { diffLines, diffStats, withContext, type DiffRow } from "./diff";
 
 /** A diff as `diff -u` writes its lines: " " unchanged, "-" removed, "+" added, "…n" a gap. */
 function unified(rows: DiffRow[]): string[] {
-  return rows.map((r) => (r.kind === "gap" ? `…${r.count}` : `${r.kind === "same" ? " " : r.kind === "del" ? "-" : "+"}${r.text}`));
+  return rows.map((r) =>
+    r.kind === "gap" ? `…${r.count}` : `${r.kind === "same" ? " " : r.kind === "del" ? "-" : "+"}${r.text}`,
+  );
 }
 
 describe("the diff on the approval card (AI-39, AI-40)", () => {
@@ -18,13 +20,31 @@ describe("the diff on the approval card (AI-39, AI-40)", () => {
     ]);
     expect(diffStats(lines)).toEqual({ added: 2, removed: 1 });
     // Several changed lines in a row: every removal first.
-    expect(unified(withContext(diffLines("x\n1\n2\ny\n", "x\none\ntwo\ny\n")))).toEqual([" x", "-1", "-2", "+one", "+two", " y"]);
+    expect(unified(withContext(diffLines("x\n1\n2\ny\n", "x\none\ntwo\ny\n")))).toEqual([
+      " x",
+      "-1",
+      "-2",
+      "+one",
+      "+two",
+      " y",
+    ]);
   });
 
   it("keeps three lines of context and folds the rest", () => {
     const before = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join("\n") + "\n";
     const after = before.replace("line 10\n", "line ten\n");
-    expect(unified(withContext(diffLines(before, after)))).toEqual(["…6", " line 7", " line 8", " line 9", "-line 10", "+line ten", " line 11", " line 12", " line 13", "…7"]);
+    expect(unified(withContext(diffLines(before, after)))).toEqual([
+      "…6",
+      " line 7",
+      " line 8",
+      " line 9",
+      "-line 10",
+      "+line ten",
+      " line 11",
+      " line 12",
+      " line 13",
+      "…7",
+    ]);
     // Two changes close together share their context.
     const two = after.replace("line 14\n", "line fourteen\n");
     const rows = withContext(diffLines(before, two));

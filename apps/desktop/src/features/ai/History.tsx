@@ -10,7 +10,16 @@ import { api } from "@/ipc/api";
 import type { AiConversationView, AiSearchHit, HostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
-import { conversationBusy, deleteConversation, exportConversation, forkConversation, loadHistory, openConversation, pinConversation, renameConversation } from "./actions";
+import {
+  conversationBusy,
+  deleteConversation,
+  exportConversation,
+  forkConversation,
+  loadHistory,
+  openConversation,
+  pinConversation,
+  renameConversation,
+} from "./actions";
 import { MAX_TITLE_CHARS } from "./fork";
 import { sortConversations } from "./models";
 import { conversationPlace, placeName } from "./place";
@@ -18,7 +27,11 @@ import { highlightParts, oneLine, SEARCH_DEBOUNCE_MS } from "./search";
 import { conversationActivity, useAi } from "./store";
 import s from "./History.module.css";
 
-type Search = { state: "idle" } | { state: "searching" } | { state: "done"; query: string; hits: AiSearchHit[] } | { state: "failed" };
+type Search =
+  | { state: "idle" }
+  | { state: "searching" }
+  | { state: "done"; query: string; hits: AiSearchHit[] }
+  | { state: "failed" };
 
 /** AI-24: matches for `query`, asked of Rust once typing pauses. */
 function useSearch(query: string): [Search, () => void] {
@@ -48,7 +61,15 @@ function useSearch(query: string): [Search, () => void] {
 }
 
 /** AI-23: conversations by last activity, pinned first, with title, host or quick-connect target, and time. */
-export function History({ slotId, currentId, onClose }: { slotId: string; currentId: string | null; onClose: () => void }) {
+export function History({
+  slotId,
+  currentId,
+  onClose,
+}: {
+  slotId: string;
+  currentId: string | null;
+  onClose: () => void;
+}) {
   const t = useT();
   const history = useAi((st) => st.history);
   const failed = useAi((st) => st.historyFailed);
@@ -99,9 +120,18 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
     setMenuEntries([
       { label: t("ai.history.open"), icon: "chat-circle-dots", onSelect: () => open(c) },
       // AI-43: a copy of the whole conversation, which opens here; not while it is busy in its tab or a fork of it is being made.
-      { label: t("ai.history.fork"), icon: "git-fork", disabled: conversationBusy(c.id) || useAi.getState().forking.includes(c.id), onSelect: () => fork(c) },
+      {
+        label: t("ai.history.fork"),
+        icon: "git-fork",
+        disabled: conversationBusy(c.id) || useAi.getState().forking.includes(c.id),
+        onSelect: () => fork(c),
+      },
       { label: t("btn.rename"), icon: "pencil-simple", onSelect: () => setRenaming(c.id) },
-      { label: t(c.pinned ? "ai.history.unpin" : "ai.history.pin"), icon: c.pinned ? "push-pin-slash" : "push-pin", onSelect: () => void pinConversation(c.id, !c.pinned) },
+      {
+        label: t(c.pinned ? "ai.history.unpin" : "ai.history.pin"),
+        icon: c.pinned ? "push-pin-slash" : "push-pin",
+        onSelect: () => void pinConversation(c.id, !c.pinned),
+      },
       { label: t("ai.history.export"), icon: "export", onSelect: () => void exportConversation(c.id) },
       { kind: "separator" },
       { label: t("ai.history.delete"), icon: "trash", danger: true, onSelect: () => void remove(c) },
@@ -117,9 +147,24 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
         <IconButton small icon="caret-left" label={t("btn.back")} size={14} onClick={onClose} />
         <span className={s.title}>{t("ai.history")}</span>
       </div>
-      <SearchField fill value={query} onChange={setQuery} placeholder={t("ai.search")} clearLabel={t("ai.search.clear")} className={s.search} />
+      <SearchField
+        fill
+        value={query}
+        onChange={setQuery}
+        placeholder={t("ai.search")}
+        clearLabel={t("ai.search.clear")}
+        className={s.search}
+      />
       {searching ? (
-        <SearchResults search={search} query={query.trim()} history={history} hosts={hosts} currentId={currentId} onOpen={openHit} onRetry={retrySearch} />
+        <SearchResults
+          search={search}
+          query={query.trim()}
+          history={history}
+          hosts={hosts}
+          currentId={currentId}
+          onOpen={openHit}
+          onRetry={retrySearch}
+        />
       ) : (
         <div className={s.list} role="list">
           {list === null && (
@@ -135,9 +180,7 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
               </LinkButton>
             </div>
           )}
-          {list?.length === 0 && !failed && (
-            <EmptyState compact icon="chats" title={t("ai.history.empty")} />
-          )}
+          {list?.length === 0 && !failed && <EmptyState compact icon="chats" title={t("ai.history.empty")} />}
           {list?.map((c) => {
             const place = conversationPlace(c, hosts);
             const menuOpen = !!menu.anchor?.trigger && menuRow === c.id;
@@ -155,7 +198,8 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
                       initial={c.title}
                       onDone={(title) => {
                         setRenaming(null);
-                        if (title !== null && title.trim() && title.trim() !== c.title) void renameConversation(c.id, title.trim());
+                        if (title !== null && title.trim() && title.trim() !== c.title)
+                          void renameConversation(c.id, title.trim());
                       }}
                     />
                   ) : (
@@ -203,7 +247,12 @@ function Activity({ id }: { id: string }) {
   if (activity === "idle") return null;
   const label = t(activity === "waiting" ? "ai.tabWaiting" : "ai.tabRunning");
   return (
-    <span className={cx(s.activity, activity === "waiting" ? s.activityWaiting : s.activityRunning)} title={label} aria-label={label} role="img">
+    <span
+      className={cx(s.activity, activity === "waiting" ? s.activityWaiting : s.activityRunning)}
+      title={label}
+      aria-label={label}
+      role="img"
+    >
       <Icon name={activity === "waiting" ? "hand-palm" : "sparkle"} fill={activity === "waiting"} size={12} />
     </span>
   );
@@ -296,7 +345,9 @@ function SearchResults({
               )}
               {c && (
                 <div className={s.rowMeta}>
-                  <span className={s.metaHost}>{placeName(t, conversationPlace(c, hosts), useApp.getState().info.device_name)}</span>
+                  <span className={s.metaHost}>
+                    {placeName(t, conversationPlace(c, hosts), useApp.getState().info.device_name)}
+                  </span>
                   <span className={s.dot}>·</span>
                   <span className={s.time}>{formatRelative(t.locale, c.last_activity)}</span>
                 </div>

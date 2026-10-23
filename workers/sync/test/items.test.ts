@@ -217,7 +217,10 @@ describe("POST /v1/items", () => {
   describe("limits", () => {
     it("accepts 100 changes in one request", async () => {
       const token = await loggedIn();
-      const res = await push(token, Array.from({ length: 100 }, (_, i) => change(uuid(i + 1), 0)));
+      const res = await push(
+        token,
+        Array.from({ length: 100 }, (_, i) => change(uuid(i + 1), 0)),
+      );
       expect(res.status).toBe(200);
       expect(res.body.results).toHaveLength(100);
       expect(res.body.results.every((r: { status: string }) => r.status === "ok")).toBe(true);
@@ -225,7 +228,10 @@ describe("POST /v1/items", () => {
 
     it("rejects 101 changes with 413 and writes nothing", async () => {
       const token = await loggedIn();
-      const res = await push(token, Array.from({ length: 101 }, (_, i) => change(uuid(i + 1), 0)));
+      const res = await push(
+        token,
+        Array.from({ length: 101 }, (_, i) => change(uuid(i + 1), 0)),
+      );
       expect(res.status).toBe(413);
       expect(res.body.error).toBe("too_many_changes");
       const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM items").first<{ n: number }>();
@@ -258,7 +264,11 @@ describe("POST /v1/items", () => {
 
     it("rejects a request body beyond the overall size ceiling with 413", async () => {
       const token = await loggedIn();
-      const res = await call("/v1/items", { token, body: `{"changes":[],"pad":"${"x".repeat(9 * 1024 * 1024)}"}`, headers: { "Content-Type": "application/json" } });
+      const res = await call("/v1/items", {
+        token,
+        body: `{"changes":[],"pad":"${"x".repeat(9 * 1024 * 1024)}"}`,
+        headers: { "Content-Type": "application/json" },
+      });
       expect(res.status).toBe(413);
       expect(res.body.error).toBe("payload_too_large");
     });
@@ -280,8 +290,14 @@ describe("POST /v1/items", () => {
       ["live item with empty envelope", { changes: [{ id: "a", base_revision: 0, deleted: false, envelope: "" }] }],
       ["envelope not a string", { changes: [{ id: "a", base_revision: 0, deleted: false, envelope: { v: 1 } }] }],
       ["deleted item with an envelope", { changes: [{ id: "a", base_revision: 1, deleted: true, envelope: "x" }] }],
-      ["updated_at negative", { changes: [{ id: "a", base_revision: 0, deleted: false, envelope: "x", updated_at: -5 }] }],
-      ["updated_at not an integer", { changes: [{ id: "a", base_revision: 0, deleted: false, envelope: "x", updated_at: "now" }] }],
+      [
+        "updated_at negative",
+        { changes: [{ id: "a", base_revision: 0, deleted: false, envelope: "x", updated_at: -5 }] },
+      ],
+      [
+        "updated_at not an integer",
+        { changes: [{ id: "a", base_revision: 0, deleted: false, envelope: "x", updated_at: "now" }] },
+      ],
       [
         "duplicate ids",
         {
@@ -302,7 +318,10 @@ describe("POST /v1/items", () => {
 
     it("writes nothing when a later change in the request is invalid", async () => {
       const token = await loggedIn();
-      const res = await push(token, [change(ID_1, 0), { id: "bad id", base_revision: 0, deleted: false, envelope: "x" }]);
+      const res = await push(token, [
+        change(ID_1, 0),
+        { id: "bad id", base_revision: 0, deleted: false, envelope: "x" },
+      ]);
       expect(res.status).toBe(400);
       expect(res.body.message).toContain("changes[1]");
       const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM items").first<{ n: number }>();
@@ -311,7 +330,12 @@ describe("POST /v1/items", () => {
 
     it("rejects non-JSON bodies with 415", async () => {
       const token = await loggedIn();
-      const res = await call("/v1/items", { token, method: "POST", body: "changes", headers: { "Content-Type": "text/plain" } });
+      const res = await call("/v1/items", {
+        token,
+        method: "POST",
+        body: "changes",
+        headers: { "Content-Type": "text/plain" },
+      });
       expect(res.status).toBe(415);
     });
   });
@@ -319,7 +343,10 @@ describe("POST /v1/items", () => {
 
 describe("GET /v1/items", () => {
   const seed = async (token: string, count: number) => {
-    const res = await push(token, Array.from({ length: count }, (_, i) => change(uuid(i + 1), 0, `item-${i + 1}`)));
+    const res = await push(
+      token,
+      Array.from({ length: count }, (_, i) => change(uuid(i + 1), 0, `item-${i + 1}`)),
+    );
     expect(res.status).toBe(200);
   };
 
@@ -388,9 +415,11 @@ describe("GET /v1/items", () => {
 
   it("defaults to 500 items per page and clamps limit to 1000", async () => {
     const token = await loggedIn();
-    const rows = Array.from({ length: 1005 }, (_, i) => env.DB.prepare(
-      "INSERT INTO items (id, envelope, revision, seq, deleted, updated_at) VALUES (?, 'e', 1, ?, 0, 0)",
-    ).bind(`bulk-${i}`, i + 1));
+    const rows = Array.from({ length: 1005 }, (_, i) =>
+      env.DB.prepare(
+        "INSERT INTO items (id, envelope, revision, seq, deleted, updated_at) VALUES (?, 'e', 1, ?, 0, 0)",
+      ).bind(`bulk-${i}`, i + 1),
+    );
     for (let i = 0; i < rows.length; i += 200) await env.DB.batch(rows.slice(i, i + 200));
 
     const dflt = await call("/v1/items", { token });
@@ -402,18 +431,13 @@ describe("GET /v1/items", () => {
     expect(clamped.body).toMatchObject({ has_more: true, next_since: 1000 });
   });
 
-  it.each([
-    ["since=-1"],
-    ["since=abc"],
-    ["since=1.5"],
-    ["since="],
-    ["limit=0"],
-    ["limit=-3"],
-    ["limit=ten"],
-  ])("rejects bad query parameters with 400: %s", async (query) => {
-    const token = await loggedIn();
-    const res = await call(`/v1/items?${query}`, { token });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("invalid_request");
-  });
+  it.each([["since=-1"], ["since=abc"], ["since=1.5"], ["since="], ["limit=0"], ["limit=-3"], ["limit=ten"]])(
+    "rejects bad query parameters with 400: %s",
+    async (query) => {
+      const token = await loggedIn();
+      const res = await call(`/v1/items?${query}`, { token });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("invalid_request");
+    },
+  );
 });

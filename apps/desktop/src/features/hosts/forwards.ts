@@ -15,7 +15,10 @@ import { windowFocused } from "@/lib/native";
 import { hostConnected, startConnectionListeners } from "./connections";
 
 /** Every host's saved forwards (FWD-05); `null` until read. */
-const useRules = create<{ rules: ForwardView[] | null; loadFailed: boolean }>(() => ({ rules: null, loadFailed: false }));
+const useRules = create<{ rules: ForwardView[] | null; loadFailed: boolean }>(() => ({
+  rules: null,
+  loadFailed: false,
+}));
 /** Grows with each read and each change, so a read that began before a change never undoes it. */
 let stamp = 0;
 
@@ -34,7 +37,9 @@ export function putForwardRule(saved: ForwardView) {
   stamp++;
   useRules.setState(({ rules }) => {
     const rest = rules ?? [];
-    return { rules: rest.some((x) => x.id === saved.id) ? rest.map((x) => (x.id === saved.id ? saved : x)) : [...rest, saved] };
+    return {
+      rules: rest.some((x) => x.id === saved.id) ? rest.map((x) => (x.id === saved.id ? saved : x)) : [...rest, saved],
+    };
   });
 }
 
@@ -115,7 +120,11 @@ export async function startForward(hostId: string, forwardId: string): Promise<n
     try {
       const port = await api.forward_start(hostId, forwardId, { password, passphrase });
       // HOST-06: the host was connected to.
-      if (!connected) void useVaultData.getState().reloadHosts().catch(() => {});
+      if (!connected)
+        void useVaultData
+          .getState()
+          .reloadHosts()
+          .catch(() => {});
       return port;
     } catch (e) {
       const err = toAppError(e);

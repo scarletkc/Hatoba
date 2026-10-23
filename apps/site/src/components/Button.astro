@@ -24,12 +24,30 @@ interface Props {
   [attribute: string]: unknown;
 }
 
-const { variant = "accent", size = "lg", href, as, icon, iconSize, iconOnly = false, label, class: className, ...rest } = Astro.props;
+const {
+  variant = "accent",
+  size = "lg",
+  href,
+  as,
+  icon,
+  iconSize,
+  iconOnly = false,
+  label,
+  class: className,
+  ...rest
+} = Astro.props;
 const Tag = as ?? (href ? "a" : "button");
 const classes = ["button", variant, size, { "icon-only": iconOnly }, className];
 ---
 
-<Tag class:list={classes} href={href} type={Tag === "button" ? "button" : undefined} aria-label={iconOnly ? label : undefined} title={iconOnly ? label : undefined} {...rest}>
+<Tag
+  class:list={classes}
+  href={href}
+  type={Tag === "button" ? "button" : undefined}
+  aria-label={iconOnly ? label : undefined}
+  title={iconOnly ? label : undefined}
+  {...rest}
+>
   {icon && <Icon name={icon} size={iconSize ?? (size === "lg" ? 18 : 16)} class="button-icon" />}
   {iconOnly ? <slot /> : <slot>{label}</slot>}
 </Tag>

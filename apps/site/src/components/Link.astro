@@ -16,7 +16,10 @@ interface Props {
 const { href, variant = "default", icon, class: className, ...rest } = Astro.props;
 ---
 
-<a href={href} class:list={["link", variant, { "with-icon": icon }, className]} {...rest}>{icon && <Icon name={icon} size={16} />}<slot /></a>
+<a href={href} class:list={["link", variant, { "with-icon": icon }, className]} {...rest}>
+  {icon && <Icon name={icon} size={16} />}
+  <slot />
+</a>
 
 <style>
   .muted {

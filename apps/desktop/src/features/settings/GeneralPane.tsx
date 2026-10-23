@@ -80,7 +80,11 @@ export function GeneralPane() {
           </SettingRow>
         )}
         <SettingRow label={t("settings.aiNotifications")} hint={t("settings.aiNotifications.hint")}>
-          <Switch label={t("settings.aiNotifications")} checked={prefs.ai_notifications} onChange={(ai_notifications) => setPrefs({ ai_notifications })} />
+          <Switch
+            label={t("settings.aiNotifications")}
+            checked={prefs.ai_notifications}
+            onChange={(ai_notifications) => setPrefs({ ai_notifications })}
+          />
         </SettingRow>
       </Section>
 
@@ -90,24 +94,38 @@ export function GeneralPane() {
 
       <Section title={t("settings.section.monitoring")}>
         <SettingRow label={t("settings.probe")} hint={t("settings.probe.hint")}>
-          <Switch label={t("settings.probe")} checked={prefs.host_probe} onChange={(host_probe) => setPrefs({ host_probe })} />
+          <Switch
+            label={t("settings.probe")}
+            checked={prefs.host_probe}
+            onChange={(host_probe) => setPrefs({ host_probe })}
+          />
         </SettingRow>
         <SettingRow label={t("dashboard.settings.interval")} hint={t("dashboard.settings.interval.hint")}>
           <PopupSelect<number>
             ariaLabel={t("dashboard.settings.interval")}
             value={prefs.dashboard_interval_secs}
             minWidth={110}
-            options={withCurrent(INTERVALS, prefs.dashboard_interval_secs).map((n) => ({ value: n, label: t("dashboard.settings.seconds", { n }) }))}
+            options={withCurrent(INTERVALS, prefs.dashboard_interval_secs).map((n) => ({
+              value: n,
+              label: t("dashboard.settings.seconds", { n }),
+            }))}
             onChange={(dashboard_interval_secs) => setPrefs({ dashboard_interval_secs })}
           />
         </SettingRow>
         {ALERTS.map(([key, label]) => (
-          <SettingRow key={key} label={t(label)} hint={key === "dashboard_disk_alert" ? t("dashboard.settings.alert.hint") : undefined}>
+          <SettingRow
+            key={key}
+            label={t(label)}
+            hint={key === "dashboard_disk_alert" ? t("dashboard.settings.alert.hint") : undefined}
+          >
             <PopupSelect<number>
               ariaLabel={t(label)}
               value={prefs[key]}
               minWidth={110}
-              options={withCurrent(THRESHOLDS, prefs[key]).map((n) => ({ value: n, label: n === 0 ? t("dashboard.settings.off") : `${n}%` }))}
+              options={withCurrent(THRESHOLDS, prefs[key]).map((n) => ({
+                value: n,
+                label: n === 0 ? t("dashboard.settings.off") : `${n}%`,
+              }))}
               onChange={(value) => setPrefs({ [key]: value })}
             />
           </SettingRow>
@@ -241,7 +259,12 @@ function CliCommandRows() {
       </SettingRow>
       {cli?.enabled && (
         <SettingRow label={t("settings.cliAccess")} hint={t("settings.cliAccess.hint")}>
-          <Switch label={t("settings.cliAccess")} checked={cli.access} disabled={busy} onChange={(on) => void toggle(() => api.cli_access_set(on))} />
+          <Switch
+            label={t("settings.cliAccess")}
+            checked={cli.access}
+            disabled={busy}
+            onChange={(on) => void toggle(() => api.cli_access_set(on))}
+          />
         </SettingRow>
       )}
       {cli?.enabled && cli.access && <CliActivityList />}
@@ -308,18 +331,19 @@ function CliActivityList() {
           </Button>
         )}
       </SettingRow>
-      {details && entries?.map((a) => (
-        <div key={a.id} className={s.activity}>
-          <Icon name={ACTIVITY_ICON[a.kind]} className={s.activityIcon} />
-          <span className={s.activityText}>
-            <span className={s.activityWhat}>{a.detail}</span>
-            <span className={s.activityMeta} title={formatDateTime(t.locale, a.started_at)}>
-              {a.host_name} · {formatRelative(t.locale, a.started_at)} ·{" "}
-              <span className={a.state === "failed" ? s.warn : undefined}>{outcome(a)}</span>
+      {details &&
+        entries?.map((a) => (
+          <div key={a.id} className={s.activity}>
+            <Icon name={ACTIVITY_ICON[a.kind]} className={s.activityIcon} />
+            <span className={s.activityText}>
+              <span className={s.activityWhat}>{a.detail}</span>
+              <span className={s.activityMeta} title={formatDateTime(t.locale, a.started_at)}>
+                {a.host_name} · {formatRelative(t.locale, a.started_at)} ·{" "}
+                <span className={a.state === "failed" ? s.warn : undefined}>{outcome(a)}</span>
+              </span>
             </span>
-          </span>
-        </div>
-      ))}
+          </div>
+        ))}
     </>
   );
 }

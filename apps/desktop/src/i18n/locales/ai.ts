@@ -181,11 +181,14 @@ export default defineMessages({
     "ai.revert.deleteTitle": "删除 {path}？",
     "ai.revert.deleteBody": "这个文件是助手创建的，撤销会把它删除。",
     "ai.revert.delete": "删除",
-    "ai.revert.changed": "文件现在既不是这次调用写入的内容，也不是调用之前的内容，所以没有撤销：可能之后又被改过，或者写入中途停止了。“仍然恢复”会做下面的修改：",
+    "ai.revert.changed":
+      "文件现在既不是这次调用写入的内容，也不是调用之前的内容，所以没有撤销：可能之后又被改过，或者写入中途停止了。“仍然恢复”会做下面的修改：",
     "ai.revert.gone": "文件已经不存在，所以没有撤销。“仍然恢复”会用调用之前的内容重新创建它：",
-    "ai.revert.changedCreated": "这个文件在调用创建之后又被改过，或者写入中途停止了，所以没有撤销。“仍然删除”会删除它，连同现在的内容：",
+    "ai.revert.changedCreated":
+      "这个文件在调用创建之后又被改过，或者写入中途停止了，所以没有撤销。“仍然删除”会删除它，连同现在的内容：",
     "ai.revert.changedAgain": "显示差异之后文件又变了，所以什么都没有写入。",
-    "ai.revert.later": "这个对话里后面的调用也写过这个文件。从最新的开始先撤销后面的修改，可能就能把它恢复到这次调用写入的样子。",
+    "ai.revert.later":
+      "这个对话里后面的调用也写过这个文件。从最新的开始先撤销后面的修改，可能就能把它恢复到这次调用写入的样子。",
     "ai.revert.restore": "仍然恢复",
     "ai.revert.restoreTitle": "仍然恢复 {path}？",
     "ai.revert.restoreBody": "文件会恢复成调用之前的内容，差异里显示的改动会丢失。",
@@ -193,15 +196,18 @@ export default defineMessages({
     "ai.revert.deleteAnyway": "仍然删除",
     "ai.revert.deleteAnywayTitle": "仍然删除 {path}？",
     "ai.revert.deleteAnywayBody": "这个文件是助手创建的，现在已经不是调用写入的内容，删除会丢掉现在的内容。",
-    "ai.revert.unfinished": "写入这个文件时出错，这时写入可能已经开始，文件可能不完整。撤销会恢复调用之前的内容；如果文件现在是别的内容，会先显示差异。",
+    "ai.revert.unfinished":
+      "写入这个文件时出错，这时写入可能已经开始，文件可能不完整。撤销会恢复调用之前的内容；如果文件现在是别的内容，会先显示差异。",
     "ai.revert.dropped": "这次修改已经无法撤销：为了腾出空间，保存的副本已被丢弃。",
     "ai.revert.already": "{path} 已经是调用之前的内容，没有写入任何东西。",
     "ai.revert.alreadyGone": "{path} 已经不存在，不需要删除。",
     "ai.revert.failed.disconnected": "连接这个对话的标签页后才能撤销。",
     "ai.revert.failed.otherServer": "标签页连接的是另一台服务器。连接到 {server} 后才能撤销。",
-    "ai.revert.failed.permissionDenied": "权限不足：这个标签页登录的用户不能修改这个文件，撤销也不会使用 sudo。请在终端里用 sudo 手动恢复。",
+    "ai.revert.failed.permissionDenied":
+      "权限不足：这个标签页登录的用户不能修改这个文件，撤销也不会使用 sudo。请在终端里用 sudo 手动恢复。",
     "ai.revert.failed.notText": "这次调用写入之后文件又被改过，现在已经不是 Hatoba 能读取的文本文件，所以没有撤销。",
-    "ai.revert.failed.symbolicLink": "这次调用创建的文件现在被一个符号链接取代了，所以没有撤销，链接和它指向的文件都保持原样。请在终端里检查。",
+    "ai.revert.failed.symbolicLink":
+      "这次调用创建的文件现在被一个符号链接取代了，所以没有撤销，链接和它指向的文件都保持原样。请在终端里检查。",
     "ai.revert.failed.timedOut": "主机 30 秒内没有响应。请先在终端里检查这个文件再重试。",
     "ai.revert.failed.unfinished": "撤销开始后出错，文件可能不完整，或者已经被删除。再撤销一次可以查看它现在的内容。",
     "ai.revert.failed.failed": "撤销失败。",
@@ -368,7 +374,8 @@ export default defineMessages({
     "ai.editFiles.noneHere": "连接到 {server} 后才能撤销这些文件。",
     "ai.editFiles.changed": "文件已经不是这次调用写入的内容。",
     "ai.editFiles.gone": "文件已经不存在。",
-    "ai.editFiles.untracked": "后面的消息里有调用修改过主机上的文件。这台设备没有保存这些修改，删除消息后它们会留在主机上。",
+    "ai.editFiles.untracked":
+      "后面的消息里有调用修改过主机上的文件。这台设备没有保存这些修改，删除消息后它们会留在主机上。",
 
     // fork (AI-43)
     "ai.fork": "从这里创建分支",
@@ -447,19 +454,23 @@ export default defineMessages({
     "ai.approval.alwaysAllow": "总是允许",
     "ai.approval.alwaysAllowHint": "运行这次调用。此后在这台设备上调用“{tool}”都不再询问，可以在设置 → AI 中更改。",
     "ai.approval.alwaysAllowHost": "在此主机上总是允许",
-    "ai.approval.alwaysAllowHostHint": "运行这次调用。此后在这台设备上，这台主机的“{tool}”都不再询问，可以在设置 → AI 中更改。",
+    "ai.approval.alwaysAllowHostHint":
+      "运行这次调用。此后在这台设备上，这台主机的“{tool}”都不再询问，可以在设置 → AI 中更改。",
     "ai.approval.allowCommandHere": "在此对话中允许“{prefix}”",
     "ai.approval.allowCommandHereHint": "运行这条命令。在退出应用之前，此对话中以“{prefix}”开头的命令不再询问。",
     "ai.approval.alwaysAllowCommand": "在此主机上总是允许“{prefix}”",
     "ai.approval.alwaysAllowLocal": "在本机上总是允许",
     "ai.approval.alwaysAllowLocalHint": "运行这次调用。此后在本机上，“{tool}”都不再询问，可以在设置 → AI 中更改。",
     "ai.approval.alwaysAllowLocalCommand": "在本机上总是允许“{prefix}”",
-    "ai.approval.alwaysAllowLocalCommandHint": "运行这条命令。此后在本机上，以“{prefix}”开头的命令都不再询问，可以在设置 → AI 中更改。",
-    "ai.approval.alwaysAllowCommandHint": "运行这条命令。此后在这台设备上，这台主机上以“{prefix}”开头的命令都不再询问，可以在设置 → AI 中更改。",
+    "ai.approval.alwaysAllowLocalCommandHint":
+      "运行这条命令。此后在本机上，以“{prefix}”开头的命令都不再询问，可以在设置 → AI 中更改。",
+    "ai.approval.alwaysAllowCommandHint":
+      "运行这条命令。此后在这台设备上，这台主机上以“{prefix}”开头的命令都不再询问，可以在设置 → AI 中更改。",
     "ai.approval.allowDomainHere": "在此对话中允许 {domain}",
     "ai.approval.allowDomainHereHint": "读取这个网页。在退出应用之前，此对话中读取 {domain} 上的网页不再询问。",
     "ai.approval.alwaysAllowDomain": "总是允许 {domain}",
-    "ai.approval.alwaysAllowDomainHint": "读取这个网页。此后在这台设备上读取 {domain} 上的网页都不再询问，可以在设置 → AI 中更改。",
+    "ai.approval.alwaysAllowDomainHint":
+      "读取这个网页。此后在这台设备上读取 {domain} 上的网页都不再询问，可以在设置 → AI 中更改。",
     "ai.annot.readOnly": "只读",
     "ai.annot.notReadOnly": "会修改内容",
     "ai.annot.destructive": "有破坏性",
@@ -540,16 +551,19 @@ export default defineMessages({
     "ai.mode.autoNeedsJudge": "Needs a judge",
     "ai.mode.chooseJudge": "Choose a Judge in Settings → AI",
     "ai.bypass.title": "Let the assistant act without asking?",
-    "ai.bypass.body": "The assistant will run commands, change files, type into the terminal and open pages without asking. Text it reads can steer it.",
+    "ai.bypass.body":
+      "The assistant will run commands, change files, type into the terminal and open pages without asking. Text it reads can steer it.",
     "ai.bypass.confirm": "Turn On Bypass",
 
     "ai.empty.title": "Ask about {host}",
-    "ai.empty.body": "The assistant can read the screen, run commands, type into the shell, and search and read the web.",
+    "ai.empty.body":
+      "The assistant can read the screen, run commands, type into the shell, and search and read the web.",
     "ai.empty.homeTitle": "Chat with the assistant",
     "ai.empty.homeBody": "Open a host to let it work in a terminal too.",
     "ai.noProvider.title": "Add a model provider",
     "ai.noModels.title": "Add a model",
-    "ai.noModels.body": "Your providers have no models yet. Enter model IDs in Settings, or fetch the provider’s model list.",
+    "ai.noModels.body":
+      "Your providers have no models yet. Enter model IDs in Settings, or fetch the provider’s model list.",
     "ai.noProvider.open": "Open Settings → AI",
 
     "ai.notice.noTab": "No terminal in this conversation.",
@@ -640,7 +654,8 @@ export default defineMessages({
     "ai.attach.total": "A message’s attachments can’t exceed {size} in total.",
     "ai.attach.readFailed": "{name} can’t be read.",
     "ai.fit.warn": "About {percent}% of the context used; compacts past 90%.",
-    "ai.fit.over": "This message is about {used} tokens, more than the model’s context window ({total}). Remove attachments or choose a model with a larger context.",
+    "ai.fit.over":
+      "This message is about {used} tokens, more than the model’s context window ({total}). Remove attachments or choose a model with a larger context.",
     "ai.fit.blocked": "The message is larger than the model’s context window",
 
     "ai.meter": "Context usage",
@@ -684,29 +699,42 @@ export default defineMessages({
     "ai.revert.deleteTitle": "Delete {path}?",
     "ai.revert.deleteBody": "The assistant created this file, so reverting deletes it.",
     "ai.revert.delete": "Delete",
-    "ai.revert.changed": "The file holds neither what this call wrote nor what it held before, so Revert left it as it is: it changed since, or a write stopped partway. Restore Anyway would make this change:",
-    "ai.revert.gone": "The file no longer exists, so Revert left it as it is. Restore Anyway would create it again with what it held before the call:",
-    "ai.revert.changedCreated": "The file changed after this call created it, or its write stopped partway, so Revert left it as it is. Delete Anyway would delete it, with what it holds now:",
+    "ai.revert.changed":
+      "The file holds neither what this call wrote nor what it held before, so Revert left it as it is: it changed since, or a write stopped partway. Restore Anyway would make this change:",
+    "ai.revert.gone":
+      "The file no longer exists, so Revert left it as it is. Restore Anyway would create it again with what it held before the call:",
+    "ai.revert.changedCreated":
+      "The file changed after this call created it, or its write stopped partway, so Revert left it as it is. Delete Anyway would delete it, with what it holds now:",
     "ai.revert.changedAgain": "The file changed again after the diff was shown, so nothing was written.",
-    "ai.revert.later": "A later call in this conversation also wrote this file. Reverting the later changes first, newest first, may bring it back to what this call wrote.",
+    "ai.revert.later":
+      "A later call in this conversation also wrote this file. Reverting the later changes first, newest first, may bring it back to what this call wrote.",
     "ai.revert.restore": "Restore Anyway",
     "ai.revert.restoreTitle": "Restore {path} anyway?",
-    "ai.revert.restoreBody": "The file gets back what it held before the call, and the changes the diff shows are lost.",
+    "ai.revert.restoreBody":
+      "The file gets back what it held before the call, and the changes the diff shows are lost.",
     "ai.revert.recreateBody": "The file is created again with what it held before the call.",
     "ai.revert.deleteAnyway": "Delete Anyway",
     "ai.revert.deleteAnywayTitle": "Delete {path} anyway?",
-    "ai.revert.deleteAnywayBody": "The assistant created this file, and it no longer holds what the call wrote, so deleting it loses what it holds now.",
-    "ai.revert.unfinished": "Writing this file failed after it may have begun, so it may be cut short. Revert puts back what it held before the call; if it holds something else, Revert shows the diff first.",
+    "ai.revert.deleteAnywayBody":
+      "The assistant created this file, and it no longer holds what the call wrote, so deleting it loses what it holds now.",
+    "ai.revert.unfinished":
+      "Writing this file failed after it may have begun, so it may be cut short. Revert puts back what it held before the call; if it holds something else, Revert shows the diff first.",
     "ai.revert.dropped": "This change can no longer be reverted: its saved copy was dropped to make room.",
     "ai.revert.already": "{path} already held what it held before the call, so nothing was written.",
     "ai.revert.alreadyGone": "{path} no longer exists, so there was nothing to delete.",
     "ai.revert.failed.disconnected": "Connect this conversation’s tab to revert the change.",
-    "ai.revert.failed.otherServer": "The tab is connected to another server. Connect it to {server} to revert the change.",
-    "ai.revert.failed.permissionDenied": "Permission denied: the user this tab is logged in as cannot change the file, and Revert never uses sudo. Restore it in the terminal with sudo instead.",
-    "ai.revert.failed.notText": "The file changed after this call wrote it and is no longer a text file Hatoba can read, so Revert left it as it is.",
-    "ai.revert.failed.symbolicLink": "A symbolic link is now in the place of the file this call created, so Revert left the link and the file it points to as they are. Check them in the terminal.",
-    "ai.revert.failed.timedOut": "The host did not answer within 30 seconds. Check the file in the terminal before you try again.",
-    "ai.revert.failed.unfinished": "The revert failed after it may have begun, so the file may be cut short or already deleted. Revert again to see what it holds now.",
+    "ai.revert.failed.otherServer":
+      "The tab is connected to another server. Connect it to {server} to revert the change.",
+    "ai.revert.failed.permissionDenied":
+      "Permission denied: the user this tab is logged in as cannot change the file, and Revert never uses sudo. Restore it in the terminal with sudo instead.",
+    "ai.revert.failed.notText":
+      "The file changed after this call wrote it and is no longer a text file Hatoba can read, so Revert left it as it is.",
+    "ai.revert.failed.symbolicLink":
+      "A symbolic link is now in the place of the file this call created, so Revert left the link and the file it points to as they are. Check them in the terminal.",
+    "ai.revert.failed.timedOut":
+      "The host did not answer within 30 seconds. Check the file in the terminal before you try again.",
+    "ai.revert.failed.unfinished":
+      "The revert failed after it may have begun, so the file may be cut short or already deleted. Revert again to see what it holds now.",
     "ai.revert.failed.failed": "Revert failed.",
     "ai.instructions.size": "{n} / {max} bytes · about {tokens} tokens",
     "ai.instructions.tooLong": "At most {max} bytes. Shorten the text to save it.",
@@ -804,7 +832,6 @@ export default defineMessages({
     "ai.key.backspace": "Backspace",
     "ai.key.space": "Space",
 
-
     "ai.status.waiting": "Waiting for the model…",
     "ai.status.mcpStarting": "Starting MCP servers…",
     "ai.status.working": "Working…",
@@ -816,7 +843,8 @@ export default defineMessages({
     "ai.outcome.empty": "The model ended its reply without an answer.",
     "ai.outcome.error": "The request failed",
     "ai.outcome.errorStatus": "The provider returned an error (HTTP {status})",
-    "ai.effortIgnored": "The model doesn’t accept the chosen thinking level, so this message was sent at its default level.",
+    "ai.effortIgnored":
+      "The model doesn’t accept the chosen thinking level, so this message was sent at its default level.",
 
     "ai.history.open": "Open",
     "ai.history.pin": "Pin",
@@ -868,7 +896,8 @@ export default defineMessages({
     "ai.editFiles.noneHere": "Connect to {server} to revert these files.",
     "ai.editFiles.changed": "The file no longer holds what the call wrote.",
     "ai.editFiles.gone": "The file no longer exists.",
-    "ai.editFiles.untracked": "Calls in the later messages changed files on the host. This device keeps no copy of those changes, so they stay when the messages are deleted.",
+    "ai.editFiles.untracked":
+      "Calls in the later messages changed files on the host. This device keeps no copy of those changes, so they stay when the messages are deleted.",
 
     // fork (AI-43)
     "ai.fork": "Fork from Here",
@@ -911,7 +940,8 @@ export default defineMessages({
     "ai.cmd.memory": "View and edit what the assistant remembers",
     "ai.cmd.model": "Choose the model and thinking level",
     "ai.cmd.prompt.missing": "{command} needs {name}.",
-    "ai.cmd.prompt.unavailable": "{command} isn’t available: its MCP server isn’t running, or doesn’t offer that prompt.",
+    "ai.cmd.prompt.unavailable":
+      "{command} isn’t available: its MCP server isn’t running, or doesn’t offer that prompt.",
     "ai.cmd.skillChip": "Skill /{name}",
     "ai.cmd.promptChip": "Prompt {name}",
     "ai.cmd.promptFrom": "From {server}",
@@ -935,7 +965,8 @@ export default defineMessages({
     "ai.mention.refused.notFolder": "{path} isn’t a folder.",
     "ai.mention.refused.not_regular": "{path} isn’t a regular file.",
     "ai.mention.refused.permission_denied": "Permission denied: this user can’t read {path}.",
-    "ai.mention.refused.too_large": "{path} is over 256 KB, so it wasn’t attached. Ask the assistant to read it instead.",
+    "ai.mention.refused.too_large":
+      "{path} is over 256 KB, so it wasn’t attached. Ask the assistant to read it instead.",
     "ai.mention.refused.binary": "{path} isn’t a UTF-8 text file.",
     "ai.mention.refused.failed": "{path} can’t be read.",
 
@@ -945,23 +976,32 @@ export default defineMessages({
     "ai.approval.hints": "Hints from the server",
     "ai.approval.alwaysAsk": "This server is set to Always ask, so it asks even in Bypass mode.",
     "ai.approval.allowHere": "Allow for This Conversation",
-    "ai.approval.allowHereHint": "Runs this call. Later “{tool}” calls in this conversation run without asking until you quit the app.",
+    "ai.approval.allowHereHint":
+      "Runs this call. Later “{tool}” calls in this conversation run without asking until you quit the app.",
     "ai.approval.alwaysAllow": "Always Allow",
-    "ai.approval.alwaysAllowHint": "Runs this call. From now on “{tool}” runs without asking on this device; change it in Settings → AI.",
+    "ai.approval.alwaysAllowHint":
+      "Runs this call. From now on “{tool}” runs without asking on this device; change it in Settings → AI.",
     "ai.approval.alwaysAllowHost": "Always Allow on This Host",
-    "ai.approval.alwaysAllowHostHint": "Runs this call. From now on “{tool}” runs without asking on this host, on this device; change it in Settings → AI.",
+    "ai.approval.alwaysAllowHostHint":
+      "Runs this call. From now on “{tool}” runs without asking on this host, on this device; change it in Settings → AI.",
     "ai.approval.allowCommandHere": "Allow “{prefix}” for This Conversation",
-    "ai.approval.allowCommandHereHint": "Runs this command. Later commands in this conversation that start with “{prefix}” run without asking until you quit the app.",
+    "ai.approval.allowCommandHereHint":
+      "Runs this command. Later commands in this conversation that start with “{prefix}” run without asking until you quit the app.",
     "ai.approval.alwaysAllowCommand": "Always Allow “{prefix}” on This Host",
     "ai.approval.alwaysAllowLocal": "Always Allow on This Computer",
-    "ai.approval.alwaysAllowLocalHint": "Runs this call. From now on “{tool}” runs without asking on this computer; change it in Settings → AI.",
+    "ai.approval.alwaysAllowLocalHint":
+      "Runs this call. From now on “{tool}” runs without asking on this computer; change it in Settings → AI.",
     "ai.approval.alwaysAllowLocalCommand": "Always Allow “{prefix}” on This Computer",
-    "ai.approval.alwaysAllowLocalCommandHint": "Runs this command. From now on commands on this computer that start with “{prefix}” run without asking; change it in Settings → AI.",
-    "ai.approval.alwaysAllowCommandHint": "Runs this command. From now on commands on this host that start with “{prefix}” run without asking on this device; change it in Settings → AI.",
+    "ai.approval.alwaysAllowLocalCommandHint":
+      "Runs this command. From now on commands on this computer that start with “{prefix}” run without asking; change it in Settings → AI.",
+    "ai.approval.alwaysAllowCommandHint":
+      "Runs this command. From now on commands on this host that start with “{prefix}” run without asking on this device; change it in Settings → AI.",
     "ai.approval.allowDomainHere": "Allow {domain} for This Conversation",
-    "ai.approval.allowDomainHereHint": "Fetches this page. Later pages on {domain} in this conversation are fetched without asking until you quit the app.",
+    "ai.approval.allowDomainHereHint":
+      "Fetches this page. Later pages on {domain} in this conversation are fetched without asking until you quit the app.",
     "ai.approval.alwaysAllowDomain": "Always Allow {domain}",
-    "ai.approval.alwaysAllowDomainHint": "Fetches this page. From now on pages on {domain} are fetched without asking on this device; change it in Settings → AI.",
+    "ai.approval.alwaysAllowDomainHint":
+      "Fetches this page. From now on pages on {domain} are fetched without asking on this device; change it in Settings → AI.",
     "ai.annot.readOnly": "Read-only",
     "ai.annot.notReadOnly": "Not read-only",
     "ai.annot.destructive": "Destructive",
@@ -984,7 +1024,8 @@ export default defineMessages({
     "ai.auto.rule.command": "Auto always asks when the input names {command}.",
     "ai.auto.rule.password": "Auto always asks while the screen asks for a password.",
     "ai.auto.rule.afterReject": "You rejected an earlier call in this reply, so Auto asks about the rest of it.",
-    "ai.auto.failure.unavailable": "Auto could not judge this call: no judge is available. Choose one in Settings → AI.",
+    "ai.auto.failure.unavailable":
+      "Auto could not judge this call: no judge is available. Choose one in Settings → AI.",
     "ai.auto.failure.too_long": "Auto could not judge this call: it is too long for the judge.",
     "ai.auto.failure.timeout": "Auto could not judge this call: the judge did not answer in time.",
     "ai.auto.failure.unreachable": "Auto could not judge this call: the judge could not be reached.",
@@ -1042,16 +1083,19 @@ export default defineMessages({
     "ai.mode.autoNeedsJudge": "判定モデルが必要",
     "ai.mode.chooseJudge": "設定 → AI で判定モデルを選ぶ",
     "ai.bypass.title": "確認なしで操作させますか？",
-    "ai.bypass.body": "アシスタントは確認なしで、コマンドの実行、ファイルの変更、ターミナルへの入力、ページの取得を行います。読み取った文字によって誘導されることがあります。",
+    "ai.bypass.body":
+      "アシスタントは確認なしで、コマンドの実行、ファイルの変更、ターミナルへの入力、ページの取得を行います。読み取った文字によって誘導されることがあります。",
     "ai.bypass.confirm": "承認をバイパス",
 
     "ai.empty.title": "{host} について質問する",
-    "ai.empty.body": "アシスタントは画面を読み取り、コマンドを実行し、シェルに入力できます。Web の検索や閲覧もできます。",
+    "ai.empty.body":
+      "アシスタントは画面を読み取り、コマンドを実行し、シェルに入力できます。Web の検索や閲覧もできます。",
     "ai.empty.homeTitle": "アシスタントと話す",
     "ai.empty.homeBody": "ホストを開くと、ターミナルでも作業できるようになります。",
     "ai.noProvider.title": "モデルのプロバイダーを追加",
     "ai.noModels.title": "モデルを追加",
-    "ai.noModels.body": "追加したプロバイダーにモデルがありません。設定でモデル ID を入力するか、プロバイダーのモデル一覧を取得してください。",
+    "ai.noModels.body":
+      "追加したプロバイダーにモデルがありません。設定でモデル ID を入力するか、プロバイダーのモデル一覧を取得してください。",
     "ai.noProvider.open": "設定 → AI を開く",
 
     "ai.notice.noTab": "この会話にはターミナルがありません。",
@@ -1138,7 +1182,8 @@ export default defineMessages({
     "ai.attach.total": "1 件のメッセージの添付は合計 {size} までです。",
     "ai.attach.readFailed": "{name} を読み込めません。",
     "ai.fit.warn": "コンテキストの約 {percent}% を使用中。90% を超えると圧縮されます。",
-    "ai.fit.over": "このメッセージは約 {used} トークンで、モデルのコンテキストウィンドウ（{total}）を超えています。添付を外すか、コンテキストの大きいモデルを選んでください。",
+    "ai.fit.over":
+      "このメッセージは約 {used} トークンで、モデルのコンテキストウィンドウ（{total}）を超えています。添付を外すか、コンテキストの大きいモデルを選んでください。",
     "ai.fit.blocked": "メッセージがモデルのコンテキストウィンドウを超えています",
 
     "ai.meter": "コンテキストの使用量",
@@ -1180,29 +1225,40 @@ export default defineMessages({
     "ai.revert.deleteTitle": "{path} を削除しますか？",
     "ai.revert.deleteBody": "このファイルはアシスタントが作成したため、元に戻すと削除されます。",
     "ai.revert.delete": "削除",
-    "ai.revert.changed": "ファイルはこの呼び出しが書き込んだ内容でも呼び出し前の内容でもないため、元に戻しませんでした。その後に変更されたか、書き込みが途中で止まった可能性があります。「このまま復元」は次の変更を行います：",
-    "ai.revert.gone": "ファイルがもう存在しないため、元に戻しませんでした。「このまま復元」は呼び出し前の内容でファイルを作り直します：",
-    "ai.revert.changedCreated": "このファイルは呼び出しが作成した後に変更されたか、書き込みが途中で止まったため、元に戻しませんでした。「このまま削除」は今の内容ごとファイルを削除します：",
+    "ai.revert.changed":
+      "ファイルはこの呼び出しが書き込んだ内容でも呼び出し前の内容でもないため、元に戻しませんでした。その後に変更されたか、書き込みが途中で止まった可能性があります。「このまま復元」は次の変更を行います：",
+    "ai.revert.gone":
+      "ファイルがもう存在しないため、元に戻しませんでした。「このまま復元」は呼び出し前の内容でファイルを作り直します：",
+    "ai.revert.changedCreated":
+      "このファイルは呼び出しが作成した後に変更されたか、書き込みが途中で止まったため、元に戻しませんでした。「このまま削除」は今の内容ごとファイルを削除します：",
     "ai.revert.changedAgain": "差分を表示した後にファイルがまた変更されたため、何も書き込みませんでした。",
-    "ai.revert.later": "この会話の後の呼び出しもこのファイルに書き込んでいます。後の変更を新しいものから先に元に戻すと、この呼び出しが書き込んだ状態に戻るかもしれません。",
+    "ai.revert.later":
+      "この会話の後の呼び出しもこのファイルに書き込んでいます。後の変更を新しいものから先に元に戻すと、この呼び出しが書き込んだ状態に戻るかもしれません。",
     "ai.revert.restore": "このまま復元",
     "ai.revert.restoreTitle": "{path} をこのまま復元しますか？",
     "ai.revert.restoreBody": "ファイルは呼び出し前の内容に戻り、差分に表示された変更は失われます。",
     "ai.revert.recreateBody": "ファイルは呼び出し前の内容で作り直されます。",
     "ai.revert.deleteAnyway": "このまま削除",
     "ai.revert.deleteAnywayTitle": "{path} をこのまま削除しますか？",
-    "ai.revert.deleteAnywayBody": "このファイルはアシスタントが作成したもので、今は呼び出しが書き込んだ内容ではないため、削除すると今の内容は失われます。",
-    "ai.revert.unfinished": "このファイルの書き込みが始まった後に失敗した可能性があり、ファイルが途中で切れているかもしれません。元に戻すと呼び出し前の内容に戻します。別の内容になっている場合は、先に差分を表示します。",
+    "ai.revert.deleteAnywayBody":
+      "このファイルはアシスタントが作成したもので、今は呼び出しが書き込んだ内容ではないため、削除すると今の内容は失われます。",
+    "ai.revert.unfinished":
+      "このファイルの書き込みが始まった後に失敗した可能性があり、ファイルが途中で切れているかもしれません。元に戻すと呼び出し前の内容に戻します。別の内容になっている場合は、先に差分を表示します。",
     "ai.revert.dropped": "この変更はもう元に戻せません。容量を空けるため、保存していたコピーを破棄しました。",
     "ai.revert.already": "{path} はすでに呼び出し前の内容だったため、何も書き込みませんでした。",
     "ai.revert.alreadyGone": "{path} はもう存在しないため、削除するものはありませんでした。",
     "ai.revert.failed.disconnected": "元に戻すには、この会話のタブを接続してください。",
     "ai.revert.failed.otherServer": "タブは別のサーバーに接続しています。元に戻すには {server} に接続してください。",
-    "ai.revert.failed.permissionDenied": "権限がありません：このタブでログインしているユーザーはファイルを変更できず、元に戻す操作は sudo を使いません。ターミナルで sudo を使って復元してください。",
-    "ai.revert.failed.notText": "この呼び出しが書き込んだ後にファイルが変更され、Hatoba が読めるテキストファイルではなくなったため、元に戻しませんでした。",
-    "ai.revert.failed.symbolicLink": "この呼び出しが作成したファイルの場所に今はシンボリックリンクがあるため、元に戻さず、リンクとリンク先のファイルはそのままにしました。ターミナルで確認してください。",
-    "ai.revert.failed.timedOut": "ホストが 30 秒以内に応答しませんでした。もう一度試す前に、ターミナルでファイルを確認してください。",
-    "ai.revert.failed.unfinished": "元に戻す処理が始まった後に失敗したため、ファイルが途中で切れているか、すでに削除されているかもしれません。もう一度元に戻すと、今の内容を確認できます。",
+    "ai.revert.failed.permissionDenied":
+      "権限がありません：このタブでログインしているユーザーはファイルを変更できず、元に戻す操作は sudo を使いません。ターミナルで sudo を使って復元してください。",
+    "ai.revert.failed.notText":
+      "この呼び出しが書き込んだ後にファイルが変更され、Hatoba が読めるテキストファイルではなくなったため、元に戻しませんでした。",
+    "ai.revert.failed.symbolicLink":
+      "この呼び出しが作成したファイルの場所に今はシンボリックリンクがあるため、元に戻さず、リンクとリンク先のファイルはそのままにしました。ターミナルで確認してください。",
+    "ai.revert.failed.timedOut":
+      "ホストが 30 秒以内に応答しませんでした。もう一度試す前に、ターミナルでファイルを確認してください。",
+    "ai.revert.failed.unfinished":
+      "元に戻す処理が始まった後に失敗したため、ファイルが途中で切れているか、すでに削除されているかもしれません。もう一度元に戻すと、今の内容を確認できます。",
     "ai.revert.failed.failed": "元に戻せませんでした。",
     "ai.instructions.size": "{n} / {max} バイト · 約 {tokens} トークン",
     "ai.instructions.tooLong": "最大 {max} バイトです。短くすると保存できます。",
@@ -1300,7 +1356,6 @@ export default defineMessages({
     "ai.key.backspace": "Backspace",
     "ai.key.space": "Space",
 
-
     "ai.status.waiting": "モデルの応答を待っています…",
     "ai.status.mcpStarting": "MCP サーバーを起動しています…",
     "ai.status.working": "処理しています…",
@@ -1312,7 +1367,8 @@ export default defineMessages({
     "ai.outcome.empty": "モデルが回答を出さずに応答を終えました。",
     "ai.outcome.error": "リクエストに失敗しました",
     "ai.outcome.errorStatus": "プロバイダーがエラーを返しました（HTTP {status}）",
-    "ai.effortIgnored": "モデルが選んだ思考レベルを受け付けないため、このメッセージはモデルの既定のレベルで送信しました。",
+    "ai.effortIgnored":
+      "モデルが選んだ思考レベルを受け付けないため、このメッセージはモデルの既定のレベルで送信しました。",
 
     "ai.history.open": "開く",
     "ai.history.pin": "ピン留め",
@@ -1355,13 +1411,15 @@ export default defineMessages({
     "ai.editFiles.keep": "ファイルはそのままで送信",
     "ai.editFiles.revert": "元に戻して送信",
     "ai.editFiles.sendAnyway": "このまま送信",
-    "ai.editFiles.failed": "一部のファイルは元に戻せませんでした。「このまま送信」すると、保存していたそれらの変更は破棄されます。",
+    "ai.editFiles.failed":
+      "一部のファイルは元に戻せませんでした。「このまま送信」すると、保存していたそれらの変更は破棄されます。",
     "ai.editFiles.disconnected": "これらのファイルを元に戻すには、タブを再接続してください。",
     "ai.editFiles.otherServer": "このタブは {server} に接続しているため、このファイルは元に戻せません。",
     "ai.editFiles.noneHere": "これらのファイルを元に戻すには、{server} に接続してください。",
     "ai.editFiles.changed": "ファイルはもうこの呼び出しが書き込んだ内容ではありません。",
     "ai.editFiles.gone": "ファイルがもう存在しません。",
-    "ai.editFiles.untracked": "後のメッセージの呼び出しがホスト上のファイルを変更しました。このデバイスにはその変更の記録がないため、メッセージを削除しても変更はホストに残ります。",
+    "ai.editFiles.untracked":
+      "後のメッセージの呼び出しがホスト上のファイルを変更しました。このデバイスにはその変更の記録がないため、メッセージを削除しても変更はホストに残ります。",
 
     // fork (AI-43)
     "ai.fork": "ここから分岐",
@@ -1424,7 +1482,8 @@ export default defineMessages({
     "ai.mention.refused.notFolder": "{path} はフォルダーではありません。",
     "ai.mention.refused.not_regular": "{path} は通常のファイルではありません。",
     "ai.mention.refused.permission_denied": "権限がありません：このユーザーは {path} を読めません。",
-    "ai.mention.refused.too_large": "{path} は 256 KB を超えるため、添付しませんでした。アシスタントに読ませてください。",
+    "ai.mention.refused.too_large":
+      "{path} は 256 KB を超えるため、添付しませんでした。アシスタントに読ませてください。",
     "ai.mention.refused.binary": "{path} は UTF-8 のテキストファイルではありません。",
     "ai.mention.refused.failed": "{path} を読めません。",
 
@@ -1434,23 +1493,32 @@ export default defineMessages({
     "ai.approval.hints": "サーバーが示すヒント",
     "ai.approval.alwaysAsk": "このサーバーは「常に確認」に設定されているため、承認をバイパスするモードでも確認します。",
     "ai.approval.allowHere": "この会話では許可",
-    "ai.approval.allowHereHint": "この呼び出しを実行します。アプリを終了するまで、この会話の「{tool}」は確認なしで実行されます。",
+    "ai.approval.allowHereHint":
+      "この呼び出しを実行します。アプリを終了するまで、この会話の「{tool}」は確認なしで実行されます。",
     "ai.approval.alwaysAllow": "常に許可",
-    "ai.approval.alwaysAllowHint": "この呼び出しを実行します。以後このデバイスでは「{tool}」を確認なしで実行します。設定 → AI で変更できます。",
+    "ai.approval.alwaysAllowHint":
+      "この呼び出しを実行します。以後このデバイスでは「{tool}」を確認なしで実行します。設定 → AI で変更できます。",
     "ai.approval.alwaysAllowHost": "このホストでは常に許可",
-    "ai.approval.alwaysAllowHostHint": "この呼び出しを実行します。以後このデバイスでは、このホストの「{tool}」を確認なしで実行します。設定 → AI で変更できます。",
+    "ai.approval.alwaysAllowHostHint":
+      "この呼び出しを実行します。以後このデバイスでは、このホストの「{tool}」を確認なしで実行します。設定 → AI で変更できます。",
     "ai.approval.allowCommandHere": "この会話では「{prefix}」を許可",
-    "ai.approval.allowCommandHereHint": "このコマンドを実行します。アプリを終了するまで、この会話で「{prefix}」で始まるコマンドは確認なしで実行されます。",
+    "ai.approval.allowCommandHereHint":
+      "このコマンドを実行します。アプリを終了するまで、この会話で「{prefix}」で始まるコマンドは確認なしで実行されます。",
     "ai.approval.alwaysAllowCommand": "このホストでは「{prefix}」を常に許可",
     "ai.approval.alwaysAllowLocal": "このコンピューターでは常に許可",
-    "ai.approval.alwaysAllowLocalHint": "この呼び出しを実行します。以後このコンピューターでは「{tool}」を確認なしで実行します。設定 → AI で変更できます。",
+    "ai.approval.alwaysAllowLocalHint":
+      "この呼び出しを実行します。以後このコンピューターでは「{tool}」を確認なしで実行します。設定 → AI で変更できます。",
     "ai.approval.alwaysAllowLocalCommand": "このコンピューターでは「{prefix}」を常に許可",
-    "ai.approval.alwaysAllowLocalCommandHint": "このコマンドを実行します。以後このコンピューターで「{prefix}」で始まるコマンドを確認なしで実行します。設定 → AI で変更できます。",
-    "ai.approval.alwaysAllowCommandHint": "このコマンドを実行します。以後このデバイスでは、このホストで「{prefix}」で始まるコマンドを確認なしで実行します。設定 → AI で変更できます。",
+    "ai.approval.alwaysAllowLocalCommandHint":
+      "このコマンドを実行します。以後このコンピューターで「{prefix}」で始まるコマンドを確認なしで実行します。設定 → AI で変更できます。",
+    "ai.approval.alwaysAllowCommandHint":
+      "このコマンドを実行します。以後このデバイスでは、このホストで「{prefix}」で始まるコマンドを確認なしで実行します。設定 → AI で変更できます。",
     "ai.approval.allowDomainHere": "この会話では {domain} を許可",
-    "ai.approval.allowDomainHereHint": "このページを取得します。アプリを終了するまで、この会話では {domain} のページを確認なしで取得します。",
+    "ai.approval.allowDomainHereHint":
+      "このページを取得します。アプリを終了するまで、この会話では {domain} のページを確認なしで取得します。",
     "ai.approval.alwaysAllowDomain": "{domain} を常に許可",
-    "ai.approval.alwaysAllowDomainHint": "このページを取得します。以後このデバイスでは、{domain} のページを確認なしで取得します。設定 → AI で変更できます。",
+    "ai.approval.alwaysAllowDomainHint":
+      "このページを取得します。以後このデバイスでは、{domain} のページを確認なしで取得します。設定 → AI で変更できます。",
     "ai.annot.readOnly": "読み取り専用",
     "ai.annot.notReadOnly": "変更あり",
     "ai.annot.destructive": "破壊的",
@@ -1472,15 +1540,23 @@ export default defineMessages({
     "ai.auto.rule.editingSubmission": "入力が端末の行を編集してから送信するため、自動承認モードは必ず確認します。",
     "ai.auto.rule.command": "入力に {command} が含まれるため、自動承認モードは必ず確認します。",
     "ai.auto.rule.password": "画面がパスワードの入力を求めているため、自動承認モードは必ず確認します。",
-    "ai.auto.rule.afterReject": "この返信の前の呼び出しを拒否したため、自動承認モードは残りの呼び出しをすべて確認します。",
-    "ai.auto.failure.unavailable": "自動承認モードはこの呼び出しを判定できませんでした：使える判定モデルがありません。設定 → AI で選んでください。",
-    "ai.auto.failure.too_long": "自動承認モードはこの呼び出しを判定できませんでした：呼び出しの内容が長すぎて判定モデルが読み込めません。",
-    "ai.auto.failure.timeout": "自動承認モードはこの呼び出しを判定できませんでした：判定モデルが時間内に回答しませんでした。",
-    "ai.auto.failure.unreachable": "自動承認モードはこの呼び出しを判定できませんでした：判定モデルに接続できませんでした。",
-    "ai.auto.failure.refused": "自動承認モードはこの呼び出しを判定できませんでした：判定モデルがリクエストを拒否しました。",
-    "ai.auto.failure.malformed": "自動承認モードはこの呼び出しを判定できませんでした：判定モデルの回答を読み取れませんでした。",
+    "ai.auto.rule.afterReject":
+      "この返信の前の呼び出しを拒否したため、自動承認モードは残りの呼び出しをすべて確認します。",
+    "ai.auto.failure.unavailable":
+      "自動承認モードはこの呼び出しを判定できませんでした：使える判定モデルがありません。設定 → AI で選んでください。",
+    "ai.auto.failure.too_long":
+      "自動承認モードはこの呼び出しを判定できませんでした：呼び出しの内容が長すぎて判定モデルが読み込めません。",
+    "ai.auto.failure.timeout":
+      "自動承認モードはこの呼び出しを判定できませんでした：判定モデルが時間内に回答しませんでした。",
+    "ai.auto.failure.unreachable":
+      "自動承認モードはこの呼び出しを判定できませんでした：判定モデルに接続できませんでした。",
+    "ai.auto.failure.refused":
+      "自動承認モードはこの呼び出しを判定できませんでした：判定モデルがリクエストを拒否しました。",
+    "ai.auto.failure.malformed":
+      "自動承認モードはこの呼び出しを判定できませんでした：判定モデルの回答を読み取れませんでした。",
     "ai.auto.failure.cancelled": "自動承認モードはこの呼び出しを判定できませんでした：判定が停止されました。",
-    "ai.auto.failure.error": "自動承認モードはこの呼び出しを判定できませんでした：判定モデルへの問い合わせに失敗しました。",
+    "ai.auto.failure.error":
+      "自動承認モードはこの呼び出しを判定できませんでした：判定モデルへの問い合わせに失敗しました。",
     "ai.auto.failure.other": "自動承認モードはこの呼び出しを判定できませんでした。",
     "ai.auto.q.requested": "依頼あり",
     "ai.auto.q.forbidden": "禁止",

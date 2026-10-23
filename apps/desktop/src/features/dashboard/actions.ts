@@ -36,9 +36,17 @@ export function dashboardSwitch(host: HostView, groups: ReadonlyMap<string, Grou
     case "host":
       return { key: "dashboard.include", icon: "eye", run: () => void setShownOnDashboard(host.id, true) } as const;
     case "group":
-      return { key: "dashboard.includeGroup", icon: "eye", run: () => void setShownOnDashboard(host.group_id!, true) } as const;
+      return {
+        key: "dashboard.includeGroup",
+        icon: "eye",
+        run: () => void setShownOnDashboard(host.group_id!, true),
+      } as const;
     case null:
-      return { key: "dashboard.leaveOut", icon: "eye-slash", run: () => void setShownOnDashboard(host.id, false) } as const;
+      return {
+        key: "dashboard.leaveOut",
+        icon: "eye-slash",
+        run: () => void setShownOnDashboard(host.id, false),
+      } as const;
   }
 }
 

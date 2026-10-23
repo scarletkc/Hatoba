@@ -95,33 +95,73 @@ export const HOSTS: HostView[] = [
       ? "主 API 节点，部署走 GitHub Actions。重启 api.service 前先在 #ops 频道说一声。"
       : "Primary API node, deployed via GitHub Actions. Post in #ops before restarting api.service.",
   }),
-  host("h-bastion", "bastion-tokyo", "ops", "bastion.tky.example.net", 2222, "g-tokyo", ["production", "edge"], ago(2 * MIN), {
-    os: "debian",
-    favorite: true,
-    key_id: "k-bastion",
-  }),
-  host("h-db-osaka-01", "db-osaka-01", "postgres", "10.24.3.11", 22, "g-osaka", ["production", "database"], ago(18 * MIN), {
-    os: "debian",
-    favorite: true,
-    key_id: "k-dbops",
-    jump_host_id: "h-bastion",
-    // AI-37: what the assistant is told about this host.
-    ai_notes: zh
-      ? "PostgreSQL 16 主库，数据目录 /srv/pgdata。工作时间（09:00–19:00）不要重启 postgresql。"
-      : "PostgreSQL 16 primary, data in /srv/pgdata. Don’t restart postgresql during business hours (09:00–19:00).",
-  }),
-  host("h-api-tokyo-02", "prod-api-tokyo-02", "deploy", "43.206.118.31", 22, "g-tokyo", ["production", "api"], ago(40 * MIN), {
-    os: "ubuntu",
-    key_id: "k-deploy",
-  }),
+  host(
+    "h-bastion",
+    "bastion-tokyo",
+    "ops",
+    "bastion.tky.example.net",
+    2222,
+    "g-tokyo",
+    ["production", "edge"],
+    ago(2 * MIN),
+    {
+      os: "debian",
+      favorite: true,
+      key_id: "k-bastion",
+    },
+  ),
+  host(
+    "h-db-osaka-01",
+    "db-osaka-01",
+    "postgres",
+    "10.24.3.11",
+    22,
+    "g-osaka",
+    ["production", "database"],
+    ago(18 * MIN),
+    {
+      os: "debian",
+      favorite: true,
+      key_id: "k-dbops",
+      jump_host_id: "h-bastion",
+      // AI-37: what the assistant is told about this host.
+      ai_notes: zh
+        ? "PostgreSQL 16 主库，数据目录 /srv/pgdata。工作时间（09:00–19:00）不要重启 postgresql。"
+        : "PostgreSQL 16 primary, data in /srv/pgdata. Don’t restart postgresql during business hours (09:00–19:00).",
+    },
+  ),
+  host(
+    "h-api-tokyo-02",
+    "prod-api-tokyo-02",
+    "deploy",
+    "43.206.118.31",
+    22,
+    "g-tokyo",
+    ["production", "api"],
+    ago(40 * MIN),
+    {
+      os: "ubuntu",
+      key_id: "k-deploy",
+    },
+  ),
   host("h-staging-web", "staging-web-02", "ubuntu", "172.31.40.8", 22, "g-staging", ["staging"], ago(70 * MIN), {
     os: "ubuntu",
     key_id: "k-deploy",
   }),
-  host("h-db-osaka-02", "db-osaka-02", "postgres", "10.24.3.12", 22, "g-osaka", ["production", "database"], ago(DAY + 2 * MIN), {
-    key_id: "k-dbops",
-    jump_host_id: "h-bastion",
-  }),
+  host(
+    "h-db-osaka-02",
+    "db-osaka-02",
+    "postgres",
+    "10.24.3.12",
+    22,
+    "g-osaka",
+    ["production", "database"],
+    ago(DAY + 2 * MIN),
+    {
+      key_id: "k-dbops",
+      jump_host_id: "h-bastion",
+    },
+  ),
   host("h-staging-worker", "staging-worker-01", "ubuntu", "172.31.40.15", 22, "g-staging", ["staging"], at(10, 5), {
     os: "ubuntu",
     key_id: "k-deploy",
@@ -260,10 +300,50 @@ export const KEYS: KeyView[] = [
 ];
 
 export const FORWARDS: ForwardView[] = [
-  { id: "f-pg", host_id: "h-db-osaka-01", name: "Postgres", kind: "local", bind_address: "127.0.0.1", bind_port: 15432, dest_host: "127.0.0.1", dest_port: 5432, auto_start: true },
-  { id: "f-grafana", host_id: "h-api-tokyo", name: "Grafana dashboards", kind: "local", bind_address: "127.0.0.1", bind_port: 3000, dest_host: "grafana.internal", dest_port: 3000, auto_start: false },
-  { id: "f-webhook", host_id: "h-api-tokyo", name: "", kind: "remote", bind_address: "localhost", bind_port: 8080, dest_host: "localhost", dest_port: 5173, auto_start: false },
-  { id: "f-socks", host_id: "h-api-tokyo", name: "", kind: "dynamic", bind_address: "127.0.0.1", bind_port: 1080, dest_host: "", dest_port: 0, auto_start: false },
+  {
+    id: "f-pg",
+    host_id: "h-db-osaka-01",
+    name: "Postgres",
+    kind: "local",
+    bind_address: "127.0.0.1",
+    bind_port: 15432,
+    dest_host: "127.0.0.1",
+    dest_port: 5432,
+    auto_start: true,
+  },
+  {
+    id: "f-grafana",
+    host_id: "h-api-tokyo",
+    name: "Grafana dashboards",
+    kind: "local",
+    bind_address: "127.0.0.1",
+    bind_port: 3000,
+    dest_host: "grafana.internal",
+    dest_port: 3000,
+    auto_start: false,
+  },
+  {
+    id: "f-webhook",
+    host_id: "h-api-tokyo",
+    name: "",
+    kind: "remote",
+    bind_address: "localhost",
+    bind_port: 8080,
+    dest_host: "localhost",
+    dest_port: 5173,
+    auto_start: false,
+  },
+  {
+    id: "f-socks",
+    host_id: "h-api-tokyo",
+    name: "",
+    kind: "dynamic",
+    bind_address: "127.0.0.1",
+    bind_port: 1080,
+    dest_host: "",
+    dest_port: 0,
+    auto_start: false,
+  },
 ];
 
 export const SETTINGS: SettingsView = {
@@ -328,7 +408,14 @@ export const AVAILABLE_UPDATE: AvailableUpdate = {
 
 /** HOST-15: what a coding agent did through the `hatoba` command (`?cli=access`). */
 export function cliActivity(): CliActivity[] {
-  const entry = (id: string, kind: CliActivity["kind"], host: string, detail: string, at: number, rest: Partial<CliActivity>): CliActivity => ({
+  const entry = (
+    id: string,
+    kind: CliActivity["kind"],
+    host: string,
+    detail: string,
+    at: number,
+    rest: Partial<CliActivity>,
+  ): CliActivity => ({
     id,
     kind,
     host_id: HOSTS.find((h) => h.name === host)?.id ?? host,
@@ -369,10 +456,38 @@ export function syncStatus(): SyncStatus {
 }
 
 export const DEVICES: DeviceView[] = [
-  { device_id: "d-1", name: "ThinkPad X1 Carbon", platform: "Windows 11", created_at: at(3, 1), last_seen: ago(0), current: true },
-  { device_id: "d-2", name: zh ? "Mac mini · 办公室" : "Mac mini · Office", platform: "macOS 15.3", created_at: at(3, 2), last_seen: ago(2 * 60 * MIN), current: false },
-  { device_id: "d-3", name: "MacBook Pro 14″", platform: "macOS 15.4", created_at: at(4, 2), last_seen: ago(3 * DAY), current: false },
-  { device_id: "d-4", name: "fedora-ws", platform: "Fedora 41", created_at: at(5, 2), last_seen: at(9, 21), current: false },
+  {
+    device_id: "d-1",
+    name: "ThinkPad X1 Carbon",
+    platform: "Windows 11",
+    created_at: at(3, 1),
+    last_seen: ago(0),
+    current: true,
+  },
+  {
+    device_id: "d-2",
+    name: zh ? "Mac mini · 办公室" : "Mac mini · Office",
+    platform: "macOS 15.3",
+    created_at: at(3, 2),
+    last_seen: ago(2 * 60 * MIN),
+    current: false,
+  },
+  {
+    device_id: "d-3",
+    name: "MacBook Pro 14″",
+    platform: "macOS 15.4",
+    created_at: at(4, 2),
+    last_seen: ago(3 * DAY),
+    current: false,
+  },
+  {
+    device_id: "d-4",
+    name: "fedora-ws",
+    platform: "Fedora 41",
+    created_at: at(5, 2),
+    last_seen: at(9, 21),
+    current: false,
+  },
 ];
 
 export const CONFLICTS: ConflictView[] = [
@@ -475,7 +590,8 @@ const DEFAULT_PROFILE: StatsProfile = {
 /** A random walk of a Linux server's resource usage, by default a 4-CPU, 8 GB one, one reading per call (TERM-12, HOST-14). */
 export function mockStats(profile: Partial<StatsProfile> = {}): (first: boolean) => ServerStatsView {
   const p = { ...DEFAULT_PROFILE, ...profile };
-  const walk = (v: number, step: number, min: number, max: number) => Math.min(max, Math.max(min, v + (Math.random() - 0.5) * step));
+  const walk = (v: number, step: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, v + (Math.random() - 0.5) * step));
   let cpu = p.cpu;
   let mem = p.mem;
   let rx = 180_000;
@@ -547,46 +663,166 @@ export function importCandidates(source: ImportSource): Candidate[] {
   switch (source) {
     case "ssh_config":
       return [
-        candidate({ id: "github-runner", address: "10.0.4.20", username: "runner", identity_file: "~/.ssh/id_ed25519", identity_file_found: true }),
-        candidate({ id: "bastion-tokyo", address: "bastion.tky.example.net", port: 2222, username: "ops", identity_file: "~/.ssh/id_ed25519", identity_file_found: true }),
-        candidate({ id: "minecraft", address: "mc.example.org", username: "mc", identity_file: "~/.ssh/mc_rsa", jump: "bastion-tokyo" }),
-        candidate({ id: "build-arm", address: "10.0.4.31", username: "ci", identity_file: "~/.ssh/build_ed25519", identity_file_found: true }),
-        candidate({ id: "lab-gpu", address: "gpu.lab.internal", username: "kc", skipped_proxy: "ProxyCommand nc -X 5 -x 127.0.0.1:7890 %h %p" }),
+        candidate({
+          id: "github-runner",
+          address: "10.0.4.20",
+          username: "runner",
+          identity_file: "~/.ssh/id_ed25519",
+          identity_file_found: true,
+        }),
+        candidate({
+          id: "bastion-tokyo",
+          address: "bastion.tky.example.net",
+          port: 2222,
+          username: "ops",
+          identity_file: "~/.ssh/id_ed25519",
+          identity_file_found: true,
+        }),
+        candidate({
+          id: "minecraft",
+          address: "mc.example.org",
+          username: "mc",
+          identity_file: "~/.ssh/mc_rsa",
+          jump: "bastion-tokyo",
+        }),
+        candidate({
+          id: "build-arm",
+          address: "10.0.4.31",
+          username: "ci",
+          identity_file: "~/.ssh/build_ed25519",
+          identity_file_found: true,
+        }),
+        candidate({
+          id: "lab-gpu",
+          address: "gpu.lab.internal",
+          username: "kc",
+          skipped_proxy: "ProxyCommand nc -X 5 -x 127.0.0.1:7890 %h %p",
+        }),
       ];
     case "xshell":
     case "finalshell":
       return [
         candidate({ id: "web-01", address: "10.10.1.11", folder: `${prod} / Web` }),
         candidate({ id: "web-02", address: "10.10.1.12", folder: `${prod} / Web` }),
-        candidate({ id: "mysql-master", address: "10.10.2.5", port: 2222, username: "dba", folder: `${prod} / DB`, kept_key: source === "xshell" ? "id_rsa_2048" : "" }),
-        candidate({ id: "staging", address: "staging.example.cn", username: "deploy", folder: zh ? "测试" : "Staging" }),
-        candidate({ id: "bastion-tokyo", address: "bastion.tky.example.net", port: 2222, username: "ops", skipped_proxy: source === "xshell" ? "Xshell proxy office" : null }),
+        candidate({
+          id: "mysql-master",
+          address: "10.10.2.5",
+          port: 2222,
+          username: "dba",
+          folder: `${prod} / DB`,
+          kept_key: source === "xshell" ? "id_rsa_2048" : "",
+        }),
+        candidate({
+          id: "staging",
+          address: "staging.example.cn",
+          username: "deploy",
+          folder: zh ? "测试" : "Staging",
+        }),
+        candidate({
+          id: "bastion-tokyo",
+          address: "bastion.tky.example.net",
+          port: 2222,
+          username: "ops",
+          skipped_proxy: source === "xshell" ? "Xshell proxy office" : null,
+        }),
       ];
     case "mobaxterm":
       return [
-        candidate({ id: "Lab\\gpu-01", name: "gpu-01", address: "gpu01.lab.internal", username: "kc", folder: "Lab", identity_file: "C:\\Users\\demo\\.ssh\\id_ed25519", identity_file_found: true, jump: "jump@bastion.lab.internal:22" }),
-        candidate({ id: "Lab\\gpu-02", name: "gpu-02", address: "gpu02.lab.internal", username: "kc", folder: "Lab", identity_file: "C:\\Users\\demo\\.ssh\\id_ed25519", identity_file_found: true, jump: "jump@bastion.lab.internal:22" }),
+        candidate({
+          id: "Lab\\gpu-01",
+          name: "gpu-01",
+          address: "gpu01.lab.internal",
+          username: "kc",
+          folder: "Lab",
+          identity_file: "C:\\Users\\demo\\.ssh\\id_ed25519",
+          identity_file_found: true,
+          jump: "jump@bastion.lab.internal:22",
+        }),
+        candidate({
+          id: "Lab\\gpu-02",
+          name: "gpu-02",
+          address: "gpu02.lab.internal",
+          username: "kc",
+          folder: "Lab",
+          identity_file: "C:\\Users\\demo\\.ssh\\id_ed25519",
+          identity_file_found: true,
+          jump: "jump@bastion.lab.internal:22",
+        }),
         candidate({ id: "nas", address: "192.168.1.20", username: "admin", proxy: "SOCKS5 127.0.0.1:1080" }),
       ];
     case "putty":
       return [
         candidate({ id: "router", address: "192.168.1.1", username: "admin" }),
-        candidate({ id: "vps-la", address: "203.0.113.40", identity_file: "C:\\Users\\demo\\keys\\vps.ppk", identity_file_found: true }),
+        candidate({
+          id: "vps-la",
+          address: "203.0.113.40",
+          identity_file: "C:\\Users\\demo\\keys\\vps.ppk",
+          identity_file_found: true,
+        }),
         candidate({ id: "old-box", address: "10.0.9.9", skipped_proxy: "SOCKS4 proxy 10.0.0.1:1080" }),
       ];
     case "securecrt":
       return [
-        candidate({ id: "Jump/bastion", name: "bastion", address: "bastion.example.net", username: "ops", folder: "Jump" }),
-        candidate({ id: "HQ/Core/core-sw1", name: "core-sw1", address: "10.1.1.1", username: "admin", folder: "HQ / Core", jump: "bastion" }),
-        candidate({ id: "HQ/Core/core-sw2", name: "core-sw2", address: "10.1.1.2", username: "admin", folder: "HQ / Core", jump: "bastion" }),
-        candidate({ id: "HQ/Servers/web-01", name: "web-01", address: "10.1.2.11", username: "deploy", folder: "HQ / Servers", identity_file: "C:\\Users\\demo\\Documents\\keys\\web.ppk", identity_file_found: true }),
-        candidate({ id: "Lab/lab-rtr", name: "lab-rtr", address: "192.168.50.1", folder: "Lab", skipped_proxy: "SecureCRT firewall Lab SOCKS" }),
+        candidate({
+          id: "Jump/bastion",
+          name: "bastion",
+          address: "bastion.example.net",
+          username: "ops",
+          folder: "Jump",
+        }),
+        candidate({
+          id: "HQ/Core/core-sw1",
+          name: "core-sw1",
+          address: "10.1.1.1",
+          username: "admin",
+          folder: "HQ / Core",
+          jump: "bastion",
+        }),
+        candidate({
+          id: "HQ/Core/core-sw2",
+          name: "core-sw2",
+          address: "10.1.1.2",
+          username: "admin",
+          folder: "HQ / Core",
+          jump: "bastion",
+        }),
+        candidate({
+          id: "HQ/Servers/web-01",
+          name: "web-01",
+          address: "10.1.2.11",
+          username: "deploy",
+          folder: "HQ / Servers",
+          identity_file: "C:\\Users\\demo\\Documents\\keys\\web.ppk",
+          identity_file_found: true,
+        }),
+        candidate({
+          id: "Lab/lab-rtr",
+          name: "lab-rtr",
+          address: "192.168.50.1",
+          folder: "Lab",
+          skipped_proxy: "SecureCRT firewall Lab SOCKS",
+        }),
       ];
     case "tabby":
       return [
         candidate({ id: "ssh:custom:bastion:1", name: "bastion", address: "bastion.example.org", username: "jump" }),
-        candidate({ id: "ssh:custom:api:1", name: "api", address: "10.20.0.8", username: "deploy", folder: "Work / API", jump: "bastion" }),
-        candidate({ id: "ssh:custom:home:1", name: "home-server", address: "home.example.net", port: 2200, username: "kc", identity_file: "~/.ssh/id_ed25519", identity_file_found: true }),
+        candidate({
+          id: "ssh:custom:api:1",
+          name: "api",
+          address: "10.20.0.8",
+          username: "deploy",
+          folder: "Work / API",
+          jump: "bastion",
+        }),
+        candidate({
+          id: "ssh:custom:home:1",
+          name: "home-server",
+          address: "home.example.net",
+          port: 2200,
+          username: "kc",
+          identity_file: "~/.ssh/id_ed25519",
+          identity_file_found: true,
+        }),
       ];
   }
 }
@@ -606,7 +842,9 @@ export function importLocation(source: ImportSource, platform: string): string |
     case "putty":
       return windows ? "HKEY_CURRENT_USER\\Software\\SimonTatham\\PuTTY\\Sessions" : null;
     case "securecrt":
-      return windows ? "C:\\Users\\demo\\AppData\\Roaming\\VanDyke\\Config\\Sessions" : "/home/demo/.vandyke/SecureCRT/Config/Sessions";
+      return windows
+        ? "C:\\Users\\demo\\AppData\\Roaming\\VanDyke\\Config\\Sessions"
+        : "/home/demo/.vandyke/SecureCRT/Config/Sessions";
     case "tabby":
       return windows ? "C:\\Users\\demo\\AppData\\Roaming\\tabby\\config.yaml" : "/home/demo/.config/tabby/config.yaml";
   }

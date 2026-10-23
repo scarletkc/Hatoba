@@ -176,7 +176,8 @@ describe("Menu", () => {
     const onSelect = vi.fn();
     render(<Menu anchor={{ x: 0, y: 0 }} onClose={() => {}} entries={[{ label: "Item", onSelect }]} />);
     const item = document.querySelector("[role=menuitem]")!;
-    const pointer = (type: string) => act(() => void item.dispatchEvent(new MouseEvent(type, { bubbles: true, relatedTarget: document.body })));
+    const pointer = (type: string) =>
+      act(() => void item.dispatchEvent(new MouseEvent(type, { bubbles: true, relatedTarget: document.body })));
     pointer("mouseover");
     pointer("mouseout");
     key("Enter");
@@ -201,7 +202,13 @@ describe("Menu", () => {
   it("opens above its button, not over it, when it doesn't fit below", () => {
     const rect = menuSize(200, 120);
     try {
-      render(<Menu anchor={{ x: 0, y: window.innerHeight - 20, above: 600 }} onClose={() => {}} entries={[{ label: "Item", onSelect: () => {} }]} />);
+      render(
+        <Menu
+          anchor={{ x: 0, y: window.innerHeight - 20, above: 600 }}
+          onClose={() => {}}
+          entries={[{ label: "Item", onSelect: () => {} }]}
+        />,
+      );
       expect((document.querySelector("[role=menu]") as HTMLElement).style.top).toBe("480px");
     } finally {
       rect.mockRestore();
@@ -241,7 +248,9 @@ describe("Menu", () => {
           <button type="button" id="trigger" onClick={(e) => menu.openBelow(e.currentTarget)}>
             Open
           </button>
-          {menu.anchor && <Menu anchor={menu.anchor} onClose={menu.close} entries={[{ label: "Item", onSelect: () => {} }]} />}
+          {menu.anchor && (
+            <Menu anchor={menu.anchor} onClose={menu.close} entries={[{ label: "Item", onSelect: () => {} }]} />
+          )}
         </>
       );
     }

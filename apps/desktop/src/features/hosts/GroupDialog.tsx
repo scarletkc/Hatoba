@@ -8,7 +8,15 @@ import { api } from "@/ipc/api";
 import type { GroupView } from "@/ipc/types";
 
 /** Names a new group, or renames `group`. */
-export function GroupDialog({ group, count, onClose }: { group: GroupView | null; count: number; onClose: () => void }) {
+export function GroupDialog({
+  group,
+  count,
+  onClose,
+}: {
+  group: GroupView | null;
+  count: number;
+  onClose: () => void;
+}) {
   const t = useT();
   const [name, setName] = useState(group?.name ?? "");
   const [busy, setBusy] = useState(false);
@@ -16,7 +24,12 @@ export function GroupDialog({ group, count, onClose }: { group: GroupView | null
     if (busy || !name.trim()) return;
     setBusy(true);
     try {
-      await api.group_save({ id: group?.id ?? null, name: name.trim(), parent_id: group?.parent_id ?? null, sort: group?.sort ?? count });
+      await api.group_save({
+        id: group?.id ?? null,
+        name: name.trim(),
+        parent_id: group?.parent_id ?? null,
+        sort: group?.sort ?? count,
+      });
       await useVaultData.getState().reload();
       onClose();
     } catch (e) {
@@ -45,7 +58,15 @@ export function GroupDialog({ group, count, onClose }: { group: GroupView | null
           void save();
         }}
       >
-        <TextField large autoFocus value={name} placeholder={t("sidebar.groupName")} aria-label={t("sidebar.groupName")} maxLength={64} onChange={(e) => setName(e.target.value)} />
+        <TextField
+          large
+          autoFocus
+          value={name}
+          placeholder={t("sidebar.groupName")}
+          aria-label={t("sidebar.groupName")}
+          maxLength={64}
+          onChange={(e) => setName(e.target.value)}
+        />
       </form>
     </Dialog>
   );
@@ -53,7 +74,14 @@ export function GroupDialog({ group, count, onClose }: { group: GroupView | null
 
 /** Deletes `group` after asking; its hosts stay, without a group. Resolves to whether it was deleted. */
 export async function deleteGroup(t: ReturnType<typeof useT>, group: GroupView): Promise<boolean> {
-  if (!(await confirm({ title: t("sidebar.deleteGroup"), body: t("sidebar.deleteGroupConfirm", { name: group.name }), confirmLabel: t("btn.delete"), danger: true })))
+  if (
+    !(await confirm({
+      title: t("sidebar.deleteGroup"),
+      body: t("sidebar.deleteGroupConfirm", { name: group.name }),
+      confirmLabel: t("btn.delete"),
+      danger: true,
+    }))
+  )
     return false;
   try {
     await api.group_delete(group.id);

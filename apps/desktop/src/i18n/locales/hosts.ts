@@ -189,7 +189,8 @@ export default defineMessages({
     "hosts.fwd.f.server": "服务器地址",
     "hosts.fwd.f.dest": "目标地址",
     "hosts.fwd.f.exposedWarn": "同一网络中的其他设备也能访问这个转发端口。",
-    "hosts.fwd.f.gatewayPorts": "服务器的 GatewayPorts 允许时，其他设备也能访问这个端口；不允许时，服务器只在回环地址上监听。",
+    "hosts.fwd.f.gatewayPorts":
+      "服务器的 GatewayPorts 允许时，其他设备也能访问这个端口；不允许时，服务器只在回环地址上监听。",
     "hosts.fwd.f.socksHint": "在应用中把这个地址设为 SOCKS 代理，连接会由服务器发起。",
     "hosts.fwd.f.portHint": "0 = 自动",
     "hosts.fwd.f.destHint": "127.0.0.1 指服务器本身。",
@@ -233,7 +234,8 @@ export default defineMessages({
     "hosts.view": "View",
     "hosts.view.list": "List",
     "hosts.stats": "Resource Usage",
-    "hosts.stats.hint": "Signs in to the listed hosts in the background and reads CPU, memory, disk and network every few seconds",
+    "hosts.stats.hint":
+      "Signs in to the listed hosts in the background and reads CPU, memory, disk and network every few seconds",
     "hosts.tags.clear": "Clear Tags",
     "hosts.tags.none": "No tags yet",
     "hosts.tags.remove": "Remove tag “{tag}”",
@@ -291,7 +293,8 @@ export default defineMessages({
     "hosts.quick.recent": "Recent",
     "hosts.quick.recentTitle": "Recent Quick Connections",
     "hosts.quick.forget": "Remove from Recent",
-    "hosts.quick.option": "Quick connect doesn’t support {option}. To use keys, jump hosts or other options, add a host.",
+    "hosts.quick.option":
+      "Quick connect doesn’t support {option}. To use keys, jump hosts or other options, add a host.",
     "hosts.quick.command": "Quick connect can’t run a remote command. Connect first, then run it in the terminal.",
     "hosts.quick.noForwarding": "Agent and X11 forwarding aren’t supported; the connection won’t forward them.",
 
@@ -367,7 +370,8 @@ export default defineMessages({
     "hosts.edit.sec.ai": "AI Notes",
     "hosts.f.aiNotes": "AI Notes",
     "hosts.f.aiNotesHint": "Sent with every AI request on this host, e.g. what it does, key paths, what to avoid.",
-    "hosts.f.aiNotesPlaceholder": "For example: PostgreSQL 16 primary, data in /srv/pgdata. Don’t restart postgresql during business hours.",
+    "hosts.f.aiNotesPlaceholder":
+      "For example: PostgreSQL 16 primary, data in /srv/pgdata. Don’t restart postgresql during business hours.",
     "hosts.auth.password": "Password",
     "hosts.auth.key": "Key",
     "hosts.auth.ask": "Ask Each Time",
@@ -390,7 +394,8 @@ export default defineMessages({
     "hosts.fwd.count": "{n} forwards",
     "hosts.fwd.count_one": "{n} forward",
     "hosts.fwd.empty": "No port forwards yet",
-    "hosts.fwd.emptyBody": "Forward ports through a host’s SSH connection: local (ssh -L), remote (ssh -R), or a SOCKS proxy (ssh -D).",
+    "hosts.fwd.emptyBody":
+      "Forward ports through a host’s SSH connection: local (ssh -L), remote (ssh -R), or a SOCKS proxy (ssh -D).",
     "hosts.fwd.add": "Add Forward…",
     "hosts.fwd.autoStart": "Start on connect",
     "hosts.fwd.autoStartFor": "Start {rule} when connecting",
@@ -403,7 +408,8 @@ export default defineMessages({
     "hosts.fwd.dialog.editTitle": "Edit Port Forward",
     "hosts.fwd.dialog.subtitle": "Like ssh -L: a port on this computer leads to an address the server reaches.",
     "hosts.fwd.dialog.subtitleRemote": "Like ssh -R: a port on the server leads to an address this computer reaches.",
-    "hosts.fwd.dialog.subtitleDynamic": "Like ssh -D: a SOCKS proxy on this computer, whose connections the server opens.",
+    "hosts.fwd.dialog.subtitleDynamic":
+      "Like ssh -D: a SOCKS proxy on this computer, whose connections the server opens.",
     "hosts.fwd.dialog.add": "Add",
     "hosts.fwd.f.name": "Name",
     "hosts.fwd.f.namePlaceholder": "Optional, e.g. Postgres",
@@ -417,7 +423,8 @@ export default defineMessages({
     "hosts.fwd.f.server": "Server address",
     "hosts.fwd.f.dest": "Destination",
     "hosts.fwd.f.exposedWarn": "Other devices on the same network will be able to reach this forwarded port.",
-    "hosts.fwd.f.gatewayPorts": "Other devices can reach this port only if the server’s GatewayPorts allows it; otherwise the server listens on loopback only.",
+    "hosts.fwd.f.gatewayPorts":
+      "Other devices can reach this port only if the server’s GatewayPorts allows it; otherwise the server listens on loopback only.",
     "hosts.fwd.f.socksHint": "Set this address as the SOCKS proxy in an app, and the server opens its connections.",
     "hosts.fwd.f.portHint": "0 = auto",
     "hosts.fwd.f.destHint": "127.0.0.1 is the server itself.",
@@ -443,7 +450,8 @@ export default defineMessages({
     "hosts.env.valueLabelFor": "Value of {name}",
     "hosts.env.remove": "Remove {name}",
     "hosts.env.removeBlank": "Remove variable",
-    "hosts.env.hint": "Only names the server’s AcceptEnv allows are applied (often LANG, LC_*). TERM sets the terminal type.",
+    "hosts.env.hint":
+      "Only names the server’s AcceptEnv allows are applied (often LANG, LC_*). TERM sets the terminal type.",
     "hosts.env.err.nameRequired": "Enter a name, or remove this row.",
     "hosts.env.err.nameInvalid": "Names use letters, digits and _, and can’t start with a digit.",
     "hosts.env.err.nameTooLong": "Names can be at most {max} characters.",
@@ -461,7 +469,8 @@ export default defineMessages({
     "hosts.view": "表示",
     "hosts.view.list": "リスト",
     "hosts.stats": "リソース使用状況",
-    "hosts.stats.hint": "表示中のホストにバックグラウンドでサインインし、数秒ごとに CPU、メモリ、ディスク、ネットワークを読み取ります",
+    "hosts.stats.hint":
+      "表示中のホストにバックグラウンドでサインインし、数秒ごとに CPU、メモリ、ディスク、ネットワークを読み取ります",
     "hosts.tags.clear": "タグをクリア",
     "hosts.tags.none": "タグはまだありません",
     "hosts.tags.remove": "タグ「{tag}」を外す",
@@ -518,8 +527,10 @@ export default defineMessages({
     "hosts.quick.recent": "最近",
     "hosts.quick.recentTitle": "最近のクイック接続",
     "hosts.quick.forget": "履歴から削除",
-    "hosts.quick.option": "クイック接続は {option} に対応していません。鍵や踏み台などを使うには、ホストを追加してください。",
-    "hosts.quick.command": "クイック接続ではリモートコマンドを実行できません。接続してからターミナルで実行してください。",
+    "hosts.quick.option":
+      "クイック接続は {option} に対応していません。鍵や踏み台などを使うには、ホストを追加してください。",
+    "hosts.quick.command":
+      "クイック接続ではリモートコマンドを実行できません。接続してからターミナルで実行してください。",
     "hosts.quick.noForwarding": "エージェント転送と X11 転送には対応していないため、転送せずに接続します。",
 
     "hosts.import": "インポート",
@@ -529,7 +540,8 @@ export default defineMessages({
     "hosts.import.loadingFrom": "{app} のセッションを読み込んでいます…",
     "hosts.import.noneAt": "{path} に {app} のセッションが見つかりません。",
     "hosts.import.noneHere": "このデバイスに {app} のセッションが見つかりません。",
-    "hosts.import.encrypted": "{app} がこのファイルを暗号化しています。{app} で暗号化をオフにしてから、もう一度お試しください。",
+    "hosts.import.encrypted":
+      "{app} がこのファイルを暗号化しています。{app} で暗号化をオフにしてから、もう一度お試しください。",
     "hosts.import.unreadable": "{app} のセッションのファイルまたはフォルダーではありません。",
     "hosts.import.chooseFile": "ファイルを選択…",
     "hosts.import.chooseFolder": "フォルダーを選択…",
@@ -539,7 +551,8 @@ export default defineMessages({
     "hosts.import.passwordsNote": "保存されたパスワードは取り込みません。",
     "hosts.import.subtitle": "{path} からインポートするホストを選択してください。",
     "hosts.import.loading": "SSH 設定を読み込んでいます…",
-    "hosts.import.none": "インポートできるホストがありません。{path} が存在し、Host エントリが含まれているか確認してください。",
+    "hosts.import.none":
+      "インポートできるホストがありません。{path} が存在し、Host エントリが含まれているか確認してください。",
     "hosts.import.exists": "登録済み",
     "hosts.import.proxyCommand": "ProxyCommand は取り込みません",
     "hosts.import.selectAll": "すべて選択",
@@ -589,8 +602,10 @@ export default defineMessages({
     "hosts.f.note": "メモ",
     "hosts.edit.sec.ai": "AI 向けメモ",
     "hosts.f.aiNotes": "AI 向けメモ",
-    "hosts.f.aiNotesHint": "このホストでの AI へのリクエストのたびに送信されます。例: ホストの用途、重要なパス、避けるべき操作。",
-    "hosts.f.aiNotesPlaceholder": "例：PostgreSQL 16 のプライマリ。データは /srv/pgdata。業務時間中は postgresql を再起動しないこと。",
+    "hosts.f.aiNotesHint":
+      "このホストでの AI へのリクエストのたびに送信されます。例: ホストの用途、重要なパス、避けるべき操作。",
+    "hosts.f.aiNotesPlaceholder":
+      "例：PostgreSQL 16 のプライマリ。データは /srv/pgdata。業務時間中は postgresql を再起動しないこと。",
     "hosts.auth.password": "パスワード",
     "hosts.auth.key": "鍵",
     "hosts.auth.ask": "毎回入力",
@@ -612,7 +627,8 @@ export default defineMessages({
     // port forwarding (FWD-01, FWD-02)
     "hosts.fwd.count": "{n} 件",
     "hosts.fwd.empty": "ポートフォワーディングがまだありません",
-    "hosts.fwd.emptyBody": "ホストの SSH 接続を通してポートを転送します。ローカル（ssh -L）、リモート（ssh -R）、SOCKS プロキシ（ssh -D）を使えます。",
+    "hosts.fwd.emptyBody":
+      "ホストの SSH 接続を通してポートを転送します。ローカル（ssh -L）、リモート（ssh -R）、SOCKS プロキシ（ssh -D）を使えます。",
     "hosts.fwd.add": "転送を追加…",
     "hosts.fwd.autoStart": "接続時に開始",
     "hosts.fwd.autoStartFor": "接続時に {rule} を自動で開始",
@@ -623,9 +639,12 @@ export default defineMessages({
     "hosts.fwd.lostToast": "{host}: ポートフォワーディングが停止しました。{reason}",
     "hosts.fwd.dialog.addTitle": "ポートフォワーディングを追加",
     "hosts.fwd.dialog.editTitle": "ポートフォワーディングを編集",
-    "hosts.fwd.dialog.subtitle": "ssh -L と同じです。このコンピューターのポートから、サーバーが到達できるアドレスへつなぎます。",
-    "hosts.fwd.dialog.subtitleRemote": "ssh -R と同じです。サーバーのポートから、このコンピューターが到達できるアドレスへつなぎます。",
-    "hosts.fwd.dialog.subtitleDynamic": "ssh -D と同じです。このコンピューターで SOCKS プロキシを開き、接続はサーバーから行います。",
+    "hosts.fwd.dialog.subtitle":
+      "ssh -L と同じです。このコンピューターのポートから、サーバーが到達できるアドレスへつなぎます。",
+    "hosts.fwd.dialog.subtitleRemote":
+      "ssh -R と同じです。サーバーのポートから、このコンピューターが到達できるアドレスへつなぎます。",
+    "hosts.fwd.dialog.subtitleDynamic":
+      "ssh -D と同じです。このコンピューターで SOCKS プロキシを開き、接続はサーバーから行います。",
     "hosts.fwd.dialog.add": "追加",
     "hosts.fwd.f.name": "名前",
     "hosts.fwd.f.namePlaceholder": "任意（例: Postgres）",
@@ -639,7 +658,8 @@ export default defineMessages({
     "hosts.fwd.f.server": "サーバーのアドレス",
     "hosts.fwd.f.dest": "転送先",
     "hosts.fwd.f.exposedWarn": "同じネットワーク上の他のデバイスからも、この転送ポートにアクセスできます。",
-    "hosts.fwd.f.gatewayPorts": "サーバーの GatewayPorts が許可している場合のみ、他のデバイスからこのポートにアクセスできます。許可していない場合、サーバーはループバックでのみ待ち受けます。",
+    "hosts.fwd.f.gatewayPorts":
+      "サーバーの GatewayPorts が許可している場合のみ、他のデバイスからこのポートにアクセスできます。許可していない場合、サーバーはループバックでのみ待ち受けます。",
     "hosts.fwd.f.socksHint": "アプリでこのアドレスを SOCKS プロキシに設定すると、接続はサーバーから行われます。",
     "hosts.fwd.f.portHint": "0 = 自動",
     "hosts.fwd.f.destHint": "127.0.0.1 はサーバー自身を指します。",
@@ -665,7 +685,8 @@ export default defineMessages({
     "hosts.env.valueLabelFor": "{name} の値",
     "hosts.env.remove": "{name} を削除",
     "hosts.env.removeBlank": "変数を削除",
-    "hosts.env.hint": "サーバーの AcceptEnv が許可する名前だけが適用されます（多くの場合 LANG、LC_*）。TERM はターミナルの種類を設定します。",
+    "hosts.env.hint":
+      "サーバーの AcceptEnv が許可する名前だけが適用されます（多くの場合 LANG、LC_*）。TERM はターミナルの種類を設定します。",
     "hosts.env.err.nameRequired": "名前を入力するか、この行を削除してください。",
     "hosts.env.err.nameInvalid": "名前には英字、数字、_ を使い、先頭を数字にしないでください。",
     "hosts.env.err.nameTooLong": "名前は {max} 文字以内にしてください。",

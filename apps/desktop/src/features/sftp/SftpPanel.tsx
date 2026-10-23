@@ -31,10 +31,17 @@ function shortDate(ms: number | null): string {
 
 /** SFTP-04: permissions, exact size and modification time on hover. */
 function tooltip(e: FileEntry): string {
-  const lines = [e.name, [e.permissions, e.is_dir ? null : `${formatBytes(e.size)} (${e.size.toLocaleString()} B)`].filter(Boolean).join(" · ")];
+  const lines = [
+    e.name,
+    [e.permissions, e.is_dir ? null : `${formatBytes(e.size)} (${e.size.toLocaleString()} B)`]
+      .filter(Boolean)
+      .join(" · "),
+  ];
   if (e.modified != null) {
     const d = new Date(e.modified);
-    lines.push(`${formatDate(e.modified)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
+    lines.push(
+      `${formatDate(e.modified)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`,
+    );
   }
   return lines.join("\n");
 }
@@ -202,7 +209,11 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
       { label: t("sftp.menu.refresh"), icon: "arrows-clockwise", onSelect: refresh },
     ];
     if (!entry) {
-      setMenuEntries([...common, { kind: "separator" }, { label: t("sftp.menu.copyPath"), icon: "copy", disabled: !cwd, onSelect: () => cwd && void copyPath(cwd) }]);
+      setMenuEntries([
+        ...common,
+        { kind: "separator" },
+        { label: t("sftp.menu.copyPath"), icon: "copy", disabled: !cwd, onSelect: () => cwd && void copyPath(cwd) },
+      ]);
     } else {
       setMenuEntries([
         entry.is_dir
@@ -254,8 +265,19 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
         <span className={s.title}>{t("sftp.title")}</span>
         <span className={s.host}>{hostName}</span>
         <div className={s.grow} />
-        <IconButton icon="upload-simple" label={t("sftp.upload")} className={s.iconBtn} onClick={() => void pickAndUpload()} />
-        <IconButton icon="folder-plus" label={t("sftp.newFolder")} className={s.iconBtn} disabled={!cwd} onClick={() => setCreating(true)} />
+        <IconButton
+          icon="upload-simple"
+          label={t("sftp.upload")}
+          className={s.iconBtn}
+          onClick={() => void pickAndUpload()}
+        />
+        <IconButton
+          icon="folder-plus"
+          label={t("sftp.newFolder")}
+          className={s.iconBtn}
+          disabled={!cwd}
+          onClick={() => setCreating(true)}
+        />
         <IconButton icon="arrows-clockwise" label={t("sftp.refresh")} className={s.iconBtn} onClick={refresh} />
       </div>
 
@@ -297,7 +319,12 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
           <div className={s.row}>
             <span className={s.nameCell}>
               <Icon name="folder-simple" fill size={14} color="var(--accent)" />
-              <NameInput initial={t("sftp.newFolderName")} selectAll onCommit={(v) => void createFolder(v)} onCancel={() => setCreating(false)} />
+              <NameInput
+                initial={t("sftp.newFolderName")}
+                selectAll
+                onCommit={(v) => void createFolder(v)}
+                onCancel={() => setCreating(false)}
+              />
             </span>
             <span />
             <span />
@@ -319,7 +346,11 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
               <span className={s.nameCell}>
                 <Icon name={icon.name} fill={icon.fill} size={14} color={icon.color} />
                 {renaming === entry.path ? (
-                  <NameInput initial={entry.name} onCommit={(v) => void rename(entry, v)} onCancel={() => setRenaming(null)} />
+                  <NameInput
+                    initial={entry.name}
+                    onCommit={(v) => void rename(entry, v)}
+                    onCancel={() => setRenaming(null)}
+                  />
                 ) : (
                   <span className={s.name}>{entry.name}</span>
                 )}

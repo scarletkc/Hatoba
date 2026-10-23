@@ -5,7 +5,10 @@ export { selectRelease, type GitHubRelease } from "./github.mjs";
 
 export type Platform = keyof typeof STEPS;
 /** INSTALL_STEPS of scripts/release/release.mjs, typed: each `steps` takes the installer names by bundle type. */
-export const INSTALL_STEPS = STEPS as unknown as Record<Platform, { heading: string; bundles: string[]; steps: (names: Record<string, string>) => string }>;
+export const INSTALL_STEPS = STEPS as unknown as Record<
+  Platform,
+  { heading: string; bundles: string[]; steps: (names: Record<string, string>) => string }
+>;
 export const PLATFORMS = Object.keys(INSTALL_STEPS) as Platform[];
 
 export interface Download {
@@ -48,21 +51,30 @@ export function parseChecksums(text: string): Map<string, string> {
  * package: `warn` hears of each one left out. Throws when a platform has no installer at all, or
  * when an installer has no checksum.
  */
-export function downloadsOf(release: GitHubRelease, sums: Map<string, string>, warn: (message: string) => void = console.warn): Download[] {
+export function downloadsOf(
+  release: GitHubRelease,
+  sums: Map<string, string>,
+  warn: (message: string) => void = console.warn,
+): Download[] {
   const names = installerNames(versionOf(release.tag_name));
   return PLATFORMS.flatMap((platform) => {
     const downloads = INSTALL_STEPS[platform].bundles.flatMap((bundle) => {
       const name = names[bundle];
       const asset = release.assets.find((candidate) => candidate.name === name);
       if (!asset) {
-        warn(`${release.tag_name} has no ${name}, the ${bundle} installer that INSTALLERS in scripts/release/release.mjs names, so the download page leaves it out.`);
+        warn(
+          `${release.tag_name} has no ${name}, the ${bundle} installer that INSTALLERS in scripts/release/release.mjs names, so the download page leaves it out.`,
+        );
         return [];
       }
       const sha256 = sums.get(name);
       if (!sha256) throw new Error(`${CHECKSUMS} of ${release.tag_name} has no checksum for ${name}.`);
       return [{ bundle, platform, name, url: asset.browser_download_url, size: asset.size, sha256 }];
     });
-    if (downloads.length === 0) throw new Error(`${release.tag_name} has none of the ${platform} installers that INSTALLERS in scripts/release/release.mjs names.`);
+    if (downloads.length === 0)
+      throw new Error(
+        `${release.tag_name} has none of the ${platform} installers that INSTALLERS in scripts/release/release.mjs names.`,
+      );
     return downloads;
   });
 }
@@ -76,7 +88,8 @@ export function loadRelease(): Promise<SiteRelease> {
     const checksums = current.assets.find((asset) => asset.name === CHECKSUMS);
     if (!checksums) throw new Error(`${current.tag_name} has no ${CHECKSUMS}.`);
     const response = await fetch(checksums.browser_download_url);
-    if (!response.ok) throw new Error(`Downloading ${CHECKSUMS} of ${current.tag_name} failed with ${response.status}.`);
+    if (!response.ok)
+      throw new Error(`Downloading ${CHECKSUMS} of ${current.tag_name} failed with ${response.status}.`);
     const version = versionOf(current.tag_name);
     return {
       version,
@@ -91,4 +104,3 @@ export function loadRelease(): Promise<SiteRelease> {
   })();
   return cached;
 }
-

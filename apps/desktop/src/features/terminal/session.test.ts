@@ -6,7 +6,10 @@ import { LiveSession } from "./session";
 import { useTermSettings } from "./theme";
 
 vi.hoisted(() => {
-  Object.defineProperty(window, "matchMedia", { value: () => ({ matches: false, addEventListener() {} }), configurable: true });
+  Object.defineProperty(window, "matchMedia", {
+    value: () => ({ matches: false, addEventListener() {} }),
+    configurable: true,
+  });
 });
 
 vi.mock("@xterm/xterm", () => ({
@@ -29,7 +32,9 @@ vi.mock("@/ipc/api", async (importActual) => {
   const actual = await importActual<typeof import("@/ipc/api")>();
   return {
     ...actual,
-    api: new Proxy(actual.api, { get: (target, prop) => (prop === "ssh_write_bytes" ? writeBytes : Reflect.get(target, prop)) }),
+    api: new Proxy(actual.api, {
+      get: (target, prop) => (prop === "ssh_write_bytes" ? writeBytes : Reflect.get(target, prop)),
+    }),
   };
 });
 
@@ -44,22 +49,28 @@ beforeEach(() => {
 });
 
 describe("terminal paste", () => {
-  it.each(["echo hello\n", "echo hello\r\n", "echo hello\r", "echo hello\n\n", "echo hello\r\n\r\n"])("trims single-line trailing newlines in %j without asking", async (text) => {
-    await session.paste(text);
-    expect(confirmMultilinePaste).not.toHaveBeenCalled();
-    expect(session.term.paste).toHaveBeenCalledWith("echo hello");
-  });
+  it.each(["echo hello\n", "echo hello\r\n", "echo hello\r", "echo hello\n\n", "echo hello\r\n\r\n"])(
+    "trims single-line trailing newlines in %j without asking",
+    async (text) => {
+      await session.paste(text);
+      expect(confirmMultilinePaste).not.toHaveBeenCalled();
+      expect(session.term.paste).toHaveBeenCalledWith("echo hello");
+    },
+  );
 
   it("preserves a single line's whitespace", async () => {
     await session.paste("  echo hello  \r\n");
     expect(session.term.paste).toHaveBeenCalledWith("  echo hello  ");
   });
 
-  it.each(["echo one\necho two", "echo one\r\necho two\r\n", "echo one\recho two\r", "\necho two"])("confirms and preserves multi-line text %j", async (text) => {
-    await session.paste(text);
-    expect(confirmMultilinePaste).toHaveBeenCalledWith(text);
-    expect(session.term.paste).toHaveBeenCalledWith(text);
-  });
+  it.each(["echo one\necho two", "echo one\r\necho two\r\n", "echo one\recho two\r", "\necho two"])(
+    "confirms and preserves multi-line text %j",
+    async (text) => {
+      await session.paste(text);
+      expect(confirmMultilinePaste).toHaveBeenCalledWith(text);
+      expect(session.term.paste).toHaveBeenCalledWith(text);
+    },
+  );
 
   it("does not paste when the user rejects multiple lines", async () => {
     vi.mocked(confirmMultilinePaste).mockResolvedValue(false);
@@ -124,7 +135,8 @@ describe("terminal search", () => {
   it("redraws highlighted matches in a new scheme's colors", () => {
     const findNext = vi.spyOn(session.search, "findNext").mockReturnValue(true);
     const clear = vi.spyOn(session.search, "clearDecorations").mockImplementation(() => {});
-    const pick = (dark_scheme: string) => useTermSettings.setState((s) => ({ settings: { ...s.settings, theme: "dark", dark_scheme } }));
+    const pick = (dark_scheme: string) =>
+      useTermSettings.setState((s) => ({ settings: { ...s.settings, theme: "dark", dark_scheme } }));
     pick("hatoba-dark");
     session.find("ops", "next");
     session.applySettings();
@@ -135,7 +147,10 @@ describe("terminal search", () => {
     pick("dracula");
     session.applySettings();
     expect(clear).toHaveBeenCalled();
-    expect(findNext).toHaveBeenLastCalledWith("ops", { incremental: true, decorations: searchColors(schemeFor("dark", "dracula")) });
+    expect(findNext).toHaveBeenLastCalledWith("ops", {
+      incremental: true,
+      decorations: searchColors(schemeFor("dark", "dracula")),
+    });
     expect(session.term.scrollToLine).toHaveBeenCalledWith(120);
 
     // Closed find bar: nothing to redraw.

@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import type { Platform } from "@/lib/platform";
 
-export type ShortcutAction = "search" | "newTab" | "newLocal" | "closeTab" | "nextTab" | "prevTab" | "settings" | "lock" | "aiPanel";
+export type ShortcutAction =
+  "search" | "newTab" | "newLocal" | "closeTab" | "nextTab" | "prevTab" | "settings" | "lock" | "aiPanel";
 
 /**
  * App-level shortcuts (WIN-04). On Windows/Linux every app shortcut uses Ctrl+Shift so that plain

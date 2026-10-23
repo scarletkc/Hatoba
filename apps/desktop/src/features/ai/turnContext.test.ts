@@ -10,8 +10,21 @@ vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, remo
 vi.mock("@/features/terminal/session", async (importActual) => {
   const rows = ["$ make", "error: no rule", "$ "];
   const line = (y: number) => ({ isWrapped: false, translateToString: () => rows[y] });
-  const term = { rows: rows.length, buffer: { active: { type: "normal", length: rows.length, baseY: 0, getLine: (y: number) => (rows[y] === undefined ? undefined : line(y)) } } };
-  return { ...(await importActual<typeof import("@/features/terminal/session")>()), getSession: (tabId: string) => (tabId === "tab-1" ? { term } : undefined) };
+  const term = {
+    rows: rows.length,
+    buffer: {
+      active: {
+        type: "normal",
+        length: rows.length,
+        baseY: 0,
+        getLine: (y: number) => (rows[y] === undefined ? undefined : line(y)),
+      },
+    },
+  };
+  return {
+    ...(await importActual<typeof import("@/features/terminal/session")>()),
+    getSession: (tabId: string) => (tabId === "tab-1" ? { term } : undefined),
+  };
 });
 
 const { setSlotScreen, turnContext } = await import("./actions");
@@ -25,7 +38,9 @@ const provider: AiProviderView = {
   base_url: "https://example.com/v1",
   has_api_key: true,
   auth_header: "authorization",
-  models: [{ id: "m", name: "m", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null }],
+  models: [
+    { id: "m", name: "m", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null },
+  ],
   updated_at: 0,
 };
 const view = (host_id: string | null, quick_target: QuickTarget | null): AiConversationView => ({
@@ -34,7 +49,7 @@ const view = (host_id: string | null, quick_target: QuickTarget | null): AiConve
   host_id,
   quick_target,
   origin: null,
-      local: null,
+  local: null,
   pinned: false,
   context_start: null,
   effort: null,
@@ -42,7 +57,14 @@ const view = (host_id: string | null, quick_target: QuickTarget | null): AiConve
   updated_at: 0,
   last_activity: 0,
 });
-const quickTab: SessionTab = { id: "tab-1", hostId: null, target: { address: "10.0.0.8", port: 22, username: "root" }, title: "root@10.0.0.8", status: "connected", sessionId: "s1" };
+const quickTab: SessionTab = {
+  id: "tab-1",
+  hostId: null,
+  target: { address: "10.0.0.8", port: 22, username: "root" },
+  title: "root@10.0.0.8",
+  status: "connected",
+  sessionId: "s1",
+};
 
 function attach(slotId: string, conversation: AiConversationView, mode: "manual" | "bypass" = "manual") {
   useAi.setState({ slots: { [slotId]: { ...blankSlot(mode), conversationId: conversation.id, conversation } } });
@@ -55,7 +77,8 @@ const settings = (send_terminal_screen: boolean): AiSettingsView => ({
   builtin_skill_enabled: true,
   custom_instructions: "",
   send_terminal_screen,
-  memory: true, text_size: 13,
+  memory: true,
+  text_size: 13,
   judge_model: null,
 });
 
@@ -82,7 +105,12 @@ describe("turnContext (AI-09)", () => {
 
   it("names the tab's target in a terminal tab, which the next message moves the conversation to", () => {
     attach(quickTab.id, view(null, { address: "10.0.0.7", port: 22, username: "root" }));
-    expect(turnContext(quickTab.id)).toMatchObject({ host_id: null, target: quickTab.target, tab: true, session_id: "s1" });
+    expect(turnContext(quickTab.id)).toMatchObject({
+      host_id: null,
+      target: quickTab.target,
+      tab: true,
+      session_id: "s1",
+    });
   });
 
   it("names the conversation's permission mode (§13.5)", () => {

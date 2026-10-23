@@ -6,7 +6,15 @@ import { HintText } from "@/components/patterns";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AiSettingsPatch, SearchKind, SearchProviderInput, SearchProviderView } from "@/ipc/types";
-import { SEARCH_KINDS, keyForInput, normalizeBaseUrl, parseBaseUrl, searchNeedsUrl, searchProviderFor, type KeyDraft } from "./aiLogic";
+import {
+  SEARCH_KINDS,
+  keyForInput,
+  normalizeBaseUrl,
+  parseBaseUrl,
+  searchNeedsUrl,
+  searchProviderFor,
+  type KeyDraft,
+} from "./aiLogic";
 import { IDLE, SavedKeyField, TestConnection, aiErrorDetail, aiErrorMessage, type TestState } from "./aiShared";
 import { SettingRow } from "./shared";
 import s from "./AiPane.module.css";

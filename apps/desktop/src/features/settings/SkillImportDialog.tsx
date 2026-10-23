@@ -97,8 +97,15 @@ export function SkillImportDialog({
     setRejected(null);
     try {
       const replacing = clash && choice === "replace";
-      const skill = await api.skill_import(path, replacing ? preview.existing_id : null, renaming ? newName.trim() : null);
-      toast(t(replacing ? "aiSettings.skills.imp.replaced" : "aiSettings.skills.imp.done", { name: skill.name }), "success");
+      const skill = await api.skill_import(
+        path,
+        replacing ? preview.existing_id : null,
+        renaming ? newName.trim() : null,
+      );
+      toast(
+        t(replacing ? "aiSettings.skills.imp.replaced" : "aiSettings.skills.imp.done", { name: skill.name }),
+        "success",
+      );
       onImported(skill);
       onClose();
     } catch (e) {
@@ -146,7 +153,9 @@ export function SkillImportDialog({
             {t("btn.cancel")}
           </Button>
           <Button variant="primary" type="submit" form={ids.form} busy={importing} disabled={!canImport}>
-            {clash && choice === "replace" ? t("aiSettings.skills.imp.submitReplace") : t("aiSettings.skills.imp.submit")}
+            {clash && choice === "replace"
+              ? t("aiSettings.skills.imp.submitReplace")
+              : t("aiSettings.skills.imp.submit")}
           </Button>
         </>
       }
@@ -213,7 +222,11 @@ export function SkillImportDialog({
 
           {clash && preview.name && (
             <Group>
-              <div className={s.clash} role="radiogroup" aria-label={t("aiSettings.skills.imp.clashTitle", { name: preview.name })}>
+              <div
+                className={s.clash}
+                role="radiogroup"
+                aria-label={t("aiSettings.skills.imp.clashTitle", { name: preview.name })}
+              >
                 <div className={s.clashTitle}>{t("aiSettings.skills.imp.clashTitle", { name: preview.name })}</div>
                 <Radio checked={choice === "rename"} onSelect={() => setChoice("rename")}>
                   <span className={s.choiceLabel}>{t("aiSettings.skills.imp.rename")}</span>
@@ -238,16 +251,29 @@ export function SkillImportDialog({
                 </LinkButton>
               </div>
               <Group>
-                <ContentBlock path={SKILL_MD} content={preview.body} open={open.has(SKILL_MD)} onToggle={() => toggle(SKILL_MD)} />
+                <ContentBlock
+                  path={SKILL_MD}
+                  content={preview.body}
+                  open={open.has(SKILL_MD)}
+                  onToggle={() => toggle(SKILL_MD)}
+                />
                 {preview.files.map((f) => (
-                  <ContentBlock key={f.path} path={f.path} content={f.content} open={open.has(f.path)} onToggle={() => toggle(f.path)} />
+                  <ContentBlock
+                    key={f.path}
+                    path={f.path}
+                    content={f.content}
+                    open={open.has(f.path)}
+                    onToggle={() => toggle(f.path)}
+                  />
                 ))}
               </Group>
             </Section>
           )}
 
           {preview.frontmatter_keys.length > 0 && (
-            <HintText className={s.note}>{t("aiSettings.skills.imp.frontmatter", { keys: preview.frontmatter_keys.join(", ") })}</HintText>
+            <HintText className={s.note}>
+              {t("aiSettings.skills.imp.frontmatter", { keys: preview.frontmatter_keys.join(", ") })}
+            </HintText>
           )}
 
           {preview.skipped.length > 0 && (
@@ -276,12 +302,28 @@ export function SkillImportDialog({
 }
 
 /** One file of a skill shown read-only: a row with its path and size, and its whole text when open. */
-export function ContentBlock({ path, content, open, onToggle }: { path: string; content: string; open: boolean; onToggle: () => void }) {
+export function ContentBlock({
+  path,
+  content,
+  open,
+  onToggle,
+}: {
+  path: string;
+  content: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const t = useT();
   const bytes = byteLength(content);
   return (
     <div className={cx(s.block, open && s.blockOpen)}>
-      <button type="button" className={s.blockHead} aria-expanded={open} aria-label={t("aiSettings.skills.file.toggle", { path })} onClick={onToggle}>
+      <button
+        type="button"
+        className={s.blockHead}
+        aria-expanded={open}
+        aria-label={t("aiSettings.skills.file.toggle", { path })}
+        onClick={onToggle}
+      >
         <span className={s.fileToggle} aria-hidden>
           <Icon name="caret-right" />
         </span>

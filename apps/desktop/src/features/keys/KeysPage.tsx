@@ -15,10 +15,7 @@ import { keyTypeLabel, shortFingerprint } from "./keyUtils";
 import s from "./KeysPage.module.css";
 
 type Dialog =
-  | { kind: "import" }
-  | { kind: "generate" }
-  | { kind: "rename"; key: KeyView }
-  | { kind: "deploy"; key: KeyView };
+  { kind: "import" } | { kind: "generate" } | { kind: "rename"; key: KeyView } | { kind: "deploy"; key: KeyView };
 
 /** Key vault (KEY-01..07, design §04): list + detail panel. Private keys never reach the WebView. */
 export function KeysPage() {
@@ -112,7 +109,9 @@ export function KeysPage() {
           }}
         />
       )}
-      {dialog?.kind === "deploy" && <DeployKeyDialog keyView={dialog.key} hosts={hosts} onClose={() => setDialog(null)} />}
+      {dialog?.kind === "deploy" && (
+        <DeployKeyDialog keyView={dialog.key} hosts={hosts} onClose={() => setDialog(null)} />
+      )}
     </>
   );
 

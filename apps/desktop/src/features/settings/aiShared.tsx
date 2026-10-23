@@ -118,7 +118,11 @@ export function SavedKeyField({
         placeholder={hasSaved ? (newPlaceholder ?? t("aiSettings.f.apiKeyNewPlaceholder")) : placeholder}
         onChange={(e) => onChange({ mode: "replace", value: e.target.value })}
       />
-      {hasSaved && <LinkButton onClick={() => onChange({ mode: "keep", value: "" })}>{keepLabel ?? t("aiSettings.f.apiKeyKeep")}</LinkButton>}
+      {hasSaved && (
+        <LinkButton onClick={() => onChange({ mode: "keep", value: "" })}>
+          {keepLabel ?? t("aiSettings.f.apiKeyKeep")}
+        </LinkButton>
+      )}
     </div>
   );
 }

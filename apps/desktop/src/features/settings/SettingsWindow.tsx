@@ -77,7 +77,8 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape")
-        escapeBlocked.current = document.querySelectorAll('[role="dialog"],[role="alertdialog"],[role="menu"]').length > 1;
+        escapeBlocked.current =
+          document.querySelectorAll('[role="dialog"],[role="alertdialog"],[role="menu"]').length > 1;
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);

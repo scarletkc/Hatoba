@@ -39,7 +39,8 @@ import {
 import blockCases from "./blocks.fixtures.json";
 
 const att = (text: string, host = "prod-api"): SelectionAttachment => makeAttachment(host, text)!;
-const DIAG = "Hatoba connection diagnostics\nHost: staging-web-02 (172.31.40.8:22)\nUser: ubuntu\nError: ETIMEDOUT (ssh/timeout)";
+const DIAG =
+  "Hatoba connection diagnostics\nHost: staging-web-02 (172.31.40.8:22)\nUser: ubuntu\nError: ETIMEDOUT (ssh/timeout)";
 const diag = (text = DIAG, host = "staging-web-02"): DiagnosticsAttachment => makeDiagnostics(host, text)!;
 const paste = (text: string): PasteAttachment => makePaste(text)!;
 const file = (name: string, text: string): FileAttachment => {
@@ -61,7 +62,13 @@ describe("the terminal selection (AI-10)", () => {
   });
 
   it("counts the selection's lines", () => {
-    expect(att("a\nb\nc  \n")).toEqual({ kind: "selection", host: "prod-api", lines: 3, text: "a\nb\nc", truncated: false });
+    expect(att("a\nb\nc  \n")).toEqual({
+      kind: "selection",
+      host: "prod-api",
+      lines: 3,
+      text: "a\nb\nc",
+      truncated: false,
+    });
   });
 
   it("keeps the first 7,500 and last 22,500 characters of a long selection, like tool results", () => {
@@ -69,7 +76,10 @@ describe("the terminal selection (AI-10)", () => {
     const clipped = clipText(text);
     expect(clipped.truncated).toBe(true);
     expect(clipped.text).toBe(`${"a".repeat(7_500)}\n\n[… 6000 characters left out …]\n\n${"c".repeat(22_500)}`);
-    expect(clipText("x".repeat(SELECTION_MAX_CHARS))).toEqual({ text: "x".repeat(SELECTION_MAX_CHARS), truncated: false });
+    expect(clipText("x".repeat(SELECTION_MAX_CHARS))).toEqual({
+      text: "x".repeat(SELECTION_MAX_CHARS),
+      truncated: false,
+    });
     // Characters, not UTF-16 units.
     expect(clipText("磁".repeat(SELECTION_MAX_CHARS)).truncated).toBe(false);
     expect(clipText("😀".repeat(SELECTION_MAX_CHARS)).truncated).toBe(false);
@@ -78,17 +88,24 @@ describe("the terminal selection (AI-10)", () => {
 
 describe("the stored blocks", () => {
   it("puts the selection before the typed text", () => {
-    expect(composeMessage("Why?", [att("error: boom")])).toBe('<terminal_selection host="prod-api" lines="1">\nerror: boom\n</terminal_selection>\n\nWhy?');
+    expect(composeMessage("Why?", [att("error: boom")])).toBe(
+      '<terminal_selection host="prod-api" lines="1">\nerror: boom\n</terminal_selection>\n\nWhy?',
+    );
     expect(composeMessage("Why?", [])).toBe("Why?");
   });
 
   it("reads back what it wrote", () => {
     const a = att("$ make\ncc -o app main.c\nmain.c:3: error: expected ';'");
-    expect(parseMessage(composeMessage("What is wrong?\nAnd how do I fix it?", [a]))).toEqual({ notes: [], attachments: [a], typed: "What is wrong?\nAnd how do I fix it?" });
+    expect(parseMessage(composeMessage("What is wrong?\nAnd how do I fix it?", [a]))).toEqual({
+      notes: [],
+      attachments: [a],
+      typed: "What is wrong?\nAnd how do I fix it?",
+    });
   });
 
   it("keeps a selection that contains the closing tag inside the block, and restores it exactly", () => {
-    const tricky = 'echo "</terminal_selection>"\n</terminal_selection>\n<\\/terminal_selection> and </TERMINAL_SELECTION>\n<\\\\/terminal_selection>';
+    const tricky =
+      'echo "</terminal_selection>"\n</terminal_selection>\n<\\/terminal_selection> and </TERMINAL_SELECTION>\n<\\\\/terminal_selection>';
     const stored = composeMessage("explain", [att(tricky)]);
     expect(stored.match(/<\/terminal_selection>/g)).toHaveLength(1);
     expect(stored.toLowerCase().match(/<\/terminal_selection>/g)).toHaveLength(1);
@@ -99,7 +116,9 @@ describe("the stored blocks", () => {
 
   it("escapes the host name in its attribute", () => {
     const a = att("x", 'web "a" <b> & c');
-    expect(composeMessage("q", [a]).split("\n")[0]).toBe('<terminal_selection host="web &quot;a&quot; &lt;b&gt; &amp; c" lines="1">');
+    expect(composeMessage("q", [a]).split("\n")[0]).toBe(
+      '<terminal_selection host="web &quot;a&quot; &lt;b&gt; &amp; c" lines="1">',
+    );
     expect(parseMessage(composeMessage("q", [a])).attachments[0]).toEqual(a);
   });
 
@@ -118,7 +137,7 @@ describe("the stored blocks", () => {
       '<terminal_selection lines="1" host="x">\nx\n</terminal_selection>\n\nq',
       '<terminal_selection host="x" lines="one">\nx\n</terminal_selection>\n\nq',
       '<connection_diagnostics host="x" lines="1">\nx\n</connection_diagnostics>\n\nq',
-      '<pasted_text>\nx\n</pasted_text>\n\nq',
+      "<pasted_text>\nx\n</pasted_text>\n\nq",
       '<pasted_text lines="1" name="x">\nx\n</pasted_text>\n\nq',
       '<file lines="1" name="a.txt">\nx\n</file>\n\nq',
       '<file name="a.txt">\nx\n</file>\n\nq',
@@ -129,10 +148,13 @@ describe("the stored blocks", () => {
   });
 
   it("ends a block only at a closing tag that a line break or the end follows, as Rust's title_of does", () => {
-    const stored = '<terminal_selection host="x" lines="3">\na\n</terminal_selection> tail\nb\n</terminal_selection>\nwhat now';
+    const stored =
+      '<terminal_selection host="x" lines="3">\na\n</terminal_selection> tail\nb\n</terminal_selection>\nwhat now';
     expect(parseMessage(stored)).toEqual({
       notes: [],
-      attachments: [{ kind: "selection", host: "x", lines: 3, truncated: false, text: "a\n</terminal_selection> tail\nb" }],
+      attachments: [
+        { kind: "selection", host: "x", lines: 3, truncated: false, text: "a\n</terminal_selection> tail\nb" },
+      ],
       typed: "what now",
     });
   });
@@ -140,7 +162,9 @@ describe("the stored blocks", () => {
 
 describe("connection diagnostics (AI-10)", () => {
   it("writes a block with the host's display name only", () => {
-    expect(composeMessage("Why?", [diag("Error: ETIMEDOUT")])).toBe('<connection_diagnostics host="staging-web-02">\nError: ETIMEDOUT\n</connection_diagnostics>\n\nWhy?');
+    expect(composeMessage("Why?", [diag("Error: ETIMEDOUT")])).toBe(
+      '<connection_diagnostics host="staging-web-02">\nError: ETIMEDOUT\n</connection_diagnostics>\n\nWhy?',
+    );
   });
 
   it("attaches nothing without text, and clips long text like a selection", () => {
@@ -203,10 +227,16 @@ describe("text files (AI-35)", () => {
   });
 
   it("accepts UTF-8 text and refuses NUL bytes and invalid UTF-8", () => {
-    expect(textFile("a.txt", new TextEncoder().encode("日本語 ✓\r\n"))).toEqual({ ok: true, file: { kind: "file", name: "a.txt", lines: 1, text: "日本語 ✓\n" } });
+    expect(textFile("a.txt", new TextEncoder().encode("日本語 ✓\r\n"))).toEqual({
+      ok: true,
+      file: { kind: "file", name: "a.txt", lines: 1, text: "日本語 ✓\n" },
+    });
     expect(textFile("a.bin", new Uint8Array([0x61, 0x00, 0x62]))).toEqual({ ok: false, reason: "binary" });
     expect(textFile("a.bin", new Uint8Array([0xc3, 0x28]))).toEqual({ ok: false, reason: "binary" });
-    expect(textFile("big.txt", new Uint8Array(FILE_MAX_BYTES + 1).fill(0x61))).toEqual({ ok: false, reason: "too_large" });
+    expect(textFile("big.txt", new Uint8Array(FILE_MAX_BYTES + 1).fill(0x61))).toEqual({
+      ok: false,
+      reason: "too_large",
+    });
     expect(textFile("max.txt", new Uint8Array(FILE_MAX_BYTES).fill(0x61)).ok).toBe(true);
   });
 
@@ -223,12 +253,23 @@ describe("text files (AI-35)", () => {
     const bytes = new TextEncoder().encode("server {\r\n  listen 80;\r\n}\n");
     const read = textFile("nginx.conf", bytes);
     expect(droppedFile({ status: "ok", name: "nginx.conf", text: "server {\r\n  listen 80;\r\n}\n" })).toEqual(read);
-    expect(droppedFile({ status: "ok", name: "C:\\Users\\kc\\x.md", text: "x" })).toEqual({ ok: true, file: { kind: "file", name: "x.md", lines: 1, text: "x" } });
+    expect(droppedFile({ status: "ok", name: "C:\\Users\\kc\\x.md", text: "x" })).toEqual({
+      ok: true,
+      file: { kind: "file", name: "x.md", lines: 1, text: "x" },
+    });
     // Each refusal keeps its reason and names the file, never a path.
     for (const reason of ["image", "too_large", "binary", "unreadable"] as const)
-      expect(droppedFile({ status: "refused", name: "/home/kc/data.bin", reason })).toEqual({ ok: false, name: "data.bin", reason });
+      expect(droppedFile({ status: "refused", name: "/home/kc/data.bin", reason })).toEqual({
+        ok: false,
+        name: "data.bin",
+        reason,
+      });
     // The size cap holds here too, in UTF-8 bytes.
-    expect(droppedFile({ status: "ok", name: "big.txt", text: "é".repeat(FILE_MAX_BYTES / 2 + 1) })).toEqual({ ok: false, name: "big.txt", reason: "too_large" });
+    expect(droppedFile({ status: "ok", name: "big.txt", text: "é".repeat(FILE_MAX_BYTES / 2 + 1) })).toEqual({
+      ok: false,
+      name: "big.txt",
+      reason: "too_large",
+    });
     expect(droppedFile({ status: "ok", name: "max.txt", text: "a".repeat(FILE_MAX_BYTES) }).ok).toBe(true);
   });
 });
@@ -257,8 +298,16 @@ describe("several attachments in one message (AI-35)", () => {
     const d = diag();
     const s = att("ls");
     const f = file("x.txt", "x");
-    expect(parseMessage(`${blockOf(f)}\n\n${blockOf(s)}\n\n${blockOf(d)}\n\nq`)).toEqual({ notes: [], attachments: [f, s, d], typed: "q" });
-    expect(parseMessage(`${blockOf(d)}\n\n${blockOf(d)}\n\nq`)).toEqual({ notes: [], attachments: [d], typed: `${blockOf(d)}\n\nq` });
+    expect(parseMessage(`${blockOf(f)}\n\n${blockOf(s)}\n\n${blockOf(d)}\n\nq`)).toEqual({
+      notes: [],
+      attachments: [f, s, d],
+      typed: "q",
+    });
+    expect(parseMessage(`${blockOf(d)}\n\n${blockOf(d)}\n\nq`)).toEqual({
+      notes: [],
+      attachments: [d],
+      typed: `${blockOf(d)}\n\nq`,
+    });
     expect(parseMessage(`${blockOf(f)}\n\n${blockOf(f)}\n\nq`)).toEqual({ notes: [], attachments: [f, f], typed: "q" });
   });
 
@@ -290,7 +339,11 @@ describe("several attachments in one message (AI-35)", () => {
 
 describe("Hatoba's notes (AI-05, AI-09)", () => {
   const moved: Note = { kind: "host_change", from: "staging-web", to: "prod-db" };
-  const switched: Note = { kind: "model_change", from: "Claude Sonnet 5.5 (claude-sonnet-5-5)", to: "Claude Opus 5.5 (claude-opus-5-5)" };
+  const switched: Note = {
+    kind: "model_change",
+    from: "Claude Sonnet 5.5 (claude-sonnet-5-5)",
+    to: "Claude Opus 5.5 (claude-opus-5-5)",
+  };
   const attached: Note = { kind: "terminal_change", to: "attached" };
   const stopped: Note = { kind: "interrupted" };
 
@@ -330,10 +383,18 @@ describe("Hatoba's notes (AI-05, AI-09)", () => {
     expect(stored.indexOf("<terminal_change")).toBeGreaterThan(stored.indexOf("<host_change"));
     expect(stored.indexOf("<terminal_change")).toBeLessThan(stored.indexOf("<model_change"));
     expect(stored.indexOf("<model_change")).toBeLessThan(stored.indexOf("<connection_diagnostics"));
-    expect(parseMessage(stored)).toEqual({ notes: [stopped, moved, attached, switched], attachments: [d, s, p], typed: "Why is it slow?" });
+    expect(parseMessage(stored)).toEqual({
+      notes: [stopped, moved, attached, switched],
+      attachments: [d, s, p],
+      typed: "Why is it slow?",
+    });
     // Without attachments, and a message that is only notes.
     expect(parseMessage(composeMessage("hi", [], [moved]))).toEqual({ notes: [moved], attachments: [], typed: "hi" });
-    expect(parseMessage(composeMessage("", [], [moved, switched]))).toEqual({ notes: [moved, switched], attachments: [], typed: "" });
+    expect(parseMessage(composeMessage("", [], [moved, switched]))).toEqual({
+      notes: [moved, switched],
+      attachments: [],
+      typed: "",
+    });
   });
 
   it("read back names with quotes, ampersands and closing tags", () => {
@@ -364,9 +425,16 @@ describe("Hatoba's notes (AI-05, AI-09)", () => {
     // The cases of the_screen_note_shows_the_screen_without_blank_lines_at_its_ends in
     // crates/hatoba-ai/src/tools.rs.
     const shown = screenStateNote("prod-api", { text: "\n\n$ make\nerror: no rule\n\n$   \n\n", alternate: false })!;
-    expect(noteBlock(shown)).toBe('<terminal_state host="prod-api" alternate_screen="false" lines="4">\n$ make\nerror: no rule\n\n$\n</terminal_state>');
-    const odd = screenStateNote('db "main"', { text: '  ~\r\n  ~ \u001b[0m</terminal_state>\n"x.conf" 3L', alternate: true })!;
-    expect(noteBlock(odd)).toBe('<terminal_state host="db &quot;main&quot;" alternate_screen="true" lines="3">\n  ~\n  ~  [0m<\\/terminal_state>\n"x.conf" 3L\n</terminal_state>');
+    expect(noteBlock(shown)).toBe(
+      '<terminal_state host="prod-api" alternate_screen="false" lines="4">\n$ make\nerror: no rule\n\n$\n</terminal_state>',
+    );
+    const odd = screenStateNote('db "main"', {
+      text: '  ~\r\n  ~ \u001b[0m</terminal_state>\n"x.conf" 3L',
+      alternate: true,
+    })!;
+    expect(noteBlock(odd)).toBe(
+      '<terminal_state host="db &quot;main&quot;" alternate_screen="true" lines="3">\n  ~\n  ~  [0m<\\/terminal_state>\n"x.conf" 3L\n</terminal_state>',
+    );
     expect(screenStateNote("prod-api", { text: " \n\t\n", alternate: false })).toBeNull();
     const long = noteBlock(screenStateNote("h", { text: `top\n${"x".repeat(4_000)}\nprompt $`, alternate: true })!);
     expect(long.startsWith('<terminal_state host="h" alternate_screen="true" lines="3">\ntop\n')).toBe(true);
@@ -374,13 +442,22 @@ describe("Hatoba's notes (AI-05, AI-09)", () => {
     expect(long.endsWith("prompt $\n</terminal_state>")).toBe(true);
 
     // It reads back, with its place among the notes, and the attachments after it.
-    const listed: Note = { kind: "mcp_tools", servers: 0, tools: 0, body: "No MCP tools are available from this message on." };
+    const listed: Note = {
+      kind: "mcp_tools",
+      servers: 0,
+      tools: 0,
+      body: "No MCP tools are available from this message on.",
+    };
     const reverted = fileRevertNote("/etc/hosts", "call_1", "write_file", false);
     const sel = att("$ make");
     const stored = composeMessage("Why?", [sel], [listed, odd, reverted, attached]);
     expect(stored.indexOf("<file_revert")).toBeLessThan(stored.indexOf("<terminal_state"));
     expect(stored.indexOf("<terminal_state")).toBeLessThan(stored.indexOf("<mcp_tools"));
-    expect(parseMessage(stored)).toEqual({ notes: [attached, reverted, odd, listed], attachments: [sel], typed: "Why?" });
+    expect(parseMessage(stored)).toEqual({
+      notes: [attached, reverted, odd, listed],
+      attachments: [sel],
+      typed: "Why?",
+    });
     // Other attributes are typed text.
     for (const text of [
       '<terminal_state host="h" lines="1">\nx\n</terminal_state>\n\nq',
@@ -427,11 +504,15 @@ describe("the permission mode notes (AI-16)", () => {
     expect(noteBlock({ kind: "permission_mode", mode: "bypass" })).toBe(bypass);
     expect(noteBlock({ kind: "permission_mode", mode: "manual" })).toBe(manual);
     expect(noteBlock({ kind: "permission_mode", mode: "auto" })).toBe(auto);
-    const text = composeMessage("go on", [], [
-      fileRevertNote("/etc/a.conf", "call_1", "edit_file", false),
-      { kind: "permission_mode", mode: "bypass" },
-      { kind: "model_change", from: "a", to: "b" },
-    ]);
+    const text = composeMessage(
+      "go on",
+      [],
+      [
+        fileRevertNote("/etc/a.conf", "call_1", "edit_file", false),
+        { kind: "permission_mode", mode: "bypass" },
+        { kind: "model_change", from: "a", to: "b" },
+      ],
+    );
     const notes = parseMessage(text).notes.map((n) => n.kind);
     expect(notes).toEqual(["model_change", "permission_mode", "file_revert"]);
     expect(parseMessage(`<permission_mode mode="strict">\nx\n</permission_mode>\n\nhi`).notes).toEqual([]);
@@ -440,9 +521,15 @@ describe("the permission mode notes (AI-16)", () => {
   it("round-trips the Auto note (AI-47), also before a summary", () => {
     const text = composeMessage("restart nginx", [], [{ kind: "permission_mode", mode: "auto" }]);
     expect(text).toBe(`${auto}\n\nrestart nginx`);
-    expect(parseMessage(text)).toMatchObject({ notes: [{ kind: "permission_mode", mode: "auto" }], typed: "restart nginx" });
+    expect(parseMessage(text)).toMatchObject({
+      notes: [{ kind: "permission_mode", mode: "auto" }],
+      typed: "restart nginx",
+    });
     expect(notedPermission([user(text), user("second")])).toBe("auto");
-    expect(splitPermissionNote(`${auto}\n\nWe restarted nginx.`)).toEqual({ mode: "auto", summary: "We restarted nginx." });
+    expect(splitPermissionNote(`${auto}\n\nWe restarted nginx.`)).toEqual({
+      mode: "auto",
+      summary: "We restarted nginx.",
+    });
     expect(notedPermission([user(`${bypass}\n\nfirst`), summary(`${auto}\n\nWe restarted nginx.`)])).toBe("auto");
   });
 
@@ -452,9 +539,14 @@ describe("the permission mode notes (AI-16)", () => {
     expect(notedPermission([user(`${bypass}\n\nfirst`), user("second")])).toBe("bypass");
     expect(notedPermission([user(`${bypass}\n\nfirst`), user(`${manual}\n\nthird`)])).toBe("manual");
     // The model sees nothing before a summary: its own note says the mode, or none does.
-    expect(notedPermission([user(`${bypass}\n\nfirst`), summary(`${bypass}\n\nWe cleaned /tmp.`), user("next")])).toBe("bypass");
+    expect(notedPermission([user(`${bypass}\n\nfirst`), summary(`${bypass}\n\nWe cleaned /tmp.`), user("next")])).toBe(
+      "bypass",
+    );
     expect(notedPermission([user(`${bypass}\n\nfirst`), summary("We cleaned /tmp.")])).toBeNull();
-    expect(splitPermissionNote(`${bypass}\n\nWe cleaned /tmp.`)).toEqual({ mode: "bypass", summary: "We cleaned /tmp." });
+    expect(splitPermissionNote(`${bypass}\n\nWe cleaned /tmp.`)).toEqual({
+      mode: "bypass",
+      summary: "We cleaned /tmp.",
+    });
     expect(splitPermissionNote("We cleaned /tmp.")).toEqual({ mode: null, summary: "We cleaned /tmp." });
   });
 
@@ -463,11 +555,20 @@ describe("the permission mode notes (AI-16)", () => {
     const memory = noteBlock({ kind: "memory", entries: 1, body });
     expect(memory).toBe(`<memory entries="1">\n${body}\n</memory>`);
     expect(parseMessage(`${manual}\n\n${memory}\n\nhello`)).toMatchObject({
-      notes: [{ kind: "permission_mode", mode: "manual" }, { kind: "memory", entries: 1, body }],
+      notes: [
+        { kind: "permission_mode", mode: "manual" },
+        { kind: "memory", entries: 1, body },
+      ],
       typed: "hello",
     });
-    expect(splitPermissionNote(`${auto}\n\n${memory}\n\nWe restarted nginx.`)).toEqual({ mode: "auto", summary: "We restarted nginx." });
-    expect(splitPermissionNote(`${memory}\n\nWe restarted nginx.`)).toEqual({ mode: null, summary: "We restarted nginx." });
+    expect(splitPermissionNote(`${auto}\n\n${memory}\n\nWe restarted nginx.`)).toEqual({
+      mode: "auto",
+      summary: "We restarted nginx.",
+    });
+    expect(splitPermissionNote(`${memory}\n\nWe restarted nginx.`)).toEqual({
+      mode: null,
+      summary: "We restarted nginx.",
+    });
     expect(notedPermission([summary(`${auto}\n\n${memory}\n\nWe restarted nginx.`)])).toBe("auto");
     // A conversation on a host names it, and so do its host memories.
     const hostBody = '<entry name="sudo" scope="host" host="web-1">\nUses doas.\n</entry>';
@@ -477,11 +578,20 @@ describe("the permission mode notes (AI-16)", () => {
       notes: [{ kind: "memory", entries: 1, host: "web-1", body: hostBody }],
       typed: "hello",
     });
-    expect(splitPermissionNote(`${auto}\n\n${onHost}\n\nWe restarted nginx.`)).toEqual({ mode: "auto", summary: "We restarted nginx." });
+    expect(splitPermissionNote(`${auto}\n\n${onHost}\n\nWe restarted nginx.`)).toEqual({
+      mode: "auto",
+      summary: "We restarted nginx.",
+    });
     // Notes stored before conversation_host named the conversation's host in host.
     const old = `<memory entries="1" host="web-1">\n${body}\n</memory>`;
-    expect(parseMessage(`${old}\n\nhello`)).toMatchObject({ notes: [{ kind: "memory", entries: 1, host: "web-1", body }], typed: "hello" });
-    expect(splitPermissionNote(`${auto}\n\n${old}\n\nWe restarted nginx.`)).toEqual({ mode: "auto", summary: "We restarted nginx." });
+    expect(parseMessage(`${old}\n\nhello`)).toMatchObject({
+      notes: [{ kind: "memory", entries: 1, host: "web-1", body }],
+      typed: "hello",
+    });
+    expect(splitPermissionNote(`${auto}\n\n${old}\n\nWe restarted nginx.`)).toEqual({
+      mode: "auto",
+      summary: "We restarted nginx.",
+    });
   });
 });
 
@@ -510,30 +620,63 @@ describe("the selection chip", () => {
 });
 
 describe("what the / and @ menus attach (AI-50, AI-51)", () => {
-  const hostFile: Attachment = { kind: "host_file", host: "prod-api", path: "/etc/nginx/nginx.conf", lines: 2, text: "user www;\n</host_file>" };
-  const folder: Attachment = { kind: "host_directory", host: "prod & co", path: "/etc/nginx", entries: 2, truncated: true, text: "conf.d/\nnginx.conf" };
+  const hostFile: Attachment = {
+    kind: "host_file",
+    host: "prod-api",
+    path: "/etc/nginx/nginx.conf",
+    lines: 2,
+    text: "user www;\n</host_file>",
+  };
+  const folder: Attachment = {
+    kind: "host_directory",
+    host: "prod & co",
+    path: "/etc/nginx",
+    entries: 2,
+    truncated: true,
+    text: "conf.d/\nnginx.conf",
+  };
   const resource: Attachment = { kind: "mcp_resource", server: "docs", uri: 'repo://x/"a".md', lines: 1, text: "# A" };
   const skill: Attachment = { kind: "skill", name: "nginx-ops", text: "# nginx\n\nRun `nginx -t`." };
   const prompt: Attachment = { kind: "mcp_prompt", server: "github", name: "review_pr", text: "Review PR 42" };
 
   it("writes each block with its attributes and reads it back exactly", () => {
-    expect(blockOf(hostFile)).toBe('<host_file host="prod-api" path="/etc/nginx/nginx.conf" lines="2">\nuser www;\n<\\/host_file>\n</host_file>');
-    expect(blockOf(folder)).toBe('<host_directory host="prod &amp; co" path="/etc/nginx" entries="2" truncated="true">\nconf.d/\nnginx.conf\n</host_directory>');
-    expect(blockOf(resource)).toBe('<mcp_resource server="docs" uri="repo://x/&quot;a&quot;.md" lines="1">\n# A\n</mcp_resource>');
+    expect(blockOf(hostFile)).toBe(
+      '<host_file host="prod-api" path="/etc/nginx/nginx.conf" lines="2">\nuser www;\n<\\/host_file>\n</host_file>',
+    );
+    expect(blockOf(folder)).toBe(
+      '<host_directory host="prod &amp; co" path="/etc/nginx" entries="2" truncated="true">\nconf.d/\nnginx.conf\n</host_directory>',
+    );
+    expect(blockOf(resource)).toBe(
+      '<mcp_resource server="docs" uri="repo://x/&quot;a&quot;.md" lines="1">\n# A\n</mcp_resource>',
+    );
     expect(blockOf(skill)).toBe('<skill name="nginx-ops">\n# nginx\n\nRun `nginx -t`.\n</skill>');
     expect(blockOf(prompt)).toBe('<mcp_prompt server="github" name="review_pr">\nReview PR 42\n</mcp_prompt>');
     const list = [skill, hostFile, folder, resource, prompt];
     const stored = composeMessage("/nginx-ops check @/etc/nginx/nginx.conf", [att("$ curl"), ...list]);
-    expect(parseMessage(stored)).toEqual({ notes: [], attachments: [att("$ curl"), ...list], typed: "/nginx-ops check @/etc/nginx/nginx.conf" });
+    expect(parseMessage(stored)).toEqual({
+      notes: [],
+      attachments: [att("$ curl"), ...list],
+      typed: "/nginx-ops check @/etc/nginx/nginx.conf",
+    });
   });
 
   it("leaves blocks with other attributes as typed text", () => {
-    for (const text of ['<skill>\nx\n</skill>\n\nq', '<host_file path="/x" lines="1">\nx\n</host_file>\n\nq', '<host_directory host="h" path="/" entries="x">\nx\n</host_directory>\n\nq'])
+    for (const text of [
+      "<skill>\nx\n</skill>\n\nq",
+      '<host_file path="/x" lines="1">\nx\n</host_file>\n\nq',
+      '<host_directory host="h" path="/" entries="x">\nx\n</host_directory>\n\nq',
+    ])
       expect(parseMessage(text)).toEqual({ notes: [], attachments: [], typed: text });
   });
 
   it("titles a conversation as Rust's title_of does", () => {
-    expect([hostFile, folder, resource, skill, prompt].map(blockTitle)).toEqual(["nginx.conf", "/etc/nginx", 'repo://x/"a".md', "/nginx-ops", "review_pr"]);
+    expect([hostFile, folder, resource, skill, prompt].map(blockTitle)).toEqual([
+      "nginx.conf",
+      "/etc/nginx",
+      'repo://x/"a".md',
+      "/nginx-ops",
+      "review_pr",
+    ]);
     expect(pathName("/etc/nginx/")).toBe("nginx");
     expect(pathName("/")).toBe("/");
     expect(folderName("/etc/nginx")).toBe("nginx/");

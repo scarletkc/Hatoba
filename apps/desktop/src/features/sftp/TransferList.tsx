@@ -25,7 +25,8 @@ function TransferRow({ item }: { item: TransferItem }) {
   const t = useT();
   const running = item.state === "running";
   const failed = item.state === "failed";
-  const pct = item.state === "done" ? 100 : item.total > 0 ? Math.min(100, Math.floor((item.bytes / item.total) * 100)) : 0;
+  const pct =
+    item.state === "done" ? 100 : item.total > 0 ? Math.min(100, Math.floor((item.bytes / item.total) * 100)) : 0;
 
   const eta = () => {
     const sec = Math.ceil((item.total - item.bytes) / item.bytes_per_sec);
@@ -45,12 +46,18 @@ function TransferRow({ item }: { item: TransferItem }) {
   }
 
   const close = () =>
-    running ? void api.transfer_cancel(item.transfer_id).catch(() => {}) : useTransfers.getState().dismiss(item.transfer_id);
+    running
+      ? void api.transfer_cancel(item.transfer_id).catch(() => {})
+      : useTransfers.getState().dismiss(item.transfer_id);
 
   return (
     <div className={cx(s.transfer, item.fading && s.fading)}>
       <div className={s.top}>
-        <Icon name={item.direction === "upload" ? "upload-simple" : "download-simple"} size={14} color={failed ? "var(--red)" : "var(--accent)"} />
+        <Icon
+          name={item.direction === "upload" ? "upload-simple" : "download-simple"}
+          size={14}
+          color={failed ? "var(--red)" : "var(--accent)"}
+        />
         <span className={s.name} title={item.name}>
           {item.name}
         </span>

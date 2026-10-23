@@ -242,7 +242,8 @@ export default defineMessages({
     "terminal.stats.chartNet": "Recent network rates",
     "terminal.stats.waiting": "Reading…",
     "terminal.stats.unsupported": "Resource usage is available only for Linux and macOS servers.",
-    "terminal.stats.unsupportedSystem": "Resource usage is available only for Linux and macOS servers. This server runs {system}.",
+    "terminal.stats.unsupportedSystem":
+      "Resource usage is available only for Linux and macOS servers. This server runs {system}.",
     "terminal.stats.failed": "Resource usage stopped: {error}",
 
     "terminal.menu.reconnect": "Reconnect",
@@ -301,7 +302,8 @@ export default defineMessages({
     "terminal.find.count": "{i}/{n}",
 
     "terminal.paste.title": "Paste multiple lines?",
-    "terminal.paste.body": "You’re about to paste {n} lines. Text that contains line breaks may run as commands right away.",
+    "terminal.paste.body":
+      "You’re about to paste {n} lines. Text that contains line breaks may run as commands right away.",
     "terminal.paste.more": "… {n} more lines",
     "terminal.paste.confirm": "Paste",
     "terminal.clipboardDenied": "Can’t access the clipboard.",
@@ -363,7 +365,8 @@ export default defineMessages({
     "sftp.nameLabel": "Name",
     "sftp.delete.title": "Delete “{name}”?",
     "sftp.delete.file": "This file will be permanently deleted from the server. This can’t be undone.",
-    "sftp.delete.dir": "This folder and everything in it will be permanently deleted from the server. This can’t be undone.",
+    "sftp.delete.dir":
+      "This folder and everything in it will be permanently deleted from the server. This can’t be undone.",
     "sftp.pathCopied": "Path copied",
     "sftp.dropHere": "Drop to upload to {path}",
     "sftp.transfers": "Transfers",
@@ -424,7 +427,8 @@ export default defineMessages({
     "terminal.stats.chartNet": "最近のネットワーク速度",
     "terminal.stats.waiting": "読み取り中…",
     "terminal.stats.unsupported": "リソース使用状況は Linux と macOS のサーバーでのみ表示できます。",
-    "terminal.stats.unsupportedSystem": "リソース使用状況は Linux と macOS のサーバーでのみ表示できます。このサーバーは {system} です。",
+    "terminal.stats.unsupportedSystem":
+      "リソース使用状況は Linux と macOS のサーバーでのみ表示できます。このサーバーは {system} です。",
     "terminal.stats.failed": "リソース使用状況の読み取りが止まりました: {error}",
 
     "terminal.menu.reconnect": "再接続",
@@ -482,7 +486,8 @@ export default defineMessages({
     "terminal.find.count": "{i}/{n}",
 
     "terminal.paste.title": "複数行を貼り付けますか？",
-    "terminal.paste.body": "{n} 行のテキストを貼り付けようとしています。改行を含む内容は、貼り付けた直後にコマンドとして実行される場合があります。",
+    "terminal.paste.body":
+      "{n} 行のテキストを貼り付けようとしています。改行を含む内容は、貼り付けた直後にコマンドとして実行される場合があります。",
     "terminal.paste.more": "… ほか {n} 行",
     "terminal.paste.confirm": "貼り付け",
     "terminal.clipboardDenied": "クリップボードにアクセスできません。",
@@ -499,7 +504,8 @@ export default defineMessages({
     "terminal.connect": "接続",
 
     "terminal.hostkey.newTitle": "{host}:{port} への初回接続",
-    "terminal.hostkey.newBody": "信頼する前に、このフィンガープリントがサーバーのものと一致することを確認してください。",
+    "terminal.hostkey.newBody":
+      "信頼する前に、このフィンガープリントがサーバーのものと一致することを確認してください。",
     "terminal.hostkey.additionalTitle": "{host}:{port} の新しいホストキー",
     "terminal.hostkey.additionalBody":
       "このサーバーでは別の種類の鍵を信頼済みです。信頼する前に、今回受信したフィンガープリントがサーバーのものと一致することを確認してください。",

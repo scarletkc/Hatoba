@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { useTabs, type SessionTab } from "@/app/tabs";
@@ -56,7 +65,14 @@ export function AiPanel({ slotId }: { slotId: string }) {
   const hosts = useVaultData((st) => st.hosts);
   const tabHost = tab ? hosts.find((h) => h.id === tab.hostId) : undefined;
   // §7.5: a local tab is this computer, named so wherever a tab's host is named.
-  const local = tab?.local ? { name: t("terminal.local.thisComputer"), target: shellName(tab.local, t), local: true, dialect: dialectOf(tab.local.kind) } : null;
+  const local = tab?.local
+    ? {
+        name: t("terminal.local.thisComputer"),
+        target: shellName(tab.local, t),
+        local: true,
+        dialect: dialectOf(tab.local.kind),
+      }
+    : null;
   const [view, setView] = useState<"chat" | "history">("chat");
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -124,7 +140,11 @@ export function AiPanel({ slotId }: { slotId: string }) {
   };
 
   const title = slot.conversation?.title || (slot.conversationId ? t("ai.untitled") : t("ai.newConversation"));
-  const hostLabel = tab ? (local ? `${local.name} · ${local.target}` : (tabHost?.name ?? tab.title)) : t("ai.noTerminal");
+  const hostLabel = tab
+    ? local
+      ? `${local.name} · ${local.target}`
+      : (tabHost?.name ?? tab.title)
+    : t("ai.noTerminal");
 
   return (
     <aside
@@ -132,7 +152,12 @@ export function AiPanel({ slotId }: { slotId: string }) {
       className={s.panel}
       // TERM-13: the zoom keys change the text size here, which the conversation and input take.
       data-zoom="ai"
-      style={{ width: dragWidth ?? clampWidth(prefWidth || PANEL_DEFAULT_WIDTH), "--text-scale": aiTextScale(catalog.settings?.text_size) } as CSSProperties}
+      style={
+        {
+          width: dragWidth ?? clampWidth(prefWidth || PANEL_DEFAULT_WIDTH),
+          "--text-scale": aiTextScale(catalog.settings?.text_size),
+        } as CSSProperties
+      }
       aria-label={t("ai.title")}
       onKeyDown={onKeyDown}
       {...drop.handlers}
@@ -158,7 +183,10 @@ export function AiPanel({ slotId }: { slotId: string }) {
           <span className={s.title} title={title}>
             {title}
           </span>
-          <span className={s.host} title={tabHost ? `${tabHost.username}@${tabHost.address}:${tabHost.port}` : undefined}>
+          <span
+            className={s.host}
+            title={tabHost ? `${tabHost.username}@${tabHost.address}:${tabHost.port}` : undefined}
+          >
             {hostLabel}
           </span>
         </div>
@@ -221,7 +249,17 @@ export function AiPanel({ slotId }: { slotId: string }) {
   );
 }
 
-function Notice({ icon, tone, children, action }: { icon: ReactNode; tone?: "warn"; children: ReactNode; action?: ReactNode }) {
+function Notice({
+  icon,
+  tone,
+  children,
+  action,
+}: {
+  icon: ReactNode;
+  tone?: "warn";
+  children: ReactNode;
+  action?: ReactNode;
+}) {
   return (
     <div className={cx(s.notice, tone === "warn" && s.noticeWarn)} role="status">
       <span className={s.noticeIcon}>{icon}</span>
@@ -235,11 +273,25 @@ function Notice({ icon, tone, children, action }: { icon: ReactNode; tone?: "war
  * The tab's state: no terminal (AI-09), disconnected (AI-08), a conversation from another host or
  * quick-connect target, or the home tab's conversation to continue here (AI-09).
  */
-function Notices({ slotId, slot, tab, tabHost, hosts }: { slotId: string; slot: Slot; tab: SessionTab | undefined; tabHost: HostView | undefined; hosts: HostView[] }) {
+function Notices({
+  slotId,
+  slot,
+  tab,
+  tabHost,
+  hosts,
+}: {
+  slotId: string;
+  slot: Slot;
+  tab: SessionTab | undefined;
+  tabHost: HostView | undefined;
+  hosts: HostView[];
+}) {
   const t = useT();
   const device = useApp((st) => st.info.device_name);
   // The title of the home tab's conversation while this tab offers to continue it (AI-09).
-  const homeTitle = useAi((st) => (tab && offersHomeConversation(slot, st.slots[HOME_SLOT]) ? (st.slots[HOME_SLOT]?.conversation?.title ?? "") : null));
+  const homeTitle = useAi((st) =>
+    tab && offersHomeConversation(slot, st.slots[HOME_SLOT]) ? (st.slots[HOME_SLOT]?.conversation?.title ?? "") : null,
+  );
   const items: ReactNode[] = [];
   if (!tab) {
     const connection = slot.conversation ? connectionFor(slot.conversation, hosts, device) : null;
@@ -257,7 +309,12 @@ function Notices({ slotId, slot, tab, tabHost, hosts }: { slotId: string; slot: 
           {t("ai.notice.noTab")}
         </Notice>,
       );
-    else if (slot.entries.length > 0) items.push(<Notice key="tab" icon={<Icon name="terminal-window" size={14} />}>{t("ai.notice.noTab")}</Notice>);
+    else if (slot.entries.length > 0)
+      items.push(
+        <Notice key="tab" icon={<Icon name="terminal-window" size={14} />}>
+          {t("ai.notice.noTab")}
+        </Notice>,
+      );
   } else {
     const name = tab.local ? `${t("terminal.local.thisComputer")} · ${tab.title}` : (tabHost?.name ?? tab.title);
     if (tab.status === "disconnected" || tab.status === "failed")
@@ -275,7 +332,12 @@ function Notices({ slotId, slot, tab, tabHost, hosts }: { slotId: string; slot: 
           {t("ai.notice.disconnected", { host: name })}
         </Notice>,
       );
-    else if (tab.status === "connecting") items.push(<Notice key="state" icon={<Spinner size={12} />}>{t("ai.notice.connecting", { host: name })}</Notice>);
+    else if (tab.status === "connecting")
+      items.push(
+        <Notice key="state" icon={<Spinner size={12} />}>
+          {t("ai.notice.connecting", { host: name })}
+        </Notice>,
+      );
     if (homeTitle !== null)
       items.push(
         <Notice
@@ -295,7 +357,10 @@ function Notices({ slotId, slot, tab, tabHost, hosts }: { slotId: string; slot: 
     if (move)
       items.push(
         <Notice key="move" icon={<Icon name="arrows-left-right" size={14} />}>
-          {t("ai.notice.moveHost", { from: move.from ? placeLabel(t, move.from, device) : t("ai.history.hostGone"), to: placeLabel(t, move.to, device) })}
+          {t("ai.notice.moveHost", {
+            from: move.from ? placeLabel(t, move.from, device) : t("ai.history.hostGone"),
+            to: placeLabel(t, move.to, device),
+          })}
         </Notice>,
       );
   }
@@ -308,7 +373,11 @@ function EmptyConversation({ tab, host }: { tab: SessionTab | undefined; host: H
     <EmptyState
       compact
       icon="sparkle"
-      title={tab ? t("ai.empty.title", { host: tab.local ? t("terminal.local.thisComputer") : (host?.name ?? tab.title) }) : t("ai.empty.homeTitle")}
+      title={
+        tab
+          ? t("ai.empty.title", { host: tab.local ? t("terminal.local.thisComputer") : (host?.name ?? tab.title) })
+          : t("ai.empty.homeTitle")
+      }
       body={tab ? t("ai.empty.body") : t("ai.empty.homeBody")}
     />
   );
@@ -333,14 +402,29 @@ function NoProvider({ none }: { none: boolean }) {
 }
 
 /** The tab bar's AI button (§9) and its shortcut hint. */
-export function AiPanelButton({ className, activeClassName, dotClassName }: { className: string; activeClassName: string; dotClassName: string }) {
+export function AiPanelButton({
+  className,
+  activeClassName,
+  dotClassName,
+}: {
+  className: string;
+  activeClassName: string;
+  dotClassName: string;
+}) {
   const t = useT();
   const open = useApp((st) => st.prefs.ai_panel_open);
   const platform = useApp((st) => st.info.platform);
   const waiting = useAi((st) => Object.values(st.slots).some((x) => !!approvalOf(x.turn)));
   const label = `${t(open ? "ai.hide" : "ai.show")} (${shortcutLabel(platform, "Ctrl+Shift+A", "⌘⇧A")})`;
   return (
-    <button type="button" className={cx(className, open && activeClassName)} title={label} aria-label={label} aria-pressed={open} onClick={() => toggleAiPanel()}>
+    <button
+      type="button"
+      className={cx(className, open && activeClassName)}
+      title={label}
+      aria-label={label}
+      aria-pressed={open}
+      onClick={() => toggleAiPanel()}
+    >
       <Icon name="sparkle" size={16} />
       {waiting && !open && <span className={dotClassName} />}
     </button>

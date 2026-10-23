@@ -73,7 +73,7 @@ export function ImportKeyDialog({ onClose, onDone }: { onClose: () => void; onDo
     try {
       const key = await api.key_import({
         name: name.trim(),
-        path: source === "file" ? file?.path ?? null : null,
+        path: source === "file" ? (file?.path ?? null) : null,
         private_key: source === "paste" ? text : file?.path ? null : (file?.text ?? null),
         passphrase: passphrase || null,
       });
@@ -114,7 +114,11 @@ export function ImportKeyDialog({ onClose, onDone }: { onClose: () => void; onDo
           void submit();
         }}
       >
-        <Field label={t("keys.field.name")} htmlFor={nameId} error={error?.field === "name" ? error.message : undefined}>
+        <Field
+          label={t("keys.field.name")}
+          htmlFor={nameId}
+          error={error?.field === "name" ? error.message : undefined}
+        >
           <TextField
             id={nameId}
             value={name}
@@ -268,7 +272,13 @@ export function GenerateKeyDialog({ onClose, onDone }: { onClose: () => void; on
           <TextField id={commentId} mono value={comment} disabled={busy} onChange={(e) => setComment(e.target.value)} />
         </Field>
         <Field label={t("keys.field.passphraseOpt")} htmlFor={passId}>
-          <TextField id={passId} secret value={passphrase} disabled={busy} onChange={(e) => setPassphrase(e.target.value)} />
+          <TextField
+            id={passId}
+            secret
+            value={passphrase}
+            disabled={busy}
+            onChange={(e) => setPassphrase(e.target.value)}
+          />
         </Field>
         <Field
           label={t("keys.generate.confirmPassphrase")}
@@ -292,7 +302,15 @@ export function GenerateKeyDialog({ onClose, onDone }: { onClose: () => void; on
 
 // ───────────────────────── Rename ─────────────────────────
 
-export function RenameKeyDialog({ keyView, onClose, onDone }: { keyView: KeyView; onClose: () => void; onDone: () => void }) {
+export function RenameKeyDialog({
+  keyView,
+  onClose,
+  onDone,
+}: {
+  keyView: KeyView;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const t = useT();
   const nameId = useId();
   const formId = useId();
@@ -348,7 +366,15 @@ export function RenameKeyDialog({ keyView, onClose, onDone }: { keyView: KeyView
 
 // ───────────────────────── Deploy (KEY-06) ─────────────────────────
 
-export function DeployKeyDialog({ keyView, hosts, onClose }: { keyView: KeyView; hosts: HostView[]; onClose: () => void }) {
+export function DeployKeyDialog({
+  keyView,
+  hosts,
+  onClose,
+}: {
+  keyView: KeyView;
+  hosts: HostView[];
+  onClose: () => void;
+}) {
   const t = useT();
   const [hostId, setHostId] = useState("");
   const [busy, setBusy] = useState(false);

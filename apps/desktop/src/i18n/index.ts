@@ -61,7 +61,10 @@ function subscribe(cb: () => void) {
  */
 export function useT() {
   const locale = useSyncExternalStore(subscribe, getLocale);
-  return useMemo(() => Object.assign((key: MessageKey, params?: Params) => translate(locale, key, params), { locale }), [locale]);
+  return useMemo(
+    () => Object.assign((key: MessageKey, params?: Params) => translate(locale, key, params), { locale }),
+    [locale],
+  );
 }
 
 let zone = { id: "", offset: NaN, at: NaN };
@@ -73,7 +76,8 @@ let zone = { id: "", offset: NaN, at: NaN };
 function timeZone(): string {
   const now = Date.now();
   const offset = new Date(now).getTimezoneOffset();
-  if (offset !== zone.offset || !(Math.abs(now - zone.at) < 1000)) zone = { id: Intl.DateTimeFormat().resolvedOptions().timeZone, offset, at: now };
+  if (offset !== zone.offset || !(Math.abs(now - zone.at) < 1000))
+    zone = { id: Intl.DateTimeFormat().resolvedOptions().timeZone, offset, at: now };
   return zone.id;
 }
 
@@ -134,7 +138,10 @@ export function formatRelative(locale: Locale, ms: number, now = Date.now()): st
   if (ms >= startOfDay(now)) return translate(locale, "time.todayAt", { time: hm });
   if (ms >= startOfDay(now, -1)) return translate(locale, "time.yesterdayAt", { time: hm });
   const sameYear = d.getFullYear() === new Date(now).getFullYear();
-  return fmt(locale, sameYear ? { month: "short", day: "numeric" } : { year: "numeric", month: "short", day: "numeric" }).format(d);
+  return fmt(
+    locale,
+    sameYear ? { month: "short", day: "numeric" } : { year: "numeric", month: "short", day: "numeric" },
+  ).format(d);
 }
 
 /**
@@ -146,7 +153,8 @@ export function formatMessageTime(locale: Locale, ms: number, now = Date.now()):
   const clock = { hour: "2-digit", minute: "2-digit", hour12: false } as const;
   // A time from a later day (another device's clock ahead, say) keeps its date.
   if (ms >= startOfDay(now) && ms < startOfDay(now, 1)) return fmt(locale, clock).format(d);
-  if (ms >= startOfDay(now, -1) && ms < startOfDay(now)) return translate(locale, "time.yesterdayAt", { time: fmt(locale, clock).format(d) });
+  if (ms >= startOfDay(now, -1) && ms < startOfDay(now))
+    return translate(locale, "time.yesterdayAt", { time: fmt(locale, clock).format(d) });
   const year = d.getFullYear() === new Date(now).getFullYear() ? {} : ({ year: "numeric" } as const);
   return fmt(locale, { ...year, month: "short", day: "numeric", ...clock }).format(d);
 }

@@ -20,7 +20,11 @@ interface Props {
 const { as: Tag = "section", sea, room = true, flat = false, class: className, ...rest } = Astro.props;
 ---
 
-<Tag class:list={["night", { "has-sea": sea, room: sea && room, flat }, className]} style={sea && { "--band-sea": sea }} {...rest}>
+<Tag
+  class:list={["night", { "has-sea": sea, room: sea && room, flat }, className]}
+  style={sea && { "--band-sea": sea }}
+  {...rest}
+>
   <slot />
   {sea && <Sea depth="var(--band-sea)" />}
 </Tag>

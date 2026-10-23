@@ -20,7 +20,8 @@ function fits(key: keyof LocalPrefs, value: unknown): boolean {
   if (key === "dashboard_hidden_columns") return Array.isArray(value) && value.every((v) => typeof v === "string");
   const fallback = PREFS[key];
   // Rust stores the numbers as u32.
-  if (typeof fallback === "number") return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 0xffff_ffff;
+  if (typeof fallback === "number")
+    return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 0xffff_ffff;
   return typeof value === typeof fallback;
 }
 

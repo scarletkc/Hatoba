@@ -91,7 +91,21 @@ export function WorkerStep({
       footer={
         <>
           <Button onClick={onBack}>{t("btn.back")}</Button>
-          <Button variant="primary" disabled={!canContinue} onClick={() => ok && onNext({ kind: "worker", url: normalizeWorkerUrl(form.url), setup_token: initialized ? null : form.token.trim() }, initialized)}>
+          <Button
+            variant="primary"
+            disabled={!canContinue}
+            onClick={() =>
+              ok &&
+              onNext(
+                {
+                  kind: "worker",
+                  url: normalizeWorkerUrl(form.url),
+                  setup_token: initialized ? null : form.token.trim(),
+                },
+                initialized,
+              )
+            }
+          >
             {t("btn.continue")}
           </Button>
         </>
@@ -111,7 +125,12 @@ export function WorkerStep({
       </div>
 
       <div className={s.wrangler}>
-        <button type="button" className={s.disclosure} aria-expanded={wranglerOpen} onClick={() => setWranglerOpen((v) => !v)}>
+        <button
+          type="button"
+          className={s.disclosure}
+          aria-expanded={wranglerOpen}
+          onClick={() => setWranglerOpen((v) => !v)}
+        >
           <DisclosureCaret open={wranglerOpen} />
           {t("sync.wrangler")}
         </button>
@@ -165,7 +184,13 @@ export function WorkerStep({
           />
         </Field>
         <div className={s.testRow}>
-          <Button size="sm" icon="plugs-connected" busy={test.status === "testing"} disabled={!canTest} onClick={() => void runTest()}>
+          <Button
+            size="sm"
+            icon="plugs-connected"
+            busy={test.status === "testing"}
+            disabled={!canTest}
+            onClick={() => void runTest()}
+          >
             {t("sync.test")}
           </Button>
           {status && (

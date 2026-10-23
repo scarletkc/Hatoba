@@ -166,9 +166,7 @@ export function AiPane() {
           )}
         </div>
         <div className={cx(layoutStyles.group, s.clip)}>
-          {!loaded && !loadError && (
-            <StatusRow tone="progress">{t("aiSettings.loading")}</StatusRow>
-          )}
+          {!loaded && !loadError && <StatusRow tone="progress">{t("aiSettings.loading")}</StatusRow>}
           {!loaded && !!loadError && (
             <StatusRow
               tone="error"
@@ -188,7 +186,11 @@ export function AiPane() {
             </StatusRow>
           )}
           {loaded && providers.length === 0 && (
-            <EmptyBlock icon="sparkle" title={t("aiSettings.providers.empty.title")} body={t("aiSettings.providers.empty.body")}>
+            <EmptyBlock
+              icon="sparkle"
+              title={t("aiSettings.providers.empty.title")}
+              body={t("aiSettings.providers.empty.body")}
+            >
               <Button variant="primary" icon="plus" onClick={() => setDialog({ provider: null })}>
                 {t("aiSettings.providers.add")}
               </Button>
@@ -196,7 +198,12 @@ export function AiPane() {
             </EmptyBlock>
           )}
           {providers.map((p) => (
-            <ProviderRow key={p.id} provider={p} onEdit={() => setDialog({ provider: p })} onDelete={() => void removeProvider(p)} />
+            <ProviderRow
+              key={p.id}
+              provider={p}
+              onEdit={() => setDialog({ provider: p })}
+              onDelete={() => void removeProvider(p)}
+            />
           ))}
         </div>
       </section>
@@ -314,13 +321,26 @@ export function AiPane() {
   );
 }
 
-function ProviderRow({ provider: p, onEdit, onDelete }: { provider: AiProviderView; onEdit: () => void; onDelete: () => void }) {
+function ProviderRow({
+  provider: p,
+  onEdit,
+  onDelete,
+}: {
+  provider: AiProviderView;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   const t = useT();
   const host = parseBaseUrl(p.base_url)?.host ?? p.base_url;
   const signIn = p.chatgpt ? chatgptRowKey(p.chatgpt.status) : null;
   return (
     <div className={s.provider}>
-      <button type="button" className={s.providerMain} title={t("aiSettings.provider.edit", { name: p.name })} onClick={onEdit}>
+      <button
+        type="button"
+        className={s.providerMain}
+        title={t("aiSettings.provider.edit", { name: p.name })}
+        onClick={onEdit}
+      >
         <span className={s.providerIcon} aria-hidden>
           <Icon name="sparkle" />
         </span>
@@ -352,13 +372,21 @@ function ProviderRow({ provider: p, onEdit, onDelete }: { provider: AiProviderVi
               </>
             )}
             <span className={p.models.length === 0 ? s.warn : undefined}>
-              {p.models.length === 0 ? t("aiSettings.provider.noModels") : t("aiSettings.provider.models", { n: p.models.length })}
+              {p.models.length === 0
+                ? t("aiSettings.provider.noModels")
+                : t("aiSettings.provider.models", { n: p.models.length })}
             </span>
           </span>
         </span>
         <Icon name="caret-right" className={s.providerCaret} />
       </button>
-      <IconButton icon="trash" label={t("aiSettings.provider.delete", { name: p.name })} className={s.providerDelete} danger onClick={onDelete} />
+      <IconButton
+        icon="trash"
+        label={t("aiSettings.provider.delete", { name: p.name })}
+        className={s.providerDelete}
+        danger
+        onClick={onDelete}
+      />
     </div>
   );
 }
@@ -395,7 +423,11 @@ function ModelSelect({
   }
   choices.forEach((c, i) => {
     if (c.ref.provider_id !== choices[i - 1]?.ref.provider_id) entries.push({ kind: "header", label: c.providerName });
-    entries.push({ label: c.model.name || c.model.id, checked: sameRef(c.ref, value), onSelect: () => onChange(c.ref) });
+    entries.push({
+      label: c.model.name || c.model.id,
+      checked: sameRef(c.ref, value),
+      onSelect: () => onChange(c.ref),
+    });
   });
 
   return (
@@ -417,16 +449,16 @@ function ModelSelect({
         {selected && <span className={controlStyles.popupHint}>{selected.providerName}</span>}
         <Icon name="caret-up-down" className={controlStyles.popupCaret} />
       </button>
-      {menu.anchor && <Menu anchor={menu.anchor} entries={entries} onClose={menu.close} minWidth={ref.current?.offsetWidth} />}
+      {menu.anchor && (
+        <Menu anchor={menu.anchor} entries={entries} onClose={menu.close} minWidth={ref.current?.offsetWidth} />
+      )}
     </>
   );
 }
 
 /** What **Test** beside the judge shows (AI-47), for the judge it ran with. */
 type JudgeTest = { judge: AiModelRef } & (
-  | { state: "running" }
-  | { state: "done"; outcomes: AiJudgeSampleOutcome[] }
-  | { state: "error"; message: string }
+  { state: "running" } | { state: "done"; outcomes: AiJudgeSampleOutcome[] } | { state: "error"; message: string }
 );
 
 /** The short labels of the sample calls, by the names Rust gives them; a sample a newer version added shows its name. */
@@ -496,7 +528,10 @@ function JudgeSection({
     <section className={layoutStyles.section}>
       <div className={layoutStyles.sectionTitle}>{t("aiSettings.judge")}</div>
       <Group>
-        <SettingRow label={t("aiSettings.judge.row")} hint={t(choices.length === 0 ? "aiSettings.default.empty" : "aiSettings.judge.rowHint")}>
+        <SettingRow
+          label={t("aiSettings.judge.row")}
+          hint={t(choices.length === 0 ? "aiSettings.default.empty" : "aiSettings.judge.rowHint")}
+        >
           <ModelSelect
             choices={choices}
             value={value}
@@ -505,7 +540,12 @@ function JudgeSection({
             noneLabel={t("aiSettings.judge.none")}
             onChange={onChange}
           />
-          <Button icon="flask" busy={shown?.state === "running"} disabled={!value || choices.length === 0} onClick={() => void run()}>
+          <Button
+            icon="flask"
+            busy={shown?.state === "running"}
+            disabled={!value || choices.length === 0}
+            onClick={() => void run()}
+          >
             {t("aiSettings.judge.test")}
           </Button>
         </SettingRow>
@@ -545,7 +585,9 @@ function JudgeTestResult({ test, details, onDetails }: { test: JudgeTest; detail
     <div className={s.judgeResult}>
       <div className={s.judgeStatus}>
         <span role="status">
-          <StatusLine tone={summary}>{t("aiSettings.judge.test.summary", { n: matched, total: outcomes.length })}</StatusLine>
+          <StatusLine tone={summary}>
+            {t("aiSettings.judge.test.summary", { n: matched, total: outcomes.length })}
+          </StatusLine>
         </span>
         <Button
           size="xs"
@@ -574,7 +616,11 @@ function JudgeSamples({ outcomes }: { outcomes: AiJudgeSampleOutcome[] }) {
           ? { icon: "check-circle", color: "var(--green)", label: t("aiSettings.judge.test.match") }
           : failed
             ? { icon: "warning-circle", color: "var(--orange)", label: t("aiSettings.judge.test.unanswered") }
-            : { icon: "x-circle", color: o.verdict.decision === "run" ? "var(--red)" : "var(--orange)", label: t("aiSettings.judge.test.mismatch") };
+            : {
+                icon: "x-circle",
+                color: o.verdict.decision === "run" ? "var(--red)" : "var(--orange)",
+                label: t("aiSettings.judge.test.mismatch"),
+              };
         return (
           <li key={o.name} className={s.sample}>
             <span className={s.sampleMark} role="img" aria-label={mark.label} title={mark.label}>
@@ -585,9 +631,13 @@ function JudgeSamples({ outcomes }: { outcomes: AiJudgeSampleOutcome[] }) {
               <span className={s.sampleMeta}>
                 {t("aiSettings.judge.test.expected", { decision: t(DECISION_LABEL[o.expected]) })}
                 <span className={s.dot}>·</span>
-                <span className={ok ? undefined : s.sampleOff}>{t("aiSettings.judge.test.judged", { decision: t(DECISION_LABEL[o.verdict.decision]) })}</span>
+                <span className={ok ? undefined : s.sampleOff}>
+                  {t("aiSettings.judge.test.judged", { decision: t(DECISION_LABEL[o.verdict.decision]) })}
+                </span>
               </span>
-              <span className={cx(s.sampleDetail, "selectable")}>{failed ? verdictText(t, o.verdict) : answersText(t, o.verdict.answers)}</span>
+              <span className={cx(s.sampleDetail, "selectable")}>
+                {failed ? verdictText(t, o.verdict) : answersText(t, o.verdict.answers)}
+              </span>
             </span>
           </li>
         );
@@ -649,7 +699,13 @@ function InstructionsSection({ value, onSave }: { value: string; onSave: (text: 
   );
 }
 
-const ALLOWANCE_ICON: Record<string, string> = { command: "terminal", domain: "globe", edit_file: "note-pencil", write_file: "file-plus", send_input: "keyboard" };
+const ALLOWANCE_ICON: Record<string, string> = {
+  command: "terminal",
+  domain: "globe",
+  edit_file: "note-pencil",
+  write_file: "file-plus",
+  send_input: "keyboard",
+};
 
 /** AI-19: the approvals saved with Always Allow on approval cards, as rows that Remove deletes. */
 function SavedApprovals() {
@@ -667,16 +723,28 @@ function SavedApprovals() {
         ? t("terminal.local.thisComputer")
         : (a.target ?? "");
   const what = (a: AiAllowance) =>
-    a.kind === "command" ? t("aiSettings.allowances.command", { prefix: a.value }) : a.kind === "domain" ? t("aiSettings.allowances.domain", { domain: a.value }) : toolLabel(t, a.value);
+    a.kind === "command"
+      ? t("aiSettings.allowances.command", { prefix: a.value })
+      : a.kind === "domain"
+        ? t("aiSettings.allowances.domain", { domain: a.value })
+        : toolLabel(t, a.value);
   const remove = (a: AiAllowance) => removeAllowance(a).catch((e) => toast(aiErrorMessage(t, e), "error"));
 
   return (
     <>
-      <SettingRow label={t("aiSettings.allowances")} hint={list?.length === 0 ? t("aiSettings.allowances.empty") : undefined} />
+      <SettingRow
+        label={t("aiSettings.allowances")}
+        hint={list?.length === 0 ? t("aiSettings.allowances.empty") : undefined}
+      />
       {list?.map((a) => (
         <ListRow
           key={`${a.kind}\n${a.host_id ?? ""}\n${a.target ?? ""}\n${a.value}`}
-          leading={<Icon name={ALLOWANCE_ICON[a.kind === "tool" ? a.value : a.kind] ?? "check-circle"} className={s.allowanceIcon} />}
+          leading={
+            <Icon
+              name={ALLOWANCE_ICON[a.kind === "tool" ? a.value : a.kind] ?? "check-circle"}
+              className={s.allowanceIcon}
+            />
+          }
           status={a.kind !== "domain" && <span className={s.allowanceHost}>{hostName(a)}</span>}
           trailing={<IconButton icon="x" label={t("btn.remove")} onClick={() => void remove(a)} />}
         >
@@ -714,14 +782,22 @@ function DeviceSection({ judge }: { judge: boolean | null }) {
     <section className={layoutStyles.section}>
       <div className={layoutStyles.sectionTitle}>{t("aiSettings.device")}</div>
       <Group>
-        <SettingRow label={t("aiSettings.mode")} hint={t(judge === false ? "aiSettings.mode.hintNoJudge" : "aiSettings.mode.hint")} top>
+        <SettingRow
+          label={t("aiSettings.mode")}
+          hint={t(judge === false ? "aiSettings.mode.hintNoJudge" : "aiSettings.mode.hint")}
+          top
+        >
           <Segmented<AiPermissionMode>
             ariaLabel={t("aiSettings.mode")}
             value={prefs.ai_permission_mode}
             options={[
               { value: "manual", label: t("aiSettings.mode.manual") },
               // The device's own Auto stays selected once the judge is gone; every call then asks.
-              { value: "auto", label: t("aiSettings.mode.auto"), disabled: judge !== true && prefs.ai_permission_mode !== "auto" },
+              {
+                value: "auto",
+                label: t("aiSettings.mode.auto"),
+                disabled: judge !== true && prefs.ai_permission_mode !== "auto",
+              },
               { value: "bypass", label: t("aiSettings.mode.bypass") },
             ]}
             onChange={(mode) => void chooseMode(mode)}

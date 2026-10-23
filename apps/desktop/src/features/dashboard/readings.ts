@@ -46,7 +46,16 @@ export function applyEvent(prev: HostReadout | undefined, event: DashboardEvent,
     case "reset":
       return { ...r, os: null, history: [] };
     case "reading":
-      return { ...r, online: true, phase: "reading", os: event.os ?? r.os, tab: event.tab, hold: null, error: null, system: null };
+      return {
+        ...r,
+        online: true,
+        phase: "reading",
+        os: event.os ?? r.os,
+        tab: event.tab,
+        hold: null,
+        error: null,
+        system: null,
+      };
     case "stats":
       return { ...r, online: true, phase: "reading", history: appendReading(r.history, { ...event.stats, at: now }) };
     case "unsupported":

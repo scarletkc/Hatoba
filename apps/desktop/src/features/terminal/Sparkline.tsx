@@ -80,7 +80,15 @@ export function Sparkline({
   const onKey = (e: KeyboardEvent<SVGSVGElement>) => {
     if (count === 0) return;
     const next =
-      e.key === "ArrowLeft" ? at - 1 : e.key === "ArrowRight" ? at + 1 : e.key === "Home" ? 0 : e.key === "End" ? last : null;
+      e.key === "ArrowLeft"
+        ? at - 1
+        : e.key === "ArrowRight"
+          ? at + 1
+          : e.key === "Home"
+            ? 0
+            : e.key === "End"
+              ? last
+              : null;
     if (next == null) return;
     e.preventDefault();
     onPick(Math.max(0, Math.min(last, next)));

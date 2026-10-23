@@ -9,7 +9,11 @@ function session(applicationCursor = false): LiveSession {
     status: "connected",
     sendInput: vi.fn().mockResolvedValue(undefined),
     onOutput: vi.fn(() => vi.fn()),
-    term: { modes: { applicationCursorKeysMode: applicationCursor }, buffer: { active: { type: "normal" } }, write: (_text: string, done: () => void) => done() },
+    term: {
+      modes: { applicationCursorKeysMode: applicationCursor },
+      buffer: { active: { type: "normal" } },
+      write: (_text: string, done: () => void) => done(),
+    },
   } as unknown as LiveSession;
 }
 
@@ -30,13 +34,20 @@ describe("send_input terminal delivery", () => {
     expect(live.sendInput).toHaveBeenCalledExactlyOnceWith(bytes);
   });
 
-  it.each(["pagedown", "\u200d", "enter\r"])("rejects %j without sending text or the valid prefix, and explains the notation", async (key) => {
-    const live = session();
-    const result = await sendInput(live, JSON.stringify({ text: "hello", keys: ["enter", key] }), new AbortController().signal);
-    expect(result?.status).toBe("error");
-    expect(result?.content).toContain("ctrl+a");
-    expect(result?.content).toContain("page_down");
-    expect(result?.content).toContain("one printable character");
-    expect(live.sendInput).not.toHaveBeenCalled();
-  });
+  it.each(["pagedown", "\u200d", "enter\r"])(
+    "rejects %j without sending text or the valid prefix, and explains the notation",
+    async (key) => {
+      const live = session();
+      const result = await sendInput(
+        live,
+        JSON.stringify({ text: "hello", keys: ["enter", key] }),
+        new AbortController().signal,
+      );
+      expect(result?.status).toBe("error");
+      expect(result?.content).toContain("ctrl+a");
+      expect(result?.content).toContain("page_down");
+      expect(result?.content).toContain("one printable character");
+      expect(live.sendInput).not.toHaveBeenCalled();
+    },
+  );
 });

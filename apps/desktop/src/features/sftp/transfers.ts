@@ -25,9 +25,7 @@ export const useTransfers = create<TransfersState>((set, get) => ({
     const prev = get().items.find((i) => i.transfer_id === ev.transfer_id);
     const item: TransferItem = { ...ev, fading: false };
     set((s) => ({
-      items: prev
-        ? s.items.map((i) => (i.transfer_id === ev.transfer_id ? item : i))
-        : [...s.items, item],
+      items: prev ? s.items.map((i) => (i.transfer_id === ev.transfer_id ? item : i)) : [...s.items, item],
       uploadsDone:
         ev.state === "done" && ev.direction === "upload" && prev?.state !== "done"
           ? { ...s.uploadsDone, [ev.session_id]: (s.uploadsDone[ev.session_id] ?? 0) + 1 }
@@ -36,7 +34,8 @@ export const useTransfers = create<TransfersState>((set, get) => ({
     // Done / cancelled transfers fade away; failed ones stay (with the error) until dismissed.
     if ((ev.state === "done" || ev.state === "cancelled") && prev?.state !== ev.state) {
       setTimeout(
-        () => set((s) => ({ items: s.items.map((i) => (i.transfer_id === ev.transfer_id ? { ...i, fading: true } : i)) })),
+        () =>
+          set((s) => ({ items: s.items.map((i) => (i.transfer_id === ev.transfer_id ? { ...i, fading: true } : i)) })),
         FADE_AFTER_MS,
       );
       setTimeout(() => get().dismiss(ev.transfer_id), REMOVE_AFTER_MS);

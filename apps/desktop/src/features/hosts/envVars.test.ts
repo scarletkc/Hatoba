@@ -28,13 +28,19 @@ describe("env rows (SSH-14)", () => {
   });
 
   it("accepts shell variable names and any one-line value", () => {
-    const rows = [row("LANG", "ja_JP.UTF-8"), row("_x1"), row("lang", "names are case-sensitive"), row(" TZ ", "a = b\tc")];
+    const rows = [
+      row("LANG", "ja_JP.UTF-8"),
+      row("_x1"),
+      row("lang", "names are case-sensitive"),
+      row(" TZ ", "a = b\tc"),
+    ];
     expect(validateEnvRows(rows)).toEqual([null, null, null, null]);
   });
 
   it("names each problem", () => {
     expect(validateEnvRows([row("", "x")])).toEqual([{ name: "empty" }]);
-    for (const bad of ["1ST", "A-B", "A B", "A=B", "日本", "a.b"]) expect(validateEnvRows([row(bad)])).toEqual([{ name: "invalid" }]);
+    for (const bad of ["1ST", "A-B", "A B", "A=B", "日本", "a.b"])
+      expect(validateEnvRows([row(bad)])).toEqual([{ name: "invalid" }]);
     expect(validateEnvRows([row("N".repeat(ENV_NAME_MAX_CHARS))])).toEqual([null]);
     expect(validateEnvRows([row("N".repeat(ENV_NAME_MAX_CHARS + 1))])).toEqual([{ name: "tooLong" }]);
     expect(validateEnvRows([row("A", "1"), row("B"), row(" A ", "2")])).toEqual([null, null, { name: "duplicate" }]);
@@ -48,7 +54,12 @@ describe("env rows (SSH-14)", () => {
 
   it("counts names and values together in UTF-8 bytes, as Rust does", () => {
     const value = (n: number) => "x".repeat(n);
-    const rows = [row("A", value(4_096)), row("B", value(4_096)), row("C", value(4_096)), row("D", value(ENV_MAX_BYTES - 3 * 4_096 - 4))];
+    const rows = [
+      row("A", value(4_096)),
+      row("B", value(4_096)),
+      row("C", value(4_096)),
+      row("D", value(ENV_MAX_BYTES - 3 * 4_096 - 4)),
+    ];
     expect(envTooLarge(rows)).toBe(false);
     rows[3].value += "x";
     expect(envTooLarge(rows)).toBe(true);

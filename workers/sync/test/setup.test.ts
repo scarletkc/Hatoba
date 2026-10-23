@@ -1,15 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "../src/util";
-import {
-  AUTH_KEY,
-  KDF_PARAMS,
-  RECOVERY_AUTH,
-  SETUP_TOKEN,
-  call,
-  key32,
-  setupPayload,
-} from "./helpers";
+import { AUTH_KEY, KDF_PARAMS, RECOVERY_AUTH, SETUP_TOKEN, call, key32, setupPayload } from "./helpers";
 
 // `token: null` sends no Authorization header at all.
 const setup = (json: unknown, token: string | null = SETUP_TOKEN) =>

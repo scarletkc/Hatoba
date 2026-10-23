@@ -21,7 +21,15 @@ import type {
 const ipc = vi.hoisted(() => ({
   send: vi.fn<(input: AiSendInput, onEvent: (event: AiTurnEvent) => void) => Promise<AiSendStarted>>(),
   judge: vi.fn<(conversationId: string, toolCallId: string, screenTail: string | null) => Promise<AiAutoVerdict>>(),
-  run: vi.fn<(conversationId: string, toolCallId: string, sessionId: string | null, edited: string | null, judged: boolean) => Promise<AiToolRun>>(),
+  run: vi.fn<
+    (
+      conversationId: string,
+      toolCallId: string,
+      sessionId: string | null,
+      edited: string | null,
+      judged: boolean,
+    ) => Promise<AiToolRun>
+  >(),
   result: vi.fn<(conversationId: string, toolCallId: string, result: AiToolResultInput) => Promise<AiEntryView>>(),
   allowances: vi.fn<() => Promise<AiAllowance[]>>(),
   settings: vi.fn<() => Promise<AiSettingsView>>(),
@@ -67,7 +75,10 @@ vi.mock("@/features/terminal/session", async (importActual) => {
     },
     buffer: { active },
   };
-  return { ...(await importActual<typeof import("@/features/terminal/session")>()), getSession: (tabId: string) => (tabId === "tab-1" ? { status: "connected", term } : undefined) };
+  return {
+    ...(await importActual<typeof import("@/features/terminal/session")>()),
+    getSession: (tabId: string) => (tabId === "tab-1" ? { status: "connected", term } : undefined),
+  };
 });
 
 const { decideCall, resetForLock, sendMessage, setSlotMode } = await import("./actions");
@@ -76,14 +87,21 @@ const { useTabs } = await import("@/app/tabs");
 type CallState = import("./turn").CallState;
 
 const TAB = "tab-1";
-const tab: SessionTab = { id: TAB, hostId: null, target: { address: "10.0.0.8", port: 22, username: "root" }, title: "root@10.0.0.8", status: "connected", sessionId: "s1" };
+const tab: SessionTab = {
+  id: TAB,
+  hostId: null,
+  target: { address: "10.0.0.8", port: 22, username: "root" },
+  title: "root@10.0.0.8",
+  status: "connected",
+  sessionId: "s1",
+};
 const view: AiConversationView = {
   id: "conv-1",
   title: "nginx",
   host_id: null,
   quick_target: null,
   origin: null,
-      local: null,
+  local: null,
   pinned: false,
   context_start: null,
   effort: null,
@@ -99,8 +117,22 @@ const provider: AiProviderView = {
   has_api_key: false,
   auth_header: "x-api-key",
   models: [
-    { id: "m1", name: "Model 1", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null },
-    { id: "judge", name: "Judge", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null },
+    {
+      id: "m1",
+      name: "Model 1",
+      context_window: null,
+      max_output_tokens: null,
+      efforts: null,
+      adaptive_thinking: null,
+    },
+    {
+      id: "judge",
+      name: "Judge",
+      context_window: null,
+      max_output_tokens: null,
+      efforts: null,
+      adaptive_thinking: null,
+    },
   ],
   updated_at: 0,
 };
@@ -113,7 +145,8 @@ const settings = (judge: AiSettingsView["judge_model"] = { provider_id: "p1", mo
   builtin_skill_enabled: true,
   custom_instructions: "",
   send_terminal_screen: true,
-  memory: true, text_size: 13,
+  memory: true,
+  text_size: 13,
   judge_model: judge,
 });
 
@@ -126,12 +159,22 @@ const shell: McpToolInfo = {
     name: "mcp__shell__exec",
     tool: "exec",
     description: "",
-    annotations: { title: null, read_only_hint: null, destructive_hint: null, idempotent_hint: null, open_world_hint: null },
+    annotations: {
+      title: null,
+      read_only_hint: null,
+      destructive_hint: null,
+      idempotent_hint: null,
+      open_world_hint: null,
+    },
     always_allow: false,
   },
 };
 
-const call = (id: string, name: string, args: Record<string, unknown>): AiToolCall => ({ id, name, arguments: JSON.stringify(args) });
+const call = (id: string, name: string, args: Record<string, unknown>): AiToolCall => ({
+  id,
+  name,
+  arguments: JSON.stringify(args),
+});
 const verdict = (decision: AiAutoVerdict["decision"], concerns: string[] = []): AiAutoVerdict => ({
   provider_id: "p1",
   model_id: "judge",
@@ -143,7 +186,15 @@ const verdict = (decision: AiAutoVerdict["decision"], concerns: string[] = []): 
   concerns,
   failure: null,
 });
-const toolEntry = (callId: string): AiEntryView => ({ role: "tool", entry_id: `t-${callId}`, created_at: 0, tool_call_id: callId, status: "ok", content: "ok", auto: null });
+const toolEntry = (callId: string): AiEntryView => ({
+  role: "tool",
+  entry_id: `t-${callId}`,
+  created_at: 0,
+  tool_call_id: callId,
+  status: "ok",
+  content: "ok",
+  auto: null,
+});
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 async function until(check: () => boolean) {
@@ -161,7 +212,18 @@ function answer(emit: Emit, entryId: string, calls: AiToolCall[]) {
   emit({ kind: "request_started" });
   emit({
     kind: "entry",
-    entry: { role: "assistant", entry_id: entryId, created_at: 0, provider_id: "p1", model_id: "m1", text: "", reasoning: null, tool_calls: calls, finish: "tool_calls", usage: null },
+    entry: {
+      role: "assistant",
+      entry_id: entryId,
+      created_at: 0,
+      provider_id: "p1",
+      model_id: "m1",
+      text: "",
+      reasoning: null,
+      tool_calls: calls,
+      finish: "tool_calls",
+      usage: null,
+    },
   });
   emit({ kind: "done", finish: "tool_calls" });
 }
@@ -198,7 +260,9 @@ function watchStates(): CallState[] {
 beforeEach(() => {
   ipc.send.mockReset();
   ipc.judge.mockReset();
-  ipc.run.mockReset().mockImplementation(async (_conv, callId) => ({ entry: toolEntry(callId), dropped_file_changes: false }));
+  ipc.run
+    .mockReset()
+    .mockImplementation(async (_conv, callId) => ({ entry: toolEntry(callId), dropped_file_changes: false }));
   ipc.result.mockReset().mockImplementation(async (_conv, callId) => toolEntry(callId));
   ipc.allowances.mockReset().mockResolvedValue([]);
   ipc.settings.mockReset().mockResolvedValue(settings());
@@ -235,7 +299,10 @@ describe("a turn in Auto mode (AI-47)", () => {
   it("shows the card with the verdict when the judge asks, and stores what the user decides with it", async () => {
     const asks = verdict("ask", ["destroys_data"]);
     ipc.judge.mockResolvedValue(asks);
-    await respond("auto", [call("call_1", "run_command", { command: "rm /etc/motd" }), call("call_2", "run_command", { command: "rm /etc/issue" })]);
+    await respond("auto", [
+      call("call_1", "run_command", { command: "rm /etc/motd" }),
+      call("call_2", "run_command", { command: "rm /etc/issue" }),
+    ]);
     await until(() => current()?.state === "approval");
     expect(current()).toMatchObject({ id: "call_1", auto: { verdict: asks } });
 
@@ -246,13 +313,20 @@ describe("a turn in Auto mode (AI-47)", () => {
 
     decideCall(TAB, { kind: "reject", reason: "keep it" });
     await until(() => ipc.result.mock.calls.length === 1);
-    expect(ipc.result).toHaveBeenCalledWith("conv-1", "call_2", { status: "rejected", content: "keep it", edited_arguments: null, judged: true });
+    expect(ipc.result).toHaveBeenCalledWith("conv-1", "call_2", {
+      status: "rejected",
+      content: "keep it",
+      edited_arguments: null,
+      judged: true,
+    });
     // Both verdicts were asked for as the response arrived.
     expect(ipc.judge).toHaveBeenCalledTimes(2);
   });
 
   it("asks about the rest of a response without the judge once the user rejects one of its calls, and judges the next response", async () => {
-    ipc.judge.mockImplementation(async (_conv, callId) => (callId === "call_1" ? verdict("ask", ["destroys_data"]) : verdict("run")));
+    ipc.judge.mockImplementation(async (_conv, callId) =>
+      callId === "call_1" ? verdict("ask", ["destroys_data"]) : verdict("run"),
+    );
     const emit = await respond("auto", [
       call("call_1", "run_command", { command: "rm /etc/motd" }),
       // The judge lets these two run.
@@ -289,7 +363,12 @@ describe("a turn in Auto mode (AI-47)", () => {
 
   it("checks a call_mcp_tool call's hard rules against the arguments of the tool it names", async () => {
     // The tool's arguments as a string that holds them, which Rust reads as the object.
-    await respond("auto", [call("call_1", "call_mcp_tool", { tool: "mcp__shell__exec", arguments: JSON.stringify({ command: "rm -rf /srv/old" }) })]);
+    await respond("auto", [
+      call("call_1", "call_mcp_tool", {
+        tool: "mcp__shell__exec",
+        arguments: JSON.stringify({ command: "rm -rf /srv/old" }),
+      }),
+    ]);
     await until(() => current()?.state === "approval");
     expect(current()?.auto).toEqual({ rule: { kind: "command", command: "rm -r" } });
     expect(ipc.judge).not.toHaveBeenCalled();
@@ -308,7 +387,9 @@ describe("a turn in Auto mode (AI-47)", () => {
 
   it("requires approval for terminal editing keys even when the judge would allow the call", async () => {
     ipc.judge.mockResolvedValue(verdict("run"));
-    await respond("auto", [call("call_1", "send_input", { text: "shx", keys: ["backspace", ...Array.from("utdown"), "enter"] })]);
+    await respond("auto", [
+      call("call_1", "send_input", { text: "shx", keys: ["backspace", ...Array.from("utdown"), "enter"] }),
+    ]);
     await until(() => current()?.state === "approval");
     expect(current()?.auto).toEqual({ rule: { kind: "editing_submission" } });
     expect(ipc.judge).not.toHaveBeenCalled();
@@ -316,12 +397,15 @@ describe("a turn in Auto mode (AI-47)", () => {
     expect(ipc.terminal).not.toHaveBeenCalled();
   });
 
-  it.each([["ctrl+x", "n"], ["f10"], ["ctrl_c"], ["esc"], ["tab"], ["up"]])("lets the judge decide non-submitting keys %j", async (...keys) => {
-    ipc.judge.mockResolvedValue(verdict("ask"));
-    await respond("auto", [call("call_1", "send_input", { keys })]);
-    await until(() => current()?.state === "approval");
-    expect(ipc.judge).toHaveBeenCalledOnce();
-  });
+  it.each([["ctrl+x", "n"], ["f10"], ["ctrl_c"], ["esc"], ["tab"], ["up"]])(
+    "lets the judge decide non-submitting keys %j",
+    async (...keys) => {
+      ipc.judge.mockResolvedValue(verdict("ask"));
+      await respond("auto", [call("call_1", "send_input", { keys })]);
+      await until(() => current()?.state === "approval");
+      expect(ipc.judge).toHaveBeenCalledOnce();
+    },
+  );
 
   it("reads the updated screen before submitting a line recalled by an earlier call", async () => {
     ipc.judge.mockResolvedValue(verdict("run"));
@@ -329,7 +413,10 @@ describe("a turn in Auto mode (AI-47)", () => {
       screen.rows = ["$ sudo reboot"];
       return { status: "ok", content: "ok" };
     });
-    await respond("auto", [call("call_1", "send_input", { keys: ["up"] }), call("call_2", "send_input", { keys: ["enter"] })]);
+    await respond("auto", [
+      call("call_1", "send_input", { keys: ["up"] }),
+      call("call_2", "send_input", { keys: ["enter"] }),
+    ]);
     await until(() => current()?.id === "call_2" && current()?.state === "approval");
     expect(current()?.auto).toEqual({ rule: { kind: "command", command: "reboot" } });
     expect(ipc.judge.mock.calls.map((c) => c[1])).toEqual(["call_1"]);
@@ -456,7 +543,9 @@ describe("a turn in Auto mode (AI-47)", () => {
 
   it("runs a call judged ahead when its judge is still the one chosen", async () => {
     ipc.judge.mockResolvedValue(verdict("run"));
-    await respond("auto", [call("call_1", "write_file", { path: "/srv/app/maintenance.html", content: "<h1>Back soon</h1>" })]);
+    await respond("auto", [
+      call("call_1", "write_file", { path: "/srv/app/maintenance.html", content: "<h1>Back soon</h1>" }),
+    ]);
     await until(() => ipc.run.mock.calls.length === 1);
     expect(ipc.judge).toHaveBeenCalledTimes(1);
     expect(ipc.run).toHaveBeenCalledWith("conv-1", "call_1", "s1", null, true);

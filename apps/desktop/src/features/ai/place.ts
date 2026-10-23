@@ -4,7 +4,8 @@ import type { MessageKey, Params } from "@/i18n";
 import type { AiConversationView, HostView, QuickTarget } from "@/ipc/types";
 
 type Tr = (key: MessageKey, params?: Params) => string;
-type Recorded = Pick<AiConversationView, "host_id" | "quick_target"> & Partial<Pick<AiConversationView, "origin" | "local">>;
+type Recorded = Pick<AiConversationView, "host_id" | "quick_target"> &
+  Partial<Pick<AiConversationView, "origin" | "local">>;
 
 /** What follows a computer's name where a host's display name would be, as Rust's `local_name` writes it (§7.5). */
 const LOCAL_SUFFIX = " (local terminal)";
@@ -81,7 +82,9 @@ export function connectionFor(
   if (place.kind === "local") return place.device === device ? { name: localName(device), source: "local" } : null;
   if (place.kind !== "target") return null;
   const saved = savedHostFor(hosts, place.target);
-  return saved ? { name: saved.name, source: { hostId: saved.id, target: null } } : { name: formatTarget(place.target), source: { hostId: null, target: place.target } };
+  return saved
+    ? { name: saved.name, source: { hostId: saved.id, target: null } }
+    : { name: formatTarget(place.target), source: { hostId: null, target: place.target } };
 }
 
 /**
@@ -90,7 +93,9 @@ export function connectionFor(
  */
 export function moves(c: Recorded, tab: TabSource, device = ""): boolean {
   if (tab.local) return c.host_id !== null || c.quick_target !== null || c.local !== device;
-  return tab.hostId !== null ? c.host_id !== tab.hostId : c.host_id !== null || !c.quick_target || !sameTarget(c.quick_target, tab.target);
+  return tab.hostId !== null
+    ? c.host_id !== tab.hostId
+    : c.host_id !== null || !c.quick_target || !sameTarget(c.quick_target, tab.target);
 }
 
 /**
@@ -114,6 +119,10 @@ export function movedFrom(
   if (c.host_id) from = tab.target && old && sameTarget(old, tab.target) ? null : (old?.name ?? "");
   else if (c.quick_target) from = next && sameTarget(next, c.quick_target) ? null : formatTarget(c.quick_target);
   else from = c.local ? localName(c.local) : (c.origin ?? null);
-  const to = tab.local ? localName(device) : tab.hostId !== null ? next?.name : formatTarget(recordedTarget(tab.target));
+  const to = tab.local
+    ? localName(device)
+    : tab.hostId !== null
+      ? next?.name
+      : formatTarget(recordedTarget(tab.target));
   return from !== null && to !== undefined && from !== to ? { from, to } : null;
 }

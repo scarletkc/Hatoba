@@ -26,7 +26,6 @@ export async function collectCredentials(host: HostView): Promise<Credentials | 
   return password === null ? null : { password, passphrase: null };
 }
 
-
 /** Open a new terminal tab for a host and connect (HOST-07, TERM-01: the same host may have several tabs). */
 export async function connectHost(hostId: string): Promise<void> {
   startSessionListeners();
@@ -49,7 +48,8 @@ export async function connectHost(hostId: string): Promise<void> {
  */
 export async function connectTarget(typed: { address: string; port: number; username: string | null }): Promise<void> {
   startSessionListeners();
-  const username = typed.username ?? (useApp.getState().info.local_user || (await askUsername(formatTarget(typed)))?.trim());
+  const username =
+    typed.username ?? (useApp.getState().info.local_user || (await askUsername(formatTarget(typed)))?.trim());
   if (!username) return;
   const target: QuickTarget = { address: typed.address, port: typed.port, username };
   useTabs.getState().openSession({ hostId: null, target }, `${username}@${target.address}`);

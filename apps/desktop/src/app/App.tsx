@@ -81,7 +81,12 @@ export function App() {
     <>
       {/* SEC-03: sessions stay mounted (and connected) behind the lock screen, but are hidden. */}
       {(!locked || hasSessions) && (
-        <div className={s.main} aria-hidden={locked} data-locked={locked || undefined} style={locked ? { visibility: "hidden" } : undefined}>
+        <div
+          className={s.main}
+          aria-hidden={locked}
+          data-locked={locked || undefined}
+          style={locked ? { visibility: "hidden" } : undefined}
+        >
           <Main />
         </div>
       )}
@@ -152,10 +157,7 @@ function Main() {
 
   return (
     <div className={s.window}>
-      <TabBar
-        onNewTab={() => onShortcut("newTab")}
-        onCloseTab={(id) => void closeSessionTab(id)}
-      />
+      <TabBar onNewTab={() => onShortcut("newTab")} onCloseTab={(id) => void closeSessionTab(id)} />
       <div className={s.workspace}>
         {/* The rail navigates the home tab, so a session's tab has the window's whole width. */}
         {rail && <Sidebar />}

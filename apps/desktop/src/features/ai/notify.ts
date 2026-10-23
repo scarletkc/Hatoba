@@ -32,7 +32,11 @@ export interface NoticeContext {
  * AI-07: the system notification about a conversation, or null when none goes: switched off, or the window has the
  * focus. It names the tab, and the conversation with what happened; a click on it shows the conversation.
  */
-export function aiNotification(notice: AiNotice, ctx: NoticeContext, tr: (key: MessageKey, params?: Params) => string = t): NotificationInput | null {
+export function aiNotification(
+  notice: AiNotice,
+  ctx: NoticeContext,
+  tr: (key: MessageKey, params?: Params) => string = t,
+): NotificationInput | null {
   if (!ctx.enabled || ctx.focused) return null;
   return {
     title: ctx.tabTitle ?? tr("ai.title"),
@@ -49,6 +53,13 @@ export async function notifyAi(slotId: string, notice: AiNotice) {
   const tabTitle = tab === HOME_SLOT ? null : (useTabs.getState().tabs.find((x) => x.id === tab)?.title ?? null);
   const enabled = useApp.getState().prefs.ai_notifications;
   const focused = enabled ? await windowFocused() : true;
-  const notification = aiNotification(notice, { enabled, focused, tab, tabTitle, conversationId, conversationTitle: conversation?.title ?? "" });
+  const notification = aiNotification(notice, {
+    enabled,
+    focused,
+    tab,
+    tabTitle,
+    conversationId,
+    conversationTitle: conversation?.title ?? "",
+  });
   if (notification) await api.notification_show(notification).catch(() => {});
 }

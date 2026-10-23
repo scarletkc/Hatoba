@@ -42,7 +42,14 @@ const ask = (
   list: AiFileChange[],
   revert: (change: AiFileChange) => Promise<AiFileRevert>,
   options: { server?: string | null; diff?: (change: AiFileChange) => Promise<AiFilePreview | null> } = {},
-) => askEditedFiles({ later: 2, changes: list, server: options.server === undefined ? SERVER : options.server, revert, diff: options.diff });
+) =>
+  askEditedFiles({
+    later: 2,
+    changes: list,
+    server: options.server === undefined ? SERVER : options.server,
+    revert,
+    diff: options.diff,
+  });
 
 const button = (label: string) => [...document.body.querySelectorAll("button")].find((b) => b.textContent === label)!;
 const click = async (label: string) => {
@@ -161,7 +168,11 @@ describe("the dialog of an edit that deletes file changes (AI-26, AI-41)", () =>
 
   it("lists each file once, with how many changes it has and the lines a revert adds and removes", async () => {
     render();
-    const twice = [change("c1", "/etc/nginx/nginx.conf"), change("c2", "/etc/hosts"), change("c3", "/etc/nginx/nginx.conf")];
+    const twice = [
+      change("c1", "/etc/nginx/nginx.conf"),
+      change("c2", "/etc/hosts"),
+      change("c3", "/etc/nginx/nginx.conf"),
+    ];
     const order: string[] = [];
     act(() => {
       void ask(
@@ -170,7 +181,15 @@ describe("the dialog of an edit that deletes file changes (AI-26, AI-41)", () =>
           order.push(c.tool_call_id);
           return { status: "reverted", wrote: true };
         },
-        { diff: async (c) => ({ path: c.path, before: "a\n", after: c.tool_call_id === "c3" ? "a\nb\nc\n" : "b\n", error: null, crlf: false }) },
+        {
+          diff: async (c) => ({
+            path: c.path,
+            before: "a\n",
+            after: c.tool_call_id === "c3" ? "a\nb\nc\n" : "b\n",
+            error: null,
+            crlf: false,
+          }),
+        },
       );
     });
     await act(async () => {});

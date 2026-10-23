@@ -27,7 +27,13 @@ function Glyph({ os, icon }: { os: string | null; icon?: string }) {
 export function OsIcon({ os, badge, icon }: { os: string | null; badge: string; icon?: string }) {
   const name = os === null ? undefined : OS_NAMES.get(os);
   return (
-    <span className={s.root} role={name ? "img" : undefined} aria-label={name} aria-hidden={name ? undefined : true} title={name}>
+    <span
+      className={s.root}
+      role={name ? "img" : undefined}
+      aria-label={name}
+      aria-hidden={name ? undefined : true}
+      title={name}
+    >
       <span className={s.glyph}>
         <Glyph os={os} icon={icon} />
       </span>

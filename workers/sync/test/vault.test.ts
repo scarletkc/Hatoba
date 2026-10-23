@@ -84,7 +84,10 @@ describe("PUT /v1/vault/password", () => {
     const row = await env.DB.prepare("SELECT auth_hash, recovery_auth_hash FROM meta").first<Record<string, string>>();
     expect(row!.auth_hash).toBe(await sha256Hex(Uint8Array.from(atob(NEW_AUTH_KEY), (c) => c.charCodeAt(0))));
     // recovery secret not rotated
-    expect((await call("/v1/recover", { json: { recovery_auth: RECOVERY_AUTH, device_id: "d", device_name: envelope() } })).status).toBe(200);
+    expect(
+      (await call("/v1/recover", { json: { recovery_auth: RECOVERY_AUTH, device_id: "d", device_name: envelope() } }))
+        .status,
+    ).toBe(200);
   });
 
   it("rotates the recovery material when recovery_vault_key and recovery_auth are sent", async () => {

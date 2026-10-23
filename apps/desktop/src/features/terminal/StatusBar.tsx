@@ -73,7 +73,9 @@ export function StatusBar({
     <div className={s.bar}>
       <span className={s.state} role="status">
         <StatusDot color={DOT[status]} />
-        <span className={s.stateText}>{t(local ? `terminal.local.status.${status}` : `terminal.status.${status}`)}</span>
+        <span className={s.stateText}>
+          {t(local ? `terminal.local.status.${status}` : `terminal.status.${status}`)}
+        </span>
       </span>
       <span className={s.sep} />
       {target && <span className={s.target}>{target}</span>}
@@ -90,7 +92,12 @@ export function StatusBar({
       ) : (
         <IconButton icon="gauge" label={t("terminal.stats.show")} disabled={!connected} onClick={onShowStats} />
       )}
-      <IconButton icon="magnifying-glass" label={`${t("terminal.find")} (${findHint})`} active={findOpen} onClick={onFind} />
+      <IconButton
+        icon="magnifying-glass"
+        label={`${t("terminal.find")} (${findHint})`}
+        active={findOpen}
+        onClick={onFind}
+      />
       {forwards && (
         <button
           type="button"
@@ -99,8 +106,16 @@ export function StatusBar({
           data-forwards-trigger=""
           aria-haspopup="dialog"
           aria-expanded={forwardsOpen}
-          aria-label={forwardCount > 0 ? `${t("terminal.fwd")} (${t("terminal.fwd.running", { n: forwardCount })})` : t("terminal.fwd")}
-          title={forwardCount > 0 ? `${t("terminal.fwd")} · ${t("terminal.fwd.running", { n: forwardCount })}` : t("terminal.fwd")}
+          aria-label={
+            forwardCount > 0
+              ? `${t("terminal.fwd")} (${t("terminal.fwd.running", { n: forwardCount })})`
+              : t("terminal.fwd")
+          }
+          title={
+            forwardCount > 0
+              ? `${t("terminal.fwd")} · ${t("terminal.fwd.running", { n: forwardCount })}`
+              : t("terminal.fwd")
+          }
           onClick={(e) => onForwards(e.currentTarget)}
         >
           <Icon name="arrows-left-right" />
@@ -110,14 +125,21 @@ export function StatusBar({
       {!local && (
         <button
           type="button"
-          className={cx(controlStyles.iconButton, sftpOpen && connected && controlStyles.iconButtonActive, s.sftp, sftpOpen && connected && s.sftpOn)}
+          className={cx(
+            controlStyles.iconButton,
+            sftpOpen && connected && controlStyles.iconButtonActive,
+            s.sftp,
+            sftpOpen && connected && s.sftpOn,
+          )}
           disabled={!connected}
           aria-pressed={sftpOpen && connected}
           title={t("terminal.sftpToggle")}
           onClick={onToggleSftp}
         >
           <Icon name="folder-simple" size={14} />
-          <span className={s.sftpLabel} data-label={t("terminal.sftp")}>{t("terminal.sftp")}</span>
+          <span className={s.sftpLabel} data-label={t("terminal.sftp")}>
+            {t("terminal.sftp")}
+          </span>
         </button>
       )}
       <IconButton
@@ -137,7 +159,15 @@ export function StatusBar({
  * The resource usage readout (TERM-12): CPU, memory and network rates, which open the details. A
  * narrow bar drops the rates, then everything but the icon.
  */
-function StatsReadout({ stats, open, onClick }: { stats: SessionStats | undefined; open: boolean; onClick(button: HTMLElement): void }) {
+function StatsReadout({
+  stats,
+  open,
+  onClick,
+}: {
+  stats: SessionStats | undefined;
+  open: boolean;
+  onClick(button: HTMLElement): void;
+}) {
   const t = useT();
   const kind = stats?.state.kind ?? "starting";
   const latest = stats?.history.at(-1);
@@ -153,7 +183,11 @@ function StatsReadout({ stats, open, onClick }: { stats: SessionStats | undefine
       title={t("terminal.stats")}
       onClick={(e) => onClick(e.currentTarget)}
     >
-      <Icon name={kind === "failed" ? "warning-circle" : "gauge"} size={14} className={cx(kind === "failed" && s.statsFailed)} />
+      <Icon
+        name={kind === "failed" ? "warning-circle" : "gauge"}
+        size={14}
+        className={cx(kind === "failed" && s.statsFailed)}
+      />
       {kind !== "failed" && kind !== "unsupported" && (
         <span className={s.statsText}>
           <span>
@@ -164,7 +198,8 @@ function StatsReadout({ stats, open, onClick }: { stats: SessionStats | undefine
           </span>
           {latest && latest.net_interfaces.length > 0 && (
             <span className={s.statsNet}>
-              ↓ <b className={s.rate}>{value(latest.net_rx_rate, formatRate)}</b> ↑ <b className={s.rate}>{value(latest.net_tx_rate, formatRate)}</b>
+              ↓ <b className={s.rate}>{value(latest.net_rx_rate, formatRate)}</b> ↑{" "}
+              <b className={s.rate}>{value(latest.net_tx_rate, formatRate)}</b>
             </span>
           )}
         </span>

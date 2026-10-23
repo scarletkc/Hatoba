@@ -19,9 +19,25 @@ import { EmptyState, PageHeader, SearchField, Tag, layoutStyles } from "@/compon
 import { Menu, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { dashboardSwitch, retryHost, setShownOnDashboard } from "@/features/dashboard/actions";
 import { HostDetail } from "@/features/dashboard/HostDetail";
-import { DASHBOARD_COLUMNS, leftOutBy, shownOnDashboard, sortForDashboard, type DashboardColumn } from "@/features/dashboard/logic";
+import {
+  DASHBOARD_COLUMNS,
+  leftOutBy,
+  shownOnDashboard,
+  sortForDashboard,
+  type DashboardColumn,
+} from "@/features/dashboard/logic";
 import { useDashboardWatch, useReadoutMap } from "@/features/dashboard/readings";
-import { HostCard, StatsHead, StatsRow, canRetry, fitStatsColumns, useWidth, type Alerts, type ListState, type View } from "@/features/dashboard/views";
+import {
+  HostCard,
+  StatsHead,
+  StatsRow,
+  canRetry,
+  fitStatsColumns,
+  useWidth,
+  type Alerts,
+  type ListState,
+  type View,
+} from "@/features/dashboard/views";
 import { durationLabel } from "@/features/settings/durations";
 import { usePrefs } from "@/features/settings/shared";
 import { connectHost, connectTarget } from "@/features/terminal/connect";
@@ -88,7 +104,17 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   const tagList = useVaultData((st) => st.tags);
   const tabs = useTabs((st) => st.tabs);
   const recents = useRecentTargets((st) => st.targets);
-  const { selection, sort, favorites, tags: pickedTags, select, setSort, setFavorites, setTags, clearFilters } = useHostsUi();
+  const {
+    selection,
+    sort,
+    favorites,
+    tags: pickedTags,
+    select,
+    setSort,
+    setFavorites,
+    setTags,
+    clearFilters,
+  } = useHostsUi();
   const view = prefs.hosts_view;
   const stats = prefs.hosts_stats;
   const readouts = useReadoutMap();
@@ -131,11 +157,17 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   const group = scope ? requested : null;
   const title = scope?.name ?? t("hosts.title");
   // Tags no host has any more drop out of the filter.
-  const activeTags = useMemo(() => pickedTags.filter((tag) => tagList.some((x) => x.name === tag)), [pickedTags, tagList]);
+  const activeTags = useMemo(
+    () => pickedTags.filter((tag) => tagList.some((x) => x.name === tag)),
+    [pickedTags, tagList],
+  );
   const filtering = favorites || activeTags.length > 0;
 
   // Filter + sort only when inputs change; typing in the search box touches neither.
-  const filtered = useMemo(() => applyFilter(hosts, { group, favorites, tags: activeTags }), [hosts, group, favorites, activeTags]);
+  const filtered = useMemo(
+    () => applyFilter(hosts, { group, favorites, tags: activeTags }),
+    [hosts, group, favorites, activeTags],
+  );
   const listSort: ListSort = isListSort(sort) ? sort : "recent";
   const base = useMemo(() => sortHosts(filtered, listSort, t.locale), [filtered, listSort, t.locale]);
   const index = useMemo(() => buildHostIndex(base), [base]);
@@ -147,7 +179,10 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   const found = useMemo(() => searchHosts(index, searchText), [index, searchText]);
   // HOST-14: a resource order sorts again with each reading; a search keeps its ranking.
   const statsSort = stats && !isListSort(sort) && !searching ? sort : null;
-  const ordered = useMemo(() => (statsSort ? sortForDashboard(found, statsSort, readouts, t.locale) : found), [found, statsSort, readouts, t.locale]);
+  const ordered = useMemo(
+    () => (statsSort ? sortForDashboard(found, statsSort, readouts, t.locale) : found),
+    [found, statsSort, readouts, t.locale],
+  );
   // A typed target that is a saved host connects as that host, with its key and jump host.
   const exact = useMemo(() => (parsed?.ok ? savedHostFor(hosts, parsed.target) : undefined), [parsed, hosts]);
   const visible = useMemo(() => (exact && !ordered.includes(exact) ? [exact, ...ordered] : ordered), [exact, ordered]);
@@ -156,7 +191,11 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   const quickRows = useMemo(() => {
     const rows: QuickRowItem[] = [];
     if (parsed?.ok && !exact)
-      rows.push({ id: TYPED_ROW, target: parsed.target, recent: unsavedRecents.find((r) => sameTarget(r, parsed.target)) ?? null });
+      rows.push({
+        id: TYPED_ROW,
+        target: parsed.target,
+        recent: unsavedRecents.find((r) => sameTarget(r, parsed.target)) ?? null,
+      });
     const q = searchText.trim().toLowerCase();
     if (q)
       for (const r of unsavedRecents)
@@ -184,14 +223,24 @@ export function HostsPage({ group: requested }: { group: string | null }) {
 
   // HOST-14: the listed hosts are read while resource usage shows; the search does not change which.
   const interval = prefs.dashboard_interval_secs;
-  const watched = useMemo(() => filtered.filter((h) => shownOnDashboard(h, groupMap)).map((h) => h.id), [filtered, groupMap]);
+  const watched = useMemo(
+    () => filtered.filter((h) => shownOnDashboard(h, groupMap)).map((h) => h.id),
+    [filtered, groupMap],
+  );
   useDashboardWatch(watched, interval, stats && docVisible);
   const { dashboard_cpu_alert: cpuAlert, dashboard_mem_alert: memAlert, dashboard_disk_alert: diskAlert } = prefs;
-  const alerts: Alerts = useMemo(() => ({ cpu: cpuAlert, mem: memAlert, disk: diskAlert }), [cpuAlert, memAlert, diskAlert]);
+  const alerts: Alerts = useMemo(
+    () => ({ cpu: cpuAlert, mem: memAlert, disk: diskAlert }),
+    [cpuAlert, memAlert, diskAlert],
+  );
   const hiddenColumns = prefs.dashboard_hidden_columns;
   const [measureTable, tableWidth] = useWidth();
   const columns = useMemo(
-    () => fitStatsColumns(DASHBOARD_COLUMNS.filter((c) => !hiddenColumns.includes(c)), tableWidth),
+    () =>
+      fitStatsColumns(
+        DASHBOARD_COLUMNS.filter((c) => !hiddenColumns.includes(c)),
+        tableWidth,
+      ),
     [hiddenColumns, tableWidth],
   );
 
@@ -337,8 +386,14 @@ export function HostsPage({ group: requested }: { group: string | null }) {
     };
   }, [probeKey, hostProbe]);
 
-  const newHost = useCallback(() => navigate({ kind: "host-edit", hostId: null, groupId: group, back: group }), [navigate, group]);
-  const editHost = useCallback((id: string) => navigate({ kind: "host-edit", hostId: id, groupId: null, back: group }), [navigate, group]);
+  const newHost = useCallback(
+    () => navigate({ kind: "host-edit", hostId: null, groupId: group, back: group }),
+    [navigate, group],
+  );
+  const editHost = useCallback(
+    (id: string) => navigate({ kind: "host-edit", hostId: id, groupId: null, back: group }),
+    [navigate, group],
+  );
 
   const connect = useCallback(
     (id: string) => {
@@ -388,8 +443,13 @@ export function HostsPage({ group: requested }: { group: string | null }) {
       const status = tabStatus.get(h.id);
       const failed = status === "failed";
       states.set(h.id, {
-        dot: status === "connected" ? "var(--green)" : failed ? "var(--red)" : probe[h.id] ? "var(--green)" : "var(--fg3)",
-        last: failed ? t("hosts.failed") : h.last_connected_at ? formatRelative(t.locale, h.last_connected_at, now) : t("hosts.neverConnected"),
+        dot:
+          status === "connected" ? "var(--green)" : failed ? "var(--red)" : probe[h.id] ? "var(--green)" : "var(--fg3)",
+        last: failed
+          ? t("hosts.failed")
+          : h.last_connected_at
+            ? formatRelative(t.locale, h.last_connected_at, now)
+            : t("hosts.neverConnected"),
         failed,
       });
     }
@@ -479,7 +539,10 @@ export function HostsPage({ group: requested }: { group: string | null }) {
     try {
       await api.host_copy_password(host.id);
       const secs = useApp.getState().prefs.clipboard_clear_secs;
-      toast(secs ? t("hosts.passwordCopied", { time: durationLabel(t, secs) }) : t("hosts.passwordCopiedKept"), "success");
+      toast(
+        secs ? t("hosts.passwordCopied", { time: durationLabel(t, secs) }) : t("hosts.passwordCopiedKept"),
+        "success",
+      );
     } catch (e) {
       fail(e);
     }
@@ -493,8 +556,19 @@ export function HostsPage({ group: requested }: { group: string | null }) {
     const toggle = dashboardSwitch(host, groupMap);
     return [
       { kind: "separator" },
-      ...(included ? [{ label: t("hosts.menu.details"), icon: "chart-line", hint: t("hosts.menu.detailsKey"), onSelect: () => setDetail(host.id) }] : []),
-      ...((canRetry(r) || r?.phase === "offline") && included ? [{ label: t("btn.retry"), icon: "arrow-clockwise", onSelect: () => retryHost(host.id) }] : []),
+      ...(included
+        ? [
+            {
+              label: t("hosts.menu.details"),
+              icon: "chart-line",
+              hint: t("hosts.menu.detailsKey"),
+              onSelect: () => setDetail(host.id),
+            },
+          ]
+        : []),
+      ...((canRetry(r) || r?.phase === "offline") && included
+        ? [{ label: t("btn.retry"), icon: "arrow-clockwise", onSelect: () => retryHost(host.id) }]
+        : []),
       { label: t(toggle.key), icon: toggle.icon, onSelect: toggle.run },
     ];
   };
@@ -521,7 +595,11 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   const severalEntries = (list: HostView[]): MenuEntry[] => {
     const favorite = list.every((h) => h.favorite);
     return [
-      { label: t("hosts.menu.connect"), icon: "plugs-connected", onSelect: () => void connectAll(list.map((h) => h.id)) },
+      {
+        label: t("hosts.menu.connect"),
+        icon: "plugs-connected",
+        onSelect: () => void connectAll(list.map((h) => h.id)),
+      },
       {
         label: favorite ? t("hosts.menu.unfavorite") : t("hosts.menu.favorite"),
         icon: "star",
@@ -538,7 +616,11 @@ export function HostsPage({ group: requested }: { group: string | null }) {
     ...(stats
       ? [
           g.dashboard
-            ? { label: t("dashboard.leaveOutGroup"), icon: "eye-slash", onSelect: () => void setShownOnDashboard(g.id, false) }
+            ? {
+                label: t("dashboard.leaveOutGroup"),
+                icon: "eye-slash",
+                onSelect: () => void setShownOnDashboard(g.id, false),
+              }
             : { label: t("dashboard.includeGroup"), icon: "eye", onSelect: () => void setShownOnDashboard(g.id, true) },
         ]
       : []),
@@ -708,8 +790,16 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   const dialogs = (
     <>
       {importing && <ImportDialog source={importing} onClose={() => setImporting(null)} />}
-      {editingGroup && <GroupDialog group={editingGroup === "new" ? null : editingGroup} count={groups.length} onClose={() => setEditingGroup(null)} />}
-      {groupMenu.anchor && ctxGroup && <Menu anchor={groupMenu.anchor} onClose={groupMenu.close} entries={groupEntries(ctxGroup)} />}
+      {editingGroup && (
+        <GroupDialog
+          group={editingGroup === "new" ? null : editingGroup}
+          count={groups.length}
+          onClose={() => setEditingGroup(null)}
+        />
+      )}
+      {groupMenu.anchor && ctxGroup && (
+        <Menu anchor={groupMenu.anchor} onClose={groupMenu.close} entries={groupEntries(ctxGroup)} />
+      )}
     </>
   );
 
@@ -810,7 +900,8 @@ export function HostsPage({ group: requested }: { group: string | null }) {
     );
   }
 
-  const sortLabel = (k: HostSort) => t(isListSort(k) ? (`hosts.sort.${k}` as MessageKey) : (`dashboard.sort.${k}` as MessageKey));
+  const sortLabel = (k: HostSort) =>
+    t(isListSort(k) ? (`hosts.sort.${k}` as MessageKey) : (`dashboard.sort.${k}` as MessageKey));
   const shownSort = stats ? sort : listSort;
 
   const hasQuick = quickRows.length > 0 || problem !== null;
@@ -821,7 +912,12 @@ export function HostsPage({ group: requested }: { group: string | null }) {
 
   const toolbar = (
     <div className={s.toolbar}>
-      <button type="button" className={cx(s.toggle, favorites && s.toggleOn)} aria-pressed={favorites} onClick={() => setFavorites(!favorites)}>
+      <button
+        type="button"
+        className={cx(s.toggle, favorites && s.toggleOn)}
+        aria-pressed={favorites}
+        onClick={() => setFavorites(!favorites)}
+      >
         <Icon name="star" fill={favorites} />
         {t("sidebar.favorites")}
       </button>
@@ -839,7 +935,13 @@ export function HostsPage({ group: requested }: { group: string | null }) {
         <Icon name="caret-down" className={s.toggleCaret} />
       </button>
       {activeTags.map((tag) => (
-        <button key={tag} type="button" className={s.tagChip} title={t("hosts.tags.remove", { tag })} onClick={() => setTags(activeTags.filter((x) => x !== tag))}>
+        <button
+          key={tag}
+          type="button"
+          className={s.tagChip}
+          title={t("hosts.tags.remove", { tag })}
+          onClick={() => setTags(activeTags.filter((x) => x !== tag))}
+        >
           <Tag name={tag} />
           <Icon name="x" className={s.tagChipX} />
         </button>
@@ -866,7 +968,12 @@ export function HostsPage({ group: requested }: { group: string | null }) {
         value={view}
         options={[
           { value: "list", label: t("hosts.view.list"), title: t("hosts.view.list"), icon: "rows" },
-          { value: "cards", label: t("dashboard.layout.cards"), title: t("dashboard.layout.cards"), icon: "squares-four" },
+          {
+            value: "cards",
+            label: t("dashboard.layout.cards"),
+            title: t("dashboard.layout.cards"),
+            icon: "squares-four",
+          },
         ]}
         onChange={(hosts_view) => savePrefs({ hosts_view })}
       />
@@ -900,10 +1007,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
         icon="funnel"
         title={t("hosts.emptyFilter.title")}
         body={t("hosts.emptyFilter.body")}
-        actions={
-          <Button onClick={clearFilters}>{t("hosts.emptyFilter.clear")}
-          </Button>
-        }
+        actions={<Button onClick={clearFilters}>{t("hosts.emptyFilter.clear")}</Button>}
       />
     );
   } else if (emptyBody === "group") {
@@ -993,7 +1097,9 @@ export function HostsPage({ group: requested }: { group: string | null }) {
                   locale={t.locale}
                   connectLabel={t("hosts.connect")}
                   failedLabel={t("hosts.failed")}
-                  viaTitle={h.jump_host_id ? t("hosts.viaTitle", { name: hostById.get(h.jump_host_id)?.name ?? "" }) : ""}
+                  viaTitle={
+                    h.jump_host_id ? t("hosts.viaTitle", { name: hostById.get(h.jump_host_id)?.name ?? "" }) : ""
+                  }
                   onSelect={clickHost}
                   onConnect={connect}
                   onContext={onContext}
@@ -1026,7 +1132,12 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   const detailHost = detail ? hosts.find((h) => h.id === detail) : undefined;
   const sortEntries: MenuEntry[] = [
     ...LIST_SORTS.map((k) => ({ label: sortLabel(k), checked: shownSort === k, onSelect: () => setSort(k) })),
-    ...(stats ? [{ kind: "separator" } as const, ...STATS_SORTS.map((k) => ({ label: sortLabel(k), checked: sort === k, onSelect: () => setSort(k) }))] : []),
+    ...(stats
+      ? [
+          { kind: "separator" } as const,
+          ...STATS_SORTS.map((k) => ({ label: sortLabel(k), checked: sort === k, onSelect: () => setSort(k) })),
+        ]
+      : []),
   ];
 
   return (
@@ -1039,7 +1150,9 @@ export function HostsPage({ group: requested }: { group: string | null }) {
       {groupBar}
       {body}
 
-      {sortMenu.anchor && <Menu anchor={sortMenu.anchor} onClose={sortMenu.close} minWidth={150} entries={sortEntries} />}
+      {sortMenu.anchor && (
+        <Menu anchor={sortMenu.anchor} onClose={sortMenu.close} minWidth={150} entries={sortEntries} />
+      )}
       {tagsMenu.anchor && (
         <Menu
           anchor={tagsMenu.anchor}
@@ -1054,9 +1167,19 @@ export function HostsPage({ group: requested }: { group: string | null }) {
                     hint: String(tag.count),
                     checked: activeTags.includes(tag.name),
                     keepOpen: true,
-                    onSelect: () => setTags(activeTags.includes(tag.name) ? activeTags.filter((x) => x !== tag.name) : [...activeTags, tag.name]),
+                    onSelect: () =>
+                      setTags(
+                        activeTags.includes(tag.name)
+                          ? activeTags.filter((x) => x !== tag.name)
+                          : [...activeTags, tag.name],
+                      ),
                   })),
-                  ...(activeTags.length > 0 ? [{ kind: "separator" } as const, { label: t("hosts.tags.clear"), icon: "x", onSelect: () => setTags([]) }] : []),
+                  ...(activeTags.length > 0
+                    ? [
+                        { kind: "separator" } as const,
+                        { label: t("hosts.tags.clear"), icon: "x", onSelect: () => setTags([]) },
+                      ]
+                    : []),
                 ]
           }
         />
@@ -1071,7 +1194,11 @@ export function HostsPage({ group: requested }: { group: string | null }) {
             checked: !hiddenColumns.includes(c),
             keepOpen: true,
             onSelect: () =>
-              savePrefs({ dashboard_hidden_columns: hiddenColumns.includes(c) ? hiddenColumns.filter((x) => x !== c) : [...hiddenColumns, c] }),
+              savePrefs({
+                dashboard_hidden_columns: hiddenColumns.includes(c)
+                  ? hiddenColumns.filter((x) => x !== c)
+                  : [...hiddenColumns, c],
+              }),
           }))}
         />
       )}
@@ -1242,7 +1369,6 @@ function QuickRow({ item, selected, connectLabel, hint, removeLabel, onSelect, o
             onClick={(e) => {
               e.stopPropagation();
               onRemove(recent);
-
             }}
           />
         )}
@@ -1333,7 +1459,6 @@ function RecentSuggestions({ targets, active, title, removeLabel, onHover, onCon
               onClick={(e) => {
                 e.stopPropagation();
                 onRemove(target);
-
               }}
             />
           </div>

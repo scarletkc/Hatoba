@@ -11,7 +11,13 @@
     "build": "pnpm --filter @hatoba/desktop build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "pnpm -r test",
     "worker:bundle": "node scripts/worker/bundle.mjs"
+  },
+  "devDependencies": {
+    "prettier": "3.9.10",
+    "prettier-plugin-astro": "1.1.1"
   }
 }

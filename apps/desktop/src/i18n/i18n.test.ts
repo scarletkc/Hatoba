@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { messages } from "./locales";
-import { detectLocale, formatBytes, formatDateTime, formatMessageTime, formatRelative, startOfDay, translate } from "./index";
+import {
+  detectLocale,
+  formatBytes,
+  formatDateTime,
+  formatMessageTime,
+  formatRelative,
+  startOfDay,
+  translate,
+} from "./index";
 
 const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -22,7 +30,9 @@ describe("message tables", () => {
 
   it("has no empty strings", () => {
     for (const locale of ["zh-CN", "en", "ja"] as const) {
-      const empty = Object.entries(messages[locale]).filter(([, v]) => !v.trim()).map(([k]) => k);
+      const empty = Object.entries(messages[locale])
+        .filter(([, v]) => !v.trim())
+        .map(([k]) => k);
       expect(empty).toEqual([]);
     }
   });

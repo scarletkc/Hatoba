@@ -64,7 +64,10 @@ export function RestoreConnect({
     return { kind: "d1", account_id: accountId.trim(), database_id: databaseId.trim(), api_token: apiToken.trim() };
   };
 
-  const filled = method === "worker" ? url.trim() !== "" : accountId.trim() !== "" && databaseId.trim() !== "" && apiToken.trim() !== "";
+  const filled =
+    method === "worker"
+      ? url.trim() !== ""
+      : accountId.trim() !== "" && databaseId.trim() !== "" && apiToken.trim() !== "";
   const ready = status.state === "ok";
 
   const test = async () => {
@@ -140,7 +143,9 @@ export function RestoreConnect({
             placeholder={t("vault.restore.workerUrlPlaceholder")}
             value={url}
             invalid={!!urlError}
-            trailing={status.state === "ok" ? <Icon name="check-circle" fill size={16} color="var(--green)" /> : undefined}
+            trailing={
+              status.state === "ok" ? <Icon name="check-circle" fill size={16} color="var(--green)" /> : undefined
+            }
             onChange={(e) => {
               setUrl(e.target.value);
               reset();
@@ -154,19 +159,38 @@ export function RestoreConnect({
             <label className={s.label} htmlFor="restore-account">
               {t("vault.restore.accountId")}
             </label>
-            <TextField id="restore-account" large mono autoFocus value={accountId} onChange={(e) => (setAccountId(e.target.value), reset())} />
+            <TextField
+              id="restore-account"
+              large
+              mono
+              autoFocus
+              value={accountId}
+              onChange={(e) => (setAccountId(e.target.value), reset())}
+            />
           </div>
           <div className={s.field}>
             <label className={s.label} htmlFor="restore-database">
               {t("vault.restore.databaseId")}
             </label>
-            <TextField id="restore-database" large mono value={databaseId} onChange={(e) => (setDatabaseId(e.target.value), reset())} />
+            <TextField
+              id="restore-database"
+              large
+              mono
+              value={databaseId}
+              onChange={(e) => (setDatabaseId(e.target.value), reset())}
+            />
           </div>
           <div className={s.field}>
             <label className={s.label} htmlFor="restore-token">
               {t("vault.restore.apiToken")}
             </label>
-            <TextField id="restore-token" large secret value={apiToken} onChange={(e) => (setApiToken(e.target.value), reset())} />
+            <TextField
+              id="restore-token"
+              large
+              secret
+              value={apiToken}
+              onChange={(e) => (setApiToken(e.target.value), reset())}
+            />
           </div>
         </>
       )}
@@ -178,7 +202,9 @@ export function RestoreConnect({
         <div className={s.status} role="status">
           {status.state === "running" && <StatusLine tone="progress">{t("vault.restore.testing")}</StatusLine>}
           {(status.state === "ok" || status.state === "warn" || status.state === "error") && (
-            <StatusLine tone={status.state === "ok" ? "success" : status.state === "warn" ? "warning" : "error"}>{status.text}</StatusLine>
+            <StatusLine tone={status.state === "ok" ? "success" : status.state === "warn" ? "warning" : "error"}>
+              {status.text}
+            </StatusLine>
           )}
         </div>
       </div>
@@ -187,7 +213,15 @@ export function RestoreConnect({
 }
 
 /** Flow B step 3: master password, then pull and decrypt everything. */
-export function RestorePassword({ steps, config, onBack }: { steps: string[]; config: SyncConfigInput; onBack: () => void }) {
+export function RestorePassword({
+  steps,
+  config,
+  onBack,
+}: {
+  steps: string[];
+  config: SyncConfigInput;
+  onBack: () => void;
+}) {
   const t = useT();
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);

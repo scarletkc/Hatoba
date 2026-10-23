@@ -57,8 +57,10 @@ export function diffLines(before: string, after: string): DiffLine[] {
 
   const out: DiffLine[] = [];
   const same = (i: number, j: number) => out.push({ kind: "same", text: a[i], old: i + 1, new: j + 1 });
-  const del = (i: number) => out.push({ kind: "del", text: a[i], old: i + 1, new: null, ...(keyA[i] !== a[i] ? { noEol: true } : {}) });
-  const add = (j: number) => out.push({ kind: "add", text: b[j], old: null, new: j + 1, ...(keyB[j] !== b[j] ? { noEol: true } : {}) });
+  const del = (i: number) =>
+    out.push({ kind: "del", text: a[i], old: i + 1, new: null, ...(keyA[i] !== a[i] ? { noEol: true } : {}) });
+  const add = (j: number) =>
+    out.push({ kind: "add", text: b[j], old: null, new: j + 1, ...(keyB[j] !== b[j] ? { noEol: true } : {}) });
 
   for (let i = 0; i < start; i++) same(i, i);
   const n = endA - start;
@@ -72,7 +74,10 @@ export function diffLines(before: string, after: string): DiffLine[] {
     const lcs = new Uint32Array((n + 1) * width);
     for (let i = n - 1; i >= 0; i--)
       for (let j = m - 1; j >= 0; j--)
-        lcs[i * width + j] = keyA[start + i] === keyB[start + j] ? lcs[(i + 1) * width + j + 1] + 1 : Math.max(lcs[(i + 1) * width + j], lcs[i * width + j + 1]);
+        lcs[i * width + j] =
+          keyA[start + i] === keyB[start + j]
+            ? lcs[(i + 1) * width + j + 1] + 1
+            : Math.max(lcs[(i + 1) * width + j], lcs[i * width + j + 1]);
     let i = 0;
     let j = 0;
     while (i < n || j < m) {

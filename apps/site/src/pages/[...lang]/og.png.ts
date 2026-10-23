@@ -17,7 +17,11 @@ const SURFACE = 468;
 const PERIOD = 448;
 const AMPLITUDE = 36;
 
-const FOLDER: Record<Locale, string> = { en: "docs/media", zh: "apps/site/src/assets/screenshots/zh-CN", ja: "apps/site/src/assets/screenshots/ja" };
+const FOLDER: Record<Locale, string> = {
+  en: "docs/media",
+  zh: "apps/site/src/assets/screenshots/zh-CN",
+  ja: "apps/site/src/assets/screenshots/ja",
+};
 
 function wave(close: boolean): string {
   const start = -PERIOD;

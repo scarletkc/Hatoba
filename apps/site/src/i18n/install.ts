@@ -8,7 +8,10 @@ type Names = Record<string, string>;
  * English, translated. `source` is the English they translate: install.test.ts fails when the
  * English in release.mjs no longer matches it, so that a change there is translated here too.
  */
-export const TRANSLATED_STEPS: { source: Record<Platform, (names: Names) => string> } & Record<"zh" | "ja", Record<Platform, (names: Names) => string>> = {
+export const TRANSLATED_STEPS: { source: Record<Platform, (names: Names) => string> } & Record<
+  "zh" | "ja",
+  Record<Platform, (names: Names) => string>
+> = {
   source: {
     windows: ({ nsis }) =>
       `download \`${nsis}\` and run it. It installs Hatoba for the current user and needs no administrator rights. The installer is not code-signed, so Windows SmartScreen may stop it: choose **More info**, then **Run anyway**.`,

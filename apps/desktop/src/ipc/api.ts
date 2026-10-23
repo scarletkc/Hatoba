@@ -313,7 +313,11 @@ export interface HatobaApi {
   /** Step 2 of an upgrade, against the deployment started with `deploy_start`. */
   deploy_upgrade_inspect(handle: string, target: UpgradeTarget): Promise<UpgradePlan>;
   /** "Update Worker": the deployment steps as an upgrade. Run it again after a failure to continue; `deploy_check` asks again while step 8 waits. */
-  deploy_upgrade(handle: string, target: UpgradeTarget, onProgress: (p: DeployProgress) => void): Promise<DeployOutcome>;
+  deploy_upgrade(
+    handle: string,
+    target: UpgradeTarget,
+    onProgress: (p: DeployProgress) => void,
+  ): Promise<DeployOutcome>;
 
   // settings
   settings_get(): Promise<SettingsView>;
@@ -376,7 +380,13 @@ export interface HatobaApi {
    * and stores its result; says whether keeping a file snapshot dropped older ones (AI-41). `judged`: Auto mode
    * decided the call (AI-47), so the result is stored with the verdict Rust remembers for it.
    */
-  ai_tool_run(conversation_id: string, tool_call_id: string, session_id: string | null, edited_arguments: string | null, judged: boolean): Promise<AiToolRun>;
+  ai_tool_run(
+    conversation_id: string,
+    tool_call_id: string,
+    session_id: string | null,
+    edited_arguments: string | null,
+    judged: boolean,
+  ): Promise<AiToolRun>;
   /**
    * AI-47: asks the judge of Auto mode whether the open call `tool_call_id` can run without the approval card, and
    * remembers the verdict for the call's result. `screen_tail`: for `send_input`, the last lines of the tab's screen.
@@ -395,20 +405,35 @@ export interface HatobaApi {
    * host, for its approval card, with the arguments as the user edited them on the card. Rust reads the file
    * once per call and the call writes only over what it read.
    */
-  ai_file_preview(conversation_id: string, tool_call_id: string, session_id: string | null, edited_arguments: string | null): Promise<AiFilePreview>;
+  ai_file_preview(
+    conversation_id: string,
+    tool_call_id: string,
+    session_id: string | null,
+    edited_arguments: string | null,
+  ): Promise<AiFilePreview>;
   /** AI-41: the changes of the conversation's `edit_file` and `write_file` calls that this device keeps. */
   ai_file_changes(conversation_id: string): Promise<AiFileChange[]>;
   /**
    * AI-41: what the call `tool_call_id` of the response `response_id` changed, from the snapshot this device
    * keeps, from the file before the call to what it wrote; null once the change was reverted or dropped.
    */
-  ai_file_change_diff(conversation_id: string, response_id: string, tool_call_id: string): Promise<AiFilePreview | null>;
+  ai_file_change_diff(
+    conversation_id: string,
+    response_id: string,
+    tool_call_id: string,
+  ): Promise<AiFilePreview | null>;
   /**
    * AI-41: reverts the change of the call `tool_call_id` of the response `response_id` on the conversation's
    * tab `session_id`, only while the file holds what the call wrote, or with `restore` (Restore anyway), what
    * the diff of the last revert showed. A file the call created is deleted, so the panel asks first.
    */
-  ai_file_revert(conversation_id: string, response_id: string, tool_call_id: string, session_id: string | null, restore: boolean): Promise<AiFileRevert>;
+  ai_file_revert(
+    conversation_id: string,
+    response_id: string,
+    tool_call_id: string,
+    session_id: string | null,
+    restore: boolean,
+  ): Promise<AiFileRevert>;
   /** AI-41: the server a revert on the tab `session_id` runs on, as `AiFileChange.server` names it; null while the tab is not connected. */
   ai_session_server(session_id: string | null): Promise<string | null>;
   /** Stops the turn: aborts the request and running tools, cancels calls without a result. */
@@ -430,7 +455,13 @@ export interface HatobaApi {
   /** AI-24: conversations whose title or message text contains `query` (case-insensitive). */
   ai_search(query: string): Promise<AiSearchHit[]>;
   /** AI-26: replaces the user's message `entry_id` with `text`, deletes every entry after it, and starts a turn. */
-  ai_edit_resend(conversation_id: string, entry_id: string, text: string, context: AiTurnContext, onEvent: (event: AiTurnEvent) => void): Promise<AiSendStarted>;
+  ai_edit_resend(
+    conversation_id: string,
+    entry_id: string,
+    text: string,
+    context: AiTurnContext,
+    onEvent: (event: AiTurnEvent) => void,
+  ): Promise<AiSendStarted>;
   /**
    * AI-35, desktop app: reads text files dropped on the window, which its webview hands over as paths only.
    * Only paths of the window's last drop, each once; any other path refuses the request. One result per path,

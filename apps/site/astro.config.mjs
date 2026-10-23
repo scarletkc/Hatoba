@@ -31,7 +31,8 @@ export default defineConfig({
         name: "hatoba-demo-index",
         configureServer(server) {
           server.middlewares.use((request, _response, next) => {
-            if (request.url && /^\/demo\/(\?|$)/.test(request.url)) request.url = request.url.replace("/demo/", "/demo/index.html");
+            if (request.url && /^\/demo\/(\?|$)/.test(request.url))
+              request.url = request.url.replace("/demo/", "/demo/index.html");
             next();
           });
         },

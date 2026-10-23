@@ -72,8 +72,14 @@ export const en = {
         term: "Terminal",
         text: "Tabs, truecolor, CJK input methods, search, clickable links, and a confirmation before a multi-line paste.",
       },
-      { term: "SFTP", text: "A file panel beside the terminal, with drag-and-drop upload and downloads that you can cancel." },
-      { term: "Port forwarding", text: "Local, remote and SOCKS forwards that can start with the connection or run without a terminal." },
+      {
+        term: "SFTP",
+        text: "A file panel beside the terminal, with drag-and-drop upload and downloads that you can cancel.",
+      },
+      {
+        term: "Port forwarding",
+        text: "Local, remote and SOCKS forwards that can start with the connection or run without a terminal.",
+      },
       {
         term: "Keys",
         text: "Passwords, Ed25519, ECDSA, and RSA keys, ssh-agent, and keyboard-interactive 2FA. Import OpenSSH, PEM, and PuTTY keys, or generate new ones.",
@@ -106,7 +112,8 @@ export const en = {
     thisDevice: "For this device",
     requirements: {
       windows: "Windows 10 or 11 (x64).",
-      linux: "x86_64. Sync keeps its credentials in the Secret Service, so it needs GNOME Keyring, KWallet, or another Secret Service provider.",
+      linux:
+        "x86_64. Sync keeps its credentials in the Secret Service, so it needs GNOME Keyring, KWallet, or another Secret Service provider.",
       macos: "Apple Silicon, macOS 13 or later. This build is experimental.",
     },
     files: {
@@ -120,7 +127,8 @@ export const en = {
     packageManager: "Package manager",
     /** Inline Markdown, followed by the commands of PACKAGE_COMMANDS in consts.ts. */
     packages: {
-      windows: "Install Hatoba from the Extras bucket of [Scoop](https://scoop.sh), which then updates it with `scoop update hatoba`:",
+      windows:
+        "Install Hatoba from the Extras bucket of [Scoop](https://scoop.sh), which then updates it with `scoop update hatoba`:",
       linux:
         "On Arch Linux and distributions based on it, install [`hatoba-bin`](https://aur.archlinux.org/packages/hatoba-bin) from the AUR with an AUR helper such as yay. It then updates with the rest of the system:",
     } as Record<string, string>,
@@ -130,7 +138,8 @@ export const en = {
     checksums: "lists the checksum of every file in the release.",
     allReleases: "All releases",
     source: "Build from source",
-    testing: "Hatoba is developed on Windows, so the Linux and macOS builds get less testing. If something doesn't work, please open an issue.",
+    testing:
+      "Hatoba is developed on Windows, so the Linux and macOS builds get less testing. If something doesn't work, please open an issue.",
     issue: "Open an issue",
   },
   notFound: {

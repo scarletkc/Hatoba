@@ -55,7 +55,13 @@ describe("reduceTurnEvent (§13.1)", () => {
       usage: { input_tokens: 10, output_tokens: 5, estimated: false },
     });
 
-    const stored = run([{ kind: "entry", entry: assistant }, { kind: "done", finish: "tool_calls" }], s);
+    const stored = run(
+      [
+        { kind: "entry", entry: assistant },
+        { kind: "done", finish: "tool_calls" },
+      ],
+      s,
+    );
     expect(stored.turn?.live).toBeNull();
     expect(stored.turn?.phase).toBe("tools");
     expect(stored.entries).toEqual([assistant]);
@@ -84,15 +90,25 @@ describe("reduceTurnEvent (§13.1)", () => {
 
   it("keeps the part of a stopped reply that Rust stored, and says it was stopped", () => {
     const user: AiEntryView = { role: "user", entry_id: "e1", created_at: 0, text: "df?" };
-    const stopped: AiEntryView = { ...assistant, text: "The disk is 4", reasoning: null, tool_calls: [], finish: "stop", usage: null };
-    const s = run([
-      { kind: "request_started" },
-      { kind: "reasoning", delta: "Thinking" },
-      { kind: "text", delta: "The disk is 4" },
-      // Rust stores what streamed and sends it before the end of the turn (§13.1).
-      { kind: "entry", entry: stopped },
-      { kind: "turn_ended", reason: "stopped" },
-    ], { ...start, entries: [user] });
+    const stopped: AiEntryView = {
+      ...assistant,
+      text: "The disk is 4",
+      reasoning: null,
+      tool_calls: [],
+      finish: "stop",
+      usage: null,
+    };
+    const s = run(
+      [
+        { kind: "request_started" },
+        { kind: "reasoning", delta: "Thinking" },
+        { kind: "text", delta: "The disk is 4" },
+        // Rust stores what streamed and sends it before the end of the turn (§13.1).
+        { kind: "entry", entry: stopped },
+        { kind: "turn_ended", reason: "stopped" },
+      ],
+      { ...start, entries: [user] },
+    );
     expect(s.entries).toEqual([user, stopped]);
     expect(s.turn).toBeNull();
     expect(s.outcome).toEqual({ reason: "stopped" });
@@ -100,14 +116,23 @@ describe("reduceTurnEvent (§13.1)", () => {
 
   it("says when a reply ended without an answer, keeping its reasoning (§13.1)", () => {
     const user: AiEntryView = { role: "user", entry_id: "e1", created_at: 0, text: "df?" };
-    const empty: AiEntryView = { ...assistant, text: "", reasoning: "Thinking it over.", tool_calls: [], finish: "stop" };
-    const s = run([
-      { kind: "request_started" },
-      { kind: "reasoning", delta: "Thinking it over." },
-      { kind: "entry", entry: empty },
-      { kind: "done", finish: "stop" },
-      { kind: "turn_ended", reason: "empty" },
-    ], { ...start, entries: [user] });
+    const empty: AiEntryView = {
+      ...assistant,
+      text: "",
+      reasoning: "Thinking it over.",
+      tool_calls: [],
+      finish: "stop",
+    };
+    const s = run(
+      [
+        { kind: "request_started" },
+        { kind: "reasoning", delta: "Thinking it over." },
+        { kind: "entry", entry: empty },
+        { kind: "done", finish: "stop" },
+        { kind: "turn_ended", reason: "empty" },
+      ],
+      { ...start, entries: [user] },
+    );
     expect(s.entries).toEqual([user, empty]);
     expect(s.turn).toBeNull();
     expect(s.outcome).toEqual({ reason: "empty" });
@@ -116,13 +141,23 @@ describe("reduceTurnEvent (§13.1)", () => {
   });
 
   it("clears the last outcome when a new request starts", () => {
-    const s = run([{ kind: "request_started" }], { entries: [], turn: newTurn(), outcome: { reason: "refused" }, contextStart: null });
+    const s = run([{ kind: "request_started" }], {
+      entries: [],
+      turn: newTurn(),
+      outcome: { reason: "refused" },
+      contextStart: null,
+    });
     expect(s.outcome).toBeNull();
     expect(s.turn?.phase).toBe("waiting");
   });
 
   it("notes a thinking level the provider refused, for the rest of the turn (AI-05)", () => {
-    const s = run([{ kind: "request_started" }, { kind: "effort_ignored" }, { kind: "text", delta: "Hi" }, { kind: "turn_ended", reason: "completed" }]);
+    const s = run([
+      { kind: "request_started" },
+      { kind: "effort_ignored" },
+      { kind: "text", delta: "Hi" },
+      { kind: "turn_ended", reason: "completed" },
+    ]);
     expect(s.effortIgnored).toBe(true);
     expect(s.turn).toBeNull();
     expect(run([{ kind: "request_started" }]).effortIgnored).toBeUndefined();
@@ -189,7 +224,15 @@ describe("the file changes an edit deletes (AI-26, AI-41)", () => {
     entry_id: id,
     tool_calls: calls.map(([callId, name]) => ({ id: callId, name, arguments: "{}" })),
   });
-  const result = (id: string, callId: string, status: "ok" | "error" = "ok"): AiEntryView => ({ role: "tool", entry_id: id, created_at: 0, tool_call_id: callId, status, content: "", auto: null });
+  const result = (id: string, callId: string, status: "ok" | "error" = "ok"): AiEntryView => ({
+    role: "tool",
+    entry_id: id,
+    created_at: 0,
+    tool_call_id: callId,
+    status,
+    content: "",
+    auto: null,
+  });
   const change = (responseId: string, callId: string, state: AiFileChange["state"] = "written"): AiFileChange => ({
     response_id: responseId,
     tool_call_id: callId,
@@ -218,19 +261,35 @@ describe("the file changes an edit deletes (AI-26, AI-41)", () => {
   ];
 
   it("offers to revert the kept changes of the deleted calls, oldest first, unfinished ones too", () => {
-    const changes = [change("a1", "c1"), change("a2", "c2"), change("a2", "c3", "reverted"), change("a2", "c5", "unfinished"), change("a2", "c6", "dropped")];
+    const changes = [
+      change("a1", "c1"),
+      change("a2", "c2"),
+      change("a2", "c3", "reverted"),
+      change("a2", "c5", "unfinished"),
+      change("a2", "c6", "dropped"),
+    ];
     expect(editedFiles(entries, changes, "u2").revert).toEqual([change("a2", "c2"), change("a2", "c5", "unfinished")]);
-    expect(editedFiles(entries, changes, "u1").revert).toEqual([change("a1", "c1"), change("a2", "c2"), change("a2", "c5", "unfinished")]);
+    expect(editedFiles(entries, changes, "u1").revert).toEqual([
+      change("a1", "c1"),
+      change("a2", "c2"),
+      change("a2", "c5", "unfinished"),
+    ]);
   });
 
   it("counts the calls that wrote and whose change this device does not keep, or dropped", () => {
     // c6 wrote and has no change here; c5 failed, c4 is no file tool, and c2 and c3 are kept.
     expect(editedFiles(entries, [change("a2", "c2"), change("a2", "c3", "reverted")], "u2").untracked).toBe(1);
-    expect(editedFiles(entries, [change("a2", "c2"), change("a2", "c3", "reverted"), change("a2", "c6", "dropped")], "u2").untracked).toBe(1);
+    expect(
+      editedFiles(entries, [change("a2", "c2"), change("a2", "c3", "reverted"), change("a2", "c6", "dropped")], "u2")
+        .untracked,
+    ).toBe(1);
     expect(editedFiles(entries, [], "u2").untracked).toBe(3);
     expect(editedFiles(entries, [], "u1").untracked).toBe(4);
     // c5 failed partway: its dropped change stays on the host as well, and counts once with c6.
-    expect(editedFiles(entries, [change("a2", "c2"), change("a2", "c3", "reverted"), change("a2", "c5", "dropped")], "u2").untracked).toBe(2);
+    expect(
+      editedFiles(entries, [change("a2", "c2"), change("a2", "c3", "reverted"), change("a2", "c5", "dropped")], "u2")
+        .untracked,
+    ).toBe(2);
   });
 
   it("finds nothing after the newest message or for one it does not have", () => {
@@ -240,7 +299,12 @@ describe("the file changes an edit deletes (AI-26, AI-41)", () => {
   });
 
   it("reveals a result in the block of its own response's call when responses reuse call ids", () => {
-    const reused: AiEntryView[] = [...entries, { role: "user", entry_id: "u3", created_at: 0, text: "third" }, response("a3", [["c1", "edit_file"]]), result("t7", "c1")];
+    const reused: AiEntryView[] = [
+      ...entries,
+      { role: "user", entry_id: "u3", created_at: 0, text: "third" },
+      response("a3", [["c1", "edit_file"]]),
+      result("t7", "c1"),
+    ];
     const at = (id: string) => reused.find((e) => e.entry_id === id)!;
     expect(revealKey(reused, at("t1"))).toBe(callRevealKey("a1", "c1"));
     expect(revealKey(reused, at("t7"))).toBe(callRevealKey("a3", "c1"));
@@ -259,7 +323,15 @@ describe("entries", () => {
   });
 
   it("lists the newest response's calls without a result, in order", () => {
-    const result: AiEntryView = { role: "tool", entry_id: "e3", created_at: 0, tool_call_id: "c1", status: "ok", content: "ok", auto: null };
+    const result: AiEntryView = {
+      role: "tool",
+      entry_id: "e3",
+      created_at: 0,
+      tool_call_id: "c1",
+      status: "ok",
+      content: "ok",
+      auto: null,
+    };
     expect(unansweredCalls([assistant]).map((c) => c.id)).toEqual(["c1", "c2"]);
     expect(unansweredCalls([assistant, result]).map((c) => c.id)).toEqual(["c2"]);
     expect(unansweredCalls([])).toEqual([]);
@@ -273,7 +345,15 @@ describe("entries", () => {
         { id: "dup", name: "read_skill", arguments: '{"name":"b"}' },
       ],
     };
-    const result = (n: number): AiEntryView => ({ role: "tool", entry_id: `e3${n}`, created_at: 0, tool_call_id: "dup", status: "ok", content: "ok", auto: null });
+    const result = (n: number): AiEntryView => ({
+      role: "tool",
+      entry_id: `e3${n}`,
+      created_at: 0,
+      tool_call_id: "dup",
+      status: "ok",
+      content: "ok",
+      auto: null,
+    });
     expect(unansweredCalls([shared]).map((c) => c.arguments)).toEqual(['{"name":"a"}', '{"name":"b"}']);
     expect(unansweredCalls([shared, result(1)]).map((c) => c.arguments)).toEqual(['{"name":"b"}']);
     expect(unansweredCalls([shared, result(1), result(2)])).toEqual([]);
@@ -282,8 +362,16 @@ describe("entries", () => {
   it("keeps stored entries in entry id order, after them the pending message", () => {
     const user = (id: string): AiEntryView => ({ role: "user", entry_id: id, created_at: 0, text: id });
     const pending = user(LOCAL_ENTRY);
-    expect(upsertEntry([user("0001"), pending], user("0002")).map((e) => e.entry_id)).toEqual(["0001", "0002", LOCAL_ENTRY]);
-    expect(upsertEntry([user("0001"), user("0003")], user("0002")).map((e) => e.entry_id)).toEqual(["0001", "0002", "0003"]);
+    expect(upsertEntry([user("0001"), pending], user("0002")).map((e) => e.entry_id)).toEqual([
+      "0001",
+      "0002",
+      LOCAL_ENTRY,
+    ]);
+    expect(upsertEntry([user("0001"), user("0003")], user("0002")).map((e) => e.entry_id)).toEqual([
+      "0001",
+      "0002",
+      "0003",
+    ]);
     expect(upsertEntry([user("0001")], user("0009")).map((e) => e.entry_id)).toEqual(["0001", "0009"]);
   });
 });
@@ -309,7 +397,9 @@ describe("a message sent after an automatic compaction (AI-22)", () => {
     const placed = placeUserEntry(s.entries, stored);
     expect(placed.map((e) => e.entry_id)).toEqual([id(1), id(2), id(3), id(4), id(5), id(6)]);
     // Everything from the context start on is the message's context: the message is inside it.
-    expect(placed.findIndex((e) => e.entry_id === s.contextStart)).toBeLessThan(placed.findIndex((e) => e.entry_id === id(6)));
+    expect(placed.findIndex((e) => e.entry_id === s.contextStart)).toBeLessThan(
+      placed.findIndex((e) => e.entry_id === id(6)),
+    );
   });
 
   it("does the same when the stored message is placed before the summary arrives", () => {
@@ -320,7 +410,10 @@ describe("a message sent after an automatic compaction (AI-22)", () => {
 
   it("places an edited message after the summary of what came before it (AI-26)", () => {
     const edited = entriesBefore([...before, { role: "user", entry_id: id(5), created_at: 0, text: "old" }], id(5));
-    const s = run([{ kind: "entry", entry: { ...summary, entry_id: id(7) } }], { ...start, entries: [...edited, local] });
+    const s = run([{ kind: "entry", entry: { ...summary, entry_id: id(7) } }], {
+      ...start,
+      entries: [...edited, local],
+    });
     const placed = placeUserEntry(s.entries, { ...stored, entry_id: id(8) });
     expect(placed.map((e) => e.entry_id)).toEqual([id(1), id(2), id(3), id(4), id(7), id(8)]);
   });

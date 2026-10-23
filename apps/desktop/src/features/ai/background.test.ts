@@ -21,7 +21,15 @@ const ipc = vi.hoisted(() => ({
   send: vi.fn<(input: AiSendInput, onEvent: (event: AiTurnEvent) => void) => Promise<AiSendStarted>>(),
   stop: vi.fn<(conversationId: string) => Promise<void>>(),
   get: vi.fn<(id: string) => Promise<AiConversationDetail>>(),
-  run: vi.fn<(conversationId: string, toolCallId: string, sessionId: string | null, edited: string | null, judged: boolean) => Promise<AiToolRun>>(),
+  run: vi.fn<
+    (
+      conversationId: string,
+      toolCallId: string,
+      sessionId: string | null,
+      edited: string | null,
+      judged: boolean,
+    ) => Promise<AiToolRun>
+  >(),
   result: vi.fn<(conversationId: string, toolCallId: string, result: AiToolResultInput) => Promise<AiEntryView>>(),
   sideStop: vi.fn<(conversationId: string, questionId: number) => Promise<void>>(),
   remove: vi.fn<(conversationId: string) => Promise<void>>(),
@@ -44,14 +52,25 @@ vi.mock("@/ipc/api", async (importActual) => ({
 }));
 /** AI-07: whether the window has the focus, which decides whether a notification goes. */
 const focus = vi.hoisted(() => ({ focused: false }));
-vi.mock("@/lib/native", async (importActual) => ({ ...(await importActual<typeof import("@/lib/native")>()), windowFocused: () => Promise.resolve(focus.focused) }));
+vi.mock("@/lib/native", async (importActual) => ({
+  ...(await importActual<typeof import("@/lib/native")>()),
+  windowFocused: () => Promise.resolve(focus.focused),
+}));
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 // The tabs' terminals: connected, with an empty screen.
 vi.mock("@/features/terminal/session", async (importActual) => {
-  const active = { type: "normal", baseY: 0, length: 1, getLine: () => ({ isWrapped: false, translateToString: () => "$ " }) };
+  const active = {
+    type: "normal",
+    baseY: 0,
+    length: 1,
+    getLine: () => ({ isWrapped: false, translateToString: () => "$ " }),
+  };
   const session = { status: "connected", term: { rows: 1, buffer: { active } } };
-  return { ...(await importActual<typeof import("@/features/terminal/session")>()), getSession: (tabId: string) => (tabId.startsWith("tab-") ? session : undefined) };
+  return {
+    ...(await importActual<typeof import("@/features/terminal/session")>()),
+    getSession: (tabId: string) => (tabId.startsWith("tab-") ? session : undefined),
+  };
 });
 /** `send_input` typing into a tab's terminal: each call that types waits until the test answers it; one without text, or whose write fails, types nothing. */
 const typing = vi.hoisted(() => ({ calls: [] as { args: string; done: (outcome: ToolOutcome) => void }[] }));
@@ -59,7 +78,8 @@ vi.mock("./terminalTools", async (importActual) => ({
   ...(await importActual<typeof import("./terminalTools")>()),
   sendInput: (_session: unknown, args: string, _signal: AbortSignal, onType: () => () => void) => {
     const { text } = JSON.parse(args) as { text?: unknown };
-    if (typeof text !== "string") return Promise.resolve<ToolOutcome>({ status: "error", content: "Invalid arguments: text is required" });
+    if (typeof text !== "string")
+      return Promise.resolve<ToolOutcome>({ status: "error", content: "Invalid arguments: text is required" });
     const untype = onType();
     // "lost" stands for a write the connection dropped.
     if (text === "lost") {
@@ -92,14 +112,21 @@ const { DEFAULT_PREFS, useApp } = await import("@/app/store");
 
 const TAB = "tab-1";
 const OTHER = "tab-2";
-const tab = (id: string): SessionTab => ({ id, hostId: null, target: { address: "10.0.0.8", port: 22, username: "root" }, title: "root@10.0.0.8", status: "connected", sessionId: `s-${id}` });
+const tab = (id: string): SessionTab => ({
+  id,
+  hostId: null,
+  target: { address: "10.0.0.8", port: 22, username: "root" },
+  title: "root@10.0.0.8",
+  status: "connected",
+  sessionId: `s-${id}`,
+});
 const conv = (id: string, title: string): AiConversationView => ({
   id,
   title,
   host_id: null,
   quick_target: null,
   origin: null,
-      local: null,
+  local: null,
   pinned: false,
   context_start: null,
   effort: null,
@@ -116,12 +143,33 @@ const provider: AiProviderView = {
   base_url: "http://127.0.0.1/v1",
   has_api_key: false,
   auth_header: "x-api-key",
-  models: [{ id: "m1", name: "Model 1", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null }],
+  models: [
+    {
+      id: "m1",
+      name: "Model 1",
+      context_window: null,
+      max_output_tokens: null,
+      efforts: null,
+      adaptive_thinking: null,
+    },
+  ],
   updated_at: 0,
 };
 
-const call = (id: string, name: string, args: Record<string, unknown>): AiToolCall => ({ id, name, arguments: JSON.stringify(args) });
-const toolEntry = (callId: string): AiEntryView => ({ role: "tool", entry_id: `t-${callId}`, created_at: 0, tool_call_id: callId, status: "ok", content: "ok", auto: null });
+const call = (id: string, name: string, args: Record<string, unknown>): AiToolCall => ({
+  id,
+  name,
+  arguments: JSON.stringify(args),
+});
+const toolEntry = (callId: string): AiEntryView => ({
+  role: "tool",
+  entry_id: `t-${callId}`,
+  created_at: 0,
+  tool_call_id: callId,
+  status: "ok",
+  content: "ok",
+  auto: null,
+});
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 async function until(check: () => boolean) {
@@ -140,7 +188,10 @@ function turns() {
   ipc.send.mockImplementation(async (input, onEvent) => {
     const view = input.conversation_id === nginx.id ? nginx : disk;
     sent.push({ text: input.text, conversationId: view.id, emit: onEvent });
-    return { conversation: view, user_entry: { role: "user", entry_id: `u${sent.length}`, created_at: 0, text: input.text } };
+    return {
+      conversation: view,
+      user_entry: { role: "user", entry_id: `u${sent.length}`, created_at: 0, text: input.text },
+    };
   });
   return sent;
 }
@@ -150,7 +201,18 @@ function answer(emit: Emit, entryId: string, calls: AiToolCall[]) {
   emit({ kind: "request_started" });
   emit({
     kind: "entry",
-    entry: { role: "assistant", entry_id: entryId, created_at: 0, provider_id: "p1", model_id: "m1", text: "", reasoning: null, tool_calls: calls, finish: "tool_calls", usage: null },
+    entry: {
+      role: "assistant",
+      entry_id: entryId,
+      created_at: 0,
+      provider_id: "p1",
+      model_id: "m1",
+      text: "",
+      reasoning: null,
+      tool_calls: calls,
+      finish: "tool_calls",
+      usage: null,
+    },
   });
   emit({ kind: "done", finish: "tool_calls" });
 }
@@ -162,8 +224,15 @@ const nginxSlot = () => getSlot(held()!);
 beforeEach(() => {
   ipc.send.mockReset();
   ipc.stop.mockReset().mockResolvedValue(undefined);
-  ipc.get.mockReset().mockImplementation(async (id) => ({ conversation: id === nginx.id ? nginx : disk, entries: [], running: false, file_changes: [] }));
-  ipc.run.mockReset().mockImplementation(async (_conv, callId) => ({ entry: toolEntry(callId), dropped_file_changes: false }));
+  ipc.get.mockReset().mockImplementation(async (id) => ({
+    conversation: id === nginx.id ? nginx : disk,
+    entries: [],
+    running: false,
+    file_changes: [],
+  }));
+  ipc.run
+    .mockReset()
+    .mockImplementation(async (_conv, callId) => ({ entry: toolEntry(callId), dropped_file_changes: false }));
   ipc.result.mockReset().mockImplementation(async (_conv, callId) => toolEntry(callId));
   ipc.sideStop.mockReset().mockResolvedValue(undefined);
   ipc.remove.mockReset().mockResolvedValue(undefined);
@@ -287,7 +356,12 @@ describe("leaving a conversation while its turn runs (AI-07)", () => {
     fail({ code: "cancelled", detail: "stopped" });
     expect(await sending).toBe(false);
     expect(useAi.getState().background).toEqual({});
-    expect(getSlot(TAB)).toMatchObject({ conversationId: null, turn: null, queued: null, draft: "first question\n\nand a follow-up\n\ntyped since" });
+    expect(getSlot(TAB)).toMatchObject({
+      conversationId: null,
+      turn: null,
+      queued: null,
+      draft: "first question\n\nand a follow-up\n\ntyped since",
+    });
   });
 
   it("keeps the chips of a queued message that goes back in the background with its conversation", async () => {
@@ -302,7 +376,10 @@ describe("leaving a conversation while its turn runs (AI-07)", () => {
     // The tab's other conversation does not get the selection the message took.
     expect(selectionAttachment(TAB)).toBeNull();
     expect(tabSelection(TAB).hidden).not.toBeNull();
-    expect(nginxSlot()).toMatchObject({ draft: "why?", extras: [{ attachment: { kind: "selection", text: "502 Bad Gateway" } }] });
+    expect(nginxSlot()).toMatchObject({
+      draft: "why?",
+      extras: [{ attachment: { kind: "selection", text: "502 Bad Gateway" } }],
+    });
 
     await openConversation(TAB, nginx.id);
     await sendMessage(TAB, getSlot(TAB).draft);
@@ -335,7 +412,11 @@ describe("leaving a conversation while its turn runs (AI-07)", () => {
     fail({ code: "cancelled", detail: "stopped" });
     expect(await sending).toBe(false);
     expect(useAi.getState().background).toEqual({});
-    expect(getSlot(TAB)).toMatchObject({ conversationId: null, turn: null, draft: "check the logs\n\nthen restart it\n\ntyped since" });
+    expect(getSlot(TAB)).toMatchObject({
+      conversationId: null,
+      turn: null,
+      draft: "check the logs\n\nthen restart it\n\ntyped since",
+    });
   });
 
   it("discards a message still on its way in a background conversation when its tab closes", async () => {
@@ -363,7 +444,11 @@ describe("leaving a conversation while its turn runs (AI-07)", () => {
 
       resetForLock();
       if (settle === "reject") done.reject({ code: "cancelled", detail: "locked" });
-      else done.resolve({ conversation: disk, user_entry: { role: "user", entry_id: "u1", created_at: 0, text: "first question" } });
+      else
+        done.resolve({
+          conversation: disk,
+          user_entry: { role: "user", entry_id: "u1", created_at: 0, text: "first question" },
+        });
       await sending;
       expect(useAi.getState().background).toEqual({});
       expect(getSlot(TAB).draft).toBe(settle === "reject" ? "first question\n\nand a follow-up" : "and a follow-up");
@@ -396,7 +481,15 @@ describe("leaving a conversation while its turn runs (AI-07)", () => {
     useTabs.setState({ active: OTHER });
     await openConversation(OTHER, nginx.id);
 
-    const late: AiEntryView = { role: "tool", entry_id: "t-late", created_at: 0, tool_call_id: "call_9", status: "cancelled", content: "cancelled", auto: null };
+    const late: AiEntryView = {
+      role: "tool",
+      entry_id: "t-late",
+      created_at: 0,
+      tool_call_id: "call_9",
+      status: "cancelled",
+      content: "cancelled",
+      auto: null,
+    };
     sent[0].emit({ kind: "entry", entry: late });
     expect(getSlot(OTHER).entries).toContainEqual(late);
     expect(getSlot(TAB).entries).toEqual([]);
@@ -471,10 +564,16 @@ describe("leaving a conversation while its turn runs (AI-07)", () => {
 describe("the marks of a tab whose conversations run several calls at once (AI-07)", () => {
   it("count a background turn's concurrent calls as running, and an approval card of another conversation as waiting", async () => {
     const reads: (() => void)[] = [];
-    ipc.run.mockImplementation((_conv, callId) => new Promise((done) => reads.push(() => done({ entry: toolEntry(callId), dropped_file_changes: false }))));
+    ipc.run.mockImplementation(
+      (_conv, callId) =>
+        new Promise((done) => reads.push(() => done({ entry: toolEntry(callId), dropped_file_changes: false }))),
+    );
     const sent = turns();
     await sendMessage(TAB, "read the configs");
-    answer(sent[0].emit, "a1", [call("call_1", "read_file", { path: "/etc/nginx/nginx.conf" }), call("call_2", "read_file", { path: "/etc/hosts" })]);
+    answer(sent[0].emit, "a1", [
+      call("call_1", "read_file", { path: "/etc/nginx/nginx.conf" }),
+      call("call_2", "read_file", { path: "/etc/hosts" }),
+    ]);
     await until(() => reads.length === 2);
 
     newConversation(TAB);
@@ -523,7 +622,8 @@ describe("the exec channels of a tab's connection, shared by its conversations (
     );
     return { open, most: () => most, end: (...ids: string[]) => ids.forEach((id) => open.get(id)!()) };
   }
-  const reads = (prefix: string, n: number) => Array.from({ length: n }, (_, i) => call(`${prefix}${i}`, "read_file", { path: `/etc/file${i}` }));
+  const reads = (prefix: string, n: number) =>
+    Array.from({ length: n }, (_, i) => call(`${prefix}${i}`, "read_file", { path: `/etc/file${i}` }));
   const ran = () => ipc.run.mock.calls.map(([, callId]) => callId);
 
   it("run at most four at once across the tab's conversations, a batch's calls and a call that runs alone", async () => {
@@ -592,10 +692,17 @@ describe("a tab's terminal shared by its conversations (AI-07)", () => {
     const sent = turns();
     patchSlot(TAB, { mode: "bypass" });
     await sendMessage(TAB, "tail the log");
-    answer(sent[0].emit, "a1", [call("call_1", "send_input", { key: "enter" }), call("call_1b", "send_input", { text: "lost", key: "enter" })]);
+    answer(sent[0].emit, "a1", [
+      call("call_1", "send_input", { key: "enter" }),
+      call("call_1b", "send_input", { text: "lost", key: "enter" }),
+    ]);
     await until(() => ipc.result.mock.calls.length === 2);
     expect(ipc.result).toHaveBeenCalledWith(nginx.id, "call_1", expect.objectContaining({ status: "error" }));
-    expect(ipc.result).toHaveBeenCalledWith(nginx.id, "call_1b", expect.objectContaining({ status: "error", content: expect.stringContaining("could not be sent") }));
+    expect(ipc.result).toHaveBeenCalledWith(
+      nginx.id,
+      "call_1b",
+      expect.objectContaining({ status: "error", content: expect.stringContaining("could not be sent") }),
+    );
 
     newConversation(TAB);
     patchSlot(TAB, { mode: "bypass" });
@@ -609,13 +716,18 @@ describe("a tab's terminal shared by its conversations (AI-07)", () => {
     const sent = turns();
     patchSlot(TAB, { mode: "bypass" });
     await sendMessage(TAB, "tail the log");
-    answer(sent[0].emit, "a1", [call("call_1", "send_input", { text: "tail -f /var/log/nginx/error.log", key: "enter" })]);
+    answer(sent[0].emit, "a1", [
+      call("call_1", "send_input", { text: "tail -f /var/log/nginx/error.log", key: "enter" }),
+    ]);
     await until(() => typing.calls.length === 1);
 
     newConversation(TAB);
     patchSlot(TAB, { mode: "bypass" });
     await sendMessage(TAB, "how full is the disk?");
-    answer(sent[1].emit, "b1", [call("call_2", "send_input", { text: "df -h", key: "enter" }), call("call_3", "run_command", { command: "df -h" })]);
+    answer(sent[1].emit, "b1", [
+      call("call_2", "send_input", { text: "df -h", key: "enter" }),
+      call("call_3", "run_command", { command: "df -h" }),
+    ]);
     await until(() => ipc.run.mock.calls.length === 1);
     expect(typing.calls).toHaveLength(1);
     expect(ipc.result).toHaveBeenCalledWith(disk.id, "call_2", {
@@ -665,7 +777,11 @@ describe("system notifications (AI-07)", () => {
     sent[0].emit({ kind: "error", status: 529, message: "overloaded" });
     sent[0].emit({ kind: "turn_ended", reason: "error" });
     await until(() => ipc.notify.mock.calls.length === 1);
-    expect(ipc.notify).toHaveBeenCalledWith({ title: "AI Assistant", body: "Stopped on an error: nginx 502", target: { tab: "home", conversation_id: nginx.id, host_id: null } });
+    expect(ipc.notify).toHaveBeenCalledWith({
+      title: "AI Assistant",
+      body: "Stopped on an error: nginx 502",
+      target: { tab: "home", conversation_id: nginx.id, host_id: null },
+    });
   });
 
   it("send nothing while the window has the focus, or with the setting off", async () => {

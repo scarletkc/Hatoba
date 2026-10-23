@@ -29,7 +29,11 @@ export function nextZoom(current: number, action: ZoomAction, max: number): numb
 }
 
 /** The next size from `current`, one px a step within `min` and `max`. */
-export function nextSize(current: number, action: ZoomAction, { min, max, reset }: { min: number; max: number; reset: number }): number {
+export function nextSize(
+  current: number,
+  action: ZoomAction,
+  { min, max, reset }: { min: number; max: number; reset: number },
+): number {
   if (action === "reset") return reset;
   return Math.min(max, Math.max(min, current + (action === "in" ? 1 : -1)));
 }
@@ -91,7 +95,11 @@ export function setAiTextSize(text_size: number) {
 function zoomAiText(action: ZoomAction, el: Element | null) {
   const settings = useAi.getState().catalog.settings;
   if (!settings) return;
-  const text_size = nextSize(settings.text_size, action, { min: AI_TEXT_SIZE_MIN, max: AI_TEXT_SIZE_MAX, reset: AI_TEXT_SIZE_DEFAULT });
+  const text_size = nextSize(settings.text_size, action, {
+    min: AI_TEXT_SIZE_MIN,
+    max: AI_TEXT_SIZE_MAX,
+    reset: AI_TEXT_SIZE_DEFAULT,
+  });
   setAiTextSize(text_size);
   showZoomHud(`${text_size} px`, el?.closest("[data-zoom='ai']")?.getBoundingClientRect() ?? null);
 }

@@ -27,7 +27,8 @@ vi.mock("@/ipc/api", async (importActual) => ({
     vault_unlock_biometric: async () => {
       backend.calls.push("hello");
       const error = backend.biometricError as { code: string } | null;
-      if (error?.code === "biometric_stale") backend.status = { ...(backend.status as object), biometric_enabled: false };
+      if (error?.code === "biometric_stale")
+        backend.status = { ...(backend.status as object), biometric_enabled: false };
       throw error ?? { code: "cancelled", detail: "Windows Hello was cancelled" };
     },
   },
@@ -56,7 +57,13 @@ afterEach(() => {
 
 /** A locked vault with these unlock methods. */
 function locked(status: Partial<VaultStatus>, lockReason: "manual" | "idle" | "sleep" | null = null) {
-  const vault = { state: "locked", retry_at: null, biometric_enabled: false, pin_unlock: false, ...status } as VaultStatus;
+  const vault = {
+    state: "locked",
+    retry_at: null,
+    biometric_enabled: false,
+    pin_unlock: false,
+    ...status,
+  } as VaultStatus;
   backend.status = vault;
   useApp.setState({ vault, lockReason });
 }
@@ -76,7 +83,8 @@ function type(field: HTMLInputElement, value: string) {
 }
 
 const field = () => document.querySelector<HTMLInputElement>("form input")!;
-const link = (key: Parameters<typeof t>[0]) => [...document.querySelectorAll("button")].find((b) => b.textContent === t(key));
+const link = (key: Parameters<typeof t>[0]) =>
+  [...document.querySelectorAll("button")].find((b) => b.textContent === t(key));
 
 async function submit() {
   await act(async () => {
@@ -95,7 +103,10 @@ function show() {
     host.remove();
   };
   const field = document.querySelector<HTMLInputElement>(`input[aria-label="${t("vault.unlock.field")}"]`)!;
-  const reveal = () => document.querySelector<HTMLButtonElement>(`button[aria-label="${t("field.show")}"], button[aria-label="${t("field.hide")}"]`)!;
+  const reveal = () =>
+    document.querySelector<HTMLButtonElement>(
+      `button[aria-label="${t("field.show")}"], button[aria-label="${t("field.hide")}"]`,
+    )!;
   return { field, reveal };
 }
 

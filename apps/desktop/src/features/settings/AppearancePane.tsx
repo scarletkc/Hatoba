@@ -27,9 +27,24 @@ export function AppearancePane() {
       <Group>
         <SettingRow top label={t("settings.appearance")}>
           <div className={s.thumbs} role="radiogroup" aria-label={t("settings.appearance")}>
-            <Thumb kind="light" label={t("settings.appearance.light")} selected={prefs.appearance === "light"} onSelect={() => setPrefs({ appearance: "light" })} />
-            <Thumb kind="dark" label={t("settings.appearance.dark")} selected={prefs.appearance === "dark"} onSelect={() => setPrefs({ appearance: "dark" })} />
-            <Thumb kind="system" label={t("settings.appearance.auto")} selected={prefs.appearance === "system"} onSelect={() => setPrefs({ appearance: "system" })} />
+            <Thumb
+              kind="light"
+              label={t("settings.appearance.light")}
+              selected={prefs.appearance === "light"}
+              onSelect={() => setPrefs({ appearance: "light" })}
+            />
+            <Thumb
+              kind="dark"
+              label={t("settings.appearance.dark")}
+              selected={prefs.appearance === "dark"}
+              onSelect={() => setPrefs({ appearance: "dark" })}
+            />
+            <Thumb
+              kind="system"
+              label={t("settings.appearance.auto")}
+              selected={prefs.appearance === "system"}
+              onSelect={() => setPrefs({ appearance: "system" })}
+            />
           </div>
         </SettingRow>
         <SettingRow label={t("settings.density")}>
@@ -43,13 +58,21 @@ export function AppearancePane() {
             onChange={(density) => setPrefs({ density })}
           />
         </SettingRow>
-        <SettingRow label={t("settings.zoom")} hint={zoom.max < ZOOM_STEPS[ZOOM_STEPS.length - 1] ? t("settings.zoom.max", { n: zoom.max }) : undefined}>
+        <SettingRow
+          label={t("settings.zoom")}
+          hint={zoom.max < ZOOM_STEPS[ZOOM_STEPS.length - 1] ? t("settings.zoom.max", { n: zoom.max }) : undefined}
+        >
           <PopupSelect
             ariaLabel={t("settings.zoom")}
             value={zoom.zoom}
             minWidth={100}
             options={ZOOM_STEPS.filter((z) => z <= zoom.max).map((z) => ({ value: z, label: `${z}%` }))}
-            onChange={(z) => void useApp.getState().setZoom(z).catch((e) => toast(errorMessage(t, e), "error"))}
+            onChange={(z) =>
+              void useApp
+                .getState()
+                .setZoom(z)
+                .catch((e) => toast(errorMessage(t, e), "error"))
+            }
           />
         </SettingRow>
       </Group>
@@ -73,7 +96,17 @@ export function AppearancePane() {
 }
 
 /** Miniature window used as the appearance picker (colors are fixed illustrations, not theme tokens). */
-function Thumb({ kind, label, selected, onSelect }: { kind: Appearance; label: string; selected: boolean; onSelect: () => void }) {
+function Thumb({
+  kind,
+  label,
+  selected,
+  onSelect,
+}: {
+  kind: Appearance;
+  label: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   return (
     <button type="button" role="radio" aria-checked={selected} className={s.thumb} onClick={onSelect}>
       <span className={cx(s.preview, s[kind], selected && s.previewOn)}>

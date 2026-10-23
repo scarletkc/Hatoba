@@ -44,7 +44,13 @@ describe("the change on the approval card (AI-39, AI-40)", () => {
   });
 
   it("shows why a call cannot apply instead of a diff", () => {
-    const el = render({ path: "/etc/hosts", before: null, after: null, error: "old_string was not found in /etc/hosts", crlf: false });
+    const el = render({
+      path: "/etc/hosts",
+      before: null,
+      after: null,
+      error: "old_string was not found in /etc/hosts",
+      crlf: false,
+    });
     expect(el.querySelector('[role="alert"]')?.textContent).toContain("old_string was not found");
     expect(el.querySelector('[role="group"]')).toBeNull();
   });

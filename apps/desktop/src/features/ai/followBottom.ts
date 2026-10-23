@@ -1,4 +1,12 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, type KeyboardEvent, type RefObject, type WheelEvent } from "react";
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type KeyboardEvent,
+  type RefObject,
+  type WheelEvent,
+} from "react";
 
 /** How near the bottom, in pixels, a scroll down has to end for the list to follow new content again. */
 const NEAR_BOTTOM = 48;
@@ -8,7 +16,8 @@ const UP_KEYS = new Set(["ArrowUp", "PageUp", "Home"]);
 const gapBelow = (el: HTMLElement) => el.scrollHeight - el.scrollTop - el.clientHeight;
 
 const isTextField = (target: EventTarget | null) =>
-  target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+  target instanceof HTMLElement &&
+  (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 
 /** Whether turning the wheel up over `target` scrolls `list`, not a scroller inside it that can still go up. */
 function wheelScrollsList(list: HTMLElement, target: EventTarget | null): boolean {
@@ -107,7 +116,8 @@ export function useFollowBottom(ref: RefObject<HTMLElement | null>, live: boolea
       },
       onKeyDown(e) {
         const el = ref.current;
-        if (el && UP_KEYS.has(e.key) && !e.defaultPrevented && !isTextField(e.target) && el.scrollTop > 0) follow.current = false;
+        if (el && UP_KEYS.has(e.key) && !e.defaultPrevented && !isTextField(e.target) && el.scrollTop > 0)
+          follow.current = false;
       },
       stick() {
         follow.current = true;

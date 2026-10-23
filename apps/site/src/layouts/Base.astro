@@ -25,7 +25,16 @@ interface Props {
   noindex?: boolean;
 }
 
-const { locale, title, description, path, translated = true, jsonLd, heroHeader = false, noindex = false } = Astro.props;
+const {
+  locale,
+  title,
+  description,
+  path,
+  translated = true,
+  jsonLd,
+  heroHeader = false,
+  noindex = false,
+} = Astro.props;
 const t = messages(locale);
 const url = new URL(localePath(locale, path), SITE_URL).href;
 const image = new URL(localePath(translated ? locale : "en", "/og.png"), SITE_URL).href;
@@ -69,12 +78,12 @@ const redirect =
     <title>{title}</title>
     <meta name="description" content={description} />
     {noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={url} />}
-    {
-      translated && [
-        ...LOCALES.map((other) => <link rel="alternate" hreflang={LANG[other]} href={new URL(localePath(other, path), SITE_URL).href} />),
-        <link rel="alternate" hreflang="x-default" href={new URL(path, SITE_URL).href} />,
-      ]
-    }
+    {translated && [
+      ...LOCALES.map((other) => (
+        <link rel="alternate" hreflang={LANG[other]} href={new URL(localePath(other, path), SITE_URL).href} />
+      )),
+      <link rel="alternate" hreflang="x-default" href={new URL(path, SITE_URL).href} />,
+    ]}
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Hatoba" />
     <meta property="og:title" content={title} />
@@ -85,7 +94,10 @@ const redirect =
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content={t.hero.alt} />
     <meta property="og:locale" content={OG_LOCALE[locale]} />
-    {translated && LOCALES.filter((other) => other !== locale).map((other) => <meta property="og:locale:alternate" content={OG_LOCALE[other]} />)}
+    {translated &&
+      LOCALES.filter((other) => other !== locale).map((other) => (
+        <meta property="og:locale:alternate" content={OG_LOCALE[other]} />
+      ))}
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="theme-color" content="#0d1735" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
@@ -102,25 +114,36 @@ const redirect =
         const platform = (navigator.userAgentData?.platform || navigator.platform || ua).toLowerCase();
         // iPadOS reports itself as a Mac, but a Mac has no touch screen.
         if (/mac/.test(platform) && navigator.maxTouchPoints > 1) return;
-        const os = /win/.test(platform) ? "windows" : /mac/.test(platform) ? "macos" : /linux|x11|cros/.test(platform) ? "linux" : "";
+        const os = /win/.test(platform)
+          ? "windows"
+          : /mac/.test(platform)
+            ? "macos"
+            : /linux|x11|cros/.test(platform)
+              ? "linux"
+              : "";
         if (os) document.documentElement.dataset.os = os;
       })();
     </script>
   </head>
   <body>
-    <a class="skip" href="#main">{t.nav.skip}</a>
+    <a class="skip" href="#main">
+      {t.nav.skip}
+    </a>
     <Header locale={locale} path={path} translated={translated} edge={!heroHeader} />
     <main id="main">
       <slot />
     </main>
     <Footer locale={locale} />
-    <script is:inline set:html={`document.addEventListener("click", (event) => {
+    <script
+      is:inline
+      set:html={`document.addEventListener("click", (event) => {
       // A language picked in a menu stops the redirect above.
       const link = event.target instanceof Element && event.target.closest("a[data-locale]");
       if (!link) return;
       try {
         localStorage.setItem("${LOCALE_KEY}", link.dataset.locale);
       } catch {}
-    });`} />
+    });`}
+    />
   </body>
 </html>

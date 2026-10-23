@@ -12,7 +12,8 @@
         font-display: block;
         font-weight: 100 900;
         font-stretch: 62% 125%;
-        src: url("../../../apps/site/node_modules/@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2") format("woff2-variations");
+        src: url("../../../apps/site/node_modules/@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2")
+          format("woff2-variations");
       }
 
       :root {
@@ -104,7 +105,12 @@
         position: absolute;
         inset: auto 0 0 0;
         height: calc(112px + var(--wave-height));
-        background: linear-gradient(180deg, var(--sea-surface) 0, var(--sea-shallow) var(--wave-height), var(--deep) 100%);
+        background: linear-gradient(
+          180deg,
+          var(--sea-surface) 0,
+          var(--sea-shallow) var(--wave-height),
+          var(--deep) 100%
+        );
         mask:
           url("../../../apps/site/src/assets/wave.svg") 192px 0 / 448px 36px repeat-x,
           linear-gradient(black 0 0) 0 35px / 100% calc(100% - 35px) no-repeat;

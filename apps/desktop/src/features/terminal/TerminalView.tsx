@@ -175,7 +175,12 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
     if (context) return [copy, paste, selectAll, { kind: "separator" }, askAi, { kind: "separator" }, clear, find];
     if (local) {
       return [
-        { label: t("terminal.local.restart"), icon: "arrow-clockwise", disabled: tab.status === "connecting", onSelect: () => void reconnectSession(tab.id) },
+        {
+          label: t("terminal.local.restart"),
+          icon: "arrow-clockwise",
+          disabled: tab.status === "connecting",
+          onSelect: () => void reconnectSession(tab.id),
+        },
         { kind: "separator" },
         copy,
         paste,
@@ -187,8 +192,18 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
       ];
     }
     return [
-      { label: t("terminal.menu.reconnect"), icon: "arrow-clockwise", disabled: tab.status === "connecting", onSelect: () => void reconnectSession(tab.id) },
-      { label: t("terminal.menu.disconnect"), icon: "plugs", disabled: !connected, onSelect: () => void session.disconnect() },
+      {
+        label: t("terminal.menu.reconnect"),
+        icon: "arrow-clockwise",
+        disabled: tab.status === "connecting",
+        onSelect: () => void reconnectSession(tab.id),
+      },
+      {
+        label: t("terminal.menu.disconnect"),
+        icon: "plugs",
+        disabled: !connected,
+        onSelect: () => void session.disconnect(),
+      },
       { kind: "separator" },
       copy,
       paste,
@@ -279,7 +294,11 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
             />
           )}
           {tab.status === "disconnected" && (
-            <DisconnectedBanner reason={info.reason} local={local ? tab.title : null} onReconnect={() => void reconnectSession(tab.id)} />
+            <DisconnectedBanner
+              reason={info.reason}
+              local={local ? tab.title : null}
+              onReconnect={() => void reconnectSession(tab.id)}
+            />
           )}
         </div>
         {info.sftpOpen && connected && tab.sessionId && !local && (

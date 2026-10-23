@@ -18,13 +18,22 @@ export function noteLabel(t: Tr, note: Note, device = ""): string {
     case "interrupted":
       return t("ai.note.interrupted");
     case "host_change":
-      return t("ai.note.hostChange", { to: placeLabel(t, note.to, device), from: note.from ? placeLabel(t, note.from, device) : t("ai.history.hostGone") });
+      return t("ai.note.hostChange", {
+        to: placeLabel(t, note.to, device),
+        from: note.from ? placeLabel(t, note.from, device) : t("ai.history.hostGone"),
+      });
     case "terminal_change":
       return t(note.to === "attached" ? "ai.note.terminalAttached" : "ai.note.terminalDetached");
     case "model_change":
       return t("ai.note.modelChange", { to: modelName(note.to), from: modelName(note.from) });
     case "permission_mode":
-      return t(note.mode === "bypass" ? "ai.note.permissionBypass" : note.mode === "auto" ? "ai.note.permissionAuto" : "ai.note.permissionManual");
+      return t(
+        note.mode === "bypass"
+          ? "ai.note.permissionBypass"
+          : note.mode === "auto"
+            ? "ai.note.permissionAuto"
+            : "ai.note.permissionManual",
+      );
     case "memory":
       return t("ai.note.memory", { n: note.entries });
     case "file_revert":

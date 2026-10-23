@@ -60,12 +60,22 @@ export type MemoryProblem = "empty_name" | "long_name" | "empty_content" | "take
  * when the edit keeps its name and its scope, the other memories of that name there, which devices saved before they
  * synced and which count as one with it.
  */
-export function editedIds(memories: readonly AiMemoryView[], id: string | null, scope: MemoryScope, name: string): string[] {
+export function editedIds(
+  memories: readonly AiMemoryView[],
+  id: string | null,
+  scope: MemoryScope,
+  name: string,
+): string[] {
   if (id === null) return [];
   const clean = cleanMemoryName(name);
   const edited = memories.find((m) => m.id === id);
   const kept = edited?.name === clean && memoryScope(edited) === scope;
-  return [id, ...(kept ? memories.filter((m) => m.id !== id && m.name === clean && memoryScope(m) === scope).map((m) => m.id) : [])];
+  return [
+    id,
+    ...(kept
+      ? memories.filter((m) => m.id !== id && m.name === clean && memoryScope(m) === scope).map((m) => m.id)
+      : []),
+  ];
 }
 
 /**

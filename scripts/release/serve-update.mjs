@@ -19,12 +19,18 @@ if (!values.installer || !values.pubkey) {
   process.exit(1);
 }
 // The updater looks for the installer under a key that depends on the kind of build it runs in.
-const bundle = Object.keys(INSTALLERS).find((type) => INSTALLERS[type].updater && extname(INSTALLERS[type].name("0")) === extname(values.installer));
-if (!bundle) throw new Error(`${values.installer} is not an NSIS installer, a deb package, an AppImage, or a macOS app tarball.`);
+const bundle = Object.keys(INSTALLERS).find(
+  (type) => INSTALLERS[type].updater && extname(INSTALLERS[type].name("0")) === extname(values.installer),
+);
+if (!bundle)
+  throw new Error(`${values.installer} is not an NSIS installer, a deb package, an AppImage, or a macOS app tarball.`);
 const installer = readFileSync(values.installer);
 const signature = readFileSync(`${values.installer}.sig`, "utf8").trim();
 const version = verifyUpdaterSignature(installer, signature, readFileSync(values.pubkey, "utf8"));
-if (!version) throw new Error(`${values.installer}.sig names no version; sign it with \`tauri build\` or \`tauri signer sign --app-version\`.`);
+if (!version)
+  throw new Error(
+    `${values.installer}.sig names no version; sign it with \`tauri build\` or \`tauri signer sign --app-version\`.`,
+  );
 
 const name = basename(values.installer);
 const path = `/${encodeURIComponent(name)}`;
@@ -41,7 +47,9 @@ createServer((req, res) => {
   if (req.url === "/latest.json") {
     res.writeHead(200, { "Content-Type": "application/json" }).end(latest);
   } else if (req.url === path) {
-    res.writeHead(200, { "Content-Type": "application/octet-stream", "Content-Length": installer.length }).end(installer);
+    res
+      .writeHead(200, { "Content-Type": "application/octet-stream", "Content-Length": installer.length })
+      .end(installer);
   } else {
     res.writeHead(404).end();
   }

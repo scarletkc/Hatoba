@@ -1,30 +1,68 @@
 import { describe, expect, it } from "vitest";
-import { CallRoom, MAX_CONCURRENT_CALLS, MAX_CONCURRENT_CHANNELS, type CallLimit, nextBatch, runConcurrently, toolBatches } from "./batches";
+import {
+  CallRoom,
+  MAX_CONCURRENT_CALLS,
+  MAX_CONCURRENT_CHANNELS,
+  type CallLimit,
+  nextBatch,
+  runConcurrently,
+  toolBatches,
+} from "./batches";
 import { concurrencySafe, limitOf, toolKind } from "./tools";
 
 describe("which calls run together (§13.1)", () => {
   const safe = (name: string, args: Record<string, unknown> = {}) => concurrencySafe(toolKind(name), args);
 
   it("counts the tools that only read, and run_command only for a command line that only reads", () => {
-    for (const name of ["read_terminal", "read_file", "grep", "glob", "web_search", "fetch_url", "read_skill", "search_tools"]) expect(safe(name), name).toBe(true);
+    for (const name of [
+      "read_terminal",
+      "read_file",
+      "grep",
+      "glob",
+      "web_search",
+      "fetch_url",
+      "read_skill",
+      "search_tools",
+    ])
+      expect(safe(name), name).toBe(true);
     expect(safe("run_command", { command: "ls -la /etc && git -C /srv/app log -5" })).toBe(true);
-    for (const command of ["systemctl restart nginx", "rm -f /tmp/x", "cat a > b", "sudo ls"]) expect(safe("run_command", { command }), command).toBe(false);
-    for (const name of ["edit_file", "write_file", "send_input", "mcp__github__list_issues", "call_mcp_tool", "no_such_tool"]) expect(safe(name), name).toBe(false);
+    for (const command of ["systemctl restart nginx", "rm -f /tmp/x", "cat a > b", "sudo ls"])
+      expect(safe("run_command", { command }), command).toBe(false);
+    for (const name of [
+      "edit_file",
+      "write_file",
+      "send_input",
+      "mcp__github__list_issues",
+      "call_mcp_tool",
+      "no_such_tool",
+    ])
+      expect(safe(name), name).toBe(false);
   });
 
   it("counts the tools that open an exec channel, and web searches, toward their limits", () => {
     const limits = (names: string[]) => names.map((n) => limitOf(toolKind(n)));
-    expect(limits(["run_command", "read_file", "edit_file", "write_file", "grep", "glob"])).toEqual(Array(6).fill("channel"));
+    expect(limits(["run_command", "read_file", "edit_file", "write_file", "grep", "glob"])).toEqual(
+      Array(6).fill("channel"),
+    );
     expect(limitOf(toolKind("web_search"))).toBe("search");
     // AI-14: the chat provider's own search takes no such limit.
     expect(limitOf(toolKind("web_search"), true)).toBeNull();
     expect(limitOf(toolKind("grep"), true)).toBe("channel");
-    expect(limits(["read_terminal", "send_input", "fetch_url", "read_skill", "search_tools", "mcp__a__b"])).toEqual(Array(6).fill(null));
+    expect(limits(["read_terminal", "send_input", "fetch_url", "read_skill", "search_tools", "mcp__a__b"])).toEqual(
+      Array(6).fill(null),
+    );
   });
 
   it("splits calls into runs of calls that join, with every other call alone, in order", () => {
     const joins = (c: string) => c.startsWith("r");
-    expect(toolBatches(["r1", "r2", "w1", "r3", "w2", "w3", "r4", "r5", "r6"], joins)).toEqual([["r1", "r2"], ["w1"], ["r3"], ["w2"], ["w3"], ["r4", "r5", "r6"]]);
+    expect(toolBatches(["r1", "r2", "w1", "r3", "w2", "w3", "r4", "r5", "r6"], joins)).toEqual([
+      ["r1", "r2"],
+      ["w1"],
+      ["r3"],
+      ["w2"],
+      ["w3"],
+      ["r4", "r5", "r6"],
+    ]);
     expect(toolBatches(["w1"], joins)).toEqual([["w1"]]);
     expect(toolBatches([], joins)).toEqual([]);
     expect(nextBatch(["w1", "r1"], joins)).toEqual(["w1"]);
@@ -59,7 +97,10 @@ describe("runConcurrently", () => {
 
   it("runs at most four calls that open an exec channel at once, and up to ten in all, starting them in order", async () => {
     const h = harness();
-    const calls = [...Array.from({ length: 6 }, (_, i) => `ch${i}`), ...Array.from({ length: 12 }, (_, i) => `web${i}`)];
+    const calls = [
+      ...Array.from({ length: 6 }, (_, i) => `ch${i}`),
+      ...Array.from({ length: 12 }, (_, i) => `web${i}`),
+    ];
     const done = runConcurrently(calls, h.limit, h.run, () => true);
     await flush();
     // The fifth channel call waits for a channel, and the calls after it wait for it to start.
@@ -103,10 +144,12 @@ describe("runConcurrently", () => {
     const h = harness();
     let going = true;
     let settled = false;
-    const done = runConcurrently(["ch0", "ch1", "ch2", "ch3", "ch4", "ch5"], h.limit, h.run, () => going).then((started) => {
-      settled = true;
-      return started;
-    });
+    const done = runConcurrently(["ch0", "ch1", "ch2", "ch3", "ch4", "ch5"], h.limit, h.run, () => going).then(
+      (started) => {
+        settled = true;
+        return started;
+      },
+    );
     await flush();
     going = false;
     h.finish.get("ch0")!();
@@ -129,7 +172,12 @@ describe("runConcurrently", () => {
         finish.set(c, resolve);
       });
     const calls = ["ch0", "ch1", "ch2", "ch3", "ch4", "ch5"];
-    const done = runConcurrently(calls, () => "channel", run, () => true);
+    const done = runConcurrently(
+      calls,
+      () => "channel",
+      run,
+      () => true,
+    );
     await flush();
     expect(started).toEqual(["ch0", "ch1", "ch2", "ch3"]);
     // ch1's tool ended, but its call waits for ch0's result: its channel is free.

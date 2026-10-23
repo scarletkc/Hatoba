@@ -11,7 +11,11 @@ export function Steps({ labels, current }: { labels: string[]; current: number }
         const n = i + 1;
         const done = n < current;
         return (
-          <li key={label} className={cx(s.step, n === current && s.stepCurrent)} aria-current={n === current ? "step" : undefined}>
+          <li
+            key={label}
+            className={cx(s.step, n === current && s.stepCurrent)}
+            aria-current={n === current ? "step" : undefined}
+          >
             {i > 0 && <span className={s.rule} />}
             <span className={cx(s.bubble, done && s.bubbleDone, n === current && s.bubbleCurrent)}>
               {done ? <Icon name="check" /> : n}

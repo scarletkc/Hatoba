@@ -18,7 +18,15 @@ import { WizardFrame, WizardTitle } from "./WizardFrame";
  * With `join` the remote already holds a vault, so this asks for that vault's master password and
  * `submit` merges this device into it (`sync_join` or `deploy_join`, flow C).
  */
-export function PasswordStep({ submit, join, onBack }: { submit: (password: string) => Promise<void>; join: boolean; onBack: () => void }) {
+export function PasswordStep({
+  submit,
+  join,
+  onBack,
+}: {
+  submit: (password: string) => Promise<void>;
+  join: boolean;
+  onBack: () => void;
+}) {
   const t = useT();
   const fieldId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -55,7 +63,11 @@ export function PasswordStep({ submit, join, onBack }: { submit: (password: stri
         busy && (
           <>
             <Spinner />
-            {join ? t("sync.join.busy") : itemCount > 0 ? t("sync.uploading", { n: itemCount }) : t("sync.initializing")}
+            {join
+              ? t("sync.join.busy")
+              : itemCount > 0
+                ? t("sync.uploading", { n: itemCount })
+                : t("sync.initializing")}
           </>
         )
       }
@@ -70,7 +82,10 @@ export function PasswordStep({ submit, join, onBack }: { submit: (password: stri
         </>
       }
     >
-      <WizardTitle title={t(join ? "sync.join.title" : "sync.w3.title")} body={t(join ? "sync.join.body" : "sync.w3.body")} />
+      <WizardTitle
+        title={t(join ? "sync.join.title" : "sync.w3.title")}
+        body={t(join ? "sync.join.body" : "sync.w3.body")}
+      />
       <Field label={t("sync.masterPassword")} htmlFor={fieldId} error={error}>
         <TextField
           id={fieldId}

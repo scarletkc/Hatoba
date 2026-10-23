@@ -71,7 +71,10 @@ export function startStats(sessionId: string, now = Date.now()) {
       if (!live()) return;
       switch (event.kind) {
         case "stats":
-          update(sessionId, (s) => ({ state: { kind: "live" }, history: appendReading(s.history, { ...event.stats, at: Date.now() }) }));
+          update(sessionId, (s) => ({
+            state: { kind: "live" },
+            history: appendReading(s.history, { ...event.stats, at: Date.now() }),
+          }));
           break;
         case "unsupported":
           update(sessionId, (s) => ({ ...s, state: { kind: "unsupported", system: event.system } }));

@@ -1,4 +1,14 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MutableRefObject, type RefObject } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type KeyboardEvent,
+  type MutableRefObject,
+  type RefObject,
+} from "react";
 import { useApp } from "@/app/store";
 import { Icon, LinkButton } from "@/components/controls";
 import { confirm, Menu, toast, useMenu, type MenuEntry } from "@/components/overlay";
@@ -48,7 +58,11 @@ export function isPlainPasteKey(e: KeyboardEvent): boolean {
 }
 
 /** Puts `text` into a text box at its caret, replacing the selection, and returns the new value. */
-export function insertAtCaret(el: HTMLTextAreaElement | null, value: string, text: string): { value: string; caret: number } {
+export function insertAtCaret(
+  el: HTMLTextAreaElement | null,
+  value: string,
+  text: string,
+): { value: string; caret: number } {
   const start = el?.selectionStart ?? value.length;
   const end = el?.selectionEnd ?? value.length;
   return { value: value.slice(0, start) + text + value.slice(end), caret: start + text.length };
@@ -75,7 +89,17 @@ type Submit = "enter" | "now" | "side";
  * selector, Ask a Side Question (AI-42) and Send / Stop on the right. Above the box, a line names the MCP servers
  * the conversation uses that failed, which `/mcp` shows (AI-32).
  */
-export function Composer({ slotId, slot, model, tools }: { slotId: string; slot: Slot; model: AiModelRef | null; tools: boolean }) {
+export function Composer({
+  slotId,
+  slot,
+  model,
+  tools,
+}: {
+  slotId: string;
+  slot: Slot;
+  model: AiModelRef | null;
+  tools: boolean;
+}) {
   const t = useT();
   const ref = useRef<HTMLTextAreaElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -116,7 +140,14 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
   const ctxWindow = findModel(providers, model)?.model.context_window ?? null;
   const live = slot.turn?.live ? slot.turn.live.text + slot.turn.live.reasoning : "";
   const meter: MeterState = useMemo(
-    () => contextUsage({ entries: slot.entries, contextStart: slot.conversation?.context_start ?? null, model, contextWindow: ctxWindow, pending: live }),
+    () =>
+      contextUsage({
+        entries: slot.entries,
+        contextStart: slot.conversation?.context_start ?? null,
+        model,
+        contextWindow: ctxWindow,
+        pending: live,
+      }),
     [slot.entries, slot.conversation?.context_start, model, ctxWindow, live],
   );
   const pending = usePendingAttachments(slotId);
@@ -125,7 +156,11 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
   const fit = useMemo(() => {
     const taken = takenBeside(pending, queued);
     const typed =
-      queued && !slot.draft.trim() ? 0 : taken.length > 0 ? estimateTokens(composeMessage(slot.draft.trim(), taken)) : estimateTokens(slot.draft);
+      queued && !slot.draft.trim()
+        ? 0
+        : taken.length > 0
+          ? estimateTokens(composeMessage(slot.draft.trim(), taken))
+          : estimateTokens(slot.draft);
     return messageFit(meter, typed + (queued ? estimateTokens(messageText(queued)) : 0));
   }, [meter, pending, slot.draft, queued]);
   const blocked = fit.level === "over";
@@ -140,7 +175,10 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
   // AI-32: the MCP servers the conversation uses that failed, which the line above the box names.
   const mcpServers = useMcp((st) => st.servers);
   const mcpStatus = useMcp((st) => st.status);
-  const failed = useMemo(() => (mcpServers ? failedServers(toolsMenuRows(mcpServers, mcpStatus, slot.mcpOff)) : []), [mcpServers, mcpStatus, slot.mcpOff]);
+  const failed = useMemo(
+    () => (mcpServers ? failedServers(toolsMenuRows(mcpServers, mcpStatus, slot.mcpOff)) : []),
+    [mcpServers, mcpStatus, slot.mcpOff],
+  );
   useEffect(() => {
     if (useMcp.getState().servers === null) void loadMcp();
   }, []);
@@ -252,7 +290,10 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
         // History keep the box).
         if (outcome === "failed" || getSlot(slotId).draft !== raw || slotGeneration(slotId) !== generation) return;
         // AI-35: what the command attached counts toward whether the message fits.
-        if (outcome === "attached" && messageFit(meter, estimateTokens(composeMessage(raw.trim(), pendingAttachments(slotId)))).level === "over") {
+        if (
+          outcome === "attached" &&
+          messageFit(meter, estimateTokens(composeMessage(raw.trim(), pendingAttachments(slotId)))).level === "over"
+        ) {
           toast(t("ai.fit.blocked"), "error");
           return;
         }
@@ -341,7 +382,9 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
         <div className={s.mcpFailed} role="status">
           <Icon name="warning-circle" size={14} className={s.fitIcon} />
           <span className={s.mcpFailedText}>
-            {failed.length === 1 ? t("ai.mcp.failed", { name: failed[0].server.name }) : t("ai.mcp.failedMany", { n: failed.length })}
+            {failed.length === 1
+              ? t("ai.mcp.failed", { name: failed[0].server.name })
+              : t("ai.mcp.failedMany", { n: failed.length })}
           </span>
           <LinkButton className={s.mcpFailedLink} onClick={showMcp}>
             /mcp
@@ -482,10 +525,22 @@ function QueuedCard({ slotId, queued }: { slotId: string; queued: QueuedMessage 
         <LinkButton className={s.queuedEdit} title={t("ai.queued.editHint")} onClick={() => editQueued(slotId)}>
           {t("ai.queued.edit")}
         </LinkButton>
-        <button type="button" className={s.queuedAction} title={t("ai.stopAndSend")} aria-label={t("ai.queued.sendNow")} onClick={() => void stopTurn(slotId)}>
+        <button
+          type="button"
+          className={s.queuedAction}
+          title={t("ai.stopAndSend")}
+          aria-label={t("ai.queued.sendNow")}
+          onClick={() => void stopTurn(slotId)}
+        >
           <Icon name="arrow-up" size={12} />
         </button>
-        <button type="button" className={s.queuedAction} title={t("ai.queued.remove")} aria-label={t("ai.queued.remove")} onClick={() => discardQueued(slotId)}>
+        <button
+          type="button"
+          className={s.queuedAction}
+          title={t("ai.queued.remove")}
+          aria-label={t("ai.queued.remove")}
+          onClick={() => discardQueued(slotId)}
+        >
           <Icon name="x" size={12} />
         </button>
       </div>
@@ -500,7 +555,17 @@ function QueuedCard({ slotId, queued }: { slotId: string; queued: QueuedMessage 
  * under the current model the thinking levels it offers. The selector shows the level the next message is
  * sent at.
  */
-function ModelPicker({ slotId, slot, value, openRef }: { slotId: string; slot: Slot; value: AiModelRef | null; openRef: MutableRefObject<(() => void) | null> }) {
+function ModelPicker({
+  slotId,
+  slot,
+  value,
+  openRef,
+}: {
+  slotId: string;
+  slot: Slot;
+  value: AiModelRef | null;
+  openRef: MutableRefObject<(() => void) | null>;
+}) {
   const t = useT();
   const providers = useAi((st) => st.catalog.providers);
   const settings = useAi((st) => st.catalog.settings);
@@ -510,7 +575,9 @@ function ModelPicker({ slotId, slot, value, openRef }: { slotId: string; slot: S
   const nameRef = useRef<HTMLSpanElement>(null);
   const current = findModel(providers, value);
   const offered = modelEfforts(current?.model);
-  const effort = current ? effectiveEffort(chosenEffort(slot.effort, slot.conversationId, slot.conversation, settings), offered) : null;
+  const effort = current
+    ? effectiveEffort(chosenEffort(slot.effort, slot.conversationId, slot.conversation, settings), offered)
+    : null;
 
   const entries = useMemo(() => {
     const list: MenuEntry[] = [];
@@ -612,17 +679,15 @@ function ModeButton({ slotId, mode }: { slotId: string; mode: AiPermissionMode }
   const short = mode === "manual" ? null : t(mode === "auto" ? "ai.mode.autoShort" : "ai.mode.bypassShort");
   const entries: MenuEntry[] = [
     { kind: "header", label: t("ai.mode.menuTitle") },
-    ...(["manual", "auto", "bypass"] as const).map(
-      (m): MenuEntry => ({
-        label: t(MODE_LABEL[m]),
-        icon: MODE_ICON[m],
-        checked: mode === m,
-        // AI-47: Auto needs a judge; the conversation's own Auto stays checked once the judge is gone.
-        disabled: m === "auto" && !judge && mode !== "auto",
-        hint: m === "auto" && !judge ? t("ai.mode.autoNeedsJudge") : undefined,
-        onSelect: () => void choose(m),
-      }),
-    ),
+    ...(["manual", "auto", "bypass"] as const).map((m): MenuEntry => ({
+      label: t(MODE_LABEL[m]),
+      icon: MODE_ICON[m],
+      checked: mode === m,
+      // AI-47: Auto needs a judge; the conversation's own Auto stays checked once the judge is gone.
+      disabled: m === "auto" && !judge && mode !== "auto",
+      hint: m === "auto" && !judge ? t("ai.mode.autoNeedsJudge") : undefined,
+      onSelect: () => void choose(m),
+    })),
   ];
   if (!judge)
     entries.push(
@@ -649,7 +714,11 @@ function ModeButton({ slotId, mode }: { slotId: string; mode: AiPermissionMode }
   );
 }
 
-const MODE_LABEL: Record<AiPermissionMode, MessageKey> = { manual: "ai.mode.manual", auto: "ai.mode.auto", bypass: "ai.mode.bypass" };
+const MODE_LABEL: Record<AiPermissionMode, MessageKey> = {
+  manual: "ai.mode.manual",
+  auto: "ai.mode.auto",
+  bypass: "ai.mode.bypass",
+};
 
 /** What the model button shows: everything, the name without the thinking level, or its icon alone. */
 type ModelFit = "full" | "name" | "icon";
@@ -676,7 +745,13 @@ function useModelFit(
     if (!btn || !grow) return;
     const update = () => {
       const room = btn.offsetWidth + grow.offsetWidth - GROW_MIN + 0.5;
-      setFit((full.current?.offsetWidth ?? 0) <= room ? "full" : (nameOnly.current?.offsetWidth ?? 0) <= room ? "name" : "icon");
+      setFit(
+        (full.current?.offsetWidth ?? 0) <= room
+          ? "full"
+          : (nameOnly.current?.offsetWidth ?? 0) <= room
+            ? "name"
+            : "icon",
+      );
     };
     update();
     if (typeof ResizeObserver === "undefined") return;
@@ -689,7 +764,15 @@ function useModelFit(
 }
 
 /** The model button's content at its full width, hidden, for `useModelFit` to measure. */
-function ModelLabel({ ref, name, level }: { ref: RefObject<HTMLSpanElement | null>; name: string; level: string | null }) {
+function ModelLabel({
+  ref,
+  name,
+  level,
+}: {
+  ref: RefObject<HTMLSpanElement | null>;
+  name: string;
+  level: string | null;
+}) {
   return (
     <span ref={ref} className={cx(s.model, s.modelMeasure)} aria-hidden>
       <Icon name="cube" size={14} className={s.modelIcon} />
@@ -750,7 +833,12 @@ function ContextMeter({ slotId, slot, m }: { slotId: string; slot: Slot; m: Mete
             { kind: "header", label: summary },
             ...(m.estimated ? [{ kind: "header" as const, label: t("ai.meter.estimated") }] : []),
             { kind: "separator" },
-            { label: t("ai.compact.menu"), icon: "arrows-in-line-vertical", disabled: !canCompact, onSelect: () => void compactConversation(slotId) },
+            {
+              label: t("ai.compact.menu"),
+              icon: "arrows-in-line-vertical",
+              disabled: !canCompact,
+              onSelect: () => void compactConversation(slotId),
+            },
           ]}
         />
       )}
@@ -765,7 +853,14 @@ function Ring({ ratio }: { ratio: number }) {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden className={s.ring}>
       <circle cx="8" cy="8" r={r} className={s.ringTrack} />
-      <circle cx="8" cy="8" r={r} className={s.ringValue} strokeDasharray={`${shown * c} ${c}`} transform="rotate(-90 8 8)" />
+      <circle
+        cx="8"
+        cy="8"
+        r={r}
+        className={s.ringValue}
+        strokeDasharray={`${shown * c} ${c}`}
+        transform="rotate(-90 8 8)"
+      />
     </svg>
   );
 }

@@ -26,7 +26,12 @@ function open(manager: PackageManager | null) {
   useUpdate.setState({
     result: {
       current_version: "0.1.0",
-      update: { version: "0.2.0", notes: null, published_at: null, release_url: "https://github.com/scarletkc/Hatoba/releases/tag/v0.2.0" },
+      update: {
+        version: "0.2.0",
+        notes: null,
+        published_at: null,
+        release_url: "https://github.com/scarletkc/Hatoba/releases/tag/v0.2.0",
+      },
     },
   });
   const host = document.createElement("div");

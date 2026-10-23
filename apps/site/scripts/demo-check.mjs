@@ -26,7 +26,9 @@ try {
   const frame = await (await page.waitForSelector(".window iframe")).contentFrame();
   if (!frame) throw new Error("The demo's frame has no document.");
   const input = "textarea:not(.xterm-helper-textarea)";
-  await frame.waitForFunction((selector) => document.querySelector(selector)?.value.includes("502"), input, { timeout: TIMEOUT });
+  await frame.waitForFunction((selector) => document.querySelector(selector)?.value.includes("502"), input, {
+    timeout: TIMEOUT,
+  });
   await frame.locator(input).press("Enter");
   await frame.getByRole("button", { name: "Run", exact: true }).first().waitFor({ timeout: TIMEOUT });
   if (errors.length > 0) throw new Error(`The page threw:\n${errors.join("\n")}`);

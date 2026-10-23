@@ -41,7 +41,9 @@ describe("McpSection", () => {
     const host = render(<McpSection />);
     const button = await until(() => host.querySelector<HTMLButtonElement>("button[aria-haspopup=menu]"));
     act(() => button.click());
-    const item = [...document.querySelectorAll<HTMLButtonElement>("[role=menuitem]")].find((x) => x.textContent === "GitHub");
+    const item = [...document.querySelectorAll<HTMLButtonElement>("[role=menuitem]")].find(
+      (x) => x.textContent === "GitHub",
+    );
     act(() => {
       // A click focuses the menu item first, as it does in the app.
       item?.focus();
@@ -59,12 +61,21 @@ describe("McpSection", () => {
     const host = render(<McpSection />);
     const button = await until(() => host.querySelector<HTMLButtonElement>("button[aria-haspopup=menu]"));
     act(() => button.click());
-    const item = [...document.querySelectorAll<HTMLButtonElement>("[role=menuitem]")].find((x) => x.textContent === "Context7");
+    const item = [...document.querySelectorAll<HTMLButtonElement>("[role=menuitem]")].find(
+      (x) => x.textContent === "Context7",
+    );
     act(() => item?.click());
-    const value = (key: string) => document.querySelector<HTMLInputElement>(`[role=dialog] input[aria-label="${key} ${t("aiSettings.mcp.f.valuePlaceholder")}"]`);
-    expect(value("Authorization")?.placeholder).toBe(t("aiSettings.mcp.f.optionalPlaceholder", { example: "ctx7sk-…" }));
+    const value = (key: string) =>
+      document.querySelector<HTMLInputElement>(
+        `[role=dialog] input[aria-label="${key} ${t("aiSettings.mcp.f.valuePlaceholder")}"]`,
+      );
+    expect(value("Authorization")?.placeholder).toBe(
+      t("aiSettings.mcp.f.optionalPlaceholder", { example: "ctx7sk-…" }),
+    );
 
-    const name = [...document.querySelectorAll<HTMLInputElement>("[role=dialog] input")].find((x) => x.value === "Authorization");
+    const name = [...document.querySelectorAll<HTMLInputElement>("[role=dialog] input")].find(
+      (x) => x.value === "Authorization",
+    );
     act(() => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(name, "X-Key");
       name?.dispatchEvent(new Event("input", { bubbles: true }));

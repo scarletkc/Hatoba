@@ -57,47 +57,47 @@ button {
  * slowly out, so the pointer leaves a short trail across a list rather than a hard edge. Colors only,
  * never size or position. These have no specificity, so a class's own `transition` replaces them. */
 :where(
-    button,
-    a,
-    [role="button"],
-    [role="tab"],
-    [role="option"],
-    [role="listitem"],
-    [role="radio"],
-    [role="checkbox"],
-    [role="switch"]
-  ) {
+  button,
+  a,
+  [role="button"],
+  [role="tab"],
+  [role="option"],
+  [role="listitem"],
+  [role="radio"],
+  [role="checkbox"],
+  [role="switch"]
+) {
   transition-property: background-color, color, border-color, box-shadow, opacity;
   transition-duration: var(--motion-fade);
   transition-timing-function: var(--ease-out);
 }
 
 :where(
-    button:hover,
-    a:hover,
-    [role="button"]:hover,
-    [role="tab"]:hover,
-    [role="option"]:hover,
-    [role="listitem"]:hover,
-    [role="radio"]:hover,
-    [role="checkbox"]:hover,
-    [role="switch"]:hover
-  ) {
+  button:hover,
+  a:hover,
+  [role="button"]:hover,
+  [role="tab"]:hover,
+  [role="option"]:hover,
+  [role="listitem"]:hover,
+  [role="radio"]:hover,
+  [role="checkbox"]:hover,
+  [role="switch"]:hover
+) {
   transition-duration: var(--motion-hover);
 }
 
 /* Pressed looks show at once, as native controls do; releasing fades back to the hover look. */
 :where(
-    button:active,
-    a:active,
-    [role="button"]:active,
-    [role="tab"]:active,
-    [role="option"]:active,
-    [role="listitem"]:active,
-    [role="radio"]:active,
-    [role="checkbox"]:active,
-    [role="switch"]:active
-  ) {
+  button:active,
+  a:active,
+  [role="button"]:active,
+  [role="tab"]:active,
+  [role="option"]:active,
+  [role="listitem"]:active,
+  [role="radio"]:active,
+  [role="checkbox"]:active,
+  [role="switch"]:active
+) {
   transition-duration: 0s;
 }
 

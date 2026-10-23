@@ -46,13 +46,20 @@ export function useStrength(password: string): number | null {
   return password && result?.password === password ? result.score : null;
 }
 
-const LABELS = ["vault.strength.weak", "vault.strength.weak", "vault.strength.fair", "vault.strength.strong", "vault.strength.veryStrong"] as const;
+const LABELS = [
+  "vault.strength.weak",
+  "vault.strength.weak",
+  "vault.strength.fair",
+  "vault.strength.strong",
+  "vault.strength.veryStrong",
+] as const;
 const FILLED = [1, 1, 2, 3, 4];
 
 /** The design's 4-segment meter with a label (design §05 step 3). */
 export function StrengthMeter({ score }: { score: number | null }) {
   const t = useT();
-  const color = score === null ? "var(--fill2)" : score <= 1 ? "var(--red)" : score === 2 ? "var(--orange)" : "var(--green)";
+  const color =
+    score === null ? "var(--fill2)" : score <= 1 ? "var(--red)" : score === 2 ? "var(--orange)" : "var(--green)";
   const filled = score === null ? 0 : FILLED[score];
   return (
     <div className={s.meter} aria-live="polite">

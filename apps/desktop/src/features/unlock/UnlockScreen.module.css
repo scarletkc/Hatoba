@@ -14,7 +14,9 @@
   inset: var(--win-pad);
   border-radius: var(--radius-xl);
   overflow: hidden;
-  box-shadow: var(--shadow-window), 0 0 0 0.5px var(--winline);
+  box-shadow:
+    var(--shadow-window),
+    0 0 0 0.5px var(--winline);
 }
 
 .center {

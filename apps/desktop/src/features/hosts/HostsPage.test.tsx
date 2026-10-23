@@ -52,10 +52,14 @@ async function until<T>(find: () => T | null | undefined): Promise<T> {
 const list = () => document.querySelector<HTMLElement>("[role=listbox]")!;
 const rows = () => [...list().querySelectorAll<HTMLElement>("[role=option]")];
 const ids = () => rows().map((r) => r.dataset.id!);
-const selected = () => rows().filter((r) => r.getAttribute("aria-selected") === "true").map((r) => r.dataset.id);
+const selected = () =>
+  rows()
+    .filter((r) => r.getAttribute("aria-selected") === "true")
+    .map((r) => r.dataset.id);
 const row = (i: number) => rows()[i];
 const menuItems = () => [...document.querySelectorAll("[role=menu] [role=menuitem]")].map((b) => b.textContent);
-const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label);
+const button = (label: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label);
 
 function click(el: Element, keys: MouseEventInit = {}) {
   act(() => void el.dispatchEvent(new MouseEvent("click", { bubbles: true, ...keys })));

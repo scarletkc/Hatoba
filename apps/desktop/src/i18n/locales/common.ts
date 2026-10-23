@@ -125,14 +125,16 @@ export default defineMessages({
     "err.biometric_stale": "{name} 解锁已失效，已自动关闭。可以在设置 → 安全中重新开启。",
     "err.io": "读写文件失败。",
     "err.internal": "发生了意外错误。",
-    "err.cloudflare_token": "Cloudflare 不接受这个 API Token。请检查它是否完整、是否已过期或停用；账户所属的 Token 还需要填写 Account ID。",
+    "err.cloudflare_token":
+      "Cloudflare 不接受这个 API Token。请检查它是否完整、是否已过期或停用；账户所属的 Token 还需要填写 Account ID。",
     "err.cloudflare_permission": "这个 Token 缺少「{permission}」权限。请在 Cloudflare 中编辑 Token 加上它，然后重试。",
     "err.cloudflare": "Cloudflare 返回了错误，请稍后重试。",
     "err.cloudflare_code": "Cloudflare 返回了错误（代码 {code}），请稍后重试。",
     "err.subdomain_required": "请为这个账户选择一个 workers.dev 子域名。",
     "err.subdomain_unavailable": "这个 workers.dev 子域名已被占用，请换一个。",
     "err.worker_name_taken": "已有同名的 Worker，但它不是 Hatoba 的同步 Worker。请换一个名称。",
-    "err.worker_not_found": "这个账户中找不到这个名称的 Hatoba Worker，或者它没有保存保险库。请检查账户和 Worker 名称。",
+    "err.worker_not_found":
+      "这个账户中找不到这个名称的 Hatoba Worker，或者它没有保存保险库。请检查账户和 Worker 名称。",
     "err.worker_newer": "这个 Worker 比这个版本的 Hatoba 内置的更新，Hatoba 不会用旧版本替换它。",
     "err.no_worker_bundle": "这个版本的 Hatoba 没有内置同步 Worker，无法一键部署。请改用其他部署方式。",
     "err.ai": "AI 请求失败：{detail}",
@@ -287,31 +289,42 @@ export default defineMessages({
     "err.sync_auth": "Cloud Sync signed out. Enter your master password again.",
     "err.sync_offline": "Can’t reach the sync service. Check your network.",
     "err.remote_initialized": "The cloud already holds a vault. Go back and connect again to join it.",
-    "err.remote_not_initialized": "The cloud has no vault yet. Turn on Cloud Sync on a device that has your data first.",
+    "err.remote_not_initialized":
+      "The cloud has no vault yet. Turn on Cloud Sync on a device that has your data first.",
     "err.sync_setup_busy": "Another Cloud Sync setup is still running. Try again when it finishes.",
-    "err.sync_already_configured": "Cloud Sync is already on for this device. Disconnect it before joining another cloud vault.",
+    "err.sync_already_configured":
+      "Cloud Sync is already on for this device. Disconnect it before joining another cloud vault.",
     "err.cancelled": "Cancelled.",
     "err.biometric_unavailable": "Touch ID isn’t available right now, for example while the lid is closed.",
-    "err.biometric_stale": "{name} unlock stopped working for this vault and was turned off. Turn it on again in Settings → Security.",
+    "err.biometric_stale":
+      "{name} unlock stopped working for this vault and was turned off. Turn it on again in Settings → Security.",
     "err.io": "Couldn’t read or write the file.",
     "err.internal": "Something went wrong.",
-    "err.cloudflare_token": "Cloudflare didn’t accept this API token. Check that it’s complete and not expired or disabled. An account-owned token also needs the account ID.",
-    "err.cloudflare_permission": "This token lacks the “{permission}” permission. Add it to the token in Cloudflare, then try again.",
+    "err.cloudflare_token":
+      "Cloudflare didn’t accept this API token. Check that it’s complete and not expired or disabled. An account-owned token also needs the account ID.",
+    "err.cloudflare_permission":
+      "This token lacks the “{permission}” permission. Add it to the token in Cloudflare, then try again.",
     "err.cloudflare": "Cloudflare returned an error. Try again later.",
     "err.cloudflare_code": "Cloudflare returned error {code}. Try again later.",
     "err.subdomain_required": "Choose a workers.dev subdomain for this account.",
     "err.subdomain_unavailable": "This workers.dev subdomain is taken. Choose another.",
-    "err.worker_name_taken": "Another Worker already has this name, and it isn’t a Hatoba sync Worker. Choose another name.",
-    "err.worker_not_found": "This account has no Hatoba Worker with this name, or it holds no vault. Check the account and the Worker name.",
-    "err.worker_newer": "This Worker is newer than the one in this version of Hatoba, and Hatoba won’t replace it with an older one.",
-    "err.no_worker_bundle": "This build of Hatoba doesn’t include the sync Worker, so it can’t deploy it. Use another way to deploy.",
+    "err.worker_name_taken":
+      "Another Worker already has this name, and it isn’t a Hatoba sync Worker. Choose another name.",
+    "err.worker_not_found":
+      "This account has no Hatoba Worker with this name, or it holds no vault. Check the account and the Worker name.",
+    "err.worker_newer":
+      "This Worker is newer than the one in this version of Hatoba, and Hatoba won’t replace it with an older one.",
+    "err.no_worker_bundle":
+      "This build of Hatoba doesn’t include the sync Worker, so it can’t deploy it. Use another way to deploy.",
     "err.ai": "The AI request failed: {detail}",
     "err.ai_status": "The provider returned HTTP {status}: {detail}",
     "err.update_signature": "The downloaded update isn’t signed by Hatoba, so it wasn’t installed.",
 
     "ssh.err.dns": "Can’t find the host {host}. Check the address or DNS.",
-    "ssh.err.refused": "{host}:{port} refused the connection. The SSH service may not be running, or the port is wrong.",
-    "ssh.err.timeout": "{host}:{port} didn’t respond within {s} seconds. The host may be down, or a firewall or security group blocks the port.",
+    "ssh.err.refused":
+      "{host}:{port} refused the connection. The SSH service may not be running, or the port is wrong.",
+    "ssh.err.timeout":
+      "{host}:{port} didn’t respond within {s} seconds. The host may be down, or a firewall or security group blocks the port.",
     "ssh.err.unreachable": "The network can’t reach {host}.",
     "ssh.err.auth_failed": "Authentication failed: the server didn’t accept the username, password or key.",
     "ssh.err.host_key_rejected": "The host key was rejected, so the connection was stopped.",
@@ -322,10 +335,12 @@ export default defineMessages({
     "ssh.err.channel": "Couldn’t open a session channel.",
     "ssh.err.sftp": "The SFTP subsystem isn’t available.",
     "ssh.err.cancelled": "The connection was cancelled.",
-    "ssh.err.proxy_unreachable": "Can’t reach the proxy. Check that it’s running and that its address and port are right.",
+    "ssh.err.proxy_unreachable":
+      "Can’t reach the proxy. Check that it’s running and that its address and port are right.",
     "ssh.err.proxy_auth": "The proxy asks for a username and password, or didn’t accept the saved ones.",
     "ssh.err.proxy": "The proxy couldn’t connect to {host}:{port}. Check the proxy’s type and rules.",
-    "ssh.err.proxy_missing": "The proxy this connection uses was deleted. Choose another one in the host’s settings or in Settings → Proxies.",
+    "ssh.err.proxy_missing":
+      "The proxy this connection uses was deleted. Choose another one in the host’s settings or in Settings → Proxies.",
     "ssh.err.other": "The connection failed.",
 
     "key.err.unsupported_format": "Unsupported private key format. Use OpenSSH, PEM or PuTTY (.ppk).",
@@ -372,7 +387,8 @@ export default defineMessages({
     "window.close": "閉じる",
     // WIN-10
     "close.title": "Hatoba をトレイに最小化しますか？",
-    "close.body": "トレイに最小化すると、セッションとポート転送はバックグラウンドで動き続け、トレイアイコンからウィンドウを再び開けます。",
+    "close.body":
+      "トレイに最小化すると、セッションとポート転送はバックグラウンドで動き続け、トレイアイコンからウィンドウを再び開けます。",
     "close.remember": "選択を記憶する（設定 → 一般 で変更できます）",
     "close.tray": "トレイに最小化",
     "close.quit": "Hatoba を終了",
@@ -393,7 +409,8 @@ export default defineMessages({
     "sidebar.groupName": "グループ名",
     "sidebar.renameGroup": "グループ名を変更",
     "sidebar.deleteGroup": "グループを削除",
-    "sidebar.deleteGroupConfirm": "グループ「{name}」を削除しますか？ 含まれるホストは「すべてのホスト」に移動し、削除されません。",
+    "sidebar.deleteGroupConfirm":
+      "グループ「{name}」を削除しますか？ 含まれるホストは「すべてのホスト」に移動し、削除されません。",
     "sidebar.lock": "ロック",
     "sidebar.settings": "設定",
     "sidebar.settingsUpdate": "設定（アップデートあり）",
@@ -452,32 +469,45 @@ export default defineMessages({
     "err.sync": "同期に失敗しました。",
     "err.sync_auth": "クラウド同期の認証が切れました。マスターパスワードを再入力してください。",
     "err.sync_offline": "同期サービスに接続できません。ネットワークを確認してください。",
-    "err.remote_initialized": "クラウドにはすでに保管庫があります。前の手順に戻ってもう一度接続すると、その保管庫に参加できます。",
-    "err.remote_not_initialized": "クラウドにまだ保管庫がありません。先にデータのあるデバイスでクラウド同期をオンにしてください。",
+    "err.remote_initialized":
+      "クラウドにはすでに保管庫があります。前の手順に戻ってもう一度接続すると、その保管庫に参加できます。",
+    "err.remote_not_initialized":
+      "クラウドにまだ保管庫がありません。先にデータのあるデバイスでクラウド同期をオンにしてください。",
     "err.sync_setup_busy": "別のクラウド同期の設定がまだ進行中です。完了してからもう一度お試しください。",
-    "err.sync_already_configured": "このデバイスではすでにクラウド同期がオンになっています。別のクラウドの保管庫に参加するには、先にクラウド同期を解除してください。",
+    "err.sync_already_configured":
+      "このデバイスではすでにクラウド同期がオンになっています。別のクラウドの保管庫に参加するには、先にクラウド同期を解除してください。",
     "err.cancelled": "キャンセルしました。",
     "err.biometric_unavailable": "現在 Touch ID を使用できません（Mac の蓋を閉じているときなど）。",
-    "err.biometric_stale": "{name} でのロック解除が使えなくなったため、オフにしました。設定 → セキュリティでもう一度オンにできます。",
+    "err.biometric_stale":
+      "{name} でのロック解除が使えなくなったため、オフにしました。設定 → セキュリティでもう一度オンにできます。",
     "err.io": "ファイルの読み書きに失敗しました。",
     "err.internal": "予期しないエラーが発生しました。",
-    "err.cloudflare_token": "Cloudflare がこの API トークンを受け付けませんでした。トークンが完全か、期限切れや無効になっていないかを確認してください。アカウント所有のトークンには Account ID も必要です。",
-    "err.cloudflare_permission": "このトークンには「{permission}」の権限がありません。Cloudflare でトークンに追加してから、もう一度お試しください。",
+    "err.cloudflare_token":
+      "Cloudflare がこの API トークンを受け付けませんでした。トークンが完全か、期限切れや無効になっていないかを確認してください。アカウント所有のトークンには Account ID も必要です。",
+    "err.cloudflare_permission":
+      "このトークンには「{permission}」の権限がありません。Cloudflare でトークンに追加してから、もう一度お試しください。",
     "err.cloudflare": "Cloudflare がエラーを返しました。しばらくしてからもう一度お試しください。",
     "err.cloudflare_code": "Cloudflare がエラー（コード {code}）を返しました。しばらくしてからもう一度お試しください。",
     "err.subdomain_required": "このアカウントの workers.dev サブドメインを選んでください。",
     "err.subdomain_unavailable": "この workers.dev サブドメインはすでに使われています。別の名前を選んでください。",
-    "err.worker_name_taken": "同じ名前の Worker がありますが、Hatoba の同期 Worker ではありません。別の名前を選んでください。",
-    "err.worker_not_found": "このアカウントにこの名前の Hatoba Worker がないか、保管庫がありません。アカウントと Worker 名を確認してください。",
-    "err.worker_newer": "この Worker はこのバージョンの Hatoba に含まれるものより新しいため、Hatoba は古いバージョンで置き換えません。",
-    "err.no_worker_bundle": "このビルドの Hatoba には同期 Worker が含まれていないため、デプロイできません。別の方法でデプロイしてください。",
+    "err.worker_name_taken":
+      "同じ名前の Worker がありますが、Hatoba の同期 Worker ではありません。別の名前を選んでください。",
+    "err.worker_not_found":
+      "このアカウントにこの名前の Hatoba Worker がないか、保管庫がありません。アカウントと Worker 名を確認してください。",
+    "err.worker_newer":
+      "この Worker はこのバージョンの Hatoba に含まれるものより新しいため、Hatoba は古いバージョンで置き換えません。",
+    "err.no_worker_bundle":
+      "このビルドの Hatoba には同期 Worker が含まれていないため、デプロイできません。別の方法でデプロイしてください。",
     "err.ai": "AI リクエストに失敗しました: {detail}",
     "err.ai_status": "プロバイダーが HTTP {status} を返しました: {detail}",
-    "err.update_signature": "ダウンロードしたアップデートに Hatoba の有効な署名がないため、インストールしませんでした。",
+    "err.update_signature":
+      "ダウンロードしたアップデートに Hatoba の有効な署名がないため、インストールしませんでした。",
 
     "ssh.err.dns": "ホスト {host} が見つかりません。アドレスまたは DNS を確認してください。",
-    "ssh.err.refused": "{host}:{port} に接続を拒否されました。SSH サービスが動いていないか、ポートが違う可能性があります。",
-    "ssh.err.timeout": "{host}:{port} から {s} 秒以内に応答がありません。ホストが停止しているか、ファイアウォール／セキュリティグループでポートが許可されていない可能性があります。",
+    "ssh.err.refused":
+      "{host}:{port} に接続を拒否されました。SSH サービスが動いていないか、ポートが違う可能性があります。",
+    "ssh.err.timeout":
+      "{host}:{port} から {s} 秒以内に応答がありません。ホストが停止しているか、ファイアウォール／セキュリティグループでポートが許可されていない可能性があります。",
     "ssh.err.unreachable": "ネットワークから {host} に到達できません。",
     "ssh.err.auth_failed": "認証に失敗しました。ユーザー名、パスワード、または鍵がサーバーに受け入れられませんでした。",
     "ssh.err.host_key_rejected": "ホスト鍵を拒否したため、接続を中止しました。",
@@ -487,14 +517,17 @@ export default defineMessages({
     "ssh.err.io": "ネットワークの読み書きエラー。",
     "ssh.err.channel": "セッションチャネルを開けませんでした。",
     "ssh.err.sftp": "SFTP サブシステムを利用できません。",
-    "ssh.err.proxy_unreachable": "プロキシに接続できません。プロキシが動いているか、アドレスとポートが正しいか確認してください。",
+    "ssh.err.proxy_unreachable":
+      "プロキシに接続できません。プロキシが動いているか、アドレスとポートが正しいか確認してください。",
     "ssh.err.proxy_auth": "プロキシがユーザー名とパスワードを求めているか、保存されたものを受け入れませんでした。",
     "ssh.err.proxy": "プロキシから {host}:{port} に接続できませんでした。プロキシの種類とルールを確認してください。",
-    "ssh.err.proxy_missing": "この接続で使うプロキシは削除されています。ホストの設定か「設定 → プロキシ」で別のものを選んでください。",
+    "ssh.err.proxy_missing":
+      "この接続で使うプロキシは削除されています。ホストの設定か「設定 → プロキシ」で別のものを選んでください。",
     "ssh.err.cancelled": "接続をキャンセルしました。",
     "ssh.err.other": "接続に失敗しました。",
 
-    "key.err.unsupported_format": "サポートされていない秘密鍵の形式です。OpenSSH、PEM、PuTTY (.ppk) を使用してください。",
+    "key.err.unsupported_format":
+      "サポートされていない秘密鍵の形式です。OpenSSH、PEM、PuTTY (.ppk) を使用してください。",
     "key.err.passphrase_required": "この鍵はパスフレーズで保護されています。パスフレーズを入力してください。",
     "key.err.wrong_passphrase": "鍵のパスフレーズが正しくありません。",
     "key.err.unsupported_algorithm": "サポートされていない鍵アルゴリズムです。Ed25519、ECDSA、RSA に対応しています。",

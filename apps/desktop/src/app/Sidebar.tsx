@@ -32,7 +32,13 @@ export function Sidebar() {
   const active = pageKey(page);
   const status = syncFooterView(t, sync);
 
-  const item = (key: Key, icon: string, label: string, target: Page, extra?: { color?: string; spin?: boolean; title?: string }) => (
+  const item = (
+    key: Key,
+    icon: string,
+    label: string,
+    target: Page,
+    extra?: { color?: string; spin?: boolean; title?: string },
+  ) => (
     <button
       key={key}
       type="button"
@@ -54,8 +60,18 @@ export function Sidebar() {
         {item("keys", "key", t("sidebar.keys"), { kind: "keys" })}
       </div>
       <div className={st.foot}>
-        {item("sync", status.icon, t("rail.sync"), { kind: "sync" }, { color: status.color, spin: status.spin, title: `${status.title}
-${status.sub}` })}
+        {item(
+          "sync",
+          status.icon,
+          t("rail.sync"),
+          { kind: "sync" },
+          {
+            color: status.color,
+            spin: status.spin,
+            title: `${status.title}
+${status.sub}`,
+          },
+        )}
       </div>
     </nav>
   );
@@ -63,7 +79,13 @@ ${status.sub}` })}
 
 export function syncFooterView(t: ReturnType<typeof useT>, s: SyncStatus | null) {
   if (!s || s.kind === "none")
-    return { icon: "cloud", color: "var(--fg2)", title: t("sync.footer.none"), sub: t("sync.footer.none_sub"), spin: false };
+    return {
+      icon: "cloud",
+      color: "var(--fg2)",
+      title: t("sync.footer.none"),
+      sub: t("sync.footer.none_sub"),
+      spin: false,
+    };
   switch (s.state) {
     case "syncing":
       return {
@@ -82,9 +104,21 @@ export function syncFooterView(t: ReturnType<typeof useT>, s: SyncStatus | null)
         spin: false,
       };
     case "auth_failed":
-      return { icon: "cloud-warning", color: "var(--orange)", title: t("sync.footer.auth"), sub: t("sync.footer.auth_sub"), spin: false };
+      return {
+        icon: "cloud-warning",
+        color: "var(--orange)",
+        title: t("sync.footer.auth"),
+        sub: t("sync.footer.auth_sub"),
+        spin: false,
+      };
     case "error":
-      return { icon: "cloud-warning", color: "var(--red)", title: t("sync.footer.error"), sub: t("sync.footer.error_sub"), spin: false };
+      return {
+        icon: "cloud-warning",
+        color: "var(--red)",
+        title: t("sync.footer.error"),
+        sub: t("sync.footer.error_sub"),
+        spin: false,
+      };
     case "paused":
       return {
         icon: "cloud-warning",
@@ -94,15 +128,29 @@ export function syncFooterView(t: ReturnType<typeof useT>, s: SyncStatus | null)
         spin: false,
       };
     case "off":
-      return { icon: "cloud", color: "var(--fg2)", title: t("sync.footer.none"), sub: t("sync.footer.none_sub"), spin: false };
+      return {
+        icon: "cloud",
+        color: "var(--fg2)",
+        title: t("sync.footer.none"),
+        sub: t("sync.footer.none_sub"),
+        spin: false,
+      };
     default:
       if (s.conflicts > 0)
-        return { icon: "warning-circle", color: "var(--orange)", title: t("sync.footer.conflict", { n: s.conflicts }), sub: t("sync.footer.conflict_sub"), spin: false };
+        return {
+          icon: "warning-circle",
+          color: "var(--orange)",
+          title: t("sync.footer.conflict", { n: s.conflicts }),
+          sub: t("sync.footer.conflict_sub"),
+          spin: false,
+        };
       return {
         icon: "cloud-check",
         color: "var(--green)",
         title: t("sync.footer.synced"),
-        sub: t("sync.footer.synced_sub", { time: s.last_synced_at ? formatRelative(t.locale, s.last_synced_at) : t("time.never") }),
+        sub: t("sync.footer.synced_sub", {
+          time: s.last_synced_at ? formatRelative(t.locale, s.last_synced_at) : t("time.never"),
+        }),
         spin: false,
       };
   }

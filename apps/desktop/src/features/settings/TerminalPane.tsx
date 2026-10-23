@@ -58,7 +58,9 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
     if (next !== term.font_family) updateTerminal({ font_family: next });
   };
 
-  const scrollbackValues = SCROLLBACK.includes(term.scrollback) ? SCROLLBACK : [...SCROLLBACK, term.scrollback].sort((a, b) => a - b);
+  const scrollbackValues = SCROLLBACK.includes(term.scrollback)
+    ? SCROLLBACK
+    : [...SCROLLBACK, term.scrollback].sort((a, b) => a - b);
   const lines = (n: number) => t("settings.term.lines", { n: n.toLocaleString(t.locale) });
   /** Following the app appearance: a scheme for each mode. */
   const both = term.theme === "system";
@@ -193,7 +195,13 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
             onChange={(scrollback) => updateTerminal({ scrollback })}
           />
         </SettingRow>
-        {shells && shells.length > 0 && <LocalShellRow shells={shells} value={prefs.local_shell} onChange={(local_shell) => setPrefs({ local_shell })} />}
+        {shells && shells.length > 0 && (
+          <LocalShellRow
+            shells={shells}
+            value={prefs.local_shell}
+            onChange={(local_shell) => setPrefs({ local_shell })}
+          />
+        )}
       </Section>
     </Pane>
   );
@@ -203,7 +211,15 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
  * LOCAL-02: the shell new local tabs run on this device. A shell that is gone, such as an uninstalled
  * WSL distribution, shows as the system default, which new tabs then run.
  */
-function LocalShellRow({ shells, value, onChange }: { shells: LocalShellView[]; value: string | null; onChange(id: string | null): void }) {
+function LocalShellRow({
+  shells,
+  value,
+  onChange,
+}: {
+  shells: LocalShellView[];
+  value: string | null;
+  onChange(id: string | null): void;
+}) {
   const t = useT();
   const system = shells.find((s) => s.default) ?? shells[0];
   const current = shells.some((s) => s.id === value) ? (value ?? "") : "";

@@ -1,4 +1,12 @@
-import { memo, useCallback, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefCallback } from "react";
+import {
+  memo,
+  useCallback,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+  type ReactNode,
+  type RefCallback,
+} from "react";
 import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
 import { Tag } from "@/components/layout";
 import { Card, Chip } from "@/components/patterns";
@@ -96,7 +104,13 @@ function CardLink({ label, onClick }: { label: string; onClick(): void }) {
 }
 
 /** The status, and for old readings when they were read; the full text on hover. */
-function statusLine(t: T, readout: HostReadout | undefined, reading: StatsReading | undefined, stale: boolean, now: number) {
+function statusLine(
+  t: T,
+  readout: HostReadout | undefined,
+  reading: StatsReading | undefined,
+  stale: boolean,
+  now: number,
+) {
   const status = statusText(t, readout);
   const read = stale && reading ? t("dashboard.readAt", { time: formatMessageTime(t.locale, reading.at, now) }) : null;
   return { ...status, full: read ? `${status.text} · ${read}` : status.text };
@@ -146,7 +160,19 @@ function rates(r: StatsReading): string | null {
 // ───────────────────────── Cards ─────────────────────────
 
 /** A labelled meter that turns red past its threshold: a row of the meters' grid. */
-function Meter({ label, sub, percent, alert, title }: { label: string; sub?: string; percent: number | null; alert: boolean; title?: string }) {
+function Meter({
+  label,
+  sub,
+  percent,
+  alert,
+  title,
+}: {
+  label: string;
+  sub?: string;
+  percent: number | null;
+  alert: boolean;
+  title?: string;
+}) {
   return (
     <>
       <span className={s.meterLabel} title={title}>
@@ -185,7 +211,12 @@ function Meters({ reading, alerts, t }: { reading: StatsReading; alerts: Alerts;
         alert={pastThreshold(reading.cpu_percent, alerts.cpu)}
         title={pastThreshold(reading.cpu_percent, alerts.cpu) ? over(alerts.cpu) : undefined}
       />
-      <Meter label={t("terminal.stats.mem")} percent={mem} alert={pastThreshold(mem, alerts.mem)} title={pastThreshold(mem, alerts.mem) ? over(alerts.mem) : undefined} />
+      <Meter
+        label={t("terminal.stats.mem")}
+        percent={mem}
+        alert={pastThreshold(mem, alerts.mem)}
+        title={pastThreshold(mem, alerts.mem) ? over(alerts.mem) : undefined}
+      />
       <Meter
         label={t("terminal.stats.disk")}
         sub={disk.mount}
@@ -202,7 +233,9 @@ function DetailLines({ reading, t }: { reading: StatsReading; t: T }) {
   const load = formatLoad(reading.load);
   const details = [
     load ? t("terminal.stats.load", { load }) : null,
-    reading.uptime_secs != null ? t("terminal.stats.uptime", { time: formatUptime(t.locale, reading.uptime_secs) }) : null,
+    reading.uptime_secs != null
+      ? t("terminal.stats.uptime", { time: formatUptime(t.locale, reading.uptime_secs) })
+      : null,
   ].filter(Boolean);
   return (
     <>
@@ -217,7 +250,19 @@ function DetailLines({ reading, t }: { reading: StatsReading; t: T }) {
 }
 
 /** Under readings from before the host stopped answering: what happened, then when they were read, and Retry. */
-function StaleLines({ host, readout, reading, t, now }: { host: HostView; readout: HostReadout | undefined; reading: StatsReading; t: T; now: number }) {
+function StaleLines({
+  host,
+  readout,
+  reading,
+  t,
+  now,
+}: {
+  host: HostView;
+  readout: HostReadout | undefined;
+  reading: StatsReading;
+  t: T;
+  now: number;
+}) {
   const status = statusText(t, readout);
   const { icon } = statusParts(t, readout);
   return (
@@ -227,7 +272,9 @@ function StaleLines({ host, readout, reading, t, now }: { host: HostView; readou
         <span className={s.lineText}>{status.text}</span>
       </div>
       <div className={s.line}>
-        <span className={s.lineText}>{t("dashboard.readAt", { time: formatMessageTime(t.locale, reading.at, now) })}</span>
+        <span className={s.lineText}>
+          {t("dashboard.readAt", { time: formatMessageTime(t.locale, reading.at, now) })}
+        </span>
         {canRetry(readout) && <CardLink label={t("btn.retry")} onClick={() => retryHost(host.id)} />}
       </div>
     </>
@@ -288,7 +335,14 @@ export const HostCard = memo(function HostCard({ host, selected, readout, leftOu
   const body = () => {
     if (leftOut) {
       const include = dashboardSwitch(host, view.groups);
-      return <CardState icon="eye-slash" title={t("dashboard.leftOutBadge")} tone="dim" action={<CardLink label={t(include.key)} onClick={include.run} />} />;
+      return (
+        <CardState
+          icon="eye-slash"
+          title={t("dashboard.leftOutBadge")}
+          tone="dim"
+          action={<CardLink label={t(include.key)} onClick={include.run} />}
+        />
+      );
     }
     if (reading) {
       return (
@@ -296,12 +350,18 @@ export const HostCard = memo(function HostCard({ host, selected, readout, leftOu
           <div className={cx(stale && s.stale)}>
             <Meters reading={reading} alerts={alerts} t={t} />
           </div>
-          {stale ? <StaleLines host={host} readout={readout} reading={reading} t={t} now={now} /> : <DetailLines reading={reading} t={t} />}
+          {stale ? (
+            <StaleLines host={host} readout={readout} reading={reading} t={t} now={now} />
+          ) : (
+            <DetailLines reading={reading} t={t} />
+          )}
         </>
       );
     }
     const status = statusParts(t, readout);
-    const retry = canRetry(readout) ? <CardLink label={t("btn.retry")} onClick={() => retryHost(host.id)} /> : undefined;
+    const retry = canRetry(readout) ? (
+      <CardLink label={t("btn.retry")} onClick={() => retryHost(host.id)} />
+    ) : undefined;
     return <CardState {...status} action={retry} />;
   };
   return (
@@ -329,7 +389,11 @@ export const HostCard = memo(function HostCard({ host, selected, readout, leftOu
           ))}
         </div>
       )}
-      {stats ? <div className={s.body}>{body()}</div> : <div className={cx(s.cardLast, list.failed && s.error)}>{list.last}</div>}
+      {stats ? (
+        <div className={s.body}>{body()}</div>
+      ) : (
+        <div className={cx(s.cardLast, list.failed && s.error)}>{list.last}</div>
+      )}
     </Card>
   );
 });
@@ -342,7 +406,11 @@ const ACTION_WIDTH = 64;
 /** The grid of the table's head and rows: the name, the columns fitColumns left room for, and Connect. */
 function gridOf(columns: DashboardColumn[]): CSSProperties {
   const widths = [NAME_WIDTH, ...columns.map((c) => COLUMN_WIDTHS[c])];
-  return { gridTemplateColumns: [...widths.map(([least, most]) => `minmax(${least}px, ${most})`), `${ACTION_WIDTH}px`].join(" ") };
+  return {
+    gridTemplateColumns: [...widths.map(([least, most]) => `minmax(${least}px, ${most})`), `${ACTION_WIDTH}px`].join(
+      " ",
+    ),
+  };
 }
 
 /** The columns a table `width` pixels wide has room for besides the name and Connect. */
@@ -386,7 +454,14 @@ export function StatsHead({
         <span key={c}>{t(`dashboard.col.${c}` as MessageKey)}</span>
       ))}
       <span className={s.action}>
-        <IconButton small icon="columns" label={t("dashboard.columns")} aria-haspopup="menu" aria-expanded={columnsOpen} onClick={(e) => onColumns(e.currentTarget)} />
+        <IconButton
+          small
+          icon="columns"
+          label={t("dashboard.columns")}
+          aria-haspopup="menu"
+          aria-expanded={columnsOpen}
+          onClick={(e) => onColumns(e.currentTarget)}
+        />
       </span>
     </div>
   );
@@ -406,7 +481,14 @@ function MiniMeter({ percent, alert, title }: { percent: number | null; alert: b
 }
 
 /** A host's row with its readings, a column per value. */
-export const StatsRow = memo(function StatsRow({ host, selected, readout, leftOut, columns, view }: Omit<ItemProps, "list"> & { columns: DashboardColumn[] }) {
+export const StatsRow = memo(function StatsRow({
+  host,
+  selected,
+  readout,
+  leftOut,
+  columns,
+  view,
+}: Omit<ItemProps, "list"> & { columns: DashboardColumn[] }) {
   const { t, now, interval, alerts } = view;
   const reading = leftOut ? undefined : latestReading(readout);
   const stale = !leftOut && isStale(readout, now, interval);
@@ -424,7 +506,12 @@ export const StatsRow = memo(function StatsRow({ host, selected, readout, leftOu
           </span>
         );
       case "cpu":
-        return <MiniMeter percent={reading?.cpu_percent ?? null} alert={pastThreshold(reading?.cpu_percent ?? null, alerts.cpu)} />;
+        return (
+          <MiniMeter
+            percent={reading?.cpu_percent ?? null}
+            alert={pastThreshold(reading?.cpu_percent ?? null, alerts.cpu)}
+          />
+        );
       case "memory": {
         const p = memPercent(reading);
         return <MiniMeter percent={p} alert={pastThreshold(p, alerts.mem)} />;

@@ -51,10 +51,17 @@ function present(t: T, st: SyncStatus) {
       title: t(st.worker_update?.kind === "app_required" ? "sync.footer.appUpdate" : "sync.footer.workerUpdate"),
       sub: st.pending > 0 ? t("sync.footer.paused_sub", { n: st.pending }) : t("sync.footer.paused_sub_none"),
     };
-  const last = st.last_synced_at ? t("sync.sub.last", { time: formatRelative(t.locale, st.last_synced_at) }) : t("sync.sub.never");
+  const last = st.last_synced_at
+    ? t("sync.sub.last", { time: formatRelative(t.locale, st.last_synced_at) })
+    : t("sync.sub.never");
   const sub = st.counts ? `${last} · ${countsLine(t, st.counts)}` : last;
   if (st.conflicts > 0)
-    return { icon: "warning-circle", color: "var(--orange)", title: t("sync.footer.conflict", { n: st.conflicts }), sub };
+    return {
+      icon: "warning-circle",
+      color: "var(--orange)",
+      title: t("sync.footer.conflict", { n: st.conflicts }),
+      sub,
+    };
   return { icon: "cloud-check", color: "var(--green)", title: t("sync.footer.synced"), sub };
 }
 
@@ -104,7 +111,12 @@ export function SyncStatusView({ status, onReview }: { status: SyncStatus; onRev
               <div className={s.title}>{view.title}</div>
               <div className={s.sub}>{view.sub}</div>
             </div>
-            <Button icon="arrows-clockwise" busy={syncing} disabled={status.state === "auth_failed"} onClick={() => void syncNow()}>
+            <Button
+              icon="arrows-clockwise"
+              busy={syncing}
+              disabled={status.state === "auth_failed"}
+              onClick={() => void syncNow()}
+            >
               {t("sync.syncNow")}
             </Button>
           </div>

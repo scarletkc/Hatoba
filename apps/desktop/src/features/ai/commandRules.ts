@@ -267,7 +267,12 @@ interface Options {
  */
 function options(long: string, short: string, optional: Record<string, RegExp> = {}): Options {
   const out: Options = {
-    long: Object.fromEntries(long.split(/\s+/).filter(Boolean).map((n) => [n.replace(/=$/, ""), n.endsWith("=")])),
+    long: Object.fromEntries(
+      long
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((n) => [n.replace(/=$/, ""), n.endsWith("=")]),
+    ),
     short: Object.fromEntries([...short.matchAll(/(.)(:?)/g)].map(([, c, value]) => [c, value === ":"])),
   };
   for (const [name, pattern] of Object.entries(optional)) (name.length === 1 ? out.short : out.long)[name] = pattern;
@@ -282,7 +287,8 @@ function options(long: string, short: string, optional: Record<string, RegExp> =
 function operands(args: readonly string[], { long, short }: Options): string[] | null {
   const out: string[] = [];
   /** How many words after `i` an option's value takes: none when it is attached or the option takes none. */
-  const value = (arity: Arity, attached: boolean, i: number) => (attached || arity === false ? 0 : arity === true || arity.test(args[i + 1] ?? "") ? 1 : 0);
+  const value = (arity: Arity, attached: boolean, i: number) =>
+    attached || arity === false ? 0 : arity === true || arity.test(args[i + 1] ?? "") ? 1 : 0;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--") {
@@ -311,7 +317,8 @@ function operands(args: readonly string[], { long, short }: Options): string[] |
 const reads = (known: Options) => (args: string[]) => operands(args, known) !== null;
 
 /** The entry of `table` named `key`, not one of its prototype's. */
-const own = <T>(table: Record<string, T>, key: string | undefined): T | undefined => (key !== undefined && Object.hasOwn(table, key) ? table[key] : undefined);
+const own = <T>(table: Record<string, T>, key: string | undefined): T | undefined =>
+  key !== undefined && Object.hasOwn(table, key) ? table[key] : undefined;
 
 /** The first word that is no option, and what follows it. */
 function firstWord(args: string[]): [string | undefined, string[]] {
@@ -326,7 +333,11 @@ function gitReads(args: string[]): boolean {
   for (; i < args.length && args[i].startsWith("-"); i++) {
     const a = args[i];
     if (a === "-C") i++;
-    else if (!["--no-pager", "-P", "--no-optional-locks", "--literal-pathspecs"].includes(a) && !/^--(git-dir|work-tree)=/.test(a)) return false;
+    else if (
+      !["--no-pager", "-P", "--no-optional-locks", "--literal-pathspecs"].includes(a) &&
+      !/^--(git-dir|work-tree)=/.test(a)
+    )
+      return false;
   }
   const sub = args[i];
   const rest = args.slice(i + 1);
@@ -356,9 +367,37 @@ function gitReads(args: string[]): boolean {
     case "grep":
       return without([], "O")(rest);
     case "branch":
-      return lists(["--delete", "--move", "--copy", "--force", "--set-upstream-to", "--unset-upstream", "--edit-description", "--track", "--create-reflog"], "dDmMcCfut", false);
+      return lists(
+        [
+          "--delete",
+          "--move",
+          "--copy",
+          "--force",
+          "--set-upstream-to",
+          "--unset-upstream",
+          "--edit-description",
+          "--track",
+          "--create-reflog",
+        ],
+        "dDmMcCfut",
+        false,
+      );
     case "tag":
-      return lists(["--delete", "--annotate", "--sign", "--local-user", "--force", "--message", "--file", "--edit", "--create-reflog"], "dasufmFe", true);
+      return lists(
+        [
+          "--delete",
+          "--annotate",
+          "--sign",
+          "--local-user",
+          "--force",
+          "--message",
+          "--file",
+          "--edit",
+          "--create-reflog",
+        ],
+        "dasufmFe",
+        true,
+      );
     case "remote": {
       if (rest.every((a) => a === "-v" || a === "--verbose") || rest[0] === "get-url") return true;
       if (rest[0] !== "show") return false;
@@ -393,7 +432,13 @@ const DOCKER_FORMAT = options("format= help", "f:");
  * `docker` and `podman` subcommands that list containers and images, with the options of each that only read. Not
  * `inspect`, which prints a container's environment, where passwords often are.
  */
-const DOCKER_READS: Record<string, Options> = { ps: DOCKER_PS, images: DOCKER_IMAGES, logs: DOCKER_LOGS, version: DOCKER_FORMAT, info: DOCKER_FORMAT };
+const DOCKER_READS: Record<string, Options> = {
+  ps: DOCKER_PS,
+  images: DOCKER_IMAGES,
+  logs: DOCKER_LOGS,
+  version: DOCKER_FORMAT,
+  info: DOCKER_FORMAT,
+};
 
 /** The subcommands of {@link DOCKER_READS} that come after a group's name. */
 const DOCKER_GROUPS: Record<string, Record<string, Options>> = {
@@ -421,7 +466,17 @@ const dockerReads =
     return operands(args.slice(group ? 2 : 1), { long: known.long, short }) !== null;
   };
 
-const KUBECTL_READS = ["get", "describe", "logs", "top", "version", "explain", "api-resources", "api-versions", "cluster-info"];
+const KUBECTL_READS = [
+  "get",
+  "describe",
+  "logs",
+  "top",
+  "version",
+  "explain",
+  "api-resources",
+  "api-versions",
+  "cluster-info",
+];
 
 /**
  * The options of {@link KUBECTL_READS} that only read. Every other option asks, among them those that pick the API
@@ -474,7 +529,12 @@ function systemctlReads(args: string[]): boolean {
 function ipReads(args: string[]): boolean {
   let i = 0;
   for (; i < args.length && args[i].startsWith("-"); i++) {
-    if (!/^-(4|6|0|br(ief)?|c(olor)?(=\w+)?|j(son)?|p(retty)?|s(tats?|tatistics)?|d(etails)?|o(neline)?|h(uman(-readable)?)?|r(esolve)?)$/.test(args[i])) return false;
+    if (
+      !/^-(4|6|0|br(ief)?|c(olor)?(=\w+)?|j(son)?|p(retty)?|s(tats?|tatistics)?|d(etails)?|o(neline)?|h(uman(-readable)?)?|r(esolve)?)$/.test(
+        args[i],
+      )
+    )
+      return false;
   }
   const object = args[i];
   // ip takes any abbreviation of an object's name.
@@ -507,11 +567,30 @@ function uniqReads(args: string[]): boolean {
 
 /** `hostname` that shows a name; with an argument, it sets it. */
 function hostnameReads(args: string[]): boolean {
-  return args.every((a) => /^-[fsdiIAa]+$/.test(a) || ["--fqdn", "--long", "--short", "--domain", "--ip-address", "--all-ip-addresses", "--all-fqdns", "--alias"].includes(a));
+  return args.every(
+    (a) =>
+      /^-[fsdiIAa]+$/.test(a) ||
+      [
+        "--fqdn",
+        "--long",
+        "--short",
+        "--domain",
+        "--ip-address",
+        "--all-ip-addresses",
+        "--all-fqdns",
+        "--alias",
+      ].includes(a),
+  );
 }
 
 function dmesgReads(args: string[]): boolean {
-  return args.every((a) => /^-[THkxdLe]+$/.test(a) || /^--(ctime|human|kernel|decode|reltime|notime|nopager|raw|color(=\w+)?|time-format=[\w-]+|(level|facility)=[\w,]+)$/.test(a));
+  return args.every(
+    (a) =>
+      /^-[THkxdLe]+$/.test(a) ||
+      /^--(ctime|human|kernel|decode|reltime|notime|nopager|raw|color(=\w+)?|time-format=[\w-]+|(level|facility)=[\w,]+)$/.test(
+        a,
+      ),
+  );
 }
 
 /** `tail`'s options that only read: not `--follow`, `-f` and `-F`, nor the options that only matter while following. */
@@ -737,7 +816,8 @@ function showsOnly(args: string[]): boolean {
 }
 
 /** The same rule under each of `names`: a cmdlet and its aliases, say. */
-const each = (names: readonly string[], rule: Rule): Record<string, Rule> => Object.fromEntries(names.map((n) => [n, rule]));
+const each = (names: readonly string[], rule: Rule): Record<string, Rule> =>
+  Object.fromEntries(names.map((n) => [n, rule]));
 
 /** Windows programs that only read, which PowerShell and Command Prompt run alike, and the tools of {@link READ_ONLY} found there too. */
 const WINDOWS_READS: Record<string, Rule> = {
@@ -785,7 +865,22 @@ const POWERSHELL_READS: Record<string, Rule> = {
     ],
     free,
   ),
-  ...each(["get-location", "gl", "pwd", "set-location", "sl", "cd", "chdir", "push-location", "pushd", "pop-location", "popd"], free),
+  ...each(
+    [
+      "get-location",
+      "gl",
+      "pwd",
+      "set-location",
+      "sl",
+      "cd",
+      "chdir",
+      "push-location",
+      "pushd",
+      "pop-location",
+      "popd",
+    ],
+    free,
+  ),
   ...each(
     [
       "write-output",
@@ -957,7 +1052,9 @@ const prefixWords = (prefix: string) => prefix.trim().split(/\s+/).filter(Boolea
 /** Whether a command starts with a prefix's words; PowerShell and Command Prompt take the command's name in any case. */
 function startsWith(words: readonly string[], prefix: readonly string[], dialect: ShellDialect): boolean {
   if (prefix.length > words.length) return false;
-  return prefix.every((w, i) => words[i] === w || (i === 0 && dialect !== "posix" && words[0].toLowerCase() === w.toLowerCase()));
+  return prefix.every(
+    (w, i) => words[i] === w || (i === 0 && dialect !== "posix" && words[0].toLowerCase() === w.toLowerCase()),
+  );
 }
 
 /**
@@ -977,12 +1074,19 @@ function callCommands(line: string, dialect: ShellDialect, workdir: string): Sim
  * command in it only reads, or starts with one of `prefixes` (whole words: `git pull` covers `git pull origin`,
  * not `git pull-request`). A line that uses anything `splitCommands` refuses never does.
  */
-export function commandAllowed(line: string, prefixes: readonly string[], dialect: ShellDialect = "posix", workdir = ""): boolean {
+export function commandAllowed(
+  line: string,
+  prefixes: readonly string[],
+  dialect: ShellDialect = "posix",
+  workdir = "",
+): boolean {
   const commands = callCommands(line, dialect, workdir);
   if (!commands) return false;
   const allowed = prefixes.map(prefixWords).filter((p) => p.length > 0);
   const reads = reading(commands, dialect);
-  return commands.every((c, i) => reads[i] || (plain(c.words, dialect) && allowed.some((p) => startsWith(c.words, p, dialect))));
+  return commands.every(
+    (c, i) => reads[i] || (plain(c.words, dialect) && allowed.some((p) => startsWith(c.words, p, dialect))),
+  );
 }
 
 /** Whether the command line, run in `workdir`, only reads (§13.5), and so runs without asking in manual approval mode. */
@@ -1021,7 +1125,17 @@ const SUBCOMMANDS = new Set([
 ]);
 
 /** {@link SUBCOMMANDS} in PowerShell and Command Prompt, with Windows' own tools that take one. */
-const WINDOWS_SUBCOMMANDS = new Set([...SUBCOMMANDS, "winget", "choco", "scoop", "dotnet", "net", "netsh", "reg", "sc"]);
+const WINDOWS_SUBCOMMANDS = new Set([
+  ...SUBCOMMANDS,
+  "winget",
+  "choco",
+  "scoop",
+  "dotnet",
+  "net",
+  "netsh",
+  "reg",
+  "sc",
+]);
 
 /**
  * A command's name as PowerShell and Command Prompt find it: in lowercase, without its directory and
@@ -1046,7 +1160,30 @@ function named(names: ReadonlySet<string>, word: string, dialect: ShellDialect =
 }
 
 /** Commands that run another command, which a prefix of theirs would allow whatever it is. */
-const WRAPPERS = new Set(["sudo", "doas", "su", "env", "xargs", "nohup", "timeout", "nice", "ionice", "time", "watch", "exec", "eval", "command", "builtin", "sh", "bash", "zsh", "dash", "ksh", "fish", "busybox"]);
+const WRAPPERS = new Set([
+  "sudo",
+  "doas",
+  "su",
+  "env",
+  "xargs",
+  "nohup",
+  "timeout",
+  "nice",
+  "ionice",
+  "time",
+  "watch",
+  "exec",
+  "eval",
+  "command",
+  "builtin",
+  "sh",
+  "bash",
+  "zsh",
+  "dash",
+  "ksh",
+  "fish",
+  "busybox",
+]);
 
 /**
  * {@link WRAPPERS} in PowerShell and Command Prompt, with the shells, `start`, `call`, dot-sourcing, and the
@@ -1200,7 +1337,13 @@ export function allowancePrefixes(line: string, dialect: ShellDialect = "posix",
       continue;
     }
     const [name, sub] = c.words;
-    if (!plain(c.words, dialect) || named(windows ? WINDOWS_WRAPPERS : WRAPPERS, name, dialect) || c.globs[0] || /\s/.test(name)) return null;
+    if (
+      !plain(c.words, dialect) ||
+      named(windows ? WINDOWS_WRAPPERS : WRAPPERS, name, dialect) ||
+      c.globs[0] ||
+      /\s/.test(name)
+    )
+      return null;
     let prefix = name;
     if (named(windows ? WINDOWS_SUBCOMMANDS : SUBCOMMANDS, name, dialect)) {
       if (!sub || sub.startsWith("-") || (windows && sub.startsWith("/")) || c.globs[1] || /\s/.test(sub)) return null;

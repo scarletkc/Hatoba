@@ -41,8 +41,18 @@ function fieldEntries(field: TextField, t: (key: MessageKey) => string, platform
           document.execCommand("delete");
         }, denied),
     },
-    { label: t("edit.copy"), hint: key("C"), disabled: !selected || secret, onSelect: () => void writeClipboard(selected).catch(denied) },
-    { label: t("edit.paste"), hint: key("V"), disabled: !editable, onSelect: () => void paste(field, restore).catch(denied) },
+    {
+      label: t("edit.copy"),
+      hint: key("C"),
+      disabled: !selected || secret,
+      onSelect: () => void writeClipboard(selected).catch(denied),
+    },
+    {
+      label: t("edit.paste"),
+      hint: key("V"),
+      disabled: !editable,
+      onSelect: () => void paste(field, restore).catch(denied),
+    },
     { kind: "separator" },
     {
       label: t("edit.selectAll"),
@@ -90,7 +100,13 @@ export function ContextMenuHost({ platform }: { platform: Platform }) {
         const selection = window.getSelection();
         const text = selection?.toString() ?? "";
         if (text.trim() && e.target instanceof Node && selection?.containsNode(e.target, true))
-          entries = [{ label: t("edit.copy"), hint: shortcutLabel(platform, "Ctrl+C", "⌘C"), onSelect: () => void writeClipboard(text).catch(() => toast(t("terminal.clipboardDenied"), "error")) }];
+          entries = [
+            {
+              label: t("edit.copy"),
+              hint: shortcutLabel(platform, "Ctrl+C", "⌘C"),
+              onSelect: () => void writeClipboard(text).catch(() => toast(t("terminal.clipboardDenied"), "error")),
+            },
+          ];
       }
       setMenu(entries.length > 0 ? { anchor: { x: e.clientX, y: e.clientY }, entries, onLockScreen: locked } : null);
     };
@@ -101,5 +117,7 @@ export function ContextMenuHost({ platform }: { platform: Platform }) {
   if (!menu) return null;
   // One opened on the lock screen is the master password field's. One opened before locking closes
   // with the lock: its Copy holds text selected in the vault's pages.
-  return <Menu anchor={menu.anchor} entries={menu.entries} onClose={close} minWidth={160} whileLocked={menu.onLockScreen} />;
+  return (
+    <Menu anchor={menu.anchor} entries={menu.entries} onClose={close} minWidth={160} whileLocked={menu.onLockScreen} />
+  );
 }

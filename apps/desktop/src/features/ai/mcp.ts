@@ -23,7 +23,9 @@ export function loadMcp(): Promise<void> {
     try {
       const servers = await api.mcp_servers_list();
       useMcp.setState({ servers, failed: false });
-      const statuses = await Promise.all(servers.filter((s) => s.enabled).map((s) => api.mcp_server_status(s.id).catch(() => null)));
+      const statuses = await Promise.all(
+        servers.filter((s) => s.enabled).map((s) => api.mcp_server_status(s.id).catch(() => null)),
+      );
       useMcp.setState((st) => {
         const status = { ...st.status };
         for (const x of statuses) if (x) status[x.server_id] = x;
@@ -63,7 +65,11 @@ export interface ToolsMenuRow {
 }
 
 /** AI-30: the servers enabled on this device, by name, with their state and whether the conversation uses them. */
-export function toolsMenuRows(servers: McpServerView[], status: Record<string, McpServerStatus>, off: readonly string[]): ToolsMenuRow[] {
+export function toolsMenuRows(
+  servers: McpServerView[],
+  status: Record<string, McpServerStatus>,
+  off: readonly string[],
+): ToolsMenuRow[] {
   return servers
     .filter((s) => s.enabled)
     .sort((a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
@@ -95,13 +101,19 @@ export function menuSources(
   status: Record<string, McpServerStatus>,
   off: readonly string[],
 ): { prompts: PromptCommand[]; resources: ResourceItem[] } {
-  const running = toolsMenuRows([...servers], status, off).filter((row) => row.on && row.state === "running" && status[row.server.id]);
-  const names = commandNames(running.map((row) => [row.server.name, status[row.server.id].prompts.map((p) => p.name)] as const));
+  const running = toolsMenuRows([...servers], status, off).filter(
+    (row) => row.on && row.state === "running" && status[row.server.id],
+  );
+  const names = commandNames(
+    running.map((row) => [row.server.name, status[row.server.id].prompts.map((p) => p.name)] as const),
+  );
   const prompts: PromptCommand[] = [];
   const resources: ResourceItem[] = [];
   running.forEach((row, i) => {
     const st = status[row.server.id];
-    st.prompts.forEach((prompt, j) => prompts.push({ serverId: row.server.id, server: row.server.name, prompt, command: names[i][j] }));
+    st.prompts.forEach((prompt, j) =>
+      prompts.push({ serverId: row.server.id, server: row.server.name, prompt, command: names[i][j] }),
+    );
     for (const resource of st.resources) resources.push({ serverId: row.server.id, server: row.server.name, resource });
   });
   return { prompts, resources };

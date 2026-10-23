@@ -22,12 +22,14 @@ const percent = (value: number) => `${(value * 100).toFixed(4)}%`;
 
 <div
   class:list={["shot", { cropped: crop }, className]}
-  style={crop && {
-    "aspect-ratio": `${crop.w} / ${crop.h}`,
-    "--img-width": percent(scale),
-    "--img-left": percent(-crop.x / crop.w),
-    "--img-top": percent(-crop.y / crop.h),
-  }}
+  style={
+    crop && {
+      "aspect-ratio": `${crop.w} / ${crop.h}`,
+      "--img-width": percent(scale),
+      "--img-left": percent(-crop.x / crop.w),
+      "--img-top": percent(-crop.y / crop.h),
+    }
+  }
 >
   <Picture
     src={src}

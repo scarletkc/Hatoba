@@ -117,7 +117,10 @@ export function SkillsSection({ builtin }: { builtin: BuiltinSwitch | null }) {
 
   const chooseSource = async (kind: "folder" | "zip") => {
     try {
-      const path = await pickSource(kind, t(kind === "folder" ? "aiSettings.skills.import.folder" : "aiSettings.skills.import.zip"));
+      const path = await pickSource(
+        kind,
+        t(kind === "folder" ? "aiSettings.skills.import.folder" : "aiSettings.skills.import.zip"),
+      );
       if (path) setImportPath(path);
     } catch (e) {
       toast(aiErrorMessage(t, e), "error");
@@ -156,7 +159,11 @@ export function SkillsSection({ builtin }: { builtin: BuiltinSwitch | null }) {
           anchor={importMenu.anchor}
           onClose={importMenu.close}
           entries={[
-            { label: t("aiSettings.skills.import.folder"), icon: "folder-open", onSelect: () => void chooseSource("folder") },
+            {
+              label: t("aiSettings.skills.import.folder"),
+              icon: "folder-open",
+              onSelect: () => void chooseSource("folder"),
+            },
             { label: t("aiSettings.skills.import.zip"), icon: "file-zip", onSelect: () => void chooseSource("zip") },
           ]}
         />
@@ -186,7 +193,11 @@ export function SkillsSection({ builtin }: { builtin: BuiltinSwitch | null }) {
           />
         )}
         {loaded && list.length === 0 && (
-          <EmptyBlock icon="book-open-text" title={t("aiSettings.skills.empty.title")} body={t("aiSettings.skills.empty.body")}>
+          <EmptyBlock
+            icon="book-open-text"
+            title={t("aiSettings.skills.empty.title")}
+            body={t("aiSettings.skills.empty.body")}
+          >
             <Button variant="primary" icon="plus" onClick={() => setEditing({ id: null })}>
               {t("aiSettings.skills.add")}
             </Button>
@@ -261,7 +272,12 @@ function BuiltinRow({
         </span>
       </button>
       <div className={s.actions}>
-        <Switch checked={enabled} disabled={disabled} label={t("aiSettings.skills.builtin.enable", { name: skill.name })} onChange={onToggle} />
+        <Switch
+          checked={enabled}
+          disabled={disabled}
+          label={t("aiSettings.skills.builtin.enable", { name: skill.name })}
+          onChange={onToggle}
+        />
         <IconButton icon="eye" label={view} onClick={onView} />
       </div>
     </div>
@@ -284,7 +300,12 @@ function SkillRow({
   const t = useT();
   return (
     <div className={cx(s.row, !skill.enabled && s.off)}>
-      <button type="button" className={s.main} title={t("aiSettings.skills.edit", { name: skill.name })} onClick={onEdit}>
+      <button
+        type="button"
+        className={s.main}
+        title={t("aiSettings.skills.edit", { name: skill.name })}
+        onClick={onEdit}
+      >
         <span className={s.icon} aria-hidden>
           <Icon name="book-open-text" />
         </span>
@@ -292,16 +313,29 @@ function SkillRow({
           <span className={s.name}>{skill.name}</span>
           <span className={s.description}>{skill.description}</span>
           <span className={s.meta}>
-            {skill.files.length === 0 ? t("aiSettings.skills.noFiles") : t("aiSettings.skills.fileCount", { n: skill.files.length })}
+            {skill.files.length === 0
+              ? t("aiSettings.skills.noFiles")
+              : t("aiSettings.skills.fileCount", { n: skill.files.length })}
           </span>
           {/* A skill from a build before the name was reserved: kept, but the name means the built-in skill (AI-34). */}
-          {skill.name === BUILTIN_SKILL_NAME && <span className={s.reservedNote}>{t("aiSettings.skills.reservedNote")}</span>}
+          {skill.name === BUILTIN_SKILL_NAME && (
+            <span className={s.reservedNote}>{t("aiSettings.skills.reservedNote")}</span>
+          )}
         </span>
       </button>
       <div className={s.actions}>
-        <Switch checked={skill.enabled} label={t("aiSettings.skills.enable", { name: skill.name })} onChange={onToggle} />
+        <Switch
+          checked={skill.enabled}
+          label={t("aiSettings.skills.enable", { name: skill.name })}
+          onChange={onToggle}
+        />
         <IconButton icon="export" label={t("aiSettings.skills.export", { name: skill.name })} onClick={onExport} />
-        <IconButton icon="trash" label={t("aiSettings.skills.delete", { name: skill.name })} danger onClick={onDelete} />
+        <IconButton
+          icon="trash"
+          label={t("aiSettings.skills.delete", { name: skill.name })}
+          danger
+          onClick={onDelete}
+        />
       </div>
     </div>
   );

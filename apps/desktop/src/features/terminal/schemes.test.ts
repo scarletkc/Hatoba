@@ -13,7 +13,13 @@ describe("terminal colour schemes", () => {
 
   it("set every palette colour as #rrggbb", () => {
     for (const { id, colors } of SCHEMES) {
-      const named = ["background", "foreground", "cursor", ...ANSI, ...ANSI.map((c) => `bright${c[0].toUpperCase()}${c.slice(1)}`)];
+      const named = [
+        "background",
+        "foreground",
+        "cursor",
+        ...ANSI,
+        ...ANSI.map((c) => `bright${c[0].toUpperCase()}${c.slice(1)}`),
+      ];
       for (const key of named) expect(colors[key as keyof typeof colors], `${id}.${key}`).toMatch(HEX);
     }
   });
@@ -42,8 +48,13 @@ describe("terminal colour schemes", () => {
       const { matchBackground, activeMatchBackground } = searchColors(s);
       const { foreground, background } = s.colors;
       expect(contrast(foreground, matchBackground), `${s.id} match`).toBeGreaterThanOrEqual(MATCH_CONTRAST);
-      expect(contrast(foreground, activeMatchBackground), `${s.id} active match`).toBeGreaterThanOrEqual(MATCH_CONTRAST);
-      if (!s.search) expect(contrast(background, activeMatchBackground), s.id).toBeGreaterThan(contrast(background, matchBackground));
+      expect(contrast(foreground, activeMatchBackground), `${s.id} active match`).toBeGreaterThanOrEqual(
+        MATCH_CONTRAST,
+      );
+      if (!s.search)
+        expect(contrast(background, activeMatchBackground), s.id).toBeGreaterThan(
+          contrast(background, matchBackground),
+        );
     }
   });
 });

@@ -40,7 +40,8 @@ async function until<T>(find: () => T | null | undefined): Promise<T> {
 }
 
 const dialogText = () => document.querySelector("[role=dialog]")?.textContent ?? "";
-const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label);
+const button = (label: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label);
 
 describe("ImportDialog", () => {
   it("lists another client's sessions with their folders and what stays behind", async () => {

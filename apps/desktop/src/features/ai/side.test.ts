@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AiConversationView, AiEntryView, AiProviderView, AiSendStarted, AiSideAnswer, AiSideEvent, AiSideQuestionInput } from "@/ipc/types";
+import type {
+  AiConversationView,
+  AiEntryView,
+  AiProviderView,
+  AiSendStarted,
+  AiSideAnswer,
+  AiSideEvent,
+  AiSideQuestionInput,
+} from "@/ipc/types";
 import type { PasteAttachment } from "./attachments";
 import { newTurn } from "./turn";
 
@@ -16,7 +24,16 @@ vi.mock("@/ipc/api", async (importActual) => ({
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 
-const { askAiAboutConnection, askSideQuestion, dismissSideQuestion, noteSelection, retrySideQuestion, sendMessage, stopSideQuestion, tabSelection } = await import("./actions");
+const {
+  askAiAboutConnection,
+  askSideQuestion,
+  dismissSideQuestion,
+  noteSelection,
+  retrySideQuestion,
+  sendMessage,
+  stopSideQuestion,
+  tabSelection,
+} = await import("./actions");
 const { approvalCall, canAskSide, newSideQuestion, reduceSideEvent, sideRunning } = await import("./side");
 const { blankSlot, getSlot, HOME_SLOT, patchSlot, slotActivity, useAi } = await import("./store");
 type Slot = import("./store").Slot;
@@ -27,7 +44,7 @@ const view: AiConversationView = {
   host_id: null,
   quick_target: null,
   origin: null,
-      local: null,
+  local: null,
   pinned: false,
   context_start: null,
   effort: null,
@@ -43,7 +60,16 @@ const provider: AiProviderView = {
   base_url: "http://127.0.0.1/v1",
   has_api_key: false,
   auth_header: "x-api-key",
-  models: [{ id: "m1", name: "Model 1", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null }],
+  models: [
+    {
+      id: "m1",
+      name: "Model 1",
+      context_window: null,
+      max_output_tokens: null,
+      efforts: null,
+      adaptive_thinking: null,
+    },
+  ],
   updated_at: 0,
 };
 const paste: PasteAttachment = { kind: "paste", text: "error.log line", lines: 1 };
@@ -90,7 +116,10 @@ describe("the side question's state (AI-42)", () => {
   it("streams reasoning, then the answer", () => {
     const thinking = reduceSideEvent(q, { kind: "reasoning", delta: "Hmm" });
     expect(thinking.phase).toBe("thinking");
-    const streaming = reduceSideEvent(reduceSideEvent(thinking, { kind: "text", delta: "It " }), { kind: "text", delta: "is." });
+    const streaming = reduceSideEvent(reduceSideEvent(thinking, { kind: "text", delta: "It " }), {
+      kind: "text",
+      delta: "is.",
+    });
     expect(streaming).toMatchObject({ phase: "streaming", answer: "It is." });
     expect(reduceSideEvent(streaming, { kind: "reasoning", delta: "more" }).phase).toBe("streaming");
   });
@@ -135,7 +164,11 @@ describe("askSideQuestion (AI-42)", () => {
     const p = pending();
     expect(askSideQuestion(HOME_SLOT, getSlot(HOME_SLOT).draft)).toBe(true);
 
-    expect(p.input()).toMatchObject({ conversation_id: "c1", approval_call_id: "call_1", context: { provider_id: "p1", model_id: "m1" } });
+    expect(p.input()).toMatchObject({
+      conversation_id: "c1",
+      approval_call_id: "call_1",
+      context: { provider_id: "p1", model_id: "m1" },
+    });
     expect(p.input()?.text).toMatch(/^<pasted_text lines="1">\nerror\.log line\n<\/pasted_text>\n\nIs it safe\?$/);
     expect(getSlot(HOME_SLOT)).toMatchObject({ draft: "", extras: [], turn, entries });
     expect(getSlot(HOME_SLOT).side).toMatchObject({ question: "Is it safe?", phase: "waiting" });

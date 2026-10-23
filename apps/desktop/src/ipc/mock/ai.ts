@@ -1,5 +1,14 @@
 import type { TabSource } from "@/app/tabs";
-import { blockTitle, fileRevertNote, noteBlock, notedPermission, parseMessage, screenStateNote, splitPermissionNote, type Note } from "@/features/ai/attachments";
+import {
+  blockTitle,
+  fileRevertNote,
+  noteBlock,
+  notedPermission,
+  parseMessage,
+  screenStateNote,
+  splitPermissionNote,
+  type Note,
+} from "@/features/ai/attachments";
 import { effectiveEffort, modelEfforts } from "@/features/ai/effort";
 import { forkCopies } from "@/features/ai/fork";
 import { localName, movedFrom, moves, recordedTarget } from "@/features/ai/place";
@@ -93,7 +102,12 @@ interface Conv {
  */
 type Recorded = Pick<AiConversationView, "host_id" | "quick_target" | "origin" | "local">;
 
-const placeOf = (c: Recorded): Recorded => ({ host_id: c.host_id, quick_target: c.quick_target, origin: c.origin, local: c.local });
+const placeOf = (c: Recorded): Recorded => ({
+  host_id: c.host_id,
+  quick_target: c.quick_target,
+  origin: c.origin,
+  local: c.local,
+});
 
 /** Like Rust's `Place` (AI-09): where a message moves its conversation, and where from (`moveOf`). */
 interface Move {
@@ -260,7 +274,15 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   /** §13.1 step 5: every call without a result gets a cancelled one. Returns the results it stored. */
   function cancelOpenCalls(c: Conv): AiEntryView[] {
     return unanswered(c).map((call) => {
-      const entry: AiEntryView = { role: "tool", entry_id: newId(), created_at: Date.now(), tool_call_id: call.id, status: "cancelled", content: "The call was cancelled before it ran.", auto: null };
+      const entry: AiEntryView = {
+        role: "tool",
+        entry_id: newId(),
+        created_at: Date.now(),
+        tool_call_id: call.id,
+        status: "cancelled",
+        content: "The call was cancelled before it ran.",
+        auto: null,
+      };
       verdicts.delete(call.id);
       store(c, entry);
       return entry;
@@ -329,7 +351,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
   function chunks(text: string): string[] {
     const out: string[] = [];
-    for (let i = 0; i < text.length; ) {
+    for (let i = 0; i < text.length;) {
       const n = 3 + Math.floor(Math.random() * 7);
       out.push(text.slice(i, i + n));
       i += n;
@@ -337,14 +359,23 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     return out;
   }
 
-  const call = (name: string, args: Record<string, unknown>): AiToolCall => ({ id: `call_${(++seq).toString(36)}`, name, arguments: JSON.stringify(args) });
+  const call = (name: string, args: Record<string, unknown>): AiToolCall => ({
+    id: `call_${(++seq).toString(36)}`,
+    name,
+    arguments: JSON.stringify(args),
+  });
 
   // ───────────── the fake model ─────────────
 
   /** AI-42: the fake model's answer to a side question, about the call whose approval card waits or the conversation. */
   function sideAnswer(c: Conv, input: AiSideQuestionInput): string {
     const running = turns.has(c.view.id);
-    const call = running && input.approval_call_id ? c.entries.flatMap((e) => (e.role === "assistant" ? e.tool_calls : [])).find((x) => x.id === input.approval_call_id) : undefined;
+    const call =
+      running && input.approval_call_id
+        ? c.entries
+            .flatMap((e) => (e.role === "assistant" ? e.tool_calls : []))
+            .find((x) => x.id === input.approval_call_id)
+        : undefined;
     if (call) {
       let args: Record<string, unknown> = {};
       try {
@@ -352,7 +383,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       } catch {
         // cut-off arguments name nothing
       }
-      const named = [args.command, args.path, args.url, args.text].find((x) => typeof x === "string") as string | undefined;
+      const named = [args.command, args.path, args.url, args.text].find((x) => typeof x === "string") as
+        string | undefined;
       const what = named ? `\`${named.split("\n")[0]}\`` : `\`${call.name}\``;
       return zh
         ? `这个 **${call.name}** 调用会处理 ${what}。它还在等你批准，所以目前什么都没有运行。\n\n- **运行**：让它继续，任务会接着用它的结果往下走。\n- **拒绝**：不运行它，可以顺便告诉助手原因。\n\n这条回答不会保存到对话里。`
@@ -445,7 +477,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         ),
         calls: [
           call("run_command", {
-            command: "sudo sed -i 's/127.0.0.1:8081/127.0.0.1:8080/' /etc/nginx/conf.d/api.conf && sudo nginx -t && sudo systemctl reload nginx",
+            command:
+              "sudo sed -i 's/127.0.0.1:8081/127.0.0.1:8080/' /etc/nginx/conf.d/api.conf && sudo nginx -t && sudo systemctl reload nginx",
             timeout_seconds: 30,
           }),
         ],
@@ -454,17 +487,22 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     if (step === 2)
       return {
         reasoning: "",
-        text: say("nginx reloaded. I’ll verify it from your shell.", "nginx 已重新加载。我在你的终端里验证一下。", "nginx をリロードしました。ターミナルで確認します。"),
+        text: say(
+          "nginx reloaded. I’ll verify it from your shell.",
+          "nginx 已重新加载。我在你的终端里验证一下。",
+          "nginx をリロードしました。ターミナルで確認します。",
+        ),
         calls: [call("send_input", { text: "curl -sI http://localhost/v1/hosts", keys: ["enter"], wait_seconds: 3 })],
         finish: "tool_calls",
       };
     return {
       reasoning: "",
-      text: say(
-        "**Fixed.** The 502s came from a port mismatch:\n\n| Check | Before | Now |\n|---|---|---|\n| nginx upstream | `127.0.0.1:8081` | `127.0.0.1:8080` |\n| `GET /v1/hosts` | 502 Bad Gateway | **200 OK** |\n\nThe last deploy moved the API to port 8080, but `/etc/nginx/conf.d/api.conf` still pointed at 8081. A check at the end of the deploy script catches this next time:\n\n```bash\ncurl -fsS http://localhost/healthz || exit 1\n```",
-        "**修好了。** 502 来自端口不一致：\n\n| 检查项 | 之前 | 现在 |\n|---|---|---|\n| nginx upstream | `127.0.0.1:8081` | `127.0.0.1:8080` |\n| `GET /v1/hosts` | 502 Bad Gateway | **200 OK** |\n\n上次部署把 API 改到了 8080 端口，但 `/etc/nginx/conf.d/api.conf` 还指向 8081。可以在部署脚本最后加一个检查，下次就能马上发现：\n\n```bash\ncurl -fsS http://localhost/healthz || exit 1\n```",
-        "**修正しました。** 502 の原因はポートの不一致でした。\n\n| 確認項目 | 修正前 | 修正後 |\n|---|---|---|\n| nginx upstream | `127.0.0.1:8081` | `127.0.0.1:8080` |\n| `GET /v1/hosts` | 502 Bad Gateway | **200 OK** |\n\n前回のデプロイで API は 8080 に移りましたが、`/etc/nginx/conf.d/api.conf` は 8081 のままでした。デプロイスクリプトの最後にこのチェックを入れれば、次はすぐ気づけます。\n\n```bash\ncurl -fsS http://localhost/healthz || exit 1\n```",
-      ) +
+      text:
+        say(
+          "**Fixed.** The 502s came from a port mismatch:\n\n| Check | Before | Now |\n|---|---|---|\n| nginx upstream | `127.0.0.1:8081` | `127.0.0.1:8080` |\n| `GET /v1/hosts` | 502 Bad Gateway | **200 OK** |\n\nThe last deploy moved the API to port 8080, but `/etc/nginx/conf.d/api.conf` still pointed at 8081. A check at the end of the deploy script catches this next time:\n\n```bash\ncurl -fsS http://localhost/healthz || exit 1\n```",
+          "**修好了。** 502 来自端口不一致：\n\n| 检查项 | 之前 | 现在 |\n|---|---|---|\n| nginx upstream | `127.0.0.1:8081` | `127.0.0.1:8080` |\n| `GET /v1/hosts` | 502 Bad Gateway | **200 OK** |\n\n上次部署把 API 改到了 8080 端口，但 `/etc/nginx/conf.d/api.conf` 还指向 8081。可以在部署脚本最后加一个检查，下次就能马上发现：\n\n```bash\ncurl -fsS http://localhost/healthz || exit 1\n```",
+          "**修正しました。** 502 の原因はポートの不一致でした。\n\n| 確認項目 | 修正前 | 修正後 |\n|---|---|---|\n| nginx upstream | `127.0.0.1:8081` | `127.0.0.1:8080` |\n| `GET /v1/hosts` | 502 Bad Gateway | **200 OK** |\n\n前回のデプロイで API は 8080 に移りましたが、`/etc/nginx/conf.d/api.conf` は 8081 のままでした。デプロイスクリプトの最後にこのチェックを入れれば、次はすぐ気づけます。\n\n```bash\ncurl -fsS http://localhost/healthz || exit 1\n```",
+        ) +
         (VISITOR
           ? say(
               "\n\n---\n\nThat was the demo’s scripted fix. You can also ask how much **disk** space is left or what’s on the **screen**, or ask me to **type** a command, **search** the web, or **edit** the nginx config.",
@@ -480,7 +518,11 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   /** The website's demo: the answer to a message without a keyword, which says what the demo answers. */
   function visitorOverview(): Plan {
     return {
-      reasoning: say("Say what this demo can answer.", "说明这个演示能回答什么。", "このデモで答えられることを伝える。"),
+      reasoning: say(
+        "Say what this demo can answer.",
+        "说明这个演示能回答什么。",
+        "このデモで答えられることを伝える。",
+      ),
       text: say(
         "This is a demo with sample servers: nothing here connects anywhere, and my replies are scripted, so I answer only a few requests. Try one of these:\n\n- Users are getting 502s from nginx on this box. Find out why and fix it.\n- How much disk space is left?\n- What’s on my screen?\n- Type a command into the shell.\n- Search the web for nginx upstream errors.\n- Edit the nginx config.\n\nIn the app, the assistant answers with the model you set up.",
         "这是一个使用示例服务器的演示：它不会连接任何地方，我的回复也是预先写好的，所以只能回应几种请求。可以试试：\n\n- 这台机器上的 nginx 一直返回 502，找出原因并修好它。\n- 磁盘还剩多少空间？\n- 屏幕上显示了什么？\n- 在 shell 里输入一条命令。\n- 搜索 nginx upstream 的报错。\n- 编辑 nginx 配置。\n\n在应用里，助手会用你设置的模型来回答。",
@@ -498,8 +540,16 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const parts = results.flatMap((r): string[] => {
       const x = calls.get(r.tool_call_id);
       if (!x) return [];
-      if (r.status === "rejected") return [say("You declined this step, so it didn’t run.", "你拒绝了这一步，所以它没有运行。", "この操作は拒否されたので、実行していません。")];
-      if (r.status !== "ok") return [say("This step didn’t finish.", "这一步没有完成。", "この操作は完了しませんでした。")];
+      if (r.status === "rejected")
+        return [
+          say(
+            "You declined this step, so it didn’t run.",
+            "你拒绝了这一步，所以它没有运行。",
+            "この操作は拒否されたので、実行していません。",
+          ),
+        ];
+      if (r.status !== "ok")
+        return [say("This step didn’t finish.", "这一步没有完成。", "この操作は完了しませんでした。")];
       switch (x.name) {
         case "run_command": {
           if (x.arguments.includes(DISK_COMMAND.unix))
@@ -511,10 +561,18 @@ export function createAiMock(deps: AiMockDeps): AiApi {
               ),
             ];
           const stdout = r.content.split("--- stdout ---\n")[1]?.split("\n--- stderr ---")[0] ?? "";
-          return [`${say("Here’s the space on this computer’s drives:", "这台电脑各个磁盘的空间：", "このコンピューターのドライブの容量です。")}\n\n\`\`\`\n${stdout}\n\`\`\``];
+          return [
+            `${say("Here’s the space on this computer’s drives:", "这台电脑各个磁盘的空间：", "このコンピューターのドライブの容量です。")}\n\n\`\`\`\n${stdout}\n\`\`\``,
+          ];
         }
         case "read_terminal": {
-          const screen = r.content.split("\n\n").slice(1).join("\n\n").split("\n").filter((l) => l.trim()).slice(-8);
+          const screen = r.content
+            .split("\n\n")
+            .slice(1)
+            .join("\n\n")
+            .split("\n")
+            .filter((l) => l.trim())
+            .slice(-8);
           const missing = screen.some((l) => l.includes("command not found"));
           return [
             `${say("Here’s the end of your screen:", "屏幕最后几行是：", "画面の最後の数行です。")}\n\n\`\`\`\n${screen.join("\n")}\n\`\`\`\n\n${
@@ -567,7 +625,12 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       }
     });
     if (parts.length === 0) return visitorOverview();
-    return { reasoning: say("Answer from what the tools returned.", "根据工具返回的结果回答。", "ツールの結果から答える。"), text: parts.join("\n\n"), calls: [], finish: "stop" };
+    return {
+      reasoning: say("Answer from what the tools returned.", "根据工具返回的结果回答。", "ツールの結果から答える。"),
+      text: parts.join("\n\n"),
+      calls: [],
+      finish: "stop",
+    };
   }
 
   async function plan(c: Conv, turn: Turn): Promise<Plan> {
@@ -587,12 +650,23 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const review = (...w: string[]) => !VISITOR && want(...w);
     const terminal = turn.context.tab;
 
-    if (flags.has("refused")) return { reasoning: "", text: zh ? "抱歉，我不能帮助完成这个请求。" : "I can’t help with that request.", calls: [], finish: "refused" };
+    if (flags.has("refused"))
+      return {
+        reasoning: "",
+        text: zh ? "抱歉，我不能帮助完成这个请求。" : "I can’t help with that request.",
+        calls: [],
+        finish: "refused",
+      };
     if (flags.has("length")) {
       const para = zh
         ? "这台主机上运行着多个服务，下面逐一说明它们的配置、日志位置和常见问题的排查方法。"
         : "This host runs several services; here is each one with its configuration, log location and the usual ways to debug it. ";
-      return { reasoning: zh ? "需要写一份很长的说明。" : "This needs a long write-up.", text: `## ${zh ? "服务总览" : "Services"}\n\n${para.repeat(14)}`, calls: [], finish: "length" };
+      return {
+        reasoning: zh ? "需要写一份很长的说明。" : "This needs a long write-up.",
+        text: `## ${zh ? "服务总览" : "Services"}\n\n${para.repeat(14)}`,
+        calls: [],
+        finish: "length",
+      };
     }
     // The website's demo starts the fix from the question its input suggests.
     if ((flags.has("showcase") || (VISITOR && want("502"))) && terminal) {
@@ -623,54 +697,144 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const calls: AiToolCall[] = [];
       // Terminal tools only with a connected tab; a request without one does not offer them.
       const wantsTerminal = want(
-        ...["disk", "space", "磁盘", "空间", "ディスク", "容量", "df", "fail", "失败", "失敗", "sleep", "workdir", "工作目录", "作業フォルダ", "screen", "屏幕", "画面", "type", "send", "输入", "入力"],
+        ...[
+          "disk",
+          "space",
+          "磁盘",
+          "空间",
+          "ディスク",
+          "容量",
+          "df",
+          "fail",
+          "失败",
+          "失敗",
+          "sleep",
+          "workdir",
+          "工作目录",
+          "作業フォルダ",
+          "screen",
+          "屏幕",
+          "画面",
+          "type",
+          "send",
+          "输入",
+          "入力",
+        ],
         ...["read file", "读取文件", "ファイルを読", "edit", "编辑", "編集", "write", "写入", "書き込", "grep", "glob"],
       );
       if (terminal) {
-        if (want("disk", "space", "磁盘", "空间", "ディスク", "容量", "df")) calls.push(call("run_command", { command: DISK_COMMAND[turn.context.local?.kind ?? "unix"], timeout_seconds: 30 }));
-        if (review("fail", "失败", "失敗")) calls.push(call("run_command", { command: "sudo systemctl restart nonexistent.service" }));
+        if (want("disk", "space", "磁盘", "空间", "ディスク", "容量", "df"))
+          calls.push(
+            call("run_command", { command: DISK_COMMAND[turn.context.local?.kind ?? "unix"], timeout_seconds: 30 }),
+          );
+        if (review("fail", "失败", "失敗"))
+          calls.push(call("run_command", { command: "sudo systemctl restart nonexistent.service" }));
         if (review("sleep")) calls.push(call("run_command", { command: "sleep 8 && echo done", timeout_seconds: 30 }));
-        if (review("workdir", "工作目录", "作業フォルダ")) calls.push(call("run_command", { command: "npm test", workdir: "/srv/app", timeout_seconds: 120 }));
+        if (review("workdir", "工作目录", "作業フォルダ"))
+          calls.push(call("run_command", { command: "npm test", workdir: "/srv/app", timeout_seconds: 120 }));
         if (want("screen", "屏幕", "画面")) calls.push(call("read_terminal", { lines: 50 }));
-        if (want("type", "send", "输入", "入力")) calls.push(call("send_input", { text: "uptime", keys: ["enter"], wait_seconds: 5 }));
-        if (review("hidden", "隐藏", "隠し")) calls.push(call("run_command", { command: "cd /srv/app\tmake deploy\nprintf '\x1b[2J'\necho ‮/ fr- mr\n", timeout_seconds: 30 }));
+        if (want("type", "send", "输入", "入力"))
+          calls.push(call("send_input", { text: "uptime", keys: ["enter"], wait_seconds: 5 }));
+        if (review("hidden", "隐藏", "隠し"))
+          calls.push(
+            call("run_command", {
+              command: "cd /srv/app\tmake deploy\nprintf '\x1b[2J'\necho ‮/ fr- mr\n",
+              timeout_seconds: 30,
+            }),
+          );
         // AI-38…40: the file tools, on the mock's files. A change to an existing file reads it first, as
         // the model must; "unread" skips that to show the refusal.
         const NGINX = "/etc/nginx/sites-available/default";
         const readFirst = (path: string) => {
-          if (!calls.some((c) => c.name === "read_file" && c.arguments.includes(JSON.stringify(path)))) calls.push(call("read_file", { path }));
+          if (!calls.some((c) => c.name === "read_file" && c.arguments.includes(JSON.stringify(path))))
+            calls.push(call("read_file", { path }));
         };
         if (want("read file", "读取文件", "ファイルを読") || review("cat ")) readFirst(NGINX);
         if (review("glob")) calls.push(call("glob", { pattern: "sites-*/*", path: "/etc/nginx" }));
-        if (review("grep")) calls.push(call("grep", { pattern: "proxy_\\w+", path: "/etc", output_mode: "content", context: 1 }));
-        if (review("unread")) calls.push(call("edit_file", { path: "/etc/motd", old_string: "Sundays", new_string: "Saturdays" }));
+        if (review("grep"))
+          calls.push(call("grep", { pattern: "proxy_\\w+", path: "/etc", output_mode: "content", context: 1 }));
+        if (review("unread"))
+          calls.push(call("edit_file", { path: "/etc/motd", old_string: "Sundays", new_string: "Saturdays" }));
         if (want("edit", "编辑", "編集")) readFirst(NGINX);
         if (want("edit", "编辑", "編集"))
           calls.push(
             call("edit_file", {
               path: "/etc/nginx/sites-available/default",
               old_string: "        proxy_pass http://127.0.0.1:8081/;\n        proxy_read_timeout 30s;",
-              new_string: "        proxy_pass http://127.0.0.1:8080/;\n        proxy_read_timeout 60s;\n        proxy_set_header Host $host;",
+              new_string:
+                "        proxy_pass http://127.0.0.1:8080/;\n        proxy_read_timeout 60s;\n        proxy_set_header Host $host;",
             }),
           );
         if (review("listen", "端口", "ポート", "nomatch", "不匹配", "不一致")) readFirst(NGINX);
         if (review("crlf")) readFirst("/srv/app/web.config");
         if (review("motd")) readFirst("/etc/motd");
-        if (review("listen", "端口", "ポート")) calls.push(call("edit_file", { path: "/etc/nginx/sites-available/default", old_string: "80 default_server", new_string: "8080 default_server", replace_all: true }));
-        if (review("nomatch", "不匹配", "不一致")) calls.push(call("edit_file", { path: "/etc/nginx/sites-available/default", old_string: "listen 443 ssl;", new_string: "listen 8443 ssl;" }));
-        if (review("crlf")) calls.push(call("edit_file", { path: "/srv/app/web.config", old_string: '<add key="mode" value="production" />', new_string: '<add key="mode" value="maintenance" />\n    <add key="banner" value="Back soon" />' }));
+        if (review("listen", "端口", "ポート"))
+          calls.push(
+            call("edit_file", {
+              path: "/etc/nginx/sites-available/default",
+              old_string: "80 default_server",
+              new_string: "8080 default_server",
+              replace_all: true,
+            }),
+          );
+        if (review("nomatch", "不匹配", "不一致"))
+          calls.push(
+            call("edit_file", {
+              path: "/etc/nginx/sites-available/default",
+              old_string: "listen 443 ssl;",
+              new_string: "listen 8443 ssl;",
+            }),
+          );
+        if (review("crlf"))
+          calls.push(
+            call("edit_file", {
+              path: "/srv/app/web.config",
+              old_string: '<add key="mode" value="production" />',
+              new_string: '<add key="mode" value="maintenance" />\n    <add key="banner" value="Back soon" />',
+            }),
+          );
         if (review("write", "写入", "書き込"))
-          calls.push(call("write_file", { path: MAINTENANCE, content: "<!doctype html>\n<title>Maintenance</title>\n<h1>We’ll be back soon</h1>\n<p>Scheduled maintenance until 04:00 UTC.</p>\n" }));
+          calls.push(
+            call("write_file", {
+              path: MAINTENANCE,
+              content:
+                "<!doctype html>\n<title>Maintenance</title>\n<h1>We’ll be back soon</h1>\n<p>Scheduled maintenance until 04:00 UTC.</p>\n",
+            }),
+          );
         if (review("bigfile"))
-          calls.push(call("write_file", { path: "/srv/app/data/seed.csv", content: `id,name\n${Array.from({ length: 1200 }, (_, i) => `${i + 1},host-${i + 1}`).join("\n")}\n` }));
-        if (review("motd")) calls.push(call("write_file", { path: "/etc/motd", content: "Welcome to prod-api.\nMaintenance window: Saturdays 01:00–03:00 UTC.\nOn call: #ops\n" }));
-        if (review("cutshort")) calls.push(call("write_file", { path: CUT_SHORT, content: "# Cache settings\nmax_size = 512m\ninactive = 60m\nuse_temp_path = off\n" }));
+          calls.push(
+            call("write_file", {
+              path: "/srv/app/data/seed.csv",
+              content: `id,name\n${Array.from({ length: 1200 }, (_, i) => `${i + 1},host-${i + 1}`).join("\n")}\n`,
+            }),
+          );
+        if (review("motd"))
+          calls.push(
+            call("write_file", {
+              path: "/etc/motd",
+              content: "Welcome to prod-api.\nMaintenance window: Saturdays 01:00–03:00 UTC.\nOn call: #ops\n",
+            }),
+          );
+        if (review("cutshort"))
+          calls.push(
+            call("write_file", {
+              path: CUT_SHORT,
+              content: "# Cache settings\nmax_size = 512m\ninactive = 60m\nuse_temp_path = off\n",
+            }),
+          );
         if (review("rmfile")) calls.push(call("run_command", { command: "rm /etc/motd" }));
-        if (review("symlink")) calls.push(call("run_command", { command: `ln -sfn /srv/app/shared/maintenance.html ${MAINTENANCE}` }));
+        if (review("symlink"))
+          calls.push(call("run_command", { command: `ln -sfn /srv/app/shared/maintenance.html ${MAINTENANCE}` }));
       }
-      if (want("search", "搜索", "検索")) calls.push(call("web_search", { query: "nginx 502 bad gateway upstream prematurely closed" }));
+      if (want("search", "搜索", "検索"))
+        calls.push(call("web_search", { query: "nginx 502 bad gateway upstream prematurely closed" }));
       if (review("fetch", "url", "网页", "ページ"))
-        calls.push(call("fetch_url", { url: "https://nginx.org/en/docs/http/ngx_http_upstream_module.html", ...(want("whole", "整页", "全体") ? { full_page: true } : {}) }));
+        calls.push(
+          call("fetch_url", {
+            url: "https://nginx.org/en/docs/http/ngx_http_upstream_module.html",
+            ...(want("whole", "整页", "全体") ? { full_page: true } : {}),
+          }),
+        );
       if (review("mcp")) {
         const mcp = await mcpCall(turn, words);
         // AI-45: "deferred" searches the MCP tools, then calls one through `call_mcp_tool`.
@@ -681,7 +845,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       }
       if (review("unknown")) calls.push(call("delete_everything", { confirm: true }));
       // Connection diagnostics: read the built-in skill's troubleshooting reference first.
-      if (diagnostics && calls.length === 0) calls.push(call("read_skill", { name: "hatoba", path: "references/troubleshooting-connections.md" }));
+      if (diagnostics && calls.length === 0)
+        calls.push(call("read_skill", { name: "hatoba", path: "references/troubleshooting-connections.md" }));
       if (calls.length > 0)
         return {
           reasoning: say(
@@ -742,10 +907,17 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
     if (added.length > 0) {
       const list = added
-        .map((a) => `- ${a.kind === "file" ? `\`${a.name}\`` : say("pasted text", "粘贴的文本", "貼り付けたテキスト")}: ${a.lines} ${say("line(s)", "行", "行")}, ${[...a.text].length} ${say("characters", "个字符", "文字")}`)
+        .map(
+          (a) =>
+            `- ${a.kind === "file" ? `\`${a.name}\`` : say("pasted text", "粘贴的文本", "貼り付けたテキスト")}: ${a.lines} ${say("line(s)", "行", "行")}, ${[...a.text].length} ${say("characters", "个字符", "文字")}`,
+        )
         .join("\n");
       return {
-        reasoning: say("The user attached text; answer from it.", "用户附上了文本，根据它回答。", "ユーザーがテキストを添付した。それをもとに答える。"),
+        reasoning: say(
+          "The user attached text; answer from it.",
+          "用户附上了文本，根据它回答。",
+          "ユーザーがテキストを添付した。それをもとに答える。",
+        ),
         text: say(
           `I received these attachments:\n\n${list}\n\nAll of it arrived whole. Tell me what to look for in it.`,
           `我收到了这些附件：\n\n${list}\n\n内容都完整地到了。告诉我要从里面找什么。`,
@@ -758,7 +930,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
     if (attachment) {
       const first = "```\n" + attachment.text.split("\n")[0] + "\n```";
-      const cut = attachment.truncated ? say(" (long, so the middle was left out)", "（太长，中间部分被省略了）", "（長いので途中を省略しました）") : "";
+      const cut = attachment.truncated
+        ? say(" (long, so the middle was left out)", "（太长，中间部分被省略了）", "（長いので途中を省略しました）")
+        : "";
       return {
         reasoning: say(
           "The user attached text selected in the terminal; answer from it.",
@@ -777,7 +951,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
     if (VISITOR) return visitorOverview();
     return {
-      reasoning: zh ? "这是一般性的问题，不需要工具。用 Markdown 简短回答。" : "A general question; no tools needed. Answer briefly in Markdown.",
+      reasoning: zh
+        ? "这是一般性的问题，不需要工具。用 Markdown 简短回答。"
+        : "A general question; no tools needed. Answer briefly in Markdown.",
       text: zh
         ? "我是 Hatoba 的 AI 助手（演示模式）。我可以：\n\n1. **读取屏幕**，解释报错\n2. 运行 `df -h` 之类的**命令**\n3. 在 shell 里**输入**内容\n4. **搜索**和读取网页\n\n```bash\n# 例如\njournalctl -u nginx -n 50 --no-pager\n```\n\n试试问我**磁盘**用量、**屏幕**上的内容、**搜索**某个错误，或者让我**输入**一条命令。文档见 [Hatoba 仓库](https://github.com/scarletkc/Hatoba)。远程图片不会加载：![架构图](https://example.com/diagram.png)\n\n> 原始 HTML 只会显示为文字：<b>不加粗</b>"
         : "I’m Hatoba’s AI assistant (demo mode). I can:\n\n1. **Read the screen** and explain errors\n2. Run **commands** such as `df -h`\n3. **Type** into the shell\n4. **Search** and read the web\n\n```bash\n# for example\njournalctl -u nginx -n 50 --no-pager\n```\n\nTry asking about **disk** usage, what’s on the **screen**, to **search** for an error, or to **type** a command. See the [Hatoba repository](https://github.com/scarletkc/Hatoba). Remote images are never loaded: ![diagram](https://example.com/diagram.png)\n\n> Raw HTML shows as text: <b>not bold</b>",
@@ -799,7 +975,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const ctx = contextOf(c);
     for (let i = ctx.length - 1; i >= 0; i--) {
       const e = ctx[i];
-      if (e.role === "assistant" && e.usage) return e.usage.input_tokens + e.usage.output_tokens + Math.ceil(JSON.stringify(ctx.slice(i + 1)).length / 4);
+      if (e.role === "assistant" && e.usage)
+        return e.usage.input_tokens + e.usage.output_tokens + Math.ceil(JSON.stringify(ctx.slice(i + 1)).length / 4);
     }
     return Math.ceil(JSON.stringify(ctx).length / 4);
   }
@@ -807,7 +984,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   /** AI-05: the level a request of the turn carries: the chosen one, fitted to the levels the model offers. */
   async function sentEffort(turn: Turn): Promise<AiEffort | null> {
     const providers = await deps.providers();
-    const model = providers.find((p) => p.id === turn.context.provider_id)?.models.find((m) => m.id === turn.context.model_id);
+    const model = providers
+      .find((p) => p.id === turn.context.provider_id)
+      ?.models.find((m) => m.id === turn.context.model_id);
     return effectiveEffort(turn.context.effort, modelEfforts(model));
   }
 
@@ -815,7 +994,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   async function compactionDue(c: Conv, turn: Turn, extra = 0): Promise<boolean> {
     if (turn.compacted) return false;
     const providers = await deps.providers();
-    const window = providers.find((p) => p.id === turn.context.provider_id)?.models.find((m) => m.id === turn.context.model_id)?.context_window ?? null;
+    const window =
+      providers.find((p) => p.id === turn.context.provider_id)?.models.find((m) => m.id === turn.context.model_id)
+        ?.context_window ?? null;
     const ctx = contextOf(c);
     const answered = ctx.some((e) => e.role === "assistant");
     // Like Rust: nothing to compact, or just compacted.
@@ -876,13 +1057,22 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     if (flags.has("effortfail") && (await sentEffort(turn))) turn.emit({ kind: "effort_ignored" });
     if (flags.has("error") && !errorShown) {
       errorShown = true;
-      turn.emit({ kind: "error", status: 529, message: "Overloaded: the service is temporarily overloaded, please try again later." });
+      turn.emit({
+        kind: "error",
+        status: 529,
+        message: "Overloaded: the service is temporarily overloaded, please try again later.",
+      });
       endTurn(turn, "error");
       return;
     }
     const p = await plan(c, turn);
     if (turn.ended) return;
-    const part = (turn.streamed = { provider_id: turn.context.provider_id, model_id: turn.context.model_id, text: "", calls: [] as AiToolCall[] });
+    const part = (turn.streamed = {
+      provider_id: turn.context.provider_id,
+      model_id: turn.context.model_id,
+      text: "",
+      calls: [] as AiToolCall[],
+    });
     // Like Rust, a thinking block says the model thinks before any reasoning text comes.
     const silent = flags.has("updates");
     const reasoning = silent ? "" : p.reasoning;
@@ -902,7 +1092,11 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       part.calls.push(x);
       turn.emit({ kind: "tool_call", id: x.id, name: x.name, arguments: x.arguments });
     }
-    const usage: AiUsage = { input_tokens: estimate(c) + 2400, output_tokens: Math.ceil((p.text.length + reasoning.length) / 4) + 20, estimated: false };
+    const usage: AiUsage = {
+      input_tokens: estimate(c) + 2400,
+      output_tokens: Math.ceil((p.text.length + reasoning.length) / 4) + 20,
+      estimated: false,
+    };
     turn.emit({ kind: "usage", ...usage });
     if (!(await sleep(turn, 80))) return;
     const entry: Assistant = {
@@ -939,7 +1133,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
   async function checkModel(context: AiTurnContext) {
     const providers = await deps.providers();
-    if (!providers.some((p) => p.id === context.provider_id && p.models.some((m) => m.id === context.model_id))) fail("invalid_input", "the model is not configured");
+    if (!providers.some((p) => p.id === context.provider_id && p.models.some((m) => m.id === context.model_id)))
+      fail("invalid_input", "the model is not configured");
   }
 
   /**
@@ -950,7 +1145,16 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   function startTurn(c: Conv, context: AiTurnContext, onEvent: (ev: AiTurnEvent) => void, go = true): Turn {
     const cancelled = stopTurn(c.view.id);
     c.runningUntil = 0;
-    const turn: Turn = { convId: c.view.id, emit: onEvent, context, ended: false, timers: new Set(), sleepers: new Set(), compacted: false, streamed: null };
+    const turn: Turn = {
+      convId: c.view.id,
+      emit: onEvent,
+      context,
+      ended: false,
+      timers: new Set(),
+      sleepers: new Set(),
+      compacted: false,
+      streamed: null,
+    };
     turns.set(c.view.id, turn);
     for (const entry of cancelled) turn.emit({ kind: "entry", entry });
     if (go) begin(turn);
@@ -966,7 +1170,14 @@ export function createAiMock(deps: AiMockDeps): AiApi {
    * The user's message after a compaction it waited for, unless the turn was stopped meanwhile, with the thinking
    * level, the move its note tells of, and where the entries before it came from, `recorded` (like Rust).
    */
-  async function storeMessage(c: Conv, turn: Turn, text: string, context: AiTurnContext, move: Move | null, recorded: Recorded | null): Promise<AiEntryView> {
+  async function storeMessage(
+    c: Conv,
+    turn: Turn,
+    text: string,
+    context: AiTurnContext,
+    move: Move | null,
+    recorded: Recorded | null,
+  ): Promise<AiEntryView> {
     if (!(await compactBefore(c, turn, text))) {
       if (turns.get(c.view.id) === turn) turns.delete(c.view.id);
       fail("cancelled", "the message was stopped before it was sent");
@@ -974,7 +1185,14 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     // AI-05: the conversation keeps the level of its last message.
     if (c.view.effort !== context.effort) c.view = { ...c.view, effort: context.effort, updated_at: Date.now() };
     if (move) {
-      c.view = { ...c.view, host_id: move.host_id, quick_target: move.quick_target, local: move.local, origin: null, updated_at: Date.now() };
+      c.view = {
+        ...c.view,
+        host_id: move.host_id,
+        quick_target: move.quick_target,
+        local: move.local,
+        origin: null,
+        updated_at: Date.now(),
+      };
     }
     const user_entry: AiEntryView = { role: "user", entry_id: newId(), created_at: Date.now(), text };
     if (recorded) cameFrom.set(user_entry.entry_id, recorded);
@@ -993,35 +1211,53 @@ export function createAiMock(deps: AiMockDeps): AiApi {
    * model, unless a message without a reply noted that switch already, then the screen (`screenNote`), also
    * before a conversation's first message. Returned as the text that goes before the message.
    */
-  async function notesBefore(c: Conv, earlier: AiEntryView[], move: Move | null, cameFrom: string | null, context: AiTurnContext): Promise<string> {
+  async function notesBefore(
+    c: Conv,
+    earlier: AiEntryView[],
+    move: Move | null,
+    cameFrom: string | null,
+    context: AiTurnContext,
+  ): Promise<string> {
     const notes: Note[] = [];
     const screen = await screenNote(c, move, context);
     // Like Rust (AI-16): the mode, unless it is the one the model was last told of; the first message always names it.
-    const permission: Note[] = notedPermission(earlier) === context.permission_mode ? [] : [{ kind: "permission_mode", mode: context.permission_mode }];
+    const permission: Note[] =
+      notedPermission(earlier) === context.permission_mode
+        ? []
+        : [{ kind: "permission_mode", mode: context.permission_mode }];
     if (earlier.length === 0) return permission.map((n) => `${noteBlock(n)}\n\n`).join("") + screen;
     for (const e of [...earlier].reverse()) {
       if (e.role === "assistant") {
         if (interrupted.has(e.entry_id)) notes.push({ kind: "interrupted" });
         break;
       }
-      if (e.role === "summary" || (e.role === "user" && parseMessage(e.text).notes.some((n) => n.kind === "interrupted"))) break;
+      if (
+        e.role === "summary" ||
+        (e.role === "user" && parseMessage(e.text).notes.some((n) => n.kind === "interrupted"))
+      )
+        break;
     }
     const hosts = (await deps.hosts?.()) ?? [];
     const place = move ?? c.view;
     const to =
       hosts.find((h) => h.id === place.host_id)?.name ??
       (place.quick_target ? formatTarget(place.quick_target) : place.local ? localName(place.local) : undefined);
-    if (cameFrom !== null && to !== undefined && cameFrom !== to) notes.push({ kind: "host_change", from: cameFrom, to });
-    if (terminalBefore(earlier) === !context.tab) notes.push({ kind: "terminal_change", to: context.tab ? "attached" : "detached" });
+    if (cameFrom !== null && to !== undefined && cameFrom !== to)
+      notes.push({ kind: "host_change", from: cameFrom, to });
+    if (terminalBefore(earlier) === !context.tab)
+      notes.push({ kind: "terminal_change", to: context.tab ? "attached" : "detached" });
     const providers = await deps.providers();
     const label = (providerId: string, modelId: string) => {
-      const name = (providers.find((p) => p.id === providerId)?.models.find((m) => m.id === modelId)?.name ?? "").trim();
+      const name = (
+        providers.find((p) => p.id === providerId)?.models.find((m) => m.id === modelId)?.name ?? ""
+      ).trim();
       return name && name !== modelId ? `${name} (${modelId})` : modelId;
     };
     const now = label(context.provider_id, context.model_id);
     for (const e of [...earlier].reverse()) {
       if (e.role === "assistant") {
-        if (e.model_id !== context.model_id) notes.push({ kind: "model_change", from: label(e.provider_id, e.model_id), to: now });
+        if (e.model_id !== context.model_id)
+          notes.push({ kind: "model_change", from: label(e.provider_id, e.model_id), to: now });
         break;
       }
       if (e.role === "user" && parseMessage(e.text).notes.some((n) => n.kind === "model_change" && n.to === now)) break;
@@ -1053,11 +1289,15 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     if (!text.toLowerCase().includes("deferred") || !deps.mcp) return "";
     const lines: string[] = [];
     let tools = 0;
-    for (const s of (await deps.mcp.servers()).filter((x) => x.enabled && !context.disabled_mcp_servers.includes(x.id))) {
+    for (const s of (await deps.mcp.servers()).filter(
+      (x) => x.enabled && !context.disabled_mcp_servers.includes(x.id),
+    )) {
       const status = await deps.mcp.status(s.id);
       if (status.state !== "running" || status.tools.length === 0) continue;
       tools += status.tools.length;
-      lines.push(`- ${s.name} (${status.tools.length === 1 ? "1 tool" : `${status.tools.length} tools`}): ${status.tools.map((x) => x.name).join(", ")}`);
+      lines.push(
+        `- ${s.name} (${status.tools.length === 1 ? "1 tool" : `${status.tools.length} tools`}): ${status.tools.map((x) => x.name).join(", ")}`,
+      );
     }
     const body =
       tools === 0
@@ -1126,11 +1366,29 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   }
 
   /** `judged`: Auto mode decided the call (AI-47), so the result keeps the judge's verdict; otherwise it is dropped. */
-  function storeResult(c: Conv, callId: string, status: AiToolStatus, content: string, edited: string | null, judged: boolean): ToolEntry {
-    const text = edited && (status === "ok" || status === "error") ? `The user edited the arguments before the call ran; it ran with ${edited}\n\n${content}` : content;
+  function storeResult(
+    c: Conv,
+    callId: string,
+    status: AiToolStatus,
+    content: string,
+    edited: string | null,
+    judged: boolean,
+  ): ToolEntry {
+    const text =
+      edited && (status === "ok" || status === "error")
+        ? `The user edited the arguments before the call ran; it ran with ${edited}\n\n${content}`
+        : content;
     const auto = judged ? (verdicts.get(callId) ?? null) : null;
     verdicts.delete(callId);
-    const entry: ToolEntry = { role: "tool", entry_id: newId(), created_at: Date.now(), tool_call_id: callId, status, content: text, auto };
+    const entry: ToolEntry = {
+      role: "tool",
+      entry_id: newId(),
+      created_at: Date.now(),
+      tool_call_id: callId,
+      status,
+      content: text,
+      auto,
+    };
     store(c, entry);
     maybeContinue(c);
     return entry;
@@ -1140,9 +1398,19 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
   /** Like Rust's `question_ids`: the questions a call of `tool` gets, in the judge's order. */
   function judgeQuestions(tool: string): string[] {
-    if (tool === "edit_file" || tool === "write_file") return ["requested", "forbidden", "touches_secrets", "sensitive_file"];
+    if (tool === "edit_file" || tool === "write_file")
+      return ["requested", "forbidden", "touches_secrets", "sensitive_file"];
     if (tool === "fetch_url") return ["forbidden", "url_carries_data"];
-    return ["requested", "forbidden", "changes_anything", "destroys_data", "touches_secrets", "sends_data_out", "security_change", "runs_unseen_code"];
+    return [
+      "requested",
+      "forbidden",
+      "changes_anything",
+      "destroys_data",
+      "touches_secrets",
+      "sends_data_out",
+      "security_change",
+      "runs_unseen_code",
+    ];
   }
 
   /**
@@ -1151,7 +1419,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
    * user's last message names what the call works on, which counts as asking for it.
    */
   function mockAnswers(c: Conv, tool: string, args: Record<string, unknown>): Record<string, number> {
-    const text = [args.command, args.text, args.path, args.url, args.content].filter((v): v is string => typeof v === "string").join("\n");
+    const text = [args.command, args.text, args.path, args.url, args.content]
+      .filter((v): v is string => typeof v === "string")
+      .join("\n");
     const asked = parseMessage(lastUser(c).text).typed.toLowerCase();
     const named = text
       .toLowerCase()
@@ -1161,11 +1431,17 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     return {
       requested: named || tool.startsWith("mcp__") ? 0.92 : 0.35,
       forbidden: 0.02,
-      changes_anything: yes(/\b(restart|reload|stop|start|enable|disable|install|remove|purge|apt|apt-get|yum|dnf|chmod|chown|useradd|usermod)\b|sed\s+-i|>/, 0.78),
+      changes_anything: yes(
+        /\b(restart|reload|stop|start|enable|disable|install|remove|purge|apt|apt-get|yum|dnf|chmod|chown|useradd|usermod)\b|sed\s+-i|>/,
+        0.78,
+      ),
       destroys_data: yes(/\b(rm|truncate|prune|vacuum|drop|delete)\b|(^|[^>])>(?!>)/, 0.66),
       touches_secrets: yes(/\.ssh|id_rsa|id_ed25519|shadow|passw|token|secret|\.env\b/i, 0.72),
       sends_data_out: yes(/\b(curl|wget|scp|rsync|nc|ssh)\b/, 0.58),
-      security_change: yes(/\b(chmod|chown|useradd|usermod|passwd|visudo|crontab|ufw|iptables|setenforce)\b|authorized_keys|sudoers|systemctl\s+enable/, 0.74),
+      security_change: yes(
+        /\b(chmod|chown|useradd|usermod|passwd|visudo|crontab|ufw|iptables|setenforce)\b|authorized_keys|sudoers|systemctl\s+enable/,
+        0.74,
+      ),
       runs_unseen_code: yes(/\|\s*(sudo\s+)?(ba|z)?sh\b|base64\s+(-d|--decode)|\b(ba|z)?sh\s+\S+\.sh\b/, 0.83),
       sensitive_file: yes(/authorized_keys|sudoers|cron|systemd|\.bashrc|\.profile|\.zshrc|rc\.local|\/etc\/pam/, 0.81),
       url_carries_data: yes(/[?&][^=&]*(token|key|secret|password)=/i, 0.7),
@@ -1179,7 +1455,13 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const unrequested = (answers.requested ?? 0) < 0.85;
     const unrequestedChange = kind === "command" && hazard("changes_anything") && unrequested;
     const concerns = judgeQuestions(tool).filter((id) =>
-      id === "requested" ? (kind === "command" ? unrequestedChange : unrequested) : id === "changes_anything" ? unrequestedChange : hazard(id),
+      id === "requested"
+        ? kind === "command"
+          ? unrequestedChange
+          : unrequested
+        : id === "changes_anything"
+          ? unrequestedChange
+          : hazard(id),
     );
     return { decision: concerns.length === 0 ? "run" : "ask", concerns };
   }
@@ -1218,7 +1500,10 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       ].join("\n"),
     ],
     ["/etc/motd", "Welcome to prod-api.\nMaintenance window: Sundays 02:00–04:00 UTC.\n"],
-    ["/srv/app/web.config", '<?xml version="1.0"?>\r\n<configuration>\r\n  <appSettings>\r\n    <add key="mode" value="production" />\r\n  </appSettings>\r\n</configuration>\r\n'],
+    [
+      "/srv/app/web.config",
+      '<?xml version="1.0"?>\r\n<configuration>\r\n  <appSettings>\r\n    <add key="mode" value="production" />\r\n  </appSettings>\r\n</configuration>\r\n',
+    ],
   ]);
   /** AI-41: what each edit or write that ran changed, by conversation, like Rust's snapshots. */
   interface Snapshot {
@@ -1234,7 +1519,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   const SNAPSHOT_CAP = 15_800;
   /** Like Rust's trim: drops what the oldest changes held until the kept ones fit; true when it dropped any. */
   function trimSnapshots(): boolean {
-    const kept = [...snapshots.values()].flat().filter((s) => s.change.state === "written" || s.change.state === "unfinished");
+    const kept = [...snapshots.values()]
+      .flat()
+      .filter((s) => s.change.state === "written" || s.change.state === "unfinished");
     let total = kept.reduce((n, s) => n + (s.before?.length ?? 0) + s.after.length, 0);
     let dropped = false;
     for (const s of kept) {
@@ -1257,18 +1544,29 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const e = earlier[at(s)];
       return e?.role === "assistant" ? e.tool_calls.findIndex((x) => x.id === s.change.tool_call_id) : -1;
     };
-    return (snapshots.get(convId) ?? [])
-      .filter((s) => s.change.state === "reverted" && at(s) >= 0 && order(s) >= 0)
-      // A note is about the call of the newest response before it with that id.
-      .filter((s) => {
-        const id = s.change.tool_call_id;
-        return !earlier.some((e, j) => {
-          if (j <= at(s) || e.role !== "user" || !parseMessage(e.text).notes.some((n) => n.kind === "file_revert" && n.toolCallId === id)) return false;
-          return earlier.slice(0, j).findLastIndex((x) => x.role === "assistant" && x.tool_calls.some((c) => c.id === id)) === at(s);
-        });
-      })
-      .sort((a, b) => at(a) - at(b) || order(a) - order(b))
-      .map((s) => fileRevertNote(s.change.path, s.change.tool_call_id, s.tool, s.change.created));
+    return (
+      (snapshots.get(convId) ?? [])
+        .filter((s) => s.change.state === "reverted" && at(s) >= 0 && order(s) >= 0)
+        // A note is about the call of the newest response before it with that id.
+        .filter((s) => {
+          const id = s.change.tool_call_id;
+          return !earlier.some((e, j) => {
+            if (
+              j <= at(s) ||
+              e.role !== "user" ||
+              !parseMessage(e.text).notes.some((n) => n.kind === "file_revert" && n.toolCallId === id)
+            )
+              return false;
+            return (
+              earlier
+                .slice(0, j)
+                .findLastIndex((x) => x.role === "assistant" && x.tool_calls.some((c) => c.id === id)) === at(s)
+            );
+          });
+        })
+        .sort((a, b) => at(a) - at(b) || order(a) - order(b))
+        .map((s) => fileRevertNote(s.change.path, s.change.tool_call_id, s.tool, s.change.created))
+    );
   }
 
   /** What each approval card read, like Rust's: the call writes only over it (AI-39). */
@@ -1282,20 +1580,35 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   /** Why `name` may not change the file at `path`, which holds `current`; null when the model saw it so. */
   function unseen(convId: string, name: string, path: string, current: string): string | null {
     const seen = seenFiles.get(seenKey(convId, path));
-    if (seen === undefined) return `${path} has not been read in this conversation, so ${name} did not change it. Call read_file on it, then call ${name} again.`;
+    if (seen === undefined)
+      return `${path} has not been read in this conversation, so ${name} did not change it. Call read_file on it, then call ${name} again.`;
     if (seen !== current)
       return `${path} changed since you last read it, by the user or another program, so ${name} did not change it. Call read_file on it again, then call ${name} again with what it holds now.`;
     return null;
   }
 
-  const filePath = (p: string) => (p === "~" ? "/home/deploy" : p.startsWith("~/") ? `/home/deploy/${p.slice(2)}` : p.startsWith("/") ? p : `/home/deploy/${p}`);
+  const filePath = (p: string) =>
+    p === "~"
+      ? "/home/deploy"
+      : p.startsWith("~/")
+        ? `/home/deploy/${p.slice(2)}`
+        : p.startsWith("/")
+          ? p
+          : `/home/deploy/${p}`;
   const crlfOf = (text: string) => {
     const crlf = text.split("\r\n").length - 1;
     return crlf > text.split("\n").length - 1 - crlf;
   };
   const toCrlf = (text: string) => text.replace(/\r\n/g, "\n").replace(/\n/g, "\r\n");
-  const fileLines = (text: string) => (text === "" ? [] : text.replace(/\n$/, "").split("\n").map((l) => l.replace(/\r$/, "")));
-  const FILE_DISCONNECTED = "The terminal tab is disconnected, so the tool did not run. Ask the user to reconnect the tab.";
+  const fileLines = (text: string) =>
+    text === ""
+      ? []
+      : text
+          .replace(/\n$/, "")
+          .split("\n")
+          .map((l) => l.replace(/\r$/, ""));
+  const FILE_DISCONNECTED =
+    "The terminal tab is disconnected, so the tool did not run. Ask the user to reconnect the tab.";
 
   /**
    * AI-48, AI-49: `glob` and `grep` over the mock's files, as `hatoba_ai::search` words their results, as on a
@@ -1306,7 +1619,11 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   function search(name: string, args: Record<string, unknown>): { status: AiToolStatus; content: string } {
     const root = filePath(String(args.path || "~")).replace(/\/$/, "") || "/";
     const glob = String((name === "glob" ? args.pattern : args.glob) ?? "").trim();
-    if (name === "glob" && !glob) return { status: "error", content: "The pattern is empty, so nothing was searched. Give one such as *.conf or **/*.conf." };
+    if (name === "glob" && !glob)
+      return {
+        status: "error",
+        content: "The pattern is empty, so nothing was searched. Give one such as *.conf or **/*.conf.",
+      };
     const source = glob
       .replace(/[.+^$()|\\]/g, "\\$&")
       .replace(/\*\*\//g, "\u0000")
@@ -1317,12 +1634,18 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const file = name === "grep" && remoteFiles.has(root);
     const paths = file
       ? [root]
-      : [...remoteFiles.keys()].filter((p) => p.startsWith(`${root}/`) && (!glob || globRe.test(p.slice(root.length + 1)))).sort();
+      : [...remoteFiles.keys()]
+          .filter((p) => p.startsWith(`${root}/`) && (!glob || globRe.test(p.slice(root.length + 1))))
+          .sort();
     const place = file ? `in ${root}` : `under ${root}`;
     const files = (n: number) => (n === 1 ? "1 file" : `${n} files`);
     const ok = (content: string) => ({ status: "ok" as const, content });
     if (name === "glob")
-      return ok(paths.length ? `${files(paths.length)} under ${root} ${paths.length === 1 ? "matches" : "match"} ${glob}, sorted by path:\n${paths.join("\n")}\n` : `No files under ${root} match ${glob}.\n`);
+      return ok(
+        paths.length
+          ? `${files(paths.length)} under ${root} ${paths.length === 1 ? "matches" : "match"} ${glob}, sorted by path:\n${paths.join("\n")}\n`
+          : `No files under ${root} match ${glob}.\n`,
+      );
     const arg = (name: string, alias: string) => args[name] ?? args[alias];
     const multiline = Boolean(args.multiline);
     let re: RegExp;
@@ -1337,11 +1660,13 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       if (!multiline) return new Set(lines.flatMap((l, i) => (l.match(re) ? [i] : [])));
       const starts = lines.map((_, i) => lines.slice(0, i).reduce((n, l) => n + l.length + 1, 0));
       const lineAt = (offset: number) => starts.filter((s) => s <= offset).length - 1;
-      return new Set([...text.matchAll(re)].flatMap((m) => {
-        const first = lineAt(m.index ?? 0);
-        const last = lineAt((m.index ?? 0) + Math.max(m[0].length - 1, 0));
-        return Array.from({ length: last - first + 1 }, (_, k) => first + k);
-      }));
+      return new Set(
+        [...text.matchAll(re)].flatMap((m) => {
+          const first = lineAt(m.index ?? 0);
+          const last = lineAt((m.index ?? 0) + Math.max(m[0].length - 1, 0));
+          return Array.from({ length: last - first + 1 }, (_, k) => first + k);
+        }),
+      );
     };
     const hits = paths
       .map((p) => ({ p, lines: fileLines(remoteFiles.get(p) ?? ""), hit: matched(remoteFiles.get(p) ?? "") }))
@@ -1354,7 +1679,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const after = Number(arg("after_context", "-A") ?? context) || 0;
       const numbers = arg("line_numbers", "-n") !== false;
       const out = hits.flatMap(({ p, lines, hit }) => {
-        const shown = new Set([...hit].flatMap((i) => Array.from({ length: before + after + 1 }, (_, k) => i - before + k)));
+        const shown = new Set(
+          [...hit].flatMap((i) => Array.from({ length: before + after + 1 }, (_, k) => i - before + k)),
+        );
         return lines.flatMap((l, i) => {
           if (!shown.has(i)) return [];
           const separator = hit.has(i) ? ":" : "-";
@@ -1364,12 +1691,20 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       return ok(`${matching} matching lines in ${files(hits.length)} ${place}, sorted by path:\n${out.join("\n")}\n`);
     }
     if (args.output_mode === "count")
-      return ok(`${matching} matching lines in ${files(hits.length)} ${place}, sorted by path:\n${hits.map(({ p, hit }) => `${p}:${hit.size}`).join("\n")}\n`);
-    return ok(`${files(hits.length)} with a matching line ${place}, sorted by path:\n${hits.map((h) => h.p).join("\n")}\n`);
+      return ok(
+        `${matching} matching lines in ${files(hits.length)} ${place}, sorted by path:\n${hits.map(({ p, hit }) => `${p}:${hit.size}`).join("\n")}\n`,
+      );
+    return ok(
+      `${files(hits.length)} with a matching line ${place}, sorted by path:\n${hits.map((h) => h.p).join("\n")}\n`,
+    );
   }
 
   /** The file after an edit or a write, or the error the model gets, as `hatoba_ai::files` computes them. */
-  function fileAfter(name: string, args: Record<string, unknown>, before: string | null): { text: string } | { error: string } {
+  function fileAfter(
+    name: string,
+    args: Record<string, unknown>,
+    before: string | null,
+  ): { text: string } | { error: string } {
     const path = String(args.path ?? "");
     if (name === "write_file") {
       const content = String(args.content ?? "");
@@ -1386,17 +1721,40 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         error: `old_string was not found in ${path}, so nothing was changed. It must match the file exactly, including spaces, tabs and line breaks: read the file with read_file and copy the text without the line numbers.`,
       };
     if (count > 1 && args.replace_all !== true)
-      return { error: `old_string appears ${count} times in ${path}, so nothing was changed. Include more of the surrounding lines to make it unique, or set replace_all to replace every occurrence.` };
+      return {
+        error: `old_string appears ${count} times in ${path}, so nothing was changed. Include more of the surrounding lines to make it unique, or set replace_all to replace every occurrence.`,
+      };
     return { text: args.replace_all === true ? before.split(old).join(neu) : before.replace(old, () => neu) };
   }
 
   function exec(command: string): { status: number; stdout: string; stderr: string } {
-    if (/nonexistent|fail/.test(command)) return { status: 5, stdout: "", stderr: "Failed to restart nonexistent.service: Unit nonexistent.service not found." };
+    if (/nonexistent|fail/.test(command))
+      return {
+        status: 5,
+        stdout: "",
+        stderr: "Failed to restart nonexistent.service: Unit nonexistent.service not found.",
+      };
     if (/\bdf\b/.test(command))
-      return { status: 0, stdout: "Filesystem      Size  Used Avail Use% Mounted on\n/dev/nvme0n1p1   49G   23G   24G  48% /", stderr: "" };
-    if (command === DISK_COMMAND.powershell) return { status: 0, stdout: "Name   Used (GB)  Free (GB)\n----   ---------  ---------\nC         211.40     264.13\nD          88.02     843.51", stderr: "" };
-    if (command === DISK_COMMAND.cmd) return { status: 0, stdout: "              14 File(s)        482,113 bytes\n              21 Dir(s)  283,604,348,928 bytes free", stderr: "" };
-    if (/uptime/.test(command)) return { status: 0, stdout: " 09:41:12 up 41 days,  3:12,  1 user,  load average: 0.21, 0.18, 0.12", stderr: "" };
+      return {
+        status: 0,
+        stdout: "Filesystem      Size  Used Avail Use% Mounted on\n/dev/nvme0n1p1   49G   23G   24G  48% /",
+        stderr: "",
+      };
+    if (command === DISK_COMMAND.powershell)
+      return {
+        status: 0,
+        stdout:
+          "Name   Used (GB)  Free (GB)\n----   ---------  ---------\nC         211.40     264.13\nD          88.02     843.51",
+        stderr: "",
+      };
+    if (command === DISK_COMMAND.cmd)
+      return {
+        status: 0,
+        stdout: "              14 File(s)        482,113 bytes\n              21 Dir(s)  283,604,348,928 bytes free",
+        stderr: "",
+      };
+    if (/uptime/.test(command))
+      return { status: 0, stdout: " 09:41:12 up 41 days,  3:12,  1 user,  load average: 0.21, 0.18, 0.12", stderr: "" };
     if (/sleep/.test(command)) return { status: 0, stdout: "done", stderr: "" };
     // `?ai=showcase`
     if (/nginx\/error\.log/.test(command))
@@ -1410,13 +1768,28 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           .join("\n"),
         stderr: "",
       };
-    if (/\bss -ltnp\b/.test(command)) return { status: 0, stdout: `LISTEN 0      4096      127.0.0.1:8080      0.0.0.0:*    users:(("api",pid=48211,fd=9))`, stderr: "" };
+    if (/\bss -ltnp\b/.test(command))
+      return {
+        status: 0,
+        stdout: `LISTEN 0      4096      127.0.0.1:8080      0.0.0.0:*    users:(("api",pid=48211,fd=9))`,
+        stderr: "",
+      };
     if (/nginx -t/.test(command))
-      return { status: 0, stdout: "", stderr: "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\nnginx: configuration file /etc/nginx/nginx.conf test is successful" };
+      return {
+        status: 0,
+        stdout: "",
+        stderr:
+          "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\nnginx: configuration file /etc/nginx/nginx.conf test is successful",
+      };
     return { status: 0, stdout: `(demo output of \`${command}\`)`, stderr: "" };
   }
 
-  async function runTool(c: Conv, x: AiToolCall, sessionId: string | null, edited: string | null): Promise<{ status: AiToolStatus; content: string }> {
+  async function runTool(
+    c: Conv,
+    x: AiToolCall,
+    sessionId: string | null,
+    edited: string | null,
+  ): Promise<{ status: AiToolStatus; content: string }> {
     let args: Record<string, unknown>;
     try {
       args = JSON.parse(edited ?? x.arguments) as Record<string, unknown>;
@@ -1435,7 +1808,10 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         const secs = Number(/sleep\s+(\d+)/.exec(command)?.[1] ?? 0);
         await wait(secs ? Math.min(secs, 15) * 1000 : 1100);
         const r = exec(command);
-        return { status: "ok", content: `exit status: ${r.status}\n--- stdout ---\n${r.stdout}\n--- stderr ---\n${r.stderr}` };
+        return {
+          status: "ok",
+          content: `exit status: ${r.status}\n--- stdout ---\n${r.stdout}\n--- stderr ---\n${r.stderr}`,
+        };
       }
       case "glob":
       case "grep": {
@@ -1454,8 +1830,14 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         const from = Math.max(1, Number(args.offset ?? 1) || 1);
         const shown = lines.slice(from - 1, args.limit ? from - 1 + Number(args.limit) : undefined);
         const crlf = crlfOf(text) ? ", CRLF line breaks" : "";
-        const head = shown.length === lines.length ? `${path}: ${lines.length} lines${crlf}` : `${path}: lines ${from}–${from + shown.length - 1} of ${lines.length}${crlf}`;
-        return { status: "ok", content: `${head}\n${shown.map((l, i) => `${String(from + i).padStart(6)}\t${l}`).join("\n")}\n` };
+        const head =
+          shown.length === lines.length
+            ? `${path}: ${lines.length} lines${crlf}`
+            : `${path}: lines ${from}–${from + shown.length - 1} of ${lines.length}${crlf}`;
+        return {
+          status: "ok",
+          content: `${head}\n${shown.map((l, i) => `${String(from + i).padStart(6)}\t${l}`).join("\n")}\n`,
+        };
       }
       case "edit_file":
       case "write_file": {
@@ -1481,22 +1863,45 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         if (response) {
           const kept = (snapshots.get(c.view.id) ?? []).filter((s) => s.change.tool_call_id !== x.id);
           const host = ((await deps.hosts?.()) ?? []).find((h) => h.id === c.view.host_id);
-          const server = host ? formatTarget(host) : c.view.quick_target ? formatTarget(c.view.quick_target) : c.view.local ? "local" : "root@localhost:22";
-          const change: AiFileChange = { response_id: response.entry_id, tool_call_id: x.id, server, path: key, created: current === null, state: "unfinished" };
+          const server = host
+            ? formatTarget(host)
+            : c.view.quick_target
+              ? formatTarget(c.view.quick_target)
+              : c.view.local
+                ? "local"
+                : "root@localhost:22";
+          const change: AiFileChange = {
+            response_id: response.entry_id,
+            tool_call_id: x.id,
+            server,
+            path: key,
+            created: current === null,
+            state: "unfinished",
+          };
           snapshot = { change, tool: x.name, before: current, after: after.text };
           snapshots.set(c.view.id, [...kept, snapshot]);
           if (trimSnapshots()) droppedBy.add(x.id);
         }
         if (key === CUT_SHORT) {
           remoteFiles.set(key, after.text.slice(0, Math.ceil(after.text.length / 2)));
-          return { status: "error", content: `Writing ${path} failed: the connection closed. The file may be unchanged, cut short or empty, so read it with read_file before you change it.` };
+          return {
+            status: "error",
+            content: `Writing ${path} failed: the connection closed. The file may be unchanged, cut short or empty, so read it with read_file before you change it.`,
+          };
         }
         remoteFiles.set(key, after.text);
         seenFiles.set(seenKey(c.view.id, path), after.text);
         if (snapshot?.change.state === "unfinished") snapshot.change = { ...snapshot.change, state: "written" };
         const count = fileLines(after.text).length;
-        if (x.name === "edit_file") return { status: "ok", content: `Edited ${path}: replaced 1 occurrence of old_string.\n` };
-        return { status: "ok", content: current === null ? `Created ${path} (${count} lines).\n` : `Replaced the content of ${path} (${count} lines).\n` };
+        if (x.name === "edit_file")
+          return { status: "ok", content: `Edited ${path}: replaced 1 occurrence of old_string.\n` };
+        return {
+          status: "ok",
+          content:
+            current === null
+              ? `Created ${path} (${count} lines).\n`
+              : `Replaced the content of ${path} (${count} lines).\n`,
+        };
       }
       case "web_search":
         await wait(700);
@@ -1526,20 +1931,27 @@ export function createAiMock(deps: AiMockDeps): AiApi {
             ? { scope: `local:${local}`, name: localName(local) }
             : null;
         const text = (key: string) => String(args[key] ?? "");
-        return deps.memory({ action: text("action"), scope: text("scope"), name: text("name"), content: text("content") }, place);
+        return deps.memory(
+          { action: text("action"), scope: text("scope"), name: text("name"), content: text("content") },
+          place,
+        );
       }
       case "read_skill":
         await wait(200);
         if (args.name === "hatoba")
           return {
             status: "ok",
-            content: "# Troubleshooting connections (demo excerpt)\n\n## ETIMEDOUT (timeout)\n\nThe host did not answer within 15 seconds: it is off, a firewall drops the packets, or the address or port is wrong.\n\n## ECONNREFUSED (refused)\n\nThe host answered but nothing listens on the port: the SSH server is stopped or listens elsewhere.",
+            content:
+              "# Troubleshooting connections (demo excerpt)\n\n## ETIMEDOUT (timeout)\n\nThe host did not answer within 15 seconds: it is off, a firewall drops the packets, or the address or port is wrong.\n\n## ECONNREFUSED (refused)\n\nThe host answered but nothing listens on the port: the SSH server is stopped or listens elsewhere.",
           };
         return { status: "error", content: `There is no enabled skill named "${String(args.name ?? "")}".` };
       case "search_tools": {
         // AI-45: the running servers' tools whose names or descriptions have a word of the query.
         await wait(300);
-        const words = String(args.query ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+        const words = String(args.query ?? "")
+          .toLowerCase()
+          .split(/\s+/)
+          .filter(Boolean);
         const found: string[] = [];
         const servers = (await deps.mcp?.servers().catch(() => [])) ?? [];
         for (const sv of servers.filter((x) => x.enabled && !turn?.context.disabled_mcp_servers.includes(x.id))) {
@@ -1547,12 +1959,17 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           for (const tool of status?.state === "running" ? status.tools : []) {
             const text = `${tool.name} ${tool.description}`.toLowerCase();
             if (words.some((w) => text.includes(w.replace(/s$/, ""))))
-              found.push(`## ${tool.name}\nServer: ${sv.name}\nDescription: ${tool.description || "(none)"}\nInput schema: {"type":"object","properties":{"repo":{"type":"string"}}}`);
+              found.push(
+                `## ${tool.name}\nServer: ${sv.name}\nDescription: ${tool.description || "(none)"}\nInput schema: {"type":"object","properties":{"repo":{"type":"string"}}}`,
+              );
           }
         }
         return {
           status: "ok",
-          content: found.length === 0 ? `No MCP tool matches "${String(args.query ?? "")}".` : `${found.length} matches (demo).\n\n${found.slice(0, 5).join("\n\n")}`,
+          content:
+            found.length === 0
+              ? `No MCP tool matches "${String(args.query ?? "")}".`
+              : `${found.length} matches (demo).\n\n${found.slice(0, 5).join("\n\n")}`,
         };
       }
       default: {
@@ -1574,10 +1991,21 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           x = { ...x, name: named };
         }
         const info = (await deps.mcp?.toolInfo(c.view.id, x.name).catch(() => null)) ?? null;
-        if (!info || turn?.context.disabled_mcp_servers.includes(info.server_id)) return { status: "error", content: `No running MCP server offers the tool ${x.name}.` };
+        if (!info || turn?.context.disabled_mcp_servers.includes(info.server_id))
+          return { status: "error", content: `No running MCP server offers the tool ${x.name}.` };
         return {
           status: "ok",
-          content: `${info.server_name} / ${info.tool.tool} (demo result)\n\n${JSON.stringify({ arguments: args, items: [{ title: "nginx 502 after deploy", state: "open" }, { title: "upstream timeouts", state: "closed" }] }, null, 2)}`,
+          content: `${info.server_name} / ${info.tool.tool} (demo result)\n\n${JSON.stringify(
+            {
+              arguments: args,
+              items: [
+                { title: "nginx 502 after deploy", state: "open" },
+                { title: "upstream timeouts", state: "closed" },
+              ],
+            },
+            null,
+            2,
+          )}`,
         };
       }
     }
@@ -1587,19 +2015,43 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
   function seed() {
     const now = Date.now();
-    const add = (id: string, title: string, host: string | null, ago: number, pinned: boolean, build: (at: (offset: number) => number) => AiEntryView[]) => {
+    const add = (
+      id: string,
+      title: string,
+      host: string | null,
+      ago: number,
+      pinned: boolean,
+      build: (at: (offset: number) => number) => AiEntryView[],
+    ) => {
       const created = now - ago;
       const at = (offset: number) => created + offset;
       const c: Conv = {
         // The pinned one was last sent at High (AI-05).
-        view: { id, title, host_id: host, quick_target: null, origin: null, local: null, pinned, context_start: null, effort: pinned ? "high" : null, created_at: created, updated_at: created },
+        view: {
+          id,
+          title,
+          host_id: host,
+          quick_target: null,
+          origin: null,
+          local: null,
+          pinned,
+          context_start: null,
+          effort: pinned ? "high" : null,
+          created_at: created,
+          updated_at: created,
+        },
         entries: build(at),
         runningUntil: 0,
       };
       convs.set(id, c);
       return c;
     };
-    const user = (ms: number, text: string): AiEntryView => ({ role: "user", entry_id: newId(ms), created_at: ms, text });
+    const user = (ms: number, text: string): AiEntryView => ({
+      role: "user",
+      entry_id: newId(ms),
+      created_at: ms,
+      text,
+    });
     const reply = (ms: number, model: [string, string], text: string, opts: Partial<Assistant> = {}): Assistant => {
       const entry: Assistant = {
         role: "assistant",
@@ -1618,7 +2070,13 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       replyTerminal.set(entry.entry_id, true);
       return entry;
     };
-    const result = (ms: number, callId: string, status: AiToolStatus, content: string, auto: AiAutoVerdict | null = null): AiEntryView => ({
+    const result = (
+      ms: number,
+      callId: string,
+      status: AiToolStatus,
+      content: string,
+      auto: AiAutoVerdict | null = null,
+    ): AiEntryView => ({
       role: "tool",
       entry_id: newId(ms),
       created_at: ms,
@@ -1628,7 +2086,11 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       auto,
     });
     // AI-47: verdicts of the judge of Auto mode, as Rust stores them with the results of calls Auto decided.
-    const judged = (decision: AiAutoVerdict["decision"], answers: [string, number][], concerns: string[] = []): AiAutoVerdict => ({
+    const judged = (
+      decision: AiAutoVerdict["decision"],
+      answers: [string, number][],
+      concerns: string[] = [],
+    ): AiAutoVerdict => ({
       provider_id: "p-anthropic",
       model_id: "claude-haiku-5-5",
       decision,
@@ -1640,49 +2102,87 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const QWEN: [string, string] = ["p-ollama", "qwen3:8b"];
     const OSS: [string, string] = ["p-ollama", "gpt-oss:20b"];
 
-    add("c-nginx", zh ? "排查 prod-api 上的 nginx 502" : "Debug nginx 502 on prod-api", "h-api-tokyo", 2 * DAY, true, (at) => {
-      const logs = call("run_command", { command: "sudo journalctl -u nginx -n 20 --no-pager", timeout_seconds: 30 });
-      const screen = call("read_terminal", { lines: 100 });
-      return [
-        user(at(0), zh ? "网站一直返回 502，帮我看看 nginx" : "The site keeps returning 502. Can you look at nginx?"),
-        reply(at(MIN), SONNET, zh ? "我先看 nginx 的日志和当前屏幕。" : "I’ll check the nginx log and the current screen first.", {
-          reasoning: zh ? "502 通常是上游服务的问题。先看 nginx 错误日志。" : "A 502 usually means the upstream failed. Start with nginx’s error log.",
-          tool_calls: [logs, screen],
-          finish: "tool_calls",
-        }),
-        result(
-          at(2 * MIN),
-          logs.id,
-          "ok",
-          "exit status: 0\n--- stdout ---\nOct 06 09:12:01 prod-api-tokyo nginx[812]: upstream prematurely closed connection while reading response header from upstream, client: 10.0.0.4, upstream: \"http://127.0.0.1:8080/v1/hosts\"\n--- stderr ---\n",
-          // Manual approval asks about `sudo`; Auto's judge found that it only reads.
-          judged("run", [
-            ["requested", 0.93],
-            ["forbidden", 0.02],
-            ["changes_anything", 0.04],
-            ["destroys_data", 0.01],
-            ["touches_secrets", 0.06],
-            ["sends_data_out", 0.01],
-            ["security_change", 0.02],
-            ["runs_unseen_code", 0.01],
-          ]),
-        ),
-        result(at(2 * MIN + 1000), screen.id, "ok", "Alternate screen: no. This is all of the terminal's 1 line(s).\n\ndeploy@prod-api-tokyo:/srv/api$"),
-        reply(at(3 * MIN), SONNET, zh
-          ? "上游 `api.service`（127.0.0.1:8080）在返回响应头之前关闭了连接。\n\n| 检查项 | 结果 |\n|---|---|\n| nginx | 正常运行 |\n| 上游 | **提前关闭连接** |\n\n建议先看 `journalctl -u api -n 100`，确认服务是否崩溃重启。"
-          : "The upstream `api.service` (127.0.0.1:8080) closed the connection before sending headers.\n\n| Check | Result |\n|---|---|\n| nginx | running |\n| upstream | **closed early** |\n\nNext, look at `journalctl -u api -n 100` to see whether the service crashed and restarted.", {
-          reasoning: zh ? "日志说明问题在上游。" : "The log points at the upstream.",
-          usage: { input_tokens: 5400, output_tokens: 310, estimated: false },
-        }),
-      ];
-    });
+    add(
+      "c-nginx",
+      zh ? "排查 prod-api 上的 nginx 502" : "Debug nginx 502 on prod-api",
+      "h-api-tokyo",
+      2 * DAY,
+      true,
+      (at) => {
+        const logs = call("run_command", { command: "sudo journalctl -u nginx -n 20 --no-pager", timeout_seconds: 30 });
+        const screen = call("read_terminal", { lines: 100 });
+        return [
+          user(at(0), zh ? "网站一直返回 502，帮我看看 nginx" : "The site keeps returning 502. Can you look at nginx?"),
+          reply(
+            at(MIN),
+            SONNET,
+            zh ? "我先看 nginx 的日志和当前屏幕。" : "I’ll check the nginx log and the current screen first.",
+            {
+              reasoning: zh
+                ? "502 通常是上游服务的问题。先看 nginx 错误日志。"
+                : "A 502 usually means the upstream failed. Start with nginx’s error log.",
+              tool_calls: [logs, screen],
+              finish: "tool_calls",
+            },
+          ),
+          result(
+            at(2 * MIN),
+            logs.id,
+            "ok",
+            'exit status: 0\n--- stdout ---\nOct 06 09:12:01 prod-api-tokyo nginx[812]: upstream prematurely closed connection while reading response header from upstream, client: 10.0.0.4, upstream: "http://127.0.0.1:8080/v1/hosts"\n--- stderr ---\n',
+            // Manual approval asks about `sudo`; Auto's judge found that it only reads.
+            judged("run", [
+              ["requested", 0.93],
+              ["forbidden", 0.02],
+              ["changes_anything", 0.04],
+              ["destroys_data", 0.01],
+              ["touches_secrets", 0.06],
+              ["sends_data_out", 0.01],
+              ["security_change", 0.02],
+              ["runs_unseen_code", 0.01],
+            ]),
+          ),
+          result(
+            at(2 * MIN + 1000),
+            screen.id,
+            "ok",
+            "Alternate screen: no. This is all of the terminal's 1 line(s).\n\ndeploy@prod-api-tokyo:/srv/api$",
+          ),
+          reply(
+            at(3 * MIN),
+            SONNET,
+            zh
+              ? "上游 `api.service`（127.0.0.1:8080）在返回响应头之前关闭了连接。\n\n| 检查项 | 结果 |\n|---|---|\n| nginx | 正常运行 |\n| 上游 | **提前关闭连接** |\n\n建议先看 `journalctl -u api -n 100`，确认服务是否崩溃重启。"
+              : "The upstream `api.service` (127.0.0.1:8080) closed the connection before sending headers.\n\n| Check | Result |\n|---|---|\n| nginx | running |\n| upstream | **closed early** |\n\nNext, look at `journalctl -u api -n 100` to see whether the service crashed and restarted.",
+            {
+              reasoning: zh ? "日志说明问题在上游。" : "The log points at the upstream.",
+              usage: { input_tokens: 5400, output_tokens: 310, estimated: false },
+            },
+          ),
+        ];
+      },
+    );
 
-    const vacuum = add("c-vacuum", zh ? "Postgres VACUUM 计划" : "Postgres vacuum plan", "h-db-osaka-01", DAY + 3 * HOUR, false, (at) => [
-      user(at(0), zh ? "帮我规划一下 db-osaka-01 的 VACUUM" : "Help me plan VACUUM on db-osaka-01"),
-      reply(at(MIN), QWEN, zh ? "先确认哪些表膨胀最严重……（很长的分析）" : "First find the most bloated tables… (a long analysis)", { usage: { input_tokens: 21_000, output_tokens: 3_100, estimated: false } }),
-      user(at(4 * MIN), zh ? "继续，给出每张表的建议" : "Go on, with advice for each table"),
-      reply(at(6 * MIN), QWEN, zh ? "按表给出的建议……（很长）" : "Per-table advice… (long)", { usage: { input_tokens: 29_500, output_tokens: 4_200, estimated: false } }),
-    ]);
+    const vacuum = add(
+      "c-vacuum",
+      zh ? "Postgres VACUUM 计划" : "Postgres vacuum plan",
+      "h-db-osaka-01",
+      DAY + 3 * HOUR,
+      false,
+      (at) => [
+        user(at(0), zh ? "帮我规划一下 db-osaka-01 的 VACUUM" : "Help me plan VACUUM on db-osaka-01"),
+        reply(
+          at(MIN),
+          QWEN,
+          zh ? "先确认哪些表膨胀最严重……（很长的分析）" : "First find the most bloated tables… (a long analysis)",
+          { usage: { input_tokens: 21_000, output_tokens: 3_100, estimated: false } },
+        ),
+        user(at(4 * MIN), zh ? "继续，给出每张表的建议" : "Go on, with advice for each table"),
+        reply(at(6 * MIN), QWEN, zh ? "按表给出的建议……（很长）" : "Per-table advice… (long)", {
+          usage: { input_tokens: 29_500, output_tokens: 4_200, estimated: false },
+        }),
+      ],
+    );
     const summary: AiEntryView = {
       role: "summary",
       entry_id: newId(vacuum.view.created_at + 8 * MIN),
@@ -1696,67 +2196,105 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const vt = vacuum.view.created_at + 10 * MIN;
     vacuum.entries.push(
       user(vt, zh ? "那 sessions 表现在能直接跑吗？" : "Can I run it on sessions right now?"),
-      reply(vt + MIN, QWEN, zh ? "可以，但现在是业务高峰，建议等到 02:00 以后。" : "You can, but it’s peak time now; wait until after 02:00.", {
-        usage: { input_tokens: 32_800, output_tokens: 160, estimated: false },
-      }),
+      reply(
+        vt + MIN,
+        QWEN,
+        zh
+          ? "可以，但现在是业务高峰，建议等到 02:00 以后。"
+          : "You can, but it’s peak time now; wait until after 02:00.",
+        {
+          usage: { input_tokens: 32_800, output_tokens: 160, estimated: false },
+        },
+      ),
     );
 
-    add("c-cleanup", zh ? "清理 staging 磁盘空间" : "Clean up disk on staging", "h-staging-worker", 3 * HOUR, false, (at) => {
-      const rm = call("run_command", { command: "sudo rm -rf /var/log/journal/*", timeout_seconds: 60 });
-      const vacuumLogs = call("run_command", { command: "sudo journalctl --vacuum-size=200M" });
-      const type = call("send_input", { text: "docker system prune -af", keys: ["enter"], wait_seconds: 30 });
-      const fetch = call("fetch_url", { url: "https://docs.docker.com/engine/manage-resources/pruning/" });
-      const mcp = call("mcp__github__create_issue", { repo: "scarletkc/infra", title: "staging disk full" });
-      return [
-        user(at(0), zh ? "staging-worker-01 的磁盘快满了" : "staging-worker-01 is nearly out of disk"),
-        reply(at(MIN), OSS, zh ? "我来清理日志和 Docker 缓存。" : "I’ll clean up logs and the Docker cache.", {
-          tool_calls: [rm, vacuumLogs, type, fetch, mcp],
-          finish: "tool_calls",
-          usage: null,
-        }),
-        result(at(2 * MIN), rm.id, "rejected", "don't delete the journal by hand"),
-        result(
-          at(3 * MIN),
-          vacuumLogs.id,
-          "ok",
-          "The user edited the arguments before the call ran; it ran with {\"command\":\"sudo journalctl --vacuum-size=500M\"}\n\nexit status: 0\n--- stdout ---\nVacuuming done, freed 1.2G of archived journals from /var/log/journal.\n--- stderr ---\n",
-          // The card showed what concerned Auto's judge, and the user edited the call and ran it.
-          judged(
-            "ask",
-            [
-              ["requested", 0.4],
-              ["forbidden", 0.03],
-              ["changes_anything", 0.22],
-              ["destroys_data", 0.64],
-              ["touches_secrets", 0.02],
-              ["sends_data_out", 0.01],
-              ["security_change", 0.02],
-              ["runs_unseen_code", 0.01],
-            ],
-            ["destroys_data"],
+    add(
+      "c-cleanup",
+      zh ? "清理 staging 磁盘空间" : "Clean up disk on staging",
+      "h-staging-worker",
+      3 * HOUR,
+      false,
+      (at) => {
+        const rm = call("run_command", { command: "sudo rm -rf /var/log/journal/*", timeout_seconds: 60 });
+        const vacuumLogs = call("run_command", { command: "sudo journalctl --vacuum-size=200M" });
+        const type = call("send_input", { text: "docker system prune -af", keys: ["enter"], wait_seconds: 30 });
+        const fetch = call("fetch_url", { url: "https://docs.docker.com/engine/manage-resources/pruning/" });
+        const mcp = call("mcp__github__create_issue", { repo: "scarletkc/infra", title: "staging disk full" });
+        return [
+          user(at(0), zh ? "staging-worker-01 的磁盘快满了" : "staging-worker-01 is nearly out of disk"),
+          reply(at(MIN), OSS, zh ? "我来清理日志和 Docker 缓存。" : "I’ll clean up logs and the Docker cache.", {
+            tool_calls: [rm, vacuumLogs, type, fetch, mcp],
+            finish: "tool_calls",
+            usage: null,
+          }),
+          result(at(2 * MIN), rm.id, "rejected", "don't delete the journal by hand"),
+          result(
+            at(3 * MIN),
+            vacuumLogs.id,
+            "ok",
+            'The user edited the arguments before the call ran; it ran with {"command":"sudo journalctl --vacuum-size=500M"}\n\nexit status: 0\n--- stdout ---\nVacuuming done, freed 1.2G of archived journals from /var/log/journal.\n--- stderr ---\n',
+            // The card showed what concerned Auto's judge, and the user edited the call and ran it.
+            judged(
+              "ask",
+              [
+                ["requested", 0.4],
+                ["forbidden", 0.03],
+                ["changes_anything", 0.22],
+                ["destroys_data", 0.64],
+                ["touches_secrets", 0.02],
+                ["sends_data_out", 0.01],
+                ["security_change", 0.02],
+                ["runs_unseen_code", 0.01],
+              ],
+              ["destroys_data"],
+            ),
           ),
-        ),
-        result(at(4 * MIN), type.id, "error", "The terminal tab disconnected while waiting. Output before that:\n\ndocker system prune -af\nDeleted Containers:"),
-        result(at(5 * MIN), fetch.id, "cancelled", "The call was cancelled before it ran."),
-        result(at(5 * MIN), mcp.id, "error", "No running MCP server offers the tool mcp__github__create_issue."),
-        reply(at(6 * MIN), OSS, zh ? "日志已压缩到 500M，释放了 1.2G。Docker 清理在终端断开时中断了，重新连接后可以再试。" : "The journal is down to 500M, which freed 1.2G. The Docker prune stopped when the terminal disconnected; try again after reconnecting.", {
-          usage: { input_tokens: 2100, output_tokens: 90, estimated: true },
-        }),
-      ];
-    });
+          result(
+            at(4 * MIN),
+            type.id,
+            "error",
+            "The terminal tab disconnected while waiting. Output before that:\n\ndocker system prune -af\nDeleted Containers:",
+          ),
+          result(at(5 * MIN), fetch.id, "cancelled", "The call was cancelled before it ran."),
+          result(at(5 * MIN), mcp.id, "error", "No running MCP server offers the tool mcp__github__create_issue."),
+          reply(
+            at(6 * MIN),
+            OSS,
+            zh
+              ? "日志已压缩到 500M，释放了 1.2G。Docker 清理在终端断开时中断了，重新连接后可以再试。"
+              : "The journal is down to 500M, which freed 1.2G. The Docker prune stopped when the terminal disconnected; try again after reconnecting.",
+            {
+              usage: { input_tokens: 2100, output_tokens: 90, estimated: true },
+            },
+          ),
+        ];
+      },
+    );
 
     // On a quick connection (HOST-12), which the conversation records by its target (AI-09).
     const pi = add("c-pi", zh ? "树莓派的温度" : "Raspberry Pi temperature", null, 5 * HOUR, false, (at) => [
       user(at(0), zh ? "这台树莓派现在多热？" : "How hot is this Pi right now?"),
-      reply(at(MIN), OSS, zh ? "`vcgencmd measure_temp` 显示 52.1°C，在正常范围内。" : "`vcgencmd measure_temp` reads 52.1°C, which is within the normal range.", {
-        usage: { input_tokens: 1800, output_tokens: 60, estimated: false },
-      }),
+      reply(
+        at(MIN),
+        OSS,
+        zh
+          ? "`vcgencmd measure_temp` 显示 52.1°C，在正常范围内。"
+          : "`vcgencmd measure_temp` reads 52.1°C, which is within the normal range.",
+        {
+          usage: { input_tokens: 1800, output_tokens: 60, estimated: false },
+        },
+      ),
     ]);
     pi.view.quick_target = { username: "pi", address: "raspberrypi.local", port: 22 };
 
-    const deploy = add("c-deploy", zh ? "盯一下 prod-api 的部署" : "Watch the prod-api deploy", "h-api-tokyo", 20 * MIN, false, (at) => [
-      user(at(0), zh ? "部署跑完之后告诉我结果" : "Tell me how the deploy went when it finishes"),
-    ]);
+    const deploy = add(
+      "c-deploy",
+      zh ? "盯一下 prod-api 的部署" : "Watch the prod-api deploy",
+      "h-api-tokyo",
+      20 * MIN,
+      false,
+      (at) => [user(at(0), zh ? "部署跑完之后告诉我结果" : "Tell me how the deploy went when it finishes")],
+    );
     if (flags.has("running")) deploy.runningUntil = now + 20_000;
   }
 
@@ -1772,7 +2310,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       created_at: Date.now(),
       provider_id: "p-anthropic",
       model_id: "claude-sonnet-5-5",
-      text: zh ? "部署完成：3 个实例都已健康，`/healthz` 返回 200。" : "The deploy finished: all 3 instances are healthy and `/healthz` returns 200.",
+      text: zh
+        ? "部署完成：3 个实例都已健康，`/healthz` 返回 200。"
+        : "The deploy finished: all 3 instances are healthy and `/healthz` returns 200.",
       reasoning: null,
       tool_calls: [],
       finish: "stop",
@@ -1818,14 +2358,21 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       await delay(120);
       const c = need(id);
       if (turns.has(id) || compacting.has(id) || c.runningUntil > Date.now())
-        fail("invalid_input", "The conversation can be forked once its turn or compaction has ended.", { field: "conversation_id" });
+        fail("invalid_input", "The conversation can be forked once its turn or compaction has ended.", {
+          field: "conversation_id",
+        });
       const name = [...title.trim()].slice(0, 200).join("");
       if (!name) fail("invalid_input", "the title is empty", { field: "title" });
       const at = entryId === null ? c.entries.length - 1 : c.entries.findIndex((e) => e.entry_id === entryId);
       if (entryId !== null && at < 0) fail("not_found", "message not found");
       if (at < 0) fail("invalid_input", "the conversation has no messages", { field: "conversation_id" });
       const copies = entryId === null ? [...c.entries.keys()] : forkCopies(c.entries, at);
-      if (!copies) return fail("invalid_input", "A conversation can be forked from one of your messages or from a finished reply.", { field: "entry_id" });
+      if (!copies)
+        return fail(
+          "invalid_input",
+          "A conversation can be forked from one of your messages or from a finished reply.",
+          { field: "entry_id" },
+        );
       // New, increasing ids; what Rust keeps in an entry's JSON goes with the copy.
       const copied = copies.map((i) => {
         const e = c.entries[i];
@@ -1859,14 +2406,29 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         const target = /\s/.test(moved.from) ? null : parseQuickConnect(moved.from);
         const named = ((await deps.hosts?.()) ?? []).filter((h) => moved.from && h.name === moved.from);
         const host_id = named.length === 1 ? named[0].id : null;
-        const quick_target = !host_id && target?.ok && target.target.username ? recordedTarget({ ...target.target, username: target.target.username }) : null;
-        const local = !host_id && !quick_target && moved.from.endsWith(" (local terminal)") ? moved.from.slice(0, -" (local terminal)".length) : null;
+        const quick_target =
+          !host_id && target?.ok && target.target.username
+            ? recordedTarget({ ...target.target, username: target.target.username })
+            : null;
+        const local =
+          !host_id && !quick_target && moved.from.endsWith(" (local terminal)")
+            ? moved.from.slice(0, -" (local terminal)".length)
+            : null;
         place = { host_id, quick_target, local, origin: host_id || quick_target || local ? null : moved.from };
         break;
       }
       const now = Date.now();
       const fork: Conv = {
-        view: { id: newId(), title: name, ...place, pinned: false, context_start: copied[start]?.entry_id ?? null, effort: c.view.effort, created_at: now, updated_at: now },
+        view: {
+          id: newId(),
+          title: name,
+          ...place,
+          pinned: false,
+          context_start: copied[start]?.entry_id ?? null,
+          effort: c.view.effort,
+          created_at: now,
+          updated_at: now,
+        },
         entries: copied,
         runningUntil: 0,
       };
@@ -1906,8 +2468,12 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       convs.set(c.view.id, c);
       const earlier = [...c.entries];
       const move = await moveOf(c, input.context);
-      const notes = (await notesBefore(c, earlier, move, move?.from ?? null, input.context)) + (await deferredList(input.context, input.text));
-      const recorded = input.conversation_id ? placeOf(c.view) : { host_id: null, quick_target: null, origin: null, local: null };
+      const notes =
+        (await notesBefore(c, earlier, move, move?.from ?? null, input.context)) +
+        (await deferredList(input.context, input.text));
+      const recorded = input.conversation_id
+        ? placeOf(c.view)
+        : { host_id: null, quick_target: null, origin: null, local: null };
       const user_entry = await storeMessage(c, turn, notes + input.text, input.context, move, recorded);
       return { conversation: view(c), user_entry };
     },
@@ -1917,7 +2483,10 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       await checkModel(context);
       // Like Rust: a conversation that ends with the model's answer has nothing to retry.
       const last = [...contextOf(c)].reverse().find((e) => e.role !== "tool");
-      if (!last || (last.role === "assistant" && last.tool_calls.length === 0)) fail("invalid_input", "nothing to retry: the conversation ends with the model's answer", { field: "conversation_id" });
+      if (!last || (last.role === "assistant" && last.tool_calls.length === 0))
+        fail("invalid_input", "nothing to retry: the conversation ends with the model's answer", {
+          field: "conversation_id",
+        });
       if (c.view.effort !== context.effort) c.view = { ...c.view, effort: context.effort, updated_at: Date.now() };
       startTurn(c, context, onEvent);
     },
@@ -2013,21 +2582,36 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     },
     ai_file_change_diff: async (id, responseId, callId) => {
       need(id);
-      const snapshot = (snapshots.get(id) ?? []).find((s) => s.change.response_id === responseId && s.change.tool_call_id === callId);
+      const snapshot = (snapshots.get(id) ?? []).find(
+        (s) => s.change.response_id === responseId && s.change.tool_call_id === callId,
+      );
       if (!snapshot) return fail("not_found", "file change not found");
       if (snapshot.change.state !== "written" && snapshot.change.state !== "unfinished") return null;
       const shown = (text: string) => text.replace(/\r\n/g, "\n");
       const crlf = snapshot.before !== null && crlfOf(snapshot.before);
-      return { path: snapshot.change.path, before: snapshot.before === null ? null : shown(snapshot.before), after: shown(snapshot.after), error: null, crlf };
+      return {
+        path: snapshot.change.path,
+        before: snapshot.before === null ? null : shown(snapshot.before),
+        after: shown(snapshot.after),
+        error: null,
+        crlf,
+      };
     },
     ai_file_revert: async (id, responseId, callId, sessionId, restore) => {
       const c = need(id);
-      if (turns.has(id) || c.runningUntil > Date.now()) fail("invalid_input", "The conversation is busy; revert the change once it is idle.", { field: "conversation_id" });
+      if (turns.has(id) || c.runningUntil > Date.now())
+        fail("invalid_input", "The conversation is busy; revert the change once it is idle.", {
+          field: "conversation_id",
+        });
       const list = snapshots.get(id) ?? [];
       const snapshot = list.find((s) => s.change.response_id === responseId && s.change.tool_call_id === callId);
       if (!snapshot) return fail("not_found", "file change not found");
-      if (snapshot.change.state === "reverted") fail("invalid_input", "the change was reverted already", { field: "tool_call_id" });
-      if (snapshot.change.state === "dropped") fail("invalid_input", "the change can no longer be reverted: the snapshot limit dropped it", { field: "tool_call_id" });
+      if (snapshot.change.state === "reverted")
+        fail("invalid_input", "the change was reverted already", { field: "tool_call_id" });
+      if (snapshot.change.state === "dropped")
+        fail("invalid_input", "the change can no longer be reverted: the snapshot limit dropped it", {
+          field: "tool_call_id",
+        });
       if (!sessionId) return { status: "failed", reason: "disconnected", detail: null } satisfies AiFileRevert;
       await delay(500);
       const path = snapshot.change.path;
@@ -2045,7 +2629,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       // (a) It holds what the call wrote; or with Restore anyway, what the diff showed.
       if (current === snapshot.after || (restore && snapshot.shown !== undefined && current === snapshot.shown)) {
         // Like Rust's delete script: a link in the place of the file the call created is not deleted.
-        if (snapshot.before === null && remoteLinks.has(path)) return { status: "failed", reason: "symbolic_link", detail: null } satisfies AiFileRevert;
+        if (snapshot.before === null && remoteLinks.has(path))
+          return { status: "failed", reason: "symbolic_link", detail: null } satisfies AiFileRevert;
         if (snapshot.before === null) remoteFiles.delete(path);
         else remoteFiles.set(path, snapshot.before);
         return reverted(true);
@@ -2053,8 +2638,16 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       // (c) Anything else: the diff to what it held before.
       snapshot.shown = current;
       const at = list.indexOf(snapshot);
-      const later = list.slice(at + 1).some((s) => s.change.path === path && (s.change.state === "written" || s.change.state === "unfinished"));
-      return { status: "changed", path, current: current === null ? null : shown(current), before: snapshot.before === null ? null : shown(snapshot.before), later } satisfies AiFileRevert;
+      const later = list
+        .slice(at + 1)
+        .some((s) => s.change.path === path && (s.change.state === "written" || s.change.state === "unfinished"));
+      return {
+        status: "changed",
+        path,
+        current: current === null ? null : shown(current),
+        before: snapshot.before === null ? null : shown(snapshot.before),
+        later,
+      } satisfies AiFileRevert;
     },
     ai_session_server: async (sessionId) => (sessionId ? (deps.sessionServer?.(sessionId) ?? null) : null),
     ai_stop: async (id) => {
@@ -2110,10 +2703,13 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const gone = () => fail("cancelled", "the side question was stopped");
       try {
         if (!parseMessage(input.text).typed.trim()) fail("invalid_input", "The question is empty.", { field: "text" });
-        if (compacting.has(id)) fail("invalid_input", "the conversation is being compacted", { field: "conversation_id" });
+        if (compacting.has(id))
+          fail("invalid_input", "the conversation is being compacted", { field: "conversation_id" });
         await checkModel(input.context);
         if (!(await pause(500))) gone();
-        for (const piece of chunks(zh ? "先看看对话里已有的内容……" : "Looking at what the conversation shows so far…")) {
+        for (const piece of chunks(
+          zh ? "先看看对话里已有的内容……" : "Looking at what the conversation shows so far…",
+        )) {
           if (!(await pause(20))) gone();
           onEvent({ kind: "reasoning", delta: piece });
         }
@@ -2142,12 +2738,20 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           .notes.filter((n) => n.kind === "terminal_state" || n.kind === "permission_mode")
           .reduce((t, n) => t.replace(`${noteBlock(n)}\n\n`, ""), text);
       const textOf = (e: AiEntryView) =>
-        e.role === "user" ? withoutNotes(e.text) : e.role === "summary" ? splitPermissionNote(e.text).summary : e.role === "assistant" ? e.text : "";
+        e.role === "user"
+          ? withoutNotes(e.text)
+          : e.role === "summary"
+            ? splitPermissionNote(e.text).summary
+            : e.role === "assistant"
+              ? e.text
+              : "";
       const hits: AiSearchHit[] = [];
       for (const c of [...convs.values()].sort((a, b) => view(b).last_activity - view(a).last_activity)) {
         const entry = c.entries.find((e) => textOf(e).toLowerCase().includes(q));
-        if (entry) hits.push({ conversation_id: c.view.id, entry_id: entry.entry_id, snippet: snippetAround(textOf(entry), q) });
-        else if (c.view.title.toLowerCase().includes(q)) hits.push({ conversation_id: c.view.id, entry_id: null, snippet: c.view.title });
+        if (entry)
+          hits.push({ conversation_id: c.view.id, entry_id: entry.entry_id, snippet: snippetAround(textOf(entry), q) });
+        else if (c.view.title.toLowerCase().includes(q))
+          hits.push({ conversation_id: c.view.id, entry_id: null, snippet: c.view.title });
       }
       return hits;
     },
@@ -2156,7 +2760,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const c = need(id);
       const i = c.entries.findIndex((e) => e.entry_id === entryId);
       if (i < 0) fail("not_found", "entry not found");
-      if (c.entries[i].role !== "user") fail("invalid_input", "only the user's messages can be edited", { field: "entry_id" });
+      if (c.entries[i].role !== "user")
+        fail("invalid_input", "only the user's messages can be edited", { field: "entry_id" });
       if (!text.trim()) fail("invalid_input", "the message is empty", { field: "text" });
       await checkModel(context);
       forgetSeen(id);
@@ -2172,7 +2777,10 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const recorded = cameFrom.get(entryId) ?? null;
       c.entries = c.entries.slice(0, i);
       // Like Rust: the snapshots of the calls the deleted responses made go with them (AI-41).
-      snapshots.set(id, (snapshots.get(id) ?? []).filter((s) => c.entries.some((e) => e.entry_id === s.change.response_id)));
+      snapshots.set(
+        id,
+        (snapshots.get(id) ?? []).filter((s) => c.entries.some((e) => e.entry_id === s.change.response_id)),
+      );
       if (c.view.context_start && !c.entries.some((e) => e.entry_id === c.view.context_start)) {
         const summary = [...c.entries].reverse().find((e) => e.role === "summary");
         c.view = { ...c.view, context_start: summary?.entry_id ?? null };
@@ -2188,7 +2796,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       return { conversation: view(c), user_entry };
     },
     // The browser reads dropped files itself (File API); there are no paths to read here.
-    ai_read_dropped_files: async (paths) => paths.map((p) => ({ status: "refused", name: p.split(/[\\/]/).pop() ?? p, reason: "unreadable" })),
+    ai_read_dropped_files: async (paths) =>
+      paths.map((p) => ({ status: "refused", name: p.split(/[\\/]/).pop() ?? p, reason: "unreadable" })),
   };
 }
 
@@ -2200,7 +2809,11 @@ function titleOf(text: string): string {
   const { attachments, typed } = parseMessage(text);
   const block = attachments[0];
   const fallback = block ? blockTitle(block) : "";
-  const line = typed.split(/\r?\n/).find((l) => l.trim())?.trim() ?? fallback;
+  const line =
+    typed
+      .split(/\r?\n/)
+      .find((l) => l.trim())
+      ?.trim() ?? fallback;
   return [...line].slice(0, 60).join("");
 }
 

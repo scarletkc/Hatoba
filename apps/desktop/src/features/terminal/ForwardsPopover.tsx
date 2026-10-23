@@ -14,7 +14,6 @@ import { writeClipboard } from "./clipboard";
 import { useStatusPopover } from "./popover";
 import s from "./ForwardsPopover.module.css";
 
-
 /**
  * The status bar's port forwarding popover (FWD-01/02): this host's saved forwards, which run on the connection the
  * tab shares (SSH-16), with start / stop / retry for each.
@@ -80,7 +79,13 @@ export function ForwardsPopover({
 
   if (locked) return null;
   return createPortal(
-    <div ref={ref} role="dialog" aria-label={t("terminal.fwd")} className={cx(s.popover, overlayStyles.popIn)} style={pos}>
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={t("terminal.fwd")}
+      className={cx(s.popover, overlayStyles.popIn)}
+      style={pos}
+    >
       <div className={s.header}>{t("terminal.fwd")}</div>
       {saved?.length === 0 && <div className={s.note}>{t("terminal.fwd.none")}</div>}
       {saved?.map((f) => {
@@ -174,7 +179,11 @@ function ForwardRow({
           aria-label={starting ? t("terminal.fwd.starting") : undefined}
           title={starting ? t("terminal.fwd.starting") : undefined}
         >
-          {starting ? <Spinner size={14} /> : <Icon name={running ? "check-circle" : failed ? "warning-circle" : "circle"} fill={running || failed} />}
+          {starting ? (
+            <Spinner size={14} />
+          ) : (
+            <Icon name={running ? "check-circle" : failed ? "warning-circle" : "circle"} fill={running || failed} />
+          )}
         </span>
       }
       status={failed && <span className={s.error}>{error}</span>}

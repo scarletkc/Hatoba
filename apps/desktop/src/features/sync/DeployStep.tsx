@@ -69,7 +69,8 @@ export function DeployStep({
   onReady: (handle: string) => void;
   onJoin: (handle: string, target: DeployTarget) => void;
 }) {
-  if (form.phase === "run" && form.start) return <RunPhase form={form} set={set} handle={form.start.handle} onReady={onReady} />;
+  if (form.phase === "run" && form.start)
+    return <RunPhase form={form} set={set} handle={form.start.handle} onReady={onReady} />;
   if (form.phase === "review" && form.start) return <ReviewPhase form={form} set={set} onJoin={onJoin} />;
   return <TokenPhase form={form} set={set} onBack={onBack} />;
 }
@@ -171,7 +172,15 @@ function TokenPhase({ form, set, onBack }: { form: DeployForm; set: Set; onBack:
   );
 }
 
-function ReviewPhase({ form, set, onJoin }: { form: DeployForm; set: Set; onJoin: (handle: string, target: DeployTarget) => void }) {
+function ReviewPhase({
+  form,
+  set,
+  onJoin,
+}: {
+  form: DeployForm;
+  set: Set;
+  onJoin: (handle: string, target: DeployTarget) => void;
+}) {
   const t = useT();
   const workerId = useId();
   const databaseId = useId();
@@ -183,15 +192,23 @@ function ReviewPhase({ form, set, onJoin }: { form: DeployForm; set: Set; onJoin
   const { plan } = form;
 
   const nameError = (() => {
-    if (form.workerName && !LABEL.test(form.workerName.trim())) return { field: "worker", text: t("sync.dep.invalid.worker_name") };
-    if (form.databaseName && !DATABASE.test(form.databaseName.trim())) return { field: "database", text: t("sync.dep.invalid.database_name") };
+    if (form.workerName && !LABEL.test(form.workerName.trim()))
+      return { field: "worker", text: t("sync.dep.invalid.worker_name") };
+    if (form.databaseName && !DATABASE.test(form.databaseName.trim()))
+      return { field: "database", text: t("sync.dep.invalid.database_name") };
     return null;
   })();
   const subdomainNeeded = !!plan && !plan.subdomain && plan.worker !== "has_vault";
   const subdomainOk = LABEL.test(form.subdomain.trim());
   const existing = plan?.worker === "has_vault";
   const canJoin = existing && !!plan?.vault_url && !form.inspecting && !nameError;
-  const canDeploy = !!plan && !existing && plan.worker !== "foreign" && !form.inspecting && !nameError && (!subdomainNeeded || subdomainOk);
+  const canDeploy =
+    !!plan &&
+    !existing &&
+    plan.worker !== "foreign" &&
+    !form.inspecting &&
+    !nameError &&
+    (!subdomainNeeded || subdomainOk);
 
   const inspect = async (f: DeployForm) => {
     const t2 = target(f);
@@ -203,7 +220,12 @@ function ReviewPhase({ form, set, onJoin }: { form: DeployForm; set: Set; onJoin
     try {
       const next = await api.deploy_inspect(start.handle, t2);
       if (n !== request.current) return;
-      set((x) => ({ ...x, inspecting: false, plan: next, namesOpen: x.namesOpen || next.worker === "has_vault" || next.worker === "foreign" }));
+      set((x) => ({
+        ...x,
+        inspecting: false,
+        plan: next,
+        namesOpen: x.namesOpen || next.worker === "has_vault" || next.worker === "foreign",
+      }));
     } catch (e) {
       if (n !== request.current) return;
       set((x) => ({ ...x, inspecting: false, plan: null, planError: toAppError(e) }));
@@ -224,7 +246,12 @@ function ReviewPhase({ form, set, onJoin }: { form: DeployForm; set: Set; onJoin
 
   const back = () => {
     void api.deploy_cancel(start.handle);
-    set((f) => ({ ...EMPTY_DEPLOY, accountId: start.account_owned ? f.accountId : "", workerName: f.workerName, databaseName: f.databaseName }));
+    set((f) => ({
+      ...EMPTY_DEPLOY,
+      accountId: start.account_owned ? f.accountId : "",
+      workerName: f.workerName,
+      databaseName: f.databaseName,
+    }));
   };
 
   const deploy = () => {
@@ -265,7 +292,11 @@ function ReviewPhase({ form, set, onJoin }: { form: DeployForm; set: Set; onJoin
               icon="buildings"
               value={form.accountId}
               placeholder={t("sync.dep.account.choose")}
-              options={start.accounts.map((a) => ({ value: a.id, label: a.name || a.id, hint: a.name ? a.id.slice(0, 8) : undefined }))}
+              options={start.accounts.map((a) => ({
+                value: a.id,
+                label: a.name || a.id,
+                hint: a.name ? a.id.slice(0, 8) : undefined,
+              }))}
               onChange={(id) => {
                 set((f) => ({ ...f, accountId: id, plan: null }));
                 reinspect({ accountId: id });
@@ -313,13 +344,22 @@ function ReviewPhase({ form, set, onJoin }: { form: DeployForm; set: Set; onJoin
         )}
 
         <div className={s.wrangler}>
-          <button type="button" className={s.disclosure} aria-expanded={form.namesOpen} onClick={() => set((f) => ({ ...f, namesOpen: !f.namesOpen }))}>
+          <button
+            type="button"
+            className={s.disclosure}
+            aria-expanded={form.namesOpen}
+            onClick={() => set((f) => ({ ...f, namesOpen: !f.namesOpen }))}
+          >
             <DisclosureCaret open={form.namesOpen} />
             {t("sync.dep.names")}
           </button>
           {form.namesOpen && (
             <div className={cx(s.fields, controlStyles.reveal)}>
-              <Field label={t("sync.dep.workerName")} htmlFor={workerId} error={nameError?.field === "worker" ? nameError.text : undefined}>
+              <Field
+                label={t("sync.dep.workerName")}
+                htmlFor={workerId}
+                error={nameError?.field === "worker" ? nameError.text : undefined}
+              >
                 <TextField
                   id={workerId}
                   mono
@@ -330,7 +370,11 @@ function ReviewPhase({ form, set, onJoin }: { form: DeployForm; set: Set; onJoin
                   onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && reinspect({})}
                 />
               </Field>
-              <Field label={t("sync.dep.databaseName")} htmlFor={databaseId} error={nameError?.field === "database" ? nameError.text : undefined}>
+              <Field
+                label={t("sync.dep.databaseName")}
+                htmlFor={databaseId}
+                error={nameError?.field === "database" ? nameError.text : undefined}
+              >
                 <TextField
                   id={databaseId}
                   mono
@@ -349,7 +393,19 @@ function ReviewPhase({ form, set, onJoin }: { form: DeployForm; set: Set; onJoin
   );
 }
 
-function PlanSummary({ t, form, plan, url, onRetry }: { t: T; form: DeployForm; plan: DeployPlan | null; url: string | null; onRetry: () => void }) {
+function PlanSummary({
+  t,
+  form,
+  plan,
+  url,
+  onRetry,
+}: {
+  t: T;
+  form: DeployForm;
+  plan: DeployPlan | null;
+  url: string | null;
+  onRetry: () => void;
+}) {
   if (form.inspecting)
     return (
       <StatusLine tone="progress" className={s.planStatus}>
@@ -393,7 +449,11 @@ function PlanSummary({ t, form, plan, url, onRetry }: { t: T; form: DeployForm; 
     {
       icon: plan.database === "create" ? "plus-circle" : "database",
       text: t(
-        plan.database === "create" ? "sync.dep.plan.dbCreate" : plan.database === "use" ? "sync.dep.plan.dbUse" : "sync.dep.plan.dbBound",
+        plan.database === "create"
+          ? "sync.dep.plan.dbCreate"
+          : plan.database === "use"
+            ? "sync.dep.plan.dbUse"
+            : "sync.dep.plan.dbBound",
         { name: database },
       ),
     },
@@ -415,7 +475,9 @@ function PlanSummary({ t, form, plan, url, onRetry }: { t: T; form: DeployForm; 
           </li>
         )}
       </ul>
-      {renamed && <HintText>{t("sync.dep.plan.renamed", { name: form.databaseName.trim(), other: database })}</HintText>}
+      {renamed && (
+        <HintText>{t("sync.dep.plan.renamed", { name: form.databaseName.trim(), other: database })}</HintText>
+      )}
     </div>
   );
 }
@@ -450,9 +512,17 @@ export function StepList({
         const state = states[step] ?? "pending";
         const icon = STEP_ICON[state];
         return (
-          <li key={step} className={cx(s.stepRow, state === "pending" && s.dim)} aria-current={state === "running" ? "step" : undefined}>
+          <li
+            key={step}
+            className={cx(s.stepRow, state === "pending" && s.dim)}
+            aria-current={state === "running" ? "step" : undefined}
+          >
             <span className={s.stepIcon}>
-              {state === "running" ? <Spinner /> : <Icon name={icon.name} fill={icon.fill} color={icon.color} size={16} />}
+              {state === "running" ? (
+                <Spinner />
+              ) : (
+                <Icon name={icon.name} fill={icon.fill} color={icon.color} size={16} />
+              )}
             </span>
             <span className={s.stepText}>
               <span>
@@ -473,7 +543,17 @@ export function StepList({
   );
 }
 
-function RunPhase({ form, set, handle, onReady }: { form: DeployForm; set: Set; handle: string; onReady: (handle: string) => void }) {
+function RunPhase({
+  form,
+  set,
+  handle,
+  onReady,
+}: {
+  form: DeployForm;
+  set: Set;
+  handle: string;
+  onReady: (handle: string) => void;
+}) {
   const t = useT();
   const [checking, setChecking] = useState(false);
   const started = useRef(false);
@@ -481,12 +561,19 @@ function RunPhase({ form, set, handle, onReady }: { form: DeployForm; set: Set; 
   const run = async () => {
     set((f) => ({ ...f, run: "running", runError: null, steps: { verify: "done" } }));
     try {
-      const outcome = await api.deploy_run(handle, target(form), (p) => set((f) => ({ ...f, steps: { ...f.steps, [p.step]: p.status } })));
+      const outcome = await api.deploy_run(handle, target(form), (p) =>
+        set((f) => ({ ...f, steps: { ...f.steps, [p.step]: p.status } })),
+      );
       set((f) => ({ ...f, url: outcome.url, run: outcome.ready ? "ready" : "waiting" }));
     } catch (e) {
       set((f) => {
         const current = DEPLOY_STEPS.find((step) => f.steps[step] === "running");
-        return { ...f, run: "failed", runError: toAppError(e), steps: current ? { ...f.steps, [current]: "failed" } : f.steps };
+        return {
+          ...f,
+          run: "failed",
+          runError: toAppError(e),
+          steps: current ? { ...f.steps, [current]: "failed" } : f.steps,
+        };
       });
     }
   };
@@ -526,10 +613,20 @@ function RunPhase({ form, set, handle, onReady }: { form: DeployForm; set: Set; 
 
   const failedStep = DEPLOY_STEPS.find((step) => form.steps[step] === "failed");
   // Failures that a retry cannot fix send the user back to the review instead.
-  const fixInReview = ["remote_initialized", "worker_name_taken", "subdomain_required", "subdomain_unavailable", "invalid_input"].includes(form.runError?.code ?? "");
+  const fixInReview = [
+    "remote_initialized",
+    "worker_name_taken",
+    "subdomain_required",
+    "subdomain_unavailable",
+    "invalid_input",
+  ].includes(form.runError?.code ?? "");
   const busy = form.run === "running" || form.run === "removing";
   const title =
-    form.run === "ready" ? t("sync.dep.run.ready") : form.run === "failed" || form.run === "removed" ? t("sync.dep.run.failed") : t("sync.dep.run.title");
+    form.run === "ready"
+      ? t("sync.dep.run.ready")
+      : form.run === "failed" || form.run === "removed"
+        ? t("sync.dep.run.failed")
+        : t("sync.dep.run.title");
 
   const footer = (() => {
     switch (form.run) {
@@ -602,10 +699,12 @@ function RunPhase({ form, set, handle, onReady }: { form: DeployForm; set: Set; 
         ariaLabel={t("sync.dep.run.title")}
       />
       {form.run === "failed" && !fixInReview && <HintText>{t("sync.dep.retryHint")}</HintText>}
-      {form.run === "failed" && !failedStep && form.runError && (
-        <ErrorText>{deployError(t, form.runError)}</ErrorText>
+      {form.run === "failed" && !failedStep && form.runError && <ErrorText>{deployError(t, form.runError)}</ErrorText>}
+      {form.run === "waiting" && (
+        <Callout icon="hourglass-medium" iconColor="var(--orange)">
+          {t("sync.dep.waiting")}
+        </Callout>
       )}
-      {form.run === "waiting" && <Callout icon="hourglass-medium" iconColor="var(--orange)">{t("sync.dep.waiting")}</Callout>}
       {form.run === "removed" && <Callout icon="trash">{t("sync.dep.removed")}</Callout>}
       {form.run === "ready" && form.url && (
         <Callout icon="check-circle" iconColor="var(--green)">

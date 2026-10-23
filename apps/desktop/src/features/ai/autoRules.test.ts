@@ -6,12 +6,22 @@ const command = (line: string) => hardRule({ kind: "run_command", args: { comman
 
 describe("the commands Auto always asks about (AI-47)", () => {
   it("asks for recursive rm, with any recursive option", () => {
-    for (const line of ["rm -r /tmp/x", "rm -rf /var/lib/mysql", "rm -fR build", "rm -Rf build", "rm -v -r logs", "rm --recursive old", "rm --rec old", "rm -f -- -r"])
+    for (const line of [
+      "rm -r /tmp/x",
+      "rm -rf /var/lib/mysql",
+      "rm -fR build",
+      "rm -Rf build",
+      "rm -v -r logs",
+      "rm --recursive old",
+      "rm --rec old",
+      "rm -f -- -r",
+    ])
       expect(command(line), line).toEqual({ kind: "command", command: "rm -r" });
   });
 
   it("leaves rm without a recursive option to the judge", () => {
-    for (const line of ["rm /etc/motd", "rm -f /tmp/a.lock", "rm -i old.log", "rm --force x", "rm -- -file"]) expect(command(line), line).toBeNull();
+    for (const line of ["rm /etc/motd", "rm -f /tmp/a.lock", "rm -i old.log", "rm --force x", "rm -- -file"])
+      expect(command(line), line).toBeNull();
   });
 
   it("finds a command nested in quotes, sh -c, eval, xargs, ssh, substitutions and groups", () => {
@@ -26,7 +36,7 @@ describe("the commands Auto always asks about (AI-47)", () => {
       "{rm,-rf,/tmp/x}",
       "'r'm -rf /tmp/x",
       "r\\m -rf /tmp/x",
-      'rm${IFS}-rf${IFS}/tmp/x',
+      "rm${IFS}-rf${IFS}/tmp/x",
       "true&&rm -rf x",
     ];
     for (const line of nested) expect(command(line), line).toEqual({ kind: "command", command: "rm -r" });
@@ -81,8 +91,14 @@ describe("the commands Auto always asks about (AI-47)", () => {
   });
 
   it("checks the text send_input types", () => {
-    expect(hardRule({ kind: "send_input", args: { text: "sudo reboot", key: "enter" } })).toEqual({ kind: "command", command: "reboot" });
-    expect(hardRule({ kind: "send_input", args: { text: "sudo reboot" }, screen: "kc@db1:~$" })).toEqual({ kind: "command", command: "reboot" });
+    expect(hardRule({ kind: "send_input", args: { text: "sudo reboot", key: "enter" } })).toEqual({
+      kind: "command",
+      command: "reboot",
+    });
+    expect(hardRule({ kind: "send_input", args: { text: "sudo reboot" }, screen: "kc@db1:~$" })).toEqual({
+      kind: "command",
+      command: "reboot",
+    });
     expect(hardRule({ kind: "send_input", args: { text: "y", key: "enter" } })).toBeNull();
     expect(namedCommand("")).toBeNull();
   });
@@ -119,7 +135,8 @@ describe("the commands Auto always asks about in PowerShell and Command Prompt (
   });
 
   it("leaves deleting without a recursive option to the judge", () => {
-    for (const line of ["Remove-Item x.txt", "rm -Force x.txt", "del -Filter *.tmp", "Get-ChildItem -Recurse"]) expect(ps(line), line).toBeNull();
+    for (const line of ["Remove-Item x.txt", "rm -Force x.txt", "del -Filter *.tmp", "Get-ChildItem -Recurse"])
+      expect(ps(line), line).toBeNull();
     for (const line of ["del x.txt", "rd empty", "del /q /f x.txt", "dir /s"]) expect(cmd(line), line).toBeNull();
   });
 
@@ -175,13 +192,26 @@ describe("the commands Auto always asks about in PowerShell and Command Prompt (
   it("checks the line send_input submits on a PowerShell tab", () => {
     const typed = (cursor: string, args: Record<string, unknown>) =>
       hardRule({ kind: "send_input", args, screen: `PS C:\\Users\\kc> Get-Date\n\n${cursor}`, dialect: "powershell" });
-    expect(typed("PS C:\\Users\\kc>", { text: "Stop-Computer\n" })).toEqual({ kind: "command", command: "Stop-Computer" });
-    expect(typed("PS C:\\Users\\kc> Remove-Item C:\\data", { text: " -Recurse", key: "enter" })).toEqual({ kind: "command", command: "Remove-Item -Recurse" });
+    expect(typed("PS C:\\Users\\kc>", { text: "Stop-Computer\n" })).toEqual({
+      kind: "command",
+      command: "Stop-Computer",
+    });
+    expect(typed("PS C:\\Users\\kc> Remove-Item C:\\data", { text: " -Recurse", key: "enter" })).toEqual({
+      kind: "command",
+      command: "Remove-Item -Recurse",
+    });
     expect(typed("PS C:\\Users\\kc>", { text: "Get-ChildItem\n" })).toBeNull();
   });
 
   it("keeps MCP calls to the POSIX rules", () => {
-    expect(hardRule({ kind: "mcp", args: { command: "rm -rf /" }, mcp: { always_ask: false } as McpToolInfo, dialect: "powershell" })).toEqual({
+    expect(
+      hardRule({
+        kind: "mcp",
+        args: { command: "rm -rf /" },
+        mcp: { always_ask: false } as McpToolInfo,
+        dialect: "powershell",
+      }),
+    ).toEqual({
       kind: "command",
       command: "rm -r",
     });
@@ -194,72 +224,137 @@ describe("a line send_input submits (AI-47)", () => {
     expect(hardRule({ kind: "send_input", args, screen: "$ " })).toEqual({ kind: "editing_submission" });
   });
 
-  it.each(["enter", "ctrl+m", "ctrl+j", "ctrl+o"])("checks the cursor's line when %s submits anywhere in keys", (key) => {
-    for (const args of [{ key }, { keys: [key] }, { keys: [key, "n"] }, { text: "down", keys: [key, "n"] }]) {
-      const cursor = args.text ? "$ shut" : "$ shutdown";
-      expect(hardRule({ kind: "send_input", args, screen: cursor })).toEqual({ kind: "command", command: "shutdown" });
-      expect(hardRule({ kind: "send_input", args: { keys: [key] }, screen: "$ ls\u200b" })).toEqual({ kind: "hidden" });
-    }
-  });
+  it.each(["enter", "ctrl+m", "ctrl+j", "ctrl+o"])(
+    "checks the cursor's line when %s submits anywhere in keys",
+    (key) => {
+      for (const args of [{ key }, { keys: [key] }, { keys: [key, "n"] }, { text: "down", keys: [key, "n"] }]) {
+        const cursor = args.text ? "$ shut" : "$ shutdown";
+        expect(hardRule({ kind: "send_input", args, screen: cursor })).toEqual({
+          kind: "command",
+          command: "shutdown",
+        });
+        expect(hardRule({ kind: "send_input", args: { keys: [key] }, screen: "$ ls\u200b" })).toEqual({
+          kind: "hidden",
+        });
+      }
+    },
+  );
 
   it("reads printable keys with text in order, even without a submission", () => {
     for (const args of [
       { keys: Array.from("rm -rf /") },
       { text: "r", keys: Array.from("m -rf /") },
       { text: "r", key: "m", keys: Array.from(" -rf /") },
-    ]) expect(hardRule({ kind: "send_input", args })).toEqual({ kind: "command", command: "rm -r" });
+    ])
+      expect(hardRule({ kind: "send_input", args })).toEqual({ kind: "command", command: "rm -r" });
     expect(hardRule({ kind: "send_input", args: { text: "ls ", keys: Array.from("/tmp") } })).toBeNull();
     expect(hardRule({ kind: "send_input", args: { keys: ["shift+a", "space", "é", "界"] } })).toBeNull();
   });
 
-  it.each(["posix", "powershell", "cmd"] as const)("asks only when editing precedes submission on a %s command line", (dialect) => {
-    for (const key of ["backspace", "delete", "left", "right", "up", "down", "home", "end", "tab", "shift+tab", "esc", "f10", "ctrl+i", "ctrl+a", "ctrl+k", "ctrl+u", "ctrl+w", "ctrl+r", "ctrl+x", "ctrl_c", "ctrl_d", "alt+f", "alt+ctrl+o"]) {
-      for (const args of [{ key }, { keys: [key] }, { keys: ["enter", key] }]) {
-        expect(hardRule({ kind: "send_input", dialect, args }), key).toBeNull();
-        expect(hardRule({ kind: "send_input", dialect, args, screen: "$ ls" }), key).toBeNull();
-      }
-      for (const submit of ["enter", "ctrl+m", "ctrl+j", "ctrl+o"]) {
-        for (const args of [{ key, keys: [submit] }, { text: "shx", keys: [key, ...Array.from("utdown"), submit] }]) {
-          expect(hardRule({ kind: "send_input", dialect, args }), key).toEqual({ kind: "editing_submission" });
+  it.each(["posix", "powershell", "cmd"] as const)(
+    "asks only when editing precedes submission on a %s command line",
+    (dialect) => {
+      for (const key of [
+        "backspace",
+        "delete",
+        "left",
+        "right",
+        "up",
+        "down",
+        "home",
+        "end",
+        "tab",
+        "shift+tab",
+        "esc",
+        "f10",
+        "ctrl+i",
+        "ctrl+a",
+        "ctrl+k",
+        "ctrl+u",
+        "ctrl+w",
+        "ctrl+r",
+        "ctrl+x",
+        "ctrl_c",
+        "ctrl_d",
+        "alt+f",
+        "alt+ctrl+o",
+      ]) {
+        for (const args of [{ key }, { keys: [key] }, { keys: ["enter", key] }]) {
+          expect(hardRule({ kind: "send_input", dialect, args }), key).toBeNull();
+          expect(hardRule({ kind: "send_input", dialect, args, screen: "$ ls" }), key).toBeNull();
+        }
+        for (const submit of ["enter", "ctrl+m", "ctrl+j", "ctrl+o"]) {
+          for (const args of [
+            { key, keys: [submit] },
+            { text: "shx", keys: [key, ...Array.from("utdown"), submit] },
+          ]) {
+            expect(hardRule({ kind: "send_input", dialect, args }), key).toEqual({ kind: "editing_submission" });
+          }
         }
       }
-    }
-  });
+    },
+  );
 
-  it.each(["alt+enter", "alt+ctrl+m", "alt+ctrl+j"])("asks about %s instead of treating it as a plain submission", (key) => {
-    expect(hardRule({ kind: "send_input", args: { keys: [key] }, screen: "$ ls" })).toEqual({ kind: "editing_submission" });
-  });
+  it.each(["alt+enter", "alt+ctrl+m", "alt+ctrl+j"])(
+    "asks about %s instead of treating it as a plain submission",
+    (key) => {
+      expect(hardRule({ kind: "send_input", args: { keys: [key] }, screen: "$ ls" })).toEqual({
+        kind: "editing_submission",
+      });
+    },
+  );
 
   it("asks before a tab in text can complete a command", () => {
     expect(hardRule({ kind: "send_input", args: { text: "sudo shut\t\n" } })).toEqual({ kind: "editing_submission" });
     expect(hardRule({ kind: "send_input", args: { text: "ls\t" } })).toBeNull();
     expect(hardRule({ kind: "send_input", args: { text: "ls\n\t" } })).toBeNull();
-    expect(hardRule({ kind: "send_input", args: { text: "ls\t", keys: ["enter"] } })).toEqual({ kind: "editing_submission" });
+    expect(hardRule({ kind: "send_input", args: { text: "ls\t", keys: ["enter"] } })).toEqual({
+      kind: "editing_submission",
+    });
   });
 
   it("keeps printable commands in the check when an editing key follows them", () => {
-    expect(hardRule({ kind: "send_input", args: { keys: [...Array.from("rm -rf /"), "home"] } })).toEqual({ kind: "command", command: "rm -r" });
+    expect(hardRule({ kind: "send_input", args: { keys: [...Array.from("rm -rf /"), "home"] } })).toEqual({
+      kind: "command",
+      command: "rm -r",
+    });
     expect(hardRule({ kind: "send_input", args: { keys: ["ctrl+x", "n"] }, screen: "nano" })).toBeNull();
     expect(hardRule({ kind: "send_input", args: { keys: ["f10"] }, screen: "htop" })).toBeNull();
   });
 
   it("checks history recalled by an earlier call when the next call submits it", () => {
     expect(hardRule({ kind: "send_input", args: { keys: ["up"] }, screen: "$ " })).toBeNull();
-    expect(hardRule({ kind: "send_input", args: { keys: ["enter"] }, screen: "$ sudo reboot" })).toEqual({ kind: "command", command: "reboot" });
+    expect(hardRule({ kind: "send_input", args: { keys: ["enter"] }, screen: "$ sudo reboot" })).toEqual({
+      kind: "command",
+      command: "reboot",
+    });
   });
 
   it.each(["powershell", "cmd"] as const)("keeps ordered keys under the %s hard rules", (dialect) => {
-    expect(hardRule({ kind: "send_input", dialect, args: { keys: Array.from("rd /s old") } })).toEqual({ kind: "command", command: "rd /s" });
-    expect(hardRule({ kind: "send_input", dialect, args: { keys: ["enter", "n"] }, screen: "C:\\> Stop-Computer" })).toEqual({ kind: "command", command: "Stop-Computer" });
+    expect(hardRule({ kind: "send_input", dialect, args: { keys: Array.from("rd /s old") } })).toEqual({
+      kind: "command",
+      command: "rd /s",
+    });
+    expect(
+      hardRule({ kind: "send_input", dialect, args: { keys: ["enter", "n"] }, screen: "C:\\> Stop-Computer" }),
+    ).toEqual({ kind: "command", command: "Stop-Computer" });
   });
 
   it("checks printable keys and Ctrl+M/Enter sequences against the cursor's line", () => {
-    for (const args of [{ keys: ["m", "space", "-", "r", "enter"] }, { text: "m -r", keys: ["ctrl+m"] }, { text: "m -r", key: "CTRL_M" }]) {
+    for (const args of [
+      { keys: ["m", "space", "-", "r", "enter"] },
+      { text: "m -r", keys: ["ctrl+m"] },
+      { text: "m -r", key: "CTRL_M" },
+    ]) {
       expect(hardRule({ kind: "send_input", args, screen: "$ r" })).toEqual({ kind: "command", command: "rm -r" });
     }
-    expect(hardRule({ kind: "send_input", args: { keys: ["r", "m", "space", "-", "r", "enter"] } })).toEqual({ kind: "command", command: "rm -r" });
+    expect(hardRule({ kind: "send_input", args: { keys: ["r", "m", "space", "-", "r", "enter"] } })).toEqual({
+      kind: "command",
+      command: "rm -r",
+    });
   });
-  const typed = (cursor: string, args: Record<string, unknown>) => hardRule({ kind: "send_input", args, screen: `$ uptime\n 10:02:11 up 3 days\n${cursor}` });
+  const typed = (cursor: string, args: Record<string, unknown>) =>
+    hardRule({ kind: "send_input", args, screen: `$ uptime\n 10:02:11 up 3 days\n${cursor}` });
 
   it("checks the cursor's line with the text, so that a command split across calls asks", () => {
     // `rm ` typed by one call, which the judge decides, and `-rf /data` entered by the next. The screen keeps
@@ -279,7 +374,16 @@ describe("a line send_input submits (AI-47)", () => {
   });
 
   it("reads past the prompt", () => {
-    const prompts = ["kc@db1:~$", "root@db1:~#", "[root@db1 ~]#", "kc@mac ~ %", "db1>", "PS C:\\Users\\kc>", "(venv) kc@db1:/srv/app$", "➜  app git:(main)"];
+    const prompts = [
+      "kc@db1:~$",
+      "root@db1:~#",
+      "[root@db1 ~]#",
+      "kc@mac ~ %",
+      "db1>",
+      "PS C:\\Users\\kc>",
+      "(venv) kc@db1:/srv/app$",
+      "➜  app git:(main)",
+    ];
     for (const prompt of prompts) {
       expect(typed(`${prompt} rm`, { text: "-r old\n" }), prompt).toEqual({ kind: "command", command: "rm -r" });
       expect(typed(prompt, { text: "sudo reboot\n" }), prompt).toEqual({ kind: "command", command: "reboot" });
@@ -292,7 +396,10 @@ describe("a line send_input submits (AI-47)", () => {
 
   it("asks when the cursor's line only mentions one, since a false alarm costs a click", () => {
     // A question about one, which the answer confirms.
-    expect(typed("Proceed with shutdown of web2? [y/N]", { text: "y", key: "enter" })).toEqual({ kind: "command", command: "shutdown" });
+    expect(typed("Proceed with shutdown of web2? [y/N]", { text: "y", key: "enter" })).toEqual({
+      kind: "command",
+      command: "shutdown",
+    });
     // A working directory named like one.
     expect(typed("deploy@web1:~/backups/dd$", { text: "ls\n" })).toEqual({ kind: "command", command: "dd" });
     expect(typed("Do you want to continue? [Y/n]", { text: "y", key: "enter" })).toBeNull();
@@ -316,7 +423,9 @@ describe("hidden characters (AI-47)", () => {
   });
 
   it("send a command whose directory has them to the card", () => {
-    expect(hardRule({ kind: "run_command", args: { command: "make", workdir: "/srv/‮ppa" } })).toEqual({ kind: "hidden" });
+    expect(hardRule({ kind: "run_command", args: { command: "make", workdir: "/srv/‮ppa" } })).toEqual({
+      kind: "hidden",
+    });
     expect(hardRule({ kind: "run_command", args: { command: "make", workdir: "/srv/app" } })).toBeNull();
   });
 });
@@ -340,13 +449,21 @@ describe("password prompts (AI-47)", () => {
   });
 
   it("leave other lines alone", () => {
-    for (const line of ["kc@db1:~$", "Do you want to continue? [Y/n]", "Password changed.", "grep password config.yml", "Enter file in which to save the key (/home/kc/.ssh/id_ed25519):"])
+    for (const line of [
+      "kc@db1:~$",
+      "Do you want to continue? [Y/n]",
+      "Password changed.",
+      "grep password config.yml",
+      "Enter file in which to save the key (/home/kc/.ssh/id_ed25519):",
+    ])
       expect(passwordPrompt(line), line).toBe(false);
   });
 
   it("send send_input to the card while the screen asks for a password", () => {
     const screen = "$ sudo systemctl restart nginx\n[sudo] password for kc:";
-    expect(hardRule({ kind: "send_input", args: { text: "hunter2", key: "enter" }, screen })).toEqual({ kind: "password" });
+    expect(hardRule({ kind: "send_input", args: { text: "hunter2", key: "enter" }, screen })).toEqual({
+      kind: "password",
+    });
     expect(hardRule({ kind: "send_input", args: { key: "enter" }, screen })).toEqual({ kind: "password" });
     // Only the last line counts: the prompt was answered.
     expect(hardRule({ kind: "send_input", args: { text: "y" }, screen: `${screen}\nRestart nginx? [y/N]` })).toBeNull();
@@ -364,29 +481,48 @@ describe("MCP servers set to Always ask, and tools that cannot be found (AI-47)"
       name: "mcp__github__create_issue",
       tool: "create_issue",
       description: "",
-      annotations: { title: null, read_only_hint: null, destructive_hint: null, idempotent_hint: null, open_world_hint: null },
+      annotations: {
+        title: null,
+        read_only_hint: null,
+        destructive_hint: null,
+        idempotent_hint: null,
+        open_world_hint: null,
+      },
       always_allow: false,
     },
   });
 
   it("send those tools to the card, and leave the others to the judge", () => {
     expect(hardRule({ kind: "mcp", args: {}, mcp: info(true) })).toEqual({ kind: "mcp_always_ask" });
-    expect(hardRule({ kind: "mcp", args: { repo: "scarletkc/infra", title: "staging disk full" }, mcp: info(false) })).toBeNull();
+    expect(
+      hardRule({ kind: "mcp", args: { repo: "scarletkc/infra", title: "staging disk full" }, mcp: info(false) }),
+    ).toBeNull();
     expect(hardRule({ kind: "mcp", args: {}, mcp: null })).toEqual({ kind: "mcp_unknown" });
     // Those come first.
-    expect(hardRule({ kind: "mcp", args: { command: "rm -rf /" }, mcp: info(true) })).toEqual({ kind: "mcp_always_ask" });
+    expect(hardRule({ kind: "mcp", args: { command: "rm -rf /" }, mcp: info(true) })).toEqual({
+      kind: "mcp_always_ask",
+    });
     expect(hardRule({ kind: "mcp", args: { command: "rm -rf /" }, mcp: null })).toEqual({ kind: "mcp_unknown" });
   });
 
   it("check every string of an MCP call's arguments for the commands, nested ones too", () => {
     const mcp = (args: Record<string, unknown>) => hardRule({ kind: "mcp", args, mcp: info(false) });
     expect(mcp({ command: "rm -rf /srv/old" })).toEqual({ kind: "command", command: "rm -r" });
-    expect(mcp({ steps: [{ run: { argv: ["sudo", "shutdown", "-r", "now"] } }] })).toEqual({ kind: "command", command: "shutdown" });
+    expect(mcp({ steps: [{ run: { argv: ["sudo", "shutdown", "-r", "now"] } }] })).toEqual({
+      kind: "command",
+      command: "shutdown",
+    });
     // A command given as a list of words.
     expect(mcp({ command: "rm", args: ["-rf", "/srv/old"] })).toEqual({ kind: "command", command: "rm -r" });
-    expect(mcp({ script: "#!/bin/sh\nset -e\nmkfs.ext4 /dev/sdb1\n" })).toEqual({ kind: "command", command: "mkfs.ext4" });
+    expect(mcp({ script: "#!/bin/sh\nset -e\nmkfs.ext4 /dev/sdb1\n" })).toEqual({
+      kind: "command",
+      command: "mkfs.ext4",
+    });
     // A false alarm costs a click.
-    expect(mcp({ title: "staging disk full", body: "Do not reboot web1 before Friday." })).toEqual({ kind: "command", command: "reboot" });
+    expect(mcp({ title: "staging disk full", body: "Do not reboot web1 before Friday." })).toEqual({
+      kind: "command",
+      command: "reboot",
+    });
     // Keys are not commands, and numbers and booleans hold none.
     expect(mcp({ reboot: false, count: 3, tags: ["ops"], nested: { dd: null } })).toBeNull();
   });

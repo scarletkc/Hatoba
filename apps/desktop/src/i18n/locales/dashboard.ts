@@ -153,7 +153,8 @@ export default defineMessages({
     "dashboard.alert": "{n}% 超",
 
     "dashboard.settings.interval": "更新間隔",
-    "dashboard.settings.interval.hint": "ホストページでリソース使用状況を表示しているとき、各ホストを読み取る間隔です。",
+    "dashboard.settings.interval.hint":
+      "ホストページでリソース使用状況を表示しているとき、各ホストを読み取る間隔です。",
     "dashboard.settings.seconds": "{n} 秒",
     "dashboard.settings.cpuAlert": "CPU 使用率の強調しきい値",
     "dashboard.settings.memAlert": "メモリ使用率の強調しきい値",

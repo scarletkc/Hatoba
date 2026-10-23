@@ -67,7 +67,11 @@ export function ForwardDialog({
     () =>
       [...hosts]
         .sort((a, b) => a.name.localeCompare(b.name))
-        .map((h) => ({ value: h.id, label: h.name, hint: `${h.username ? `${h.username}@` : ""}${h.address}:${h.port}` })),
+        .map((h) => ({
+          value: h.id,
+          label: h.name,
+          hint: `${h.username ? `${h.username}@` : ""}${h.address}:${h.port}`,
+        })),
     [hosts],
   );
   const [name, setName] = useState(forward?.name ?? "");
@@ -106,7 +110,8 @@ export function ForwardDialog({
   const validate = (): Errors => {
     const e: Errors = {};
     if (!chosenHost) e.host_id = t("hosts.fwd.err.hostRequired");
-    if (!bindAddress.trim()) e.bind_address = t(remote ? "hosts.fwd.err.serverBindRequired" : "hosts.fwd.err.bindRequired");
+    if (!bindAddress.trim())
+      e.bind_address = t(remote ? "hosts.fwd.err.serverBindRequired" : "hosts.fwd.err.bindRequired");
     if (!validPort(bindPort, 0)) e.bind_port = t(remote ? "hosts.fwd.err.serverPort" : "hosts.fwd.err.localPort");
     if (hasDest && !destHost.trim()) e.dest_host = t("hosts.fwd.err.destRequired");
     if (hasDest && !validPort(destPort, 1)) e.dest_port = t("hosts.fwd.err.destPort");
@@ -240,7 +245,12 @@ export function ForwardDialog({
               onChange={changeKind}
             />
           </FormRow>
-          <FormRow label={t(remote ? "hosts.fwd.f.server" : "hosts.fwd.f.local")} htmlFor={ids.bind} columns={LABEL_COLUMN} top>
+          <FormRow
+            label={t(remote ? "hosts.fwd.f.server" : "hosts.fwd.f.local")}
+            htmlFor={ids.bind}
+            columns={LABEL_COLUMN}
+            top
+          >
             <div className={s.stack}>
               <div className={s.addrRow}>
                 <TextField

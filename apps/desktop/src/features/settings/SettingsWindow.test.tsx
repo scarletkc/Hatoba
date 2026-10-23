@@ -45,7 +45,8 @@ const byLabel = <E extends HTMLElement>(label: string) => document.querySelector
 const fontField = () => byLabel<HTMLInputElement>(t("settings.term.font"));
 const stored = async () => (await api.settings_get()).terminal;
 const scrollbackShows = (n: number) =>
-  byLabel(t("settings.term.scrollback"))?.textContent === t("settings.term.lines", { n: n.toLocaleString(getLocale()) });
+  byLabel(t("settings.term.scrollback"))?.textContent ===
+  t("settings.term.lines", { n: n.toLocaleString(getLocale()) });
 const blur = (field: HTMLElement) =>
   act(() => {
     field.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
@@ -108,7 +109,9 @@ describe("SettingsWindow", () => {
 
     act(() => useApp.getState().openSettings(true, "about"));
     await until(() => selected() === t("settings.tab.about"));
-    const general = [...document.querySelectorAll<HTMLElement>("[role=tab]")].find((el) => el.textContent === t("settings.tab.general"));
+    const general = [...document.querySelectorAll<HTMLElement>("[role=tab]")].find(
+      (el) => el.textContent === t("settings.tab.general"),
+    );
     act(() => general!.click());
     await until(() => selected() === t("settings.tab.general"));
     act(() => useApp.getState().openSettings(true, "about"));
@@ -139,7 +142,9 @@ describe("SettingsWindow", () => {
     open();
     // A card reads as its name; the miniature terminal above it is hidden from assistive tech.
     const card = (name: string) =>
-      [...document.querySelectorAll<HTMLElement>("[role=radio]")].find((el) => el.querySelector(":scope > :not([aria-hidden])")?.textContent === name);
+      [...document.querySelectorAll<HTMLElement>("[role=radio]")].find(
+        (el) => el.querySelector(":scope > :not([aria-hidden])")?.textContent === name,
+      );
     const checked = (name: string) => card(name)?.getAttribute("aria-checked") === "true";
     await until(() => card("Hatoba Dark"));
     // Nothing picked yet: Hatoba's own scheme, and only the dark ones while the terminal is always dark.
@@ -162,7 +167,9 @@ describe("SettingsWindow", () => {
     });
     await until(async () => (await stored()).dark_scheme === "dracula");
 
-    const follow = [...document.querySelectorAll<HTMLElement>("[role=radio]")].find((el) => el.textContent === t("settings.termColors.follow"));
+    const follow = [...document.querySelectorAll<HTMLElement>("[role=radio]")].find(
+      (el) => el.textContent === t("settings.termColors.follow"),
+    );
     act(() => follow!.click());
     await until(() => byLabel(t("settings.termColors.forLight")));
     expect(byLabel(t("settings.termColors.forDark"))).not.toBeNull();

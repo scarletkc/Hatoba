@@ -151,7 +151,9 @@ const cleanName = (part: string) => part.trim().replace(/[^A-Za-z0-9_-]/gu, "_")
  * numeric suffix when two collide, the first holder of a name keeping it.
  */
 export function commandNames(servers: readonly (readonly [string, readonly string[]])[]): string[][] {
-  const bases = servers.map(([server, names]) => names.map((name) => `mcp__${cleanName(server)}__${cleanName(name)}`.slice(0, MAX_NAME)));
+  const bases = servers.map(([server, names]) =>
+    names.map((name) => `mcp__${cleanName(server)}__${cleanName(name)}`.slice(0, MAX_NAME)),
+  );
   const unsuffixed = new Set(bases.flat());
   const taken = new Set<string>();
   return bases.map((list) =>
@@ -184,7 +186,11 @@ function rank(name: string, q: string): number | null {
  * The `/` menu for `query`: the built-in commands, then the skills, then the MCP prompts, each matching
  * its name (or a built-in's alias) at the start first, then anywhere.
  */
-export function commandItems(query: string, skills: readonly AiSkillCommand[], prompts: readonly PromptCommand[]): CommandItem[] {
+export function commandItems(
+  query: string,
+  skills: readonly AiSkillCommand[],
+  prompts: readonly PromptCommand[],
+): CommandItem[] {
   const q = query.toLowerCase();
   const items: { item: CommandItem; rank: number; group: number }[] = [];
   for (const command of BUILTINS) {
@@ -234,7 +240,9 @@ export function pathItems(entries: readonly AiHostEntry[], leaf: string): AiHost
   const q = leaf.toLowerCase();
   const shown = entries.filter((e) => leaf.startsWith(".") || !e.name.startsWith("."));
   const starts = shown.filter((e) => e.name.toLowerCase().startsWith(q));
-  const contains = q ? shown.filter((e) => !e.name.toLowerCase().startsWith(q) && e.name.toLowerCase().includes(q)) : [];
+  const contains = q
+    ? shown.filter((e) => !e.name.toLowerCase().startsWith(q) && e.name.toLowerCase().includes(q))
+    : [];
   return [...starts, ...contains];
 }
 

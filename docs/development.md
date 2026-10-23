@@ -235,7 +235,8 @@ CI also runs format and lint checks:
 cargo fmt --all --check
 node scripts/ci/comment-width.mjs   # Rust comment lines within 100 characters, which rustfmt does not wrap
 cargo clippy --workspace --all-targets -- -D warnings
-pnpm lint     # ESLint for the desktop frontend; warnings fail too
+pnpm lint           # ESLint for the desktop frontend; warnings fail too
+pnpm format:check   # Prettier; `pnpm format` rewrites the files it reports
 ```
 
 ## Troubleshooting

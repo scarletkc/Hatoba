@@ -157,7 +157,9 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
     setRunError(null);
     setSteps({ verify: "done" });
     try {
-      const outcome = await api.deploy_upgrade(handle.current, target(), (p) => setSteps((st) => ({ ...st, [p.step]: p.status })));
+      const outcome = await api.deploy_upgrade(handle.current, target(), (p) =>
+        setSteps((st) => ({ ...st, [p.step]: p.status })),
+      );
       setRun(outcome.ready ? "ready" : "waiting");
     } catch (e) {
       setSteps((st) => {
@@ -197,7 +199,8 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
   if (phase === "run") {
     const fixInReview = FIX_IN_REVIEW.includes(runError?.code ?? "");
     const failedStep = UPGRADE_STEPS.find((step) => steps[step] === "failed");
-    const title = run === "ready" ? t("sync.up.run.ready") : run === "failed" ? t("sync.up.run.failed") : t("sync.up.run.title");
+    const title =
+      run === "ready" ? t("sync.up.run.ready") : run === "failed" ? t("sync.up.run.failed") : t("sync.up.run.title");
     return (
       <Dialog
         title={title}
@@ -235,10 +238,14 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
         }
       >
         <div className={d.form}>
-          <StepList steps={UPGRADE_STEPS} states={steps} error={runError} label={stepLabel(t)} ariaLabel={t("sync.up.run.title")} />
-          {run === "failed" && !failedStep && runError && (
-            <ErrorText>{deployError(t, runError)}</ErrorText>
-          )}
+          <StepList
+            steps={UPGRADE_STEPS}
+            states={steps}
+            error={runError}
+            label={stepLabel(t)}
+            ariaLabel={t("sync.up.run.title")}
+          />
+          {run === "failed" && !failedStep && runError && <ErrorText>{deployError(t, runError)}</ErrorText>}
           {run === "failed" && !fixInReview && <HintText>{t("sync.up.retryHint")}</HintText>}
           {run === "waiting" && (
             <Callout icon="hourglass-medium" iconColor="var(--orange)">
@@ -280,7 +287,11 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
                 icon="buildings"
                 value={accountId}
                 placeholder={t("sync.dep.account.choose")}
-                options={start.accounts.map((a) => ({ value: a.id, label: a.name || a.id, hint: a.name ? a.id.slice(0, 8) : undefined }))}
+                options={start.accounts.map((a) => ({
+                  value: a.id,
+                  label: a.name || a.id,
+                  hint: a.name ? a.id.slice(0, 8) : undefined,
+                }))}
                 onChange={(id) => {
                   setAccountId(id);
                   void inspect(id);
@@ -303,7 +314,14 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
               </div>
             )}
           </Field>
-          <UpgradeSummary t={t} name={name} plan={plan} inspecting={inspecting} error={error} onRetry={() => void inspect(accountId.trim(), name, true)} />
+          <UpgradeSummary
+            t={t}
+            name={name}
+            plan={plan}
+            inspecting={inspecting}
+            error={error}
+            onRetry={() => void inspect(accountId.trim(), name, true)}
+          />
           {(askName || !defaults?.worker_name) && (
             <Field
               label={t("sync.dep.workerName")}
@@ -337,7 +355,13 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
           <Button onClick={onClose} disabled={busy}>
             {t("btn.cancel")}
           </Button>
-          <Button variant="primary" type="submit" form={formId} busy={busy} disabled={!defaults || !apiToken.trim() || !nameOk}>
+          <Button
+            variant="primary"
+            type="submit"
+            form={formId}
+            busy={busy}
+            disabled={!defaults || !apiToken.trim() || !nameOk}
+          >
             {t("btn.continue")}
           </Button>
         </>
@@ -459,9 +483,14 @@ function UpgradeSummary({
   if (!plan) return null;
 
   if (plan.worker !== "upgrade") {
-    const key = ({ missing: "sync.up.plan.missing", foreign: "sync.up.plan.foreign", no_vault: "sync.up.plan.noVault", newer: "sync.up.plan.newer" } as const)[
-      plan.worker
-    ];
+    const key = (
+      {
+        missing: "sync.up.plan.missing",
+        foreign: "sync.up.plan.foreign",
+        no_vault: "sync.up.plan.noVault",
+        newer: "sync.up.plan.newer",
+      } as const
+    )[plan.worker];
     return (
       <Callout icon="warning" iconColor="var(--orange)">
         {t(key, { name, version: plan.version ?? "", bundled: plan.bundled })}

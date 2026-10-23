@@ -7,7 +7,9 @@ import "./styles/base.css";
 void boot().finally(async () => {
   // The component gallery (`/?gallery`) exists only in development builds.
   const Root =
-    import.meta.env.DEV && new URLSearchParams(location.search).has("gallery") ? (await import("./app/Gallery")).Gallery : App;
+    import.meta.env.DEV && new URLSearchParams(location.search).has("gallery")
+      ? (await import("./app/Gallery")).Gallery
+      : App;
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <Root />

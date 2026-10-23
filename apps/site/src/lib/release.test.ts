@@ -13,7 +13,11 @@ const release = (tag: string, prerelease: boolean, extra: Partial<GitHubRelease>
 
 describe("selectRelease", () => {
   it("offers the newest stable release, and a newer prerelease as the preview", () => {
-    const { current, preview } = selectRelease([release("v0.2.0-beta.1", true), release("v0.1.0", false), release("v0.1.0-alpha.2", true)]);
+    const { current, preview } = selectRelease([
+      release("v0.2.0-beta.1", true),
+      release("v0.1.0", false),
+      release("v0.1.0-alpha.2", true),
+    ]);
     expect(current.tag_name).toBe("v0.1.0");
     expect(preview?.tag_name).toBe("v0.2.0-beta.1");
   });
@@ -25,7 +29,11 @@ describe("selectRelease", () => {
   });
 
   it("skips drafts and unpublished releases", () => {
-    const { current } = selectRelease([release("v0.3.0", false, { draft: true }), release("v0.2.0", false, { published_at: null }), release("v0.1.0", false)]);
+    const { current } = selectRelease([
+      release("v0.3.0", false, { draft: true }),
+      release("v0.2.0", false, { published_at: null }),
+      release("v0.1.0", false),
+    ]);
     expect(current.tag_name).toBe("v0.1.0");
   });
 
@@ -67,24 +75,34 @@ describe("downloadsOf", () => {
       ["linux", "appimage", "Hatoba_0.1.0_linux-x64.AppImage"],
       ["macos", "dmg", "Hatoba_0.1.0_macos-apple-silicon.dmg"],
     ]);
-    expect(downloads[3]).toMatchObject({ url: "https://example.com/Hatoba_0.1.0_macos-apple-silicon.dmg", sha256: "3".repeat(64), size: 1003 });
+    expect(downloads[3]).toMatchObject({
+      url: "https://example.com/Hatoba_0.1.0_macos-apple-silicon.dmg",
+      sha256: "3".repeat(64),
+      size: 1003,
+    });
   });
 
   it("leaves out an installer the release does not have, and says so", () => {
     const withoutDeb = assets.filter((asset) => !asset.name.endsWith(".deb"));
     const warnings: string[] = [];
-    const downloads = downloadsOf(release("v0.1.0", false, { assets: withoutDeb }), sums, (message) => warnings.push(message));
+    const downloads = downloadsOf(release("v0.1.0", false, { assets: withoutDeb }), sums, (message) =>
+      warnings.push(message),
+    );
     expect(downloads.map((download) => download.bundle)).toEqual(["nsis", "appimage", "dmg"]);
     expect(warnings).toEqual([expect.stringMatching(/no Hatoba_0\.1\.0_linux-x64\.deb/)]);
   });
 
   it("refuses a release without any installer for a platform", () => {
     const withoutDmg = assets.filter((asset) => !asset.name.endsWith(".dmg"));
-    expect(() => downloadsOf(release("v0.1.0", false, { assets: withoutDmg }), sums, () => {})).toThrow(/none of the macos installers/);
+    expect(() => downloadsOf(release("v0.1.0", false, { assets: withoutDmg }), sums, () => {})).toThrow(
+      /none of the macos installers/,
+    );
   });
 
   it("refuses an installer without a checksum", () => {
     const partial = new Map([...sums].filter(([name]) => !name.endsWith(".deb")));
-    expect(() => downloadsOf(release("v0.1.0", false, { assets }), partial)).toThrow(/no checksum for Hatoba_0\.1\.0_linux-x64\.deb/);
+    expect(() => downloadsOf(release("v0.1.0", false, { assets }), partial)).toThrow(
+      /no checksum for Hatoba_0\.1\.0_linux-x64\.deb/,
+    );
   });
 });

@@ -50,9 +50,10 @@ export function ErrorCard({
   const t = useT();
   const err: AppError = error ?? { code: "internal", detail: "" };
   const when = clockTime(at ?? Date.now());
-  const meta = attempts > 1
-    ? t("terminal.err.metaRetries", { code: errorCode(err), n: attempts - 1, time: when })
-    : t("terminal.err.meta", { code: errorCode(err), time: when });
+  const meta =
+    attempts > 1
+      ? t("terminal.err.metaRetries", { code: errorCode(err), n: attempts - 1, time: when })
+      : t("terminal.err.meta", { code: errorCode(err), time: when });
 
   const copyDiagnostics = async () => {
     try {
@@ -81,7 +82,10 @@ export function ErrorCard({
             {t("terminal.err.copyDiag")}
           </LinkButton>
           <div className={s.grow} />
-          <Button icon="sparkle" onClick={() => onAskAi(diagnosticsText(host ?? target, name, err, at ?? Date.now(), attempts))}>
+          <Button
+            icon="sparkle"
+            onClick={() => onAskAi(diagnosticsText(host ?? target, name, err, at ?? Date.now(), attempts))}
+          >
             {t("terminal.err.askAi")}
           </Button>
           {host && <Button onClick={onEdit}>{t("terminal.err.editHost")}</Button>}
@@ -107,7 +111,13 @@ export function LocalErrorCard({ name, error, onRetry }: { name: string; error: 
           </div>
         </div>
         {/* What the system said, as it said it: why a program does not start is rarely worth a translation. */}
-        <div className={s.cardBody}>{!error ? "" : error.code === "not_found" ? t("terminal.local.shellGone") : error.detail || errorMessage(t, error)}</div>
+        <div className={s.cardBody}>
+          {!error
+            ? ""
+            : error.code === "not_found"
+              ? t("terminal.local.shellGone")
+              : error.detail || errorMessage(t, error)}
+        </div>
         <div className={s.cardActions}>
           <div className={s.grow} />
           <Button variant="primary" icon="arrow-clockwise" onClick={onRetry}>
@@ -123,7 +133,15 @@ export function LocalErrorCard({ name, error, onRetry }: { name: string; error: 
  * SSH-07: the session ended; reconnecting is always an explicit action. A local tab's shell that
  * exited with an error says so and offers to start it again (LOCAL-01).
  */
-export function DisconnectedBanner({ reason, local, onReconnect }: { reason: string | null; local: string | null; onReconnect(): void }) {
+export function DisconnectedBanner({
+  reason,
+  local,
+  onReconnect,
+}: {
+  reason: string | null;
+  local: string | null;
+  onReconnect(): void;
+}) {
   const t = useT();
   const text = local
     ? reason

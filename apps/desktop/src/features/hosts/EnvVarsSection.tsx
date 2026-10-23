@@ -64,7 +64,8 @@ export function EnvVarsSection({
     if (p.name === "tooLong") text.push(t("hosts.env.err.nameTooLong", { max: ENV_NAME_MAX_CHARS }));
     if (p.name === "duplicate") text.push(t("hosts.env.err.nameDuplicate"));
     if (p.value === "invalid") text.push(t("hosts.env.err.valueInvalid"));
-    if (p.value === "tooLong") text.push(t("hosts.env.err.valueTooLong", { max: ENV_VALUE_MAX_CHARS.toLocaleString(t.locale) }));
+    if (p.value === "tooLong")
+      text.push(t("hosts.env.err.valueTooLong", { max: ENV_VALUE_MAX_CHARS.toLocaleString(t.locale) }));
     return text.join(" ");
   };
 
@@ -107,9 +108,7 @@ export function EnvVarsSection({
                   onClick={() => onChange(rows.filter((r) => r.uid !== row.uid))}
                 />
               </div>
-              {problem && (
-                <ErrorText className={s.problem}>{problemText(problem)}</ErrorText>
-              )}
+              {problem && <ErrorText className={s.problem}>{problemText(problem)}</ErrorText>}
             </div>
           );
         })}

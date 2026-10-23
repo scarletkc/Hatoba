@@ -69,7 +69,9 @@ async function keys(...seq) {
   const up = [...seq].reverse().map((k) => ({ type: "keyUp", value: k }));
   await wd("POST", s("/actions"), { actions: [{ type: "key", id: "kbd", actions: [...down, ...up] }] });
 }
-const CTRL = "", SHIFT = "", ENTER = "";
+const CTRL = "",
+  SHIFT = "",
+  ENTER = "";
 
 async function main() {
   const session = await wd("POST", "/session", {
@@ -111,18 +113,29 @@ async function main() {
   await shot("host-edit");
   await click(btn("Save"));
   await find(`//*[normalize-space(text())="e2e-local"]`, 10000);
-  const hostView = await js(`return document.body.innerText.includes("hatobatest@") || document.body.innerText.includes("127.0.0.1")`);
+  const hostView = await js(
+    `return document.body.innerText.includes("hatobatest@") || document.body.innerText.includes("127.0.0.1")`,
+  );
   console.log("  host row rendered:", hostView);
   await shot("host-list");
 
   // 3. Connect: TOFU host-key prompt (SSH-04), terminal I/O over the binary channel (§10.3)
   const row = await find(`//*[normalize-space(text())="e2e-local"]`);
   await wd("POST", s("/actions"), {
-    actions: [{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
-      { type: "pointerMove", origin: { [EID]: row }, x: 0, y: 0 },
-      { type: "pointerDown", button: 0 }, { type: "pointerUp", button: 0 },
-      { type: "pointerDown", button: 0 }, { type: "pointerUp", button: 0 },
-    ] }],
+    actions: [
+      {
+        type: "pointer",
+        id: "mouse",
+        parameters: { pointerType: "mouse" },
+        actions: [
+          { type: "pointerMove", origin: { [EID]: row }, x: 0, y: 0 },
+          { type: "pointerDown", button: 0 },
+          { type: "pointerUp", button: 0 },
+          { type: "pointerDown", button: 0 },
+          { type: "pointerUp", button: 0 },
+        ],
+      },
+    ],
   });
   await find(textEl("First connection to"), 20000);
   await shot("hostkey-prompt");
@@ -133,7 +146,9 @@ async function main() {
   await sleep(1500);
   // type a command into xterm's helper textarea
   const ta = await find(`//textarea[contains(@class, "xterm-helper-textarea")]`);
-  await wd("POST", s(`/element/${ta}/value`), { text: "echo e2e-$((6*7)) && printf '\\345\\244\\232\\350\\250\\200\\350\\252\\236\\n'\n" });
+  await wd("POST", s(`/element/${ta}/value`), {
+    text: "echo e2e-$((6*7)) && printf '\\345\\244\\232\\350\\250\\200\\350\\252\\236\\n'\n",
+  });
   await sleep(1500);
   await shot("terminal");
 
@@ -160,7 +175,9 @@ async function main() {
 main()
   .catch(async (e) => {
     console.error("E2E FAILED:", e.message);
-    try { await shot("failure"); } catch {}
+    try {
+      await shot("failure");
+    } catch {}
     process.exitCode = 1;
   })
   .finally(async () => {

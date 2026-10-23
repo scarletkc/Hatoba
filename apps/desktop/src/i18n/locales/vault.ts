@@ -111,7 +111,8 @@ export default defineMessages({
     "vault.unlock.footerOff": "Local vault · Sync is off",
 
     "vault.recover.title": "Reset with Recovery Code",
-    "vault.recover.subtitle": "Enter the recovery code you saved when you created the vault, then set a new master password. None of your data is lost.",
+    "vault.recover.subtitle":
+      "Enter the recovery code you saved when you created the vault, then set a new master password. None of your data is lost.",
     "vault.recover.code": "Recovery Code",
     "vault.recover.codeHint": "Not case-sensitive. Dashes and spaces are optional.",
     "vault.recover.newPassword": "New Master Password",
@@ -136,7 +137,8 @@ export default defineMessages({
     "vault.create.busy": "Creating your vault…",
 
     "vault.code.title": "Save Your Recovery Code",
-    "vault.code.body": "If you forget your master password, the recovery code is the only way back in. It is shown only once, so write it down or store it somewhere safe.",
+    "vault.code.body":
+      "If you forget your master password, the recovery code is the only way back in. It is shown only once, so write it down or store it somewhere safe.",
     "vault.code.label": "Recovery Code",
     "vault.code.save": "Save as Text",
     "vault.code.print": "Print",
@@ -144,7 +146,8 @@ export default defineMessages({
     "vault.code.savedCheck": "I’ve saved my recovery code somewhere safe",
     "vault.code.finish": "Finish Setup",
     "vault.code.fileHeader": "Hatoba Recovery Code",
-    "vault.code.fileNote": "Keep this safe and away from your devices. Anyone who has the recovery code and gets hold of your vault data can decrypt it.",
+    "vault.code.fileNote":
+      "Keep this safe and away from your devices. Anyone who has the recovery code and gets hold of your vault data can decrypt it.",
 
     "vault.restore.title": "Restore from Cloud",
     "vault.restore.body": "Enter your sync endpoint.",
@@ -192,7 +195,8 @@ export default defineMessages({
     "vault.unlock.footerOff": "ローカル保管庫 · クラウド同期はオフ",
 
     "vault.recover.title": "リカバリーコードでリセット",
-    "vault.recover.subtitle": "保管庫の作成時に保存したリカバリーコードを入力し、新しいマスターパスワードを設定します。保管庫のデータは失われません。",
+    "vault.recover.subtitle":
+      "保管庫の作成時に保存したリカバリーコードを入力し、新しいマスターパスワードを設定します。保管庫のデータは失われません。",
     "vault.recover.code": "リカバリーコード",
     "vault.recover.codeHint": "大文字・小文字は区別されません。ハイフンとスペースは省略できます。",
     "vault.recover.newPassword": "新しいマスターパスワード",
@@ -217,7 +221,8 @@ export default defineMessages({
     "vault.create.busy": "保管庫を作成しています…",
 
     "vault.code.title": "リカバリーコードを保存",
-    "vault.code.body": "マスターパスワードを忘れたとき、リカバリーコードがデータを取り戻す唯一の方法です。表示されるのは今回だけなので、書き留めるか安全な場所に保存してください。",
+    "vault.code.body":
+      "マスターパスワードを忘れたとき、リカバリーコードがデータを取り戻す唯一の方法です。表示されるのは今回だけなので、書き留めるか安全な場所に保存してください。",
     "vault.code.label": "リカバリーコード",
     "vault.code.save": "テキストで保存",
     "vault.code.print": "印刷",
@@ -225,7 +230,8 @@ export default defineMessages({
     "vault.code.savedCheck": "リカバリーコードを安全な場所に保存しました",
     "vault.code.finish": "セットアップを完了",
     "vault.code.fileHeader": "Hatoba リカバリーコード",
-    "vault.code.fileNote": "デバイスとは別の安全な場所に保管してください。リカバリーコードと保管庫のデータの両方を入手した人は、保管庫を復号できます。",
+    "vault.code.fileNote":
+      "デバイスとは別の安全な場所に保管してください。リカバリーコードと保管庫のデータの両方を入手した人は、保管庫を復号できます。",
 
     "vault.restore.title": "クラウドから復元",
     "vault.restore.body": "同期エンドポイントを入力してください。",
@@ -243,6 +249,7 @@ export default defineMessages({
     "vault.restore.passwordHint": "ほかのデバイスで設定したマスターパスワードを入力してください。",
     "vault.restore.submit": "保管庫を復元",
     "vault.restore.busy": "クラウドから復元しています…鍵の導出には数秒かかります。",
-    "vault.restore.badUrl": "Worker の完全なアドレスを入力してください（例: https://hatoba-sync.example.workers.dev）。",
+    "vault.restore.badUrl":
+      "Worker の完全なアドレスを入力してください（例: https://hatoba-sync.example.workers.dev）。",
   },
 });

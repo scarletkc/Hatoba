@@ -21,7 +21,15 @@ const ipc = vi.hoisted(() => ({
   send: vi.fn<(input: AiSendInput, onEvent: (event: AiTurnEvent) => void) => Promise<AiSendStarted>>(),
   stop: vi.fn<(conversationId: string) => Promise<void>>(),
   judge: vi.fn<(conversationId: string, toolCallId: string, screenTail: string | null) => Promise<AiAutoVerdict>>(),
-  run: vi.fn<(conversationId: string, toolCallId: string, sessionId: string | null, edited: string | null, judged: boolean) => Promise<AiToolRun>>(),
+  run: vi.fn<
+    (
+      conversationId: string,
+      toolCallId: string,
+      sessionId: string | null,
+      edited: string | null,
+      judged: boolean,
+    ) => Promise<AiToolRun>
+  >(),
   result: vi.fn<(conversationId: string, toolCallId: string, result: AiToolResultInput) => Promise<AiEntryView>>(),
   allowances: vi.fn<() => Promise<AiAllowance[]>>(),
 }));
@@ -45,9 +53,18 @@ vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, remo
 vi.mock("@/features/terminal/session", async (importActual) => {
   const line = (text: string) => ({ isWrapped: false, translateToString: () => text });
   const rows = ["$ uptime", " 10:00:00 up 3 days", "$ "];
-  const active = { type: "normal", baseY: 0, cursorY: 2, length: rows.length, getLine: (y: number) => (rows[y] === undefined ? undefined : line(rows[y])) };
+  const active = {
+    type: "normal",
+    baseY: 0,
+    cursorY: 2,
+    length: rows.length,
+    getLine: (y: number) => (rows[y] === undefined ? undefined : line(rows[y])),
+  };
   const term = { rows: rows.length, buffer: { active } };
-  return { ...(await importActual<typeof import("@/features/terminal/session")>()), getSession: (tabId: string) => (tabId === "tab-1" ? { status: "connected", term } : undefined) };
+  return {
+    ...(await importActual<typeof import("@/features/terminal/session")>()),
+    getSession: (tabId: string) => (tabId === "tab-1" ? { status: "connected", term } : undefined),
+  };
 });
 
 const { decideCall, resetForLock, sendMessage, stopTurn } = await import("./actions");
@@ -56,14 +73,21 @@ const { useTabs } = await import("@/app/tabs");
 const { MAX_CONCURRENT_CHANNELS } = await import("./batches");
 
 const TAB = "tab-1";
-const tab: SessionTab = { id: TAB, hostId: null, target: { address: "10.0.0.8", port: 22, username: "root" }, title: "root@10.0.0.8", status: "connected", sessionId: "s1" };
+const tab: SessionTab = {
+  id: TAB,
+  hostId: null,
+  target: { address: "10.0.0.8", port: 22, username: "root" },
+  title: "root@10.0.0.8",
+  status: "connected",
+  sessionId: "s1",
+};
 const view: AiConversationView = {
   id: "conv-1",
   title: "nginx",
   host_id: null,
   quick_target: null,
   origin: null,
-      local: null,
+  local: null,
   pinned: false,
   context_start: null,
   effort: null,
@@ -79,8 +103,22 @@ const provider: AiProviderView = {
   has_api_key: false,
   auth_header: "x-api-key",
   models: [
-    { id: "m1", name: "Model 1", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null },
-    { id: "judge", name: "Judge", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null },
+    {
+      id: "m1",
+      name: "Model 1",
+      context_window: null,
+      max_output_tokens: null,
+      efforts: null,
+      adaptive_thinking: null,
+    },
+    {
+      id: "judge",
+      name: "Judge",
+      context_window: null,
+      max_output_tokens: null,
+      efforts: null,
+      adaptive_thinking: null,
+    },
   ],
   updated_at: 0,
 };
@@ -92,13 +130,26 @@ const settings: AiSettingsView = {
   builtin_skill_enabled: true,
   custom_instructions: "",
   send_terminal_screen: true,
-  memory: true, text_size: 13,
+  memory: true,
+  text_size: 13,
   judge_model: { provider_id: "p1", model_id: "judge" },
 };
 
-const call = (id: string, name: string, args: Record<string, unknown>): AiToolCall => ({ id, name, arguments: JSON.stringify(args) });
+const call = (id: string, name: string, args: Record<string, unknown>): AiToolCall => ({
+  id,
+  name,
+  arguments: JSON.stringify(args),
+});
 const read = (id: string, path = `/etc/${id}`) => call(id, "read_file", { path });
-const toolEntry = (callId: string, status: "ok" | "cancelled" = "ok"): AiEntryView => ({ role: "tool", entry_id: `t-${callId}`, created_at: 0, tool_call_id: callId, status, content: "", auto: null });
+const toolEntry = (callId: string, status: "ok" | "cancelled" = "ok"): AiEntryView => ({
+  role: "tool",
+  entry_id: `t-${callId}`,
+  created_at: 0,
+  tool_call_id: callId,
+  status,
+  content: "",
+  auto: null,
+});
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 async function until(check: () => boolean) {
@@ -123,7 +174,18 @@ async function respond(mode: AiPermissionMode, calls: AiToolCall[]): Promise<Emi
   emit({ kind: "request_started" });
   emit({
     kind: "entry",
-    entry: { role: "assistant", entry_id: "a1", created_at: 0, provider_id: "p1", model_id: "m1", text: "", reasoning: null, tool_calls: calls, finish: "tool_calls", usage: null },
+    entry: {
+      role: "assistant",
+      entry_id: "a1",
+      created_at: 0,
+      provider_id: "p1",
+      model_id: "m1",
+      text: "",
+      reasoning: null,
+      tool_calls: calls,
+      finish: "tool_calls",
+      usage: null,
+    },
   });
   emit({ kind: "done", finish: "tool_calls" });
   return emit;
@@ -154,7 +216,12 @@ beforeEach(() => {
       new Promise<AiToolRun>((resolve, reject) => {
         pending.set(callId, {
           finish: () => {
-            useAi.setState((st) => ({ slots: { ...st.slots, [TAB]: { ...st.slots[TAB], entries: [...st.slots[TAB].entries, toolEntry(callId)] } } }));
+            useAi.setState((st) => ({
+              slots: {
+                ...st.slots,
+                [TAB]: { ...st.slots[TAB], entries: [...st.slots[TAB].entries, toolEntry(callId)] },
+              },
+            }));
             resolve({ entry: toolEntry(callId), dropped_file_changes: false });
           },
           fail: reject,
@@ -219,7 +286,12 @@ describe("calls that only read run together (§13.1)", () => {
   });
 
   it("runs a command that changes something alone, between reads", async () => {
-    await respond("bypass", [read("call_1"), read("call_2"), call("call_3", "run_command", { command: "systemctl reload nginx" }), read("call_4")]);
+    await respond("bypass", [
+      read("call_1"),
+      read("call_2"),
+      call("call_3", "run_command", { command: "systemctl reload nginx" }),
+      read("call_4"),
+    ]);
     await until(() => running().length === 2);
     finish("call_1");
     await flush();
@@ -247,7 +319,10 @@ describe("calls that only read run together (§13.1)", () => {
   });
 
   it("holds at most four exec channels of the connection at once", async () => {
-    await respond("manual", [1, 2, 3, 4, 5, 6].map((i) => read(`call_${i}`)));
+    await respond(
+      "manual",
+      [1, 2, 3, 4, 5, 6].map((i) => read(`call_${i}`)),
+    );
     await until(() => running().length === MAX_CONCURRENT_CHANNELS);
     await flush();
     expect(ran()).toEqual(["call_1", "call_2", "call_3", "call_4"]);
@@ -260,7 +335,10 @@ describe("calls that only read run together (§13.1)", () => {
   });
 
   it("frees the channel of a call whose tool ended while its result waits for a slower earlier call's", async () => {
-    const emit = await respond("manual", [1, 2, 3, 4, 5, 6].map((i) => read(`call_${i}`)));
+    const emit = await respond(
+      "manual",
+      [1, 2, 3, 4, 5, 6].map((i) => read(`call_${i}`)),
+    );
     await until(() => running().length === MAX_CONCURRENT_CHANNELS);
     expect(ran()).toEqual(["call_1", "call_2", "call_3", "call_4"]);
     // call_1 is slow; the reads after it are done on the host, and their results wait for call_1's.
@@ -299,13 +377,31 @@ describe("calls that only read run together (§13.1)", () => {
     await until(() => shown().join() === "call_3:approval");
     decideCall(TAB, { kind: "reject", reason: "" });
     await until(() => running().join() === "call_4");
-    expect(ipc.result).toHaveBeenCalledWith("conv-1", "call_3", { status: "rejected", content: "", edited_arguments: null, judged: false });
+    expect(ipc.result).toHaveBeenCalledWith("conv-1", "call_3", {
+      status: "rejected",
+      content: "",
+      edited_arguments: null,
+      judged: false,
+    });
     finish("call_4");
   });
 
   it("asks Auto's judge ahead about a call between reads, which runs alone once the reads are done", async () => {
-    ipc.judge.mockResolvedValue({ provider_id: "p1", model_id: "judge", decision: "run", answers: [], concerns: [], failure: null });
-    await respond("auto", [read("call_1"), read("call_2"), call("call_3", "run_command", { command: "systemctl reload nginx" }), read("call_4"), read("call_5")]);
+    ipc.judge.mockResolvedValue({
+      provider_id: "p1",
+      model_id: "judge",
+      decision: "run",
+      answers: [],
+      concerns: [],
+      failure: null,
+    });
+    await respond("auto", [
+      read("call_1"),
+      read("call_2"),
+      call("call_3", "run_command", { command: "systemctl reload nginx" }),
+      read("call_4"),
+      read("call_5"),
+    ]);
     await until(() => running().length === 2);
     // Asked as the response arrived, while the reads run.
     expect(ipc.judge.mock.calls.map((c) => c[1])).toEqual(["call_3"]);
@@ -320,7 +416,9 @@ describe("calls that only read run together (§13.1)", () => {
   });
 
   it("shows the card for calls still waiting for room after a switch to a stricter mode", async () => {
-    const fetches = Array.from({ length: 12 }, (_, i) => call(`call_${i + 1}`, "fetch_url", { url: `https://nginx.org/${i + 1}` }));
+    const fetches = Array.from({ length: 12 }, (_, i) =>
+      call(`call_${i + 1}`, "fetch_url", { url: `https://nginx.org/${i + 1}` }),
+    );
     await respond("bypass", fetches);
     await until(() => running().length === 10);
     // §13.5: a switch to a stricter mode applies to the turn's next call.
@@ -338,7 +436,10 @@ describe("calls that only read run together (§13.1)", () => {
   });
 
   it("stops every running call of a batch on Stop and starts none of the rest", async () => {
-    await respond("manual", [1, 2, 3, 4, 5, 6].map((i) => read(`call_${i}`)));
+    await respond(
+      "manual",
+      [1, 2, 3, 4, 5, 6].map((i) => read(`call_${i}`)),
+    );
     await until(() => running().length === MAX_CONCURRENT_CHANNELS);
     await stopTurn(TAB);
     expect(ipc.stop).toHaveBeenCalledWith("conv-1");

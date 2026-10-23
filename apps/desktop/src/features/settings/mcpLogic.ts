@@ -103,7 +103,12 @@ export interface SecretRow {
 let nextUid = 1;
 export const newUid = (): number => nextUid++;
 
-export const newSecretRow = (): SecretRow => ({ uid: newUid(), key: "", saved: false, draft: { mode: "replace", value: "" } });
+export const newSecretRow = (): SecretRow => ({
+  uid: newUid(),
+  key: "",
+  saved: false,
+  draft: { mode: "replace", value: "" },
+});
 
 export const savedSecretRows = (keys: readonly string[]): SecretRow[] =>
   keys.map((key) => ({ uid: newUid(), key, saved: true, draft: { mode: "keep", value: "" } }));
@@ -124,7 +129,11 @@ export const isBlankRow = (row: SecretRow): boolean =>
  * token (AI-29). A value with its own scheme, and a saved value that is kept, stay as they are.
  */
 export function withBearer(inputs: readonly McpSecretInput[]): McpSecretInput[] {
-  return inputs.map((i) => (i.key.toLowerCase() === "authorization" && i.value && !/\s/.test(i.value) ? { ...i, value: `Bearer ${i.value}` } : i));
+  return inputs.map((i) =>
+    i.key.toLowerCase() === "authorization" && i.value && !/\s/.test(i.value)
+      ? { ...i, value: `Bearer ${i.value}` }
+      : i,
+  );
 }
 
 // A name has no `=`, no whitespace, and no control character; a header name is an HTTP token (RFC 9110).
@@ -151,7 +160,10 @@ export function validateSecretRows(rows: readonly SecretRow[], kind: SecretKind)
  * The row problems to show. Like the dialog's other fields, an empty name or value is a problem only once the user
  * tried to save, so a template's empty token is not an error before it is typed.
  */
-export function shownRowProblems(problems: readonly (SecretRowProblem | null)[], submitted: boolean): (SecretRowProblem | null)[] {
+export function shownRowProblems(
+  problems: readonly (SecretRowProblem | null)[],
+  submitted: boolean,
+): (SecretRowProblem | null)[] {
   if (submitted) return [...problems];
   return problems.map((p) => (p?.key && p.key !== "empty" ? { key: p.key } : null));
 }
@@ -219,10 +231,14 @@ export function validateMcpForm(form: McpForm, otherNames: readonly string[] = [
   const name = form.name.trim();
   const url = form.url.trim();
   return {
-    name: name === "" ? "empty" : otherNames.some((n) => n.trim().toLowerCase() === name.toLowerCase()) ? "taken" : null,
+    name:
+      name === "" ? "empty" : otherNames.some((n) => n.trim().toLowerCase() === name.toLowerCase()) ? "taken" : null,
     command: form.kind === "stdio" && form.command.trim() === "" ? "empty" : null,
     url: form.kind === "http" ? (url === "" ? "empty" : parseBaseUrl(url) ? null : "invalid") : null,
-    secrets: validateSecretRows(form.kind === "stdio" ? form.env : form.headers, form.kind === "stdio" ? "env" : "header"),
+    secrets: validateSecretRows(
+      form.kind === "stdio" ? form.env : form.headers,
+      form.kind === "stdio" ? "env" : "header",
+    ),
   };
 }
 
@@ -245,7 +261,12 @@ export function mcpFormToInput(id: string | null, form: McpForm): McpServerInput
     name: form.name.trim(),
     transport:
       form.kind === "stdio"
-        ? { kind: "stdio", command: form.command.trim(), args: form.args.map((a) => a.value).filter((v) => v !== ""), env: secretInputs(form.env) }
+        ? {
+            kind: "stdio",
+            command: form.command.trim(),
+            args: form.args.map((a) => a.value).filter((v) => v !== ""),
+            env: secretInputs(form.env),
+          }
         : { kind: "http", url: form.url.trim(), headers: withBearer(secretInputs(form.headers)) },
     always_ask: form.alwaysAsk,
   };

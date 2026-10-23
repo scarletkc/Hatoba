@@ -1,4 +1,13 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { createPortal } from "react-dom";
 import { create } from "zustand";
 import { useTabs } from "@/app/tabs";
@@ -168,7 +177,9 @@ export function useCommandMenu({
     const store = (listing: AiHostListing) => {
       if (listingGen.current === gen) setListings((l) => ({ ...l, [dirKey]: listing }));
     };
-    api.ai_host_list(session, listPath(pathQuery.dir)).then(store, () => store({ status: "refused", reason: "failed" }));
+    api
+      .ai_host_list(session, listPath(pathQuery.dir))
+      .then(store, () => store({ status: "refused", reason: "failed" }));
   }, [dirKey, listings, session, pathQuery]);
   // A new opening lists again, so a file created since shows.
   useEffect(() => {
@@ -193,7 +204,8 @@ export function useCommandMenu({
     const before = draft;
     void work()
       .then((ok) => {
-        if (ok && getSlot(slotId).draft === before) replace(tr, mentionText(target), document.activeElement === input.current);
+        if (ok && getSlot(slotId).draft === before)
+          replace(tr, mentionText(target), document.activeElement === input.current);
       })
       .finally(() => {
         attachingRef.current = false;
@@ -214,9 +226,11 @@ export function useCommandMenu({
     if (session && pathQuery && dirKey) {
       const listing = listings[dirKey];
       const shownDir = pathQuery.dir || "~/";
-      if (!listing || listing === "loading") host.push({ key: "listing", icon: "", label: t("ai.mention.listing", { path: shownDir }), busy: true });
+      if (!listing || listing === "loading")
+        host.push({ key: "listing", icon: "", label: t("ai.mention.listing", { path: shownDir }), busy: true });
       else if (listing.status === "refused") {
-        if (listing.reason !== "not_found" || pathQuery.dir) host.push({ key: "refused", icon: "warning-circle", label: hostRefusal(listing.reason, shownDir, "list") });
+        if (listing.reason !== "not_found" || pathQuery.dir)
+          host.push({ key: "refused", icon: "warning-circle", label: hostRefusal(listing.reason, shownDir, "list") });
       } else {
         if (!pathQuery.leaf)
           host.push({
@@ -224,14 +238,25 @@ export function useCommandMenu({
             icon: "folder-open",
             label: shownDir,
             description: t("ai.mention.folder", { n: listing.entries.length }),
-            pick: () => attach(trigger, pathQuery.dir || "~/", () => attachHostFolder(slotId, session, listPath(pathQuery.dir))),
+            pick: () =>
+              attach(trigger, pathQuery.dir || "~/", () => attachHostFolder(slotId, session, listPath(pathQuery.dir))),
           });
         for (const entry of pathItems(listing.entries, pathQuery.leaf)) {
           const path = `${pathQuery.dir}${entry.name}`;
           host.push(
             entry.dir
-              ? { key: `d:${entry.name}`, icon: "folder", label: `${entry.name}/`, pick: () => replace(trigger, trigger.quoted || /\s/.test(path) ? `@"${path}/` : `@${path}/`) }
-              : { key: `f:${entry.name}`, icon: "file-text", label: entry.name, pick: () => attach(trigger, path, () => attachHostFile(slotId, session, path)) },
+              ? {
+                  key: `d:${entry.name}`,
+                  icon: "folder",
+                  label: `${entry.name}/`,
+                  pick: () => replace(trigger, trigger.quoted || /\s/.test(path) ? `@"${path}/` : `@${path}/`),
+                }
+              : {
+                  key: `f:${entry.name}`,
+                  icon: "file-text",
+                  label: entry.name,
+                  pick: () => attach(trigger, path, () => attachHostFile(slotId, session, path)),
+                },
           );
         }
         if (listing.cut) host.push({ key: "cut", icon: "info", label: t("ai.mention.cut") });
@@ -265,7 +290,8 @@ export function useCommandMenu({
     const room = MAX_ROWS - local.length;
     const hostRoom = Math.max(Math.ceil(room / 2), room - resources.length);
     const list = [...[...host.slice(0, hostRoom), ...resources].slice(0, room), ...local];
-    if (list.length === 0) list.push({ key: "none", icon: "info", label: session ? t("ai.mention.none") : t("ai.mention.noTerminal") });
+    if (list.length === 0)
+      list.push({ key: "none", icon: "info", label: session ? t("ai.mention.none") : t("ai.mention.noTerminal") });
     return list;
     // The pick closures read the draft through `replace` at pick time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -283,11 +309,26 @@ export function useCommandMenu({
           pick,
         };
       case "skill":
-        return { key: `s:${item.name}`, icon: "book-open-text", label: `/${item.name}`, description: item.skill.description, badge: t("ai.cmd.skill"), pick };
+        return {
+          key: `s:${item.name}`,
+          icon: "book-open-text",
+          label: `/${item.name}`,
+          description: item.skill.description,
+          badge: t("ai.cmd.skill"),
+          pick,
+        };
       case "prompt": {
         const p = item.prompt.prompt;
         const args = p.arguments.map((a) => (a.required ? `<${a.name}>` : `[${a.name}]`)).join(" ");
-        return { key: `p:${item.name}`, icon: "chat-text", label: `/${item.name}`, args: args || undefined, description: p.description || p.title || undefined, badge: item.prompt.server, pick };
+        return {
+          key: `p:${item.name}`,
+          icon: "chat-text",
+          label: `/${item.name}`,
+          args: args || undefined,
+          description: p.description || p.title || undefined,
+          badge: item.prompt.server,
+          pick,
+        };
       }
     }
   }
@@ -411,7 +452,12 @@ function MenuPopover({
       const r = box.current?.getBoundingClientRect();
       if (!r) return;
       const b = windowSurface();
-      setPos({ left: r.left, width: r.width, bottom: window.innerHeight - r.top + 6, maxHeight: Math.max(120, Math.min(360, r.top - b.top - 14)) });
+      setPos({
+        left: r.left,
+        width: r.width,
+        bottom: window.innerHeight - r.top + 6,
+        maxHeight: Math.max(120, Math.min(360, r.top - b.top - 14)),
+      });
     };
     place();
     if (typeof ResizeObserver === "undefined" || !box.current) return;
@@ -427,13 +473,24 @@ function MenuPopover({
   // The active row stays in view as ↑ and ↓ move it.
   useEffect(() => {
     if (!activeKey) return;
-    ref.current?.querySelector<HTMLElement>(`[data-key="${CSS.escape(activeKey)}"]`)?.scrollIntoView({ block: "nearest" });
+    ref.current
+      ?.querySelector<HTMLElement>(`[data-key="${CSS.escape(activeKey)}"]`)
+      ?.scrollIntoView({ block: "nearest" });
   }, [activeKey]);
 
   if (locked || !pos) return null;
   return createPortal(
     // The box keeps the focus when the list's padding or scroll bar is clicked too.
-    <div ref={ref} id={id} role="listbox" aria-label={label} aria-busy={busy} className={cx(s.menu, overlayStyles.popIn)} style={pos} onMouseDown={(e) => e.preventDefault()}>
+    <div
+      ref={ref}
+      id={id}
+      role="listbox"
+      aria-label={label}
+      aria-busy={busy}
+      className={cx(s.menu, overlayStyles.popIn)}
+      style={pos}
+      onMouseDown={(e) => e.preventDefault()}
+    >
       {rows.map((row) => {
         const selected = row.key === activeKey;
         return (

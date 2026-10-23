@@ -55,7 +55,9 @@ function type(field: HTMLInputElement | HTMLTextAreaElement, text: string) {
 /** Opens the menu of a popup button and picks the option labelled `label`. */
 function pick(button: HTMLButtonElement, label: string) {
   act(() => button.click());
-  const option = [...document.querySelectorAll<HTMLButtonElement>("[role=menu] button")].find((b) => b.textContent === label);
+  const option = [...document.querySelectorAll<HTMLButtonElement>("[role=menu] button")].find(
+    (b) => b.textContent === label,
+  );
   if (!option) throw new Error(`no option ${label}`);
   act(() => option.click());
 }
@@ -139,8 +141,18 @@ describe("AiPane", () => {
     let first!: SearchProviderView;
     let second!: SearchProviderView;
     await act(async () => {
-      first = await api.search_provider_save({ id: null, kind: "searxng", base_url: "http://127.0.0.1:8001", api_key: null });
-      second = await api.search_provider_save({ id: null, kind: "searxng", base_url: "http://127.0.0.1:8002", api_key: null });
+      first = await api.search_provider_save({
+        id: null,
+        kind: "searxng",
+        base_url: "http://127.0.0.1:8001",
+        api_key: null,
+      });
+      second = await api.search_provider_save({
+        id: null,
+        kind: "searxng",
+        base_url: "http://127.0.0.1:8002",
+        api_key: null,
+      });
       await api.ai_settings_save({ search_provider_id: first.id });
     });
     render();
@@ -150,11 +162,15 @@ describe("AiPane", () => {
     });
 
     type(url, "http://127.0.0.1:8003");
-    await act(() => api.ai_settings_save({ search_provider_id: second.id, custom_instructions: "Use the other instance." }));
+    await act(() =>
+      api.ai_settings_save({ search_provider_id: second.id, custom_instructions: "Use the other instance." }),
+    );
     act(() => useApp.getState().refreshSynced());
     await until(() => instructions()?.value === "Use the other instance.");
     expect(url.value).toBe("http://127.0.0.1:8003");
-    const save = [...document.querySelectorAll<HTMLButtonElement>("button")].filter((b) => b.textContent === t("btn.save"));
+    const save = [...document.querySelectorAll<HTMLButtonElement>("button")].filter(
+      (b) => b.textContent === t("btn.save"),
+    );
     expect(save).toHaveLength(1);
     act(() => save[0].click());
 
@@ -167,12 +183,17 @@ describe("AiPane", () => {
   it("offers Auto as the default mode once a judge is chosen (AI-47)", async () => {
     await act(() => api.ai_settings_save({ judge_model: null }));
     render();
-    const auto = () => [...document.querySelectorAll<HTMLButtonElement>("[role=radio]")].find((b) => b.textContent === t("aiSettings.mode.auto"));
+    const auto = () =>
+      [...document.querySelectorAll<HTMLButtonElement>("[role=radio]")].find(
+        (b) => b.textContent === t("aiSettings.mode.auto"),
+      );
     await until(() => document.body.textContent?.includes(t("aiSettings.mode.hintNoJudge")));
     expect(auto()?.disabled).toBe(true);
 
     // A judge chosen on another device arrives with a sync.
-    await act(() => api.ai_settings_save({ judge_model: { provider_id: "p-anthropic", model_id: "claude-haiku-5-5" } }));
+    await act(() =>
+      api.ai_settings_save({ judge_model: { provider_id: "p-anthropic", model_id: "claude-haiku-5-5" } }),
+    );
     act(() => useApp.getState().refreshSynced());
     await until(() => auto()?.disabled === false);
     expect(document.body.textContent).not.toContain(t("aiSettings.mode.hintNoJudge"));
@@ -185,7 +206,10 @@ describe("AiPane", () => {
     render();
     const judge = await until(() => byLabel<HTMLButtonElement>(t("aiSettings.judge.row")));
     expect(judge.textContent).toBe(t("aiSettings.judge.placeholder"));
-    const test = () => [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === t("aiSettings.judge.test"));
+    const test = () =>
+      [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+        (b) => b.textContent === t("aiSettings.judge.test"),
+      );
     expect(test()?.disabled).toBe(true);
 
     // The mock's System One provider, TypeSafe, may judge but not chat.
@@ -206,14 +230,23 @@ describe("AiPane", () => {
     const marks = (label: string) => document.querySelectorAll(`[role=img][aria-label="${label}"]`).length;
     // The count shows; each sample shows under Details.
     expect(marks(t("aiSettings.judge.test.match"))).toBe(0);
-    const details = [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === t("aiSettings.judge.test.details"))!;
+    const details = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+      (b) => b.textContent === t("aiSettings.judge.test.details"),
+    )!;
     expect(details.getAttribute("aria-expanded")).toBe("false");
     act(() => details.click());
     expect(details.getAttribute("aria-expanded")).toBe("true");
     expect(marks(t("aiSettings.judge.test.match"))).toBe(12);
     expect(marks(t("aiSettings.judge.test.mismatch"))).toBe(1);
     const text = document.body.textContent ?? "";
-    for (const name of ["disk_space", "restart_requested_zh", "pipe_to_shell", "key_via_shell", "token_in_url", "input_read"] as const) {
+    for (const name of [
+      "disk_space",
+      "restart_requested_zh",
+      "pipe_to_shell",
+      "key_via_shell",
+      "token_in_url",
+      "input_read",
+    ] as const) {
       expect(text).toContain(t(`aiSettings.judge.sample.${name}`));
     }
     // The mismatch: a restart asked for in Chinese, which the judge asked about.

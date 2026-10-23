@@ -58,7 +58,9 @@ export function percent(p: number): string {
 
 /** The judge's answers in its order, such as "requested 96% · changes something 71%"; an unknown question by its id. */
 export function answersText(t: Tr, answers: readonly AiJudgeAnswer[]): string {
-  return answers.map((a) => `${QUESTION[a.question] ? t(QUESTION[a.question]) : a.question} ${percent(a.probability)}`).join(" · ");
+  return answers
+    .map((a) => `${QUESTION[a.question] ? t(QUESTION[a.question]) : a.question} ${percent(a.probability)}`)
+    .join(" · ");
 }
 
 /**

@@ -12,7 +12,9 @@
   color: var(--fg);
   font-size: var(--text-md);
   line-height: 1.35;
-  box-shadow: 0 0 0 0.5px var(--winline), var(--shadow);
+  box-shadow:
+    0 0 0 0.5px var(--winline),
+    var(--shadow);
   animation: rise var(--motion-base) var(--ease-out);
 }
 

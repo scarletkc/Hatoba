@@ -37,7 +37,13 @@ describe("triggers (AI-50, AI-51)", () => {
     expect(triggerAt("mail me@host", 12)).toBeNull();
     expect(triggerAt("@etc ", 5)).toBeNull();
     expect(triggerAt("@etc", 1, 4)).toBeNull();
-    expect(triggerAt('a @"My Docs/no', 14)).toEqual({ sign: "@", start: 2, end: 14, query: "My Docs/no", quoted: true });
+    expect(triggerAt('a @"My Docs/no', 14)).toEqual({
+      sign: "@",
+      start: 2,
+      end: 14,
+      query: "My Docs/no",
+      quoted: true,
+    });
     expect(triggerAt('@"done" x', 9)).toBeNull();
   });
 
@@ -50,7 +56,10 @@ describe("triggers (AI-50, AI-51)", () => {
     expect(replaceTrigger('@"My Docs" x', quoted, '@"My Docs/" ')).toEqual({ text: '@"My Docs/" x', caret: 12 });
     // A later quote after a space closes some other text, not the mention.
     const open = triggerAt('check @"my d and tell me "why"', 12)!;
-    expect(replaceTrigger('check @"my d and tell me "why"', open, '@"my dir/')).toEqual({ text: 'check @"my dir/ and tell me "why"', caret: 15 });
+    expect(replaceTrigger('check @"my d and tell me "why"', open, '@"my dir/')).toEqual({
+      text: 'check @"my dir/ and tell me "why"',
+      caret: 15,
+    });
     const slash = triggerAt("/co", 3)!;
     expect(replaceTrigger("/co", slash, "/compact ").text).toBe("/compact ");
   });
@@ -113,7 +122,12 @@ describe("the / menu (AI-50)", () => {
   const prompt = (command: string, required = false): PromptCommand => ({
     serverId: "s1",
     server: "github",
-    prompt: { name: command.split("__").pop()!, title: null, description: "", arguments: [{ name: "pr", description: "", required }] } satisfies McpPromptView,
+    prompt: {
+      name: command.split("__").pop()!,
+      title: null,
+      description: "",
+      arguments: [{ name: "pr", description: "", required }],
+    } satisfies McpPromptView,
     command,
   });
   // Sorted by name, as Rust lists them.
@@ -124,7 +138,8 @@ describe("the / menu (AI-50)", () => {
   ];
 
   it("lists built-ins, skills and prompts, names that start with the query first", () => {
-    const names = (q: string) => commandItems(q, skills, [prompt("mcp__github__review")]).map((i) => `${i.kind}:${i.name}`);
+    const names = (q: string) =>
+      commandItems(q, skills, [prompt("mcp__github__review")]).map((i) => `${i.kind}:${i.name}`);
     expect(names("")).toEqual([
       "builtin:btw",
       "builtin:clear",
@@ -193,12 +208,19 @@ describe("the @ menu (AI-51)", () => {
 
 describe("prompt command names (AI-50)", () => {
   it("names prompts as MCP tools are named, numbering collisions", () => {
-    expect(commandNames([["GitHub Server", ["review pr", "triage"]], ["files", ["read"]]])).toEqual([
-      ["mcp__GitHub_Server__review_pr", "mcp__GitHub_Server__triage"],
-      ["mcp__files__read"],
-    ]);
+    expect(
+      commandNames([
+        ["GitHub Server", ["review pr", "triage"]],
+        ["files", ["read"]],
+      ]),
+    ).toEqual([["mcp__GitHub_Server__review_pr", "mcp__GitHub_Server__triage"], ["mcp__files__read"]]);
     // Two servers of one name: the first keeps the name.
-    expect(commandNames([["docs", ["a"]], ["docs", ["a"]]])).toEqual([["mcp__docs__a"], ["mcp__docs__a_2"]]);
+    expect(
+      commandNames([
+        ["docs", ["a"]],
+        ["docs", ["a"]],
+      ]),
+    ).toEqual([["mcp__docs__a"], ["mcp__docs__a_2"]]);
     // A suffix never takes a name another prompt has without one, and long names keep 64 characters.
     expect(commandNames([["s", ["x", "x", "x_2"]]])).toEqual([["mcp__s__x", "mcp__s__x_3", "mcp__s__x_2"]]);
     const long = commandNames([["s", ["p".repeat(80), "p".repeat(80)]]])[0];

@@ -11,7 +11,10 @@ import s from "./RecoverSheet.module.css";
 
 /** "ab12 cd34" → "AB12-CD34": accepts dashes and spaces, uppercases, regroups by four. */
 function formatCode(raw: string): string {
-  const clean = raw.toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 40);
+  const clean = raw
+    .toUpperCase()
+    .replace(/[^0-9A-Z]/g, "")
+    .slice(0, 40);
   return clean.match(/.{1,4}/g)?.join("-") ?? "";
 }
 

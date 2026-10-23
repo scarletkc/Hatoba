@@ -99,7 +99,10 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
   const here = (c: { server: string }) => c.server === ask.server;
   const anyHere = newestFirst.some(here);
   // Why a file on another server is not reverted from this tab.
-  const elsewhere = ask.server === null ? t("ai.revert.failed.disconnected") : t("ai.editFiles.otherServer", { server: serverLabel(t, ask.server) });
+  const elsewhere =
+    ask.server === null
+      ? t("ai.revert.failed.disconnected")
+      : t("ai.editFiles.otherServer", { server: serverLabel(t, ask.server) });
 
   // What reverting each change writes back: from what the call wrote to what the file held before.
   useEffect(() => {
@@ -139,7 +142,11 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
       }
       let result: Result;
       if (outcome.status === "reverted") result = { state: "reverted" };
-      else if (outcome.status === "changed") result = { state: "failed", reason: t(outcome.current === null ? "ai.editFiles.gone" : "ai.editFiles.changed") };
+      else if (outcome.status === "changed")
+        result = {
+          state: "failed",
+          reason: t(outcome.current === null ? "ai.editFiles.gone" : "ai.editFiles.changed"),
+        };
       else result = { state: "failed", reason: revertFailure(t, outcome.reason, outcome.detail) };
       failed ||= result.state === "failed";
       setResults((r) => ({ ...r, [key]: result }));
@@ -175,7 +182,12 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
               <Button disabled={reverting} onClick={() => close(ask, true)}>
                 {t("ai.editFiles.keep")}
               </Button>
-              <Button icon="arrow-counter-clockwise" busy={reverting} disabled={!anyHere} onClick={() => void revertAll()}>
+              <Button
+                icon="arrow-counter-clockwise"
+                busy={reverting}
+                disabled={!anyHere}
+                onClick={() => void revertAll()}
+              >
                 {t("ai.editFiles.revert")}
               </Button>
             </>
@@ -197,7 +209,12 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
           // Reverting every change of the file deletes it when its oldest call created it.
           const created = group.changes[group.changes.length - 1].created;
           const counted = group.changes.map((c) => stats[keyOf(c)]);
-          const lines = counted.every(Boolean) ? counted.reduce((sum, x) => ({ added: sum.added + x!.added, removed: sum.removed + x!.removed }), { added: 0, removed: 0 }) : null;
+          const lines = counted.every(Boolean)
+            ? counted.reduce((sum, x) => ({ added: sum.added + x!.added, removed: sum.removed + x!.removed }), {
+                added: 0,
+                removed: 0,
+              })
+            : null;
           return (
             <li key={group.key} className={s.file}>
               <ListRow

@@ -7,7 +7,15 @@ import { openExternal } from "@/features/sync/external";
 import { EFFORTS, UNKNOWN_EFFORTS, effortKey } from "@/features/ai/effort";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
-import type { AiAuthHeader, AiChatgptView, AiEffort, AiModel, AiProtocol, AiProviderInput, AiProviderView } from "@/ipc/types";
+import type {
+  AiAuthHeader,
+  AiChatgptView,
+  AiEffort,
+  AiModel,
+  AiProtocol,
+  AiProviderInput,
+  AiProviderView,
+} from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import {
@@ -186,8 +194,10 @@ export function ProviderDialog({
       onClose();
     } catch (err) {
       const ae = toAppError(err);
-      if (ae.code === "invalid_input" && ae.field === "base_url") showErrors({ baseUrl: t("aiSettings.err.urlRejected") });
-      else if (ae.code === "invalid_input" && ae.field === "name") showErrors({ name: t("aiSettings.err.nameRequired") });
+      if (ae.code === "invalid_input" && ae.field === "base_url")
+        showErrors({ baseUrl: t("aiSettings.err.urlRejected") });
+      else if (ae.code === "invalid_input" && ae.field === "name")
+        showErrors({ name: t("aiSettings.err.nameRequired") });
       else setErrors({ general: aiErrorMessage(t, err) });
       setSaving(false);
     }
@@ -231,7 +241,9 @@ export function ProviderDialog({
       setTest(IDLE);
       if (models !== provider.models) setForm((f) => ({ ...f, models: addModels(f.models, models) }));
       toast(
-        result.provider.chatgpt?.status === "plan_disabled" ? t("aiSettings.chatgpt.status.plan_disabled") : t("aiSettings.chatgpt.signedIn"),
+        result.provider.chatgpt?.status === "plan_disabled"
+          ? t("aiSettings.chatgpt.status.plan_disabled")
+          : t("aiSettings.chatgpt.signedIn"),
         result.provider.chatgpt?.status === "plan_disabled" ? "error" : "success",
       );
     } catch (err) {
@@ -253,7 +265,11 @@ export function ProviderDialog({
       if (!live.current) return;
       setAccount(next);
       setTest(IDLE);
-      toast(revoked ? t("aiSettings.chatgpt.signedOut") : t("aiSettings.chatgpt.signedOutUnconfirmed"), revoked ? "info" : "error", revoked ? 2600 : 8000);
+      toast(
+        revoked ? t("aiSettings.chatgpt.signedOut") : t("aiSettings.chatgpt.signedOutUnconfirmed"),
+        revoked ? "info" : "error",
+        revoked ? 2600 : 8000,
+      );
     } catch (err) {
       if (live.current) toast(aiErrorMessage(t, err), "error");
     } finally {
@@ -293,7 +309,9 @@ export function ProviderDialog({
   };
 
   const togglePicked = (m: AiModel) =>
-    patchModels(form.models.some((d) => d.id.trim() === m.id) ? removeModel(form.models, m.id) : addModels(form.models, [m]));
+    patchModels(
+      form.models.some((d) => d.id.trim() === m.id) ? removeModel(form.models, m.id) : addModels(form.models, [m]),
+    );
 
   const protocolOptions = [
     { value: "chat_completions" as const, label: t("aiSettings.protocol.chat_completions") },
@@ -306,7 +324,8 @@ export function ProviderDialog({
     const p = problems[modelProblem];
     if (!p) return null;
     if (p.id === "empty") return t("aiSettings.models.err.idEmpty");
-    if (p.id === "duplicate") return t("aiSettings.models.err.idDuplicate", { id: form.models[modelProblem].id.trim() });
+    if (p.id === "duplicate")
+      return t("aiSettings.models.err.idDuplicate", { id: form.models[modelProblem].id.trim() });
     return t("aiSettings.models.err.tokens");
   };
 
@@ -360,55 +379,55 @@ export function ProviderDialog({
           )}
           {!account && (
             <>
-          <FormRow label={t("aiSettings.f.protocol")} top={decision}>
-            <div className={s.protocol}>
-              <PopupSelect<AiProtocol>
-                ariaLabel={t("aiSettings.f.protocol")}
-                value={form.protocol}
-                options={protocolOptions}
-                onChange={(protocol) => patchConnection({ protocol, protocolChosen: true })}
-              />
-              {decision && <HintText>{t("aiSettings.f.protocol.system_one")}</HintText>}
-            </div>
-          </FormRow>
-          <FormRow label={t("aiSettings.f.baseUrl")} htmlFor={ids.url} top error={errors.baseUrl}>
-            <div className={s.stack}>
-              <TextField
-                id={ids.url}
-                mono
-                value={form.baseUrl}
-                invalid={!!errors.baseUrl}
-                placeholder={PLACEHOLDER_URL[form.protocol]}
-                onChange={(e) => setBaseUrl(e.target.value)}
-              />
-              <HintText>{t(`aiSettings.f.baseUrl.${form.protocol}` as MessageKey)}</HintText>
-            </div>
-          </FormRow>
-          <FormRow label={t("aiSettings.f.apiKey")} htmlFor={ids.key}>
-            <SavedKeyField
-              id={ids.key}
-              hasSaved={hasSavedKey}
-              draft={form.key}
-              placeholder={t("aiSettings.f.apiKeyPlaceholder")}
-              onChange={(key) => patchConnection({ key })}
-            />
-          </FormRow>
-          {form.protocol === "anthropic" && (
-            <FormRow label={t("aiSettings.f.authHeader")} top>
-              <div className={s.stack}>
-                <Segmented<AiAuthHeader>
-                  ariaLabel={t("aiSettings.f.authHeader")}
-                  value={form.authHeader}
-                  options={[
-                    { value: "x-api-key", label: "x-api-key" },
-                    { value: "authorization", label: "Authorization: Bearer" },
-                  ]}
-                  onChange={(authHeader) => patchConnection({ authHeader })}
+              <FormRow label={t("aiSettings.f.protocol")} top={decision}>
+                <div className={s.protocol}>
+                  <PopupSelect<AiProtocol>
+                    ariaLabel={t("aiSettings.f.protocol")}
+                    value={form.protocol}
+                    options={protocolOptions}
+                    onChange={(protocol) => patchConnection({ protocol, protocolChosen: true })}
+                  />
+                  {decision && <HintText>{t("aiSettings.f.protocol.system_one")}</HintText>}
+                </div>
+              </FormRow>
+              <FormRow label={t("aiSettings.f.baseUrl")} htmlFor={ids.url} top error={errors.baseUrl}>
+                <div className={s.stack}>
+                  <TextField
+                    id={ids.url}
+                    mono
+                    value={form.baseUrl}
+                    invalid={!!errors.baseUrl}
+                    placeholder={PLACEHOLDER_URL[form.protocol]}
+                    onChange={(e) => setBaseUrl(e.target.value)}
+                  />
+                  <HintText>{t(`aiSettings.f.baseUrl.${form.protocol}` as MessageKey)}</HintText>
+                </div>
+              </FormRow>
+              <FormRow label={t("aiSettings.f.apiKey")} htmlFor={ids.key}>
+                <SavedKeyField
+                  id={ids.key}
+                  hasSaved={hasSavedKey}
+                  draft={form.key}
+                  placeholder={t("aiSettings.f.apiKeyPlaceholder")}
+                  onChange={(key) => patchConnection({ key })}
                 />
-                <HintText>{t("aiSettings.f.authHeader.hint")}</HintText>
-              </div>
-            </FormRow>
-          )}
+              </FormRow>
+              {form.protocol === "anthropic" && (
+                <FormRow label={t("aiSettings.f.authHeader")} top>
+                  <div className={s.stack}>
+                    <Segmented<AiAuthHeader>
+                      ariaLabel={t("aiSettings.f.authHeader")}
+                      value={form.authHeader}
+                      options={[
+                        { value: "x-api-key", label: "x-api-key" },
+                        { value: "authorization", label: "Authorization: Bearer" },
+                      ]}
+                      onChange={(authHeader) => patchConnection({ authHeader })}
+                    />
+                    <HintText>{t("aiSettings.f.authHeader.hint")}</HintText>
+                  </div>
+                </FormRow>
+              )}
             </>
           )}
         </Group>
@@ -416,7 +435,12 @@ export function ProviderDialog({
         <Section title={t("aiSettings.models")}>
           <div className={s.modelsBar}>
             <HintText className={s.modelsHint}>{t("aiSettings.models.hint")}</HintText>
-            <Button size="sm" icon="cloud-arrow-down" busy={fetched.state === "loading"} onClick={() => void fetchModels()}>
+            <Button
+              size="sm"
+              icon="cloud-arrow-down"
+              busy={fetched.state === "loading"}
+              onClick={() => void fetchModels()}
+            >
               {t("aiSettings.models.fetch")}
             </Button>
           </div>
@@ -488,7 +512,11 @@ export function ProviderDialog({
                           placeholder={t("aiSettings.models.unknown")}
                           onChange={(e) => setRow(i, { output: e.target.value })}
                         />
-                        <EffortCell id={d.id.trim() || d.name} efforts={d.efforts} onChange={(efforts) => setRow(i, { efforts })} />
+                        <EffortCell
+                          id={d.id.trim() || d.name}
+                          efforts={d.efforts}
+                          onChange={(efforts) => setRow(i, { efforts })}
+                        />
                       </>
                     )}
                     <IconButton
@@ -502,9 +530,7 @@ export function ProviderDialog({
               </div>
             )}
           </Group>
-          {modelProblem >= 0 && (
-            <ErrorText>{modelMessage()}</ErrorText>
-          )}
+          {modelProblem >= 0 && <ErrorText>{modelMessage()}</ErrorText>}
 
           <div className={s.addRow}>
             <TextField
@@ -528,9 +554,7 @@ export function ProviderDialog({
 
         <TestConnection scope="provider" state={test} chatgpt={!!account} onRun={() => void runTest()} />
 
-        {errors.general && (
-          <ErrorText>{errors.general}</ErrorText>
-        )}
+        {errors.general && <ErrorText>{errors.general}</ErrorText>}
       </form>
     </Sheet>
   );
@@ -589,7 +613,15 @@ function ChatgptAccount({
  * AI-05: the thinking levels a model accepts, ticked in a menu. Unknown levels show as what the panel
  * offers for them (Low to High); unticking them all leaves the model with Default only.
  */
-function EffortCell({ id, efforts, onChange }: { id: string; efforts: AiEffort[] | null; onChange: (efforts: AiEffort[]) => void }) {
+function EffortCell({
+  id,
+  efforts,
+  onChange,
+}: {
+  id: string;
+  efforts: AiEffort[] | null;
+  onChange: (efforts: AiEffort[]) => void;
+}) {
   const t = useT();
   const menu = useMenu();
   const ref = useRef<HTMLButtonElement>(null);
@@ -668,7 +700,9 @@ function ModelPicker({
       </div>
       <div className={s.pickerList} role="group" aria-label={t("aiSettings.models")}>
         {list.length === 0 && <div className={s.pickerNote}>{t("aiSettings.models.picker.empty")}</div>}
-        {list.length > 0 && matches.length === 0 && <div className={s.pickerNote}>{t("aiSettings.models.picker.noMatch")}</div>}
+        {list.length > 0 && matches.length === 0 && (
+          <div className={s.pickerNote}>{t("aiSettings.models.picker.noMatch")}</div>
+        )}
         {shown.map((m) => {
           const on = picked.has(m.id);
           return (

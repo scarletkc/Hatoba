@@ -40,7 +40,13 @@ const model = (id: string, extra: Partial<AiModel> = {}): AiModel => ({
 });
 
 /** A row as the form holds it; nothing is known about its thinking levels unless given. */
-const draft = (id: string, name: string, context: string, output: string, extra: Partial<ModelDraft> = {}): ModelDraft => ({
+const draft = (
+  id: string,
+  name: string,
+  context: string,
+  output: string,
+  extra: Partial<ModelDraft> = {},
+): ModelDraft => ({
   id,
   name,
   context,
@@ -78,7 +84,9 @@ describe("suggestProtocol", () => {
     expect(suggestProtocol("api.typesafe.ai")).toBe("system_one");
     expect(suggestProtocol("https://openrouter.ai/api/v1/systemone/")).toBe("system_one");
     expect(suggestProtocol("https://api.cloudflare.com/client/v4/accounts/abc123/ai/run")).toBe("system_one");
-    expect(suggestProtocol("https://api.cloudflare.com/client/v4/accounts/abc123/ai/run/@cf/cloudflare/clef-flash")).toBe("system_one");
+    expect(
+      suggestProtocol("https://api.cloudflare.com/client/v4/accounts/abc123/ai/run/@cf/cloudflare/clef-flash"),
+    ).toBe("system_one");
     // OpenRouter's chat endpoint and Workers AI's OpenAI-compatible one chat.
     expect(suggestProtocol("https://openrouter.ai/api/v1")).toBe("chat_completions");
     expect(suggestProtocol("https://api.cloudflare.com/client/v4/accounts/abc123/ai/v1")).toBe("chat_completions");
@@ -171,13 +179,24 @@ describe("model rows", () => {
   const rows = (...ms: AiModel[]): ModelDraft[] => ms.map(toDraft);
 
   it("adds new models with their limits", () => {
-    const next = addModels([], [model("gpt-5", { name: "GPT-5", context_window: 400_000, max_output_tokens: 128_000 })]);
+    const next = addModels(
+      [],
+      [model("gpt-5", { name: "GPT-5", context_window: 400_000, max_output_tokens: 128_000 })],
+    );
     expect(next).toEqual([draft("gpt-5", "GPT-5", "400K", "128K")]);
   });
 
   it("keeps what the user entered for a model that is already there", () => {
     const current = [draft("m", "My Model", "64K", "", { efforts: ["low"] })];
-    const next = addModels(current, [model("m", { name: "Fetched", context_window: 200_000, max_output_tokens: 8_192, efforts: ["high"], adaptive_thinking: true })]);
+    const next = addModels(current, [
+      model("m", {
+        name: "Fetched",
+        context_window: 200_000,
+        max_output_tokens: 8_192,
+        efforts: ["high"],
+        adaptive_thinking: true,
+      }),
+    ]);
     // AI-05: levels the user set stay, and only unknown capabilities are filled in.
     expect(next).toEqual([draft("m", "My Model", "64K", "8192", { efforts: ["low"], adaptive: true })]);
     expect(current[0].output).toBe("");
@@ -192,8 +211,15 @@ describe("model rows", () => {
   });
 
   it("fills unknown levels of rows already in the form from a fetched list", () => {
-    const rows = [draft("claude-opus-5-5", "Opus", "", ""), draft("set", "Set", "", "", { efforts: ["low"] }), draft("gone", "Gone", "", "")];
-    const list = [model("claude-opus-5-5", { efforts: ["low", "medium"], adaptive_thinking: true }), model("set", { efforts: ["max"] })];
+    const rows = [
+      draft("claude-opus-5-5", "Opus", "", ""),
+      draft("set", "Set", "", "", { efforts: ["low"] }),
+      draft("gone", "Gone", "", ""),
+    ];
+    const list = [
+      model("claude-opus-5-5", { efforts: ["low", "medium"], adaptive_thinking: true }),
+      model("set", { efforts: ["max"] }),
+    ];
     const next = withListedCapabilities(rows, list);
     expect(next.map((d) => [d.id, d.efforts, d.adaptive])).toEqual([
       ["claude-opus-5-5", ["low", "medium"], true],
@@ -238,7 +264,11 @@ describe("model rows", () => {
   });
 
   it("turns rows into models", () => {
-    const models = toModels([draft(" claude-x ", "", "1M", "64k"), draft("", "ghost", "", ""), draft("local", "Local", "bogus", "")]);
+    const models = toModels([
+      draft(" claude-x ", "", "1M", "64k"),
+      draft("", "ghost", "", ""),
+      draft("local", "Local", "bogus", ""),
+    ]);
     expect(models).toEqual([
       model("claude-x", { context_window: 1_000_000, max_output_tokens: 64_000 }),
       model("local", { name: "Local" }),
@@ -275,13 +305,39 @@ describe("default model", () => {
   const search: SearchProviderView[] = [{ id: "s1", kind: "brave", base_url: null, has_api_key: true, updated_at: 5 }];
 
   it("keeps a default that still exists", () => {
-    const settings = { default_model: { provider_id: "c", model_id: "c1" }, default_effort: "max" as const, search_provider_id: "s1", native_search: true, builtin_skill_enabled: false, custom_instructions: "", send_terminal_screen: true, memory: true, text_size: 13, judge_model: null };
+    const settings = {
+      default_model: { provider_id: "c", model_id: "c1" },
+      default_effort: "max" as const,
+      search_provider_id: "s1",
+      native_search: true,
+      builtin_skill_enabled: false,
+      custom_instructions: "",
+      send_terminal_screen: true,
+      memory: true,
+      text_size: 13,
+      judge_model: null,
+    };
     expect(sanitizeSettings(settings, providers, search)).toEqual(settings);
   });
 
   it("drops a default whose provider, model or search provider is gone", () => {
     expect(
-      sanitizeSettings({ default_model: { provider_id: "z", model_id: "a1" }, default_effort: "low", search_provider_id: "s9", native_search: true, builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: true, memory: true, text_size: 13, judge_model: null }, providers, search),
+      sanitizeSettings(
+        {
+          default_model: { provider_id: "z", model_id: "a1" },
+          default_effort: "low",
+          search_provider_id: "s9",
+          native_search: true,
+          builtin_skill_enabled: true,
+          custom_instructions: "",
+          send_terminal_screen: true,
+          memory: true,
+          text_size: 13,
+          judge_model: null,
+        },
+        providers,
+        search,
+      ),
     ).toEqual({
       default_model: null,
       default_effort: "low",
@@ -290,30 +346,80 @@ describe("default model", () => {
       builtin_skill_enabled: true,
       custom_instructions: "",
       send_terminal_screen: true,
-      memory: true, text_size: 13,
+      memory: true,
+      text_size: 13,
       judge_model: null,
     });
     expect(
-      sanitizeSettings({ default_model: { provider_id: "a", model_id: "gone" }, default_effort: null, search_provider_id: null, native_search: true, builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: true, memory: true, text_size: 13, judge_model: null }, providers, search)
-        .default_model,
+      sanitizeSettings(
+        {
+          default_model: { provider_id: "a", model_id: "gone" },
+          default_effort: null,
+          search_provider_id: null,
+          native_search: true,
+          builtin_skill_enabled: true,
+          custom_instructions: "",
+          send_terminal_screen: true,
+          memory: true,
+          text_size: 13,
+          judge_model: null,
+        },
+        providers,
+        search,
+      ).default_model,
     ).toBeNull();
   });
 
   it("tells a changed default thinking level apart (AI-05)", () => {
-    const base = { default_model: null, default_effort: null, search_provider_id: null, native_search: true, builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: true, memory: true, text_size: 13, judge_model: null };
+    const base = {
+      default_model: null,
+      default_effort: null,
+      search_provider_id: null,
+      native_search: true,
+      builtin_skill_enabled: true,
+      custom_instructions: "",
+      send_terminal_screen: true,
+      memory: true,
+      text_size: 13,
+      judge_model: null,
+    };
     expect(changedSettings(base, { ...base })).toBeNull();
     expect(changedSettings(base, { ...base, default_effort: "high" })).toEqual({ default_effort: "high" });
     expect(changedSettings({ ...base, default_effort: "high" }, base)).toEqual({ default_effort: null });
   });
 
   it("keeps and compares the custom instructions (AI-36)", () => {
-    const base = { default_model: null, default_effort: null, search_provider_id: "gone", native_search: true, builtin_skill_enabled: true, custom_instructions: "Answer in English.", send_terminal_screen: true, memory: true, text_size: 13, judge_model: null };
+    const base = {
+      default_model: null,
+      default_effort: null,
+      search_provider_id: "gone",
+      native_search: true,
+      builtin_skill_enabled: true,
+      custom_instructions: "Answer in English.",
+      send_terminal_screen: true,
+      memory: true,
+      text_size: 13,
+      judge_model: null,
+    };
     expect(sanitizeSettings(base, providers, search).custom_instructions).toBe("Answer in English.");
-    expect(changedSettings(base, { ...base, custom_instructions: "Answer in English. " })).toEqual({ custom_instructions: "Answer in English. " });
+    expect(changedSettings(base, { ...base, custom_instructions: "Answer in English. " })).toEqual({
+      custom_instructions: "Answer in English. ",
+    });
   });
 
   it("keeps and compares the screen switch (AI-46)", () => {
-    const base = { default_model: null, default_effort: null, search_provider_id: null, native_search: true, builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: false, memory: true, text_size: 13, judge_model: null };
+    const base = {
+      default_model: null,
+      default_effort: null,
+      search_provider_id: null,
+      native_search: true,
+      builtin_skill_enabled: true,
+      custom_instructions: "",
+      send_terminal_screen: false,
+      memory: true,
+      text_size: 13,
+      judge_model: null,
+    };
     expect(sanitizeSettings(base, providers, search).send_terminal_screen).toBe(false);
     expect(changedSettings(base, { ...base, send_terminal_screen: true })).toEqual({ send_terminal_screen: true });
     // AI-53: so does memory.
@@ -323,10 +429,25 @@ describe("default model", () => {
 
   it("keeps a judge that exists, drops one that is gone, and compares it (AI-47)", () => {
     const judge = { provider_id: "a", model_id: "a2" };
-    const base = { default_model: null, default_effort: null, search_provider_id: null, native_search: true, builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: true, memory: true, text_size: 13, judge_model: judge };
+    const base = {
+      default_model: null,
+      default_effort: null,
+      search_provider_id: null,
+      native_search: true,
+      builtin_skill_enabled: true,
+      custom_instructions: "",
+      send_terminal_screen: true,
+      memory: true,
+      text_size: 13,
+      judge_model: judge,
+    };
     expect(sanitizeSettings(base, providers, search).judge_model).toEqual(judge);
-    expect(sanitizeSettings({ ...base, judge_model: { provider_id: "a", model_id: "gone" } }, providers, search).judge_model).toBeNull();
-    expect(changedSettings(base, sanitizeSettings(base, [provider("c", [model("c1")])], search))).toEqual({ judge_model: null });
+    expect(
+      sanitizeSettings({ ...base, judge_model: { provider_id: "a", model_id: "gone" } }, providers, search).judge_model,
+    ).toBeNull();
+    expect(changedSettings(base, sanitizeSettings(base, [provider("c", [model("c1")])], search))).toEqual({
+      judge_model: null,
+    });
     expect(changedSettings(base, { ...base, judge_model: { ...judge } })).toBeNull();
   });
 
@@ -334,23 +455,62 @@ describe("default model", () => {
     const jev: AiProviderView = { ...provider("j", [model("jev-latest")]), protocol: "system_one" };
     const all = [jev, ...providers];
     expect(modelChoices(all).map((c) => c.ref.provider_id)).not.toContain("j");
-    expect(judgeChoices(all).map((c) => `${c.providerName}/${c.ref.model_id}`)).toEqual(["J/jev-latest", "A/a1", "A/a2", "C/c1"]);
+    expect(judgeChoices(all).map((c) => `${c.providerName}/${c.ref.model_id}`)).toEqual([
+      "J/jev-latest",
+      "A/a1",
+      "A/a2",
+      "C/c1",
+    ]);
     expect(firstModelRef(all)).toEqual({ provider_id: "a", model_id: "a1" });
     expect(firstModelRef([jev])).toBeNull();
 
     const onJev = { provider_id: "j", model_id: "jev-latest" };
-    const base = { default_model: onJev, default_effort: null, search_provider_id: null, native_search: true, builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: true, memory: true, text_size: 13, judge_model: onJev };
+    const base = {
+      default_model: onJev,
+      default_effort: null,
+      search_provider_id: null,
+      native_search: true,
+      builtin_skill_enabled: true,
+      custom_instructions: "",
+      send_terminal_screen: true,
+      memory: true,
+      text_size: 13,
+      judge_model: onJev,
+    };
     const clean = sanitizeSettings(base, all, search);
     expect(clean.default_model).toBeNull();
     expect(clean.judge_model).toEqual(onJev);
-    expect(changedSettings(base, resolveSettings(base, all, search))).toEqual({ default_model: { provider_id: "a", model_id: "a1" } });
+    expect(changedSettings(base, resolveSettings(base, all, search))).toEqual({
+      default_model: { provider_id: "a", model_id: "a1" },
+    });
   });
 
   it("saves only the defaults that change when the providers do", () => {
-    const base = { default_model: { provider_id: "z", model_id: "z1" }, default_effort: "low" as const, search_provider_id: "s1", native_search: true, builtin_skill_enabled: false, custom_instructions: "Be brief.", send_terminal_screen: true, memory: true, text_size: 13, judge_model: null };
-    expect(changedSettings(base, resolveSettings(base, providers, search))).toEqual({ default_model: { provider_id: "a", model_id: "a1" } });
-    expect(changedSettings(base, sanitizeSettings(base, providers, []))).toEqual({ default_model: null, search_provider_id: null });
-    expect(changedSettings({ ...base, default_model: { provider_id: "c", model_id: "c1" } }, resolveSettings({ ...base, default_model: { provider_id: "c", model_id: "c1" } }, providers, search))).toBeNull();
+    const base = {
+      default_model: { provider_id: "z", model_id: "z1" },
+      default_effort: "low" as const,
+      search_provider_id: "s1",
+      native_search: true,
+      builtin_skill_enabled: false,
+      custom_instructions: "Be brief.",
+      send_terminal_screen: true,
+      memory: true,
+      text_size: 13,
+      judge_model: null,
+    };
+    expect(changedSettings(base, resolveSettings(base, providers, search))).toEqual({
+      default_model: { provider_id: "a", model_id: "a1" },
+    });
+    expect(changedSettings(base, sanitizeSettings(base, providers, []))).toEqual({
+      default_model: null,
+      search_provider_id: null,
+    });
+    expect(
+      changedSettings(
+        { ...base, default_model: { provider_id: "c", model_id: "c1" } },
+        resolveSettings({ ...base, default_model: { provider_id: "c", model_id: "c1" } }, providers, search),
+      ),
+    ).toBeNull();
   });
 });
 

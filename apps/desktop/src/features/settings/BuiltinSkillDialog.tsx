@@ -53,9 +53,20 @@ export function BuiltinSkillDialog({ skill, onClose }: { skill: BuiltinSkillView
             </LinkButton>
           </div>
           <Group>
-            <ContentBlock path={SKILL_MD} content={skill.body} open={open.has(SKILL_MD)} onToggle={() => toggle(SKILL_MD)} />
+            <ContentBlock
+              path={SKILL_MD}
+              content={skill.body}
+              open={open.has(SKILL_MD)}
+              onToggle={() => toggle(SKILL_MD)}
+            />
             {skill.files.map((f) => (
-              <ContentBlock key={f.path} path={f.path} content={f.content} open={open.has(f.path)} onToggle={() => toggle(f.path)} />
+              <ContentBlock
+                key={f.path}
+                path={f.path}
+                content={f.content}
+                open={open.has(f.path)}
+                onToggle={() => toggle(f.path)}
+              />
             ))}
           </Group>
         </Section>

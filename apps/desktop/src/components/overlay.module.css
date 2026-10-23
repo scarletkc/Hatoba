@@ -244,7 +244,9 @@
   flex-direction: column;
   background: var(--sheet);
   border-radius: var(--radius-xl);
-  box-shadow: 0 0 0 0.5px var(--winline), var(--shadow);
+  box-shadow:
+    0 0 0 0.5px var(--winline),
+    var(--shadow);
   color: var(--fg);
   font-size: var(--text-md);
   line-height: 1.4;
@@ -321,7 +323,9 @@
   padding: 22px 22px 18px;
   border-radius: var(--radius-xl);
   background: var(--sheet);
-  box-shadow: 0 0 0 0.5px var(--winline), var(--shadow);
+  box-shadow:
+    0 0 0 0.5px var(--winline),
+    var(--shadow);
   color: var(--fg);
   line-height: 1.4;
   animation: dialogIn var(--motion-base) var(--ease-out);

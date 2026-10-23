@@ -67,7 +67,8 @@ function cssVar(name: string, fallback: string): string {
 
 /** xterm's theme for `scheme`. Hatoba Dark sits on the app's own terminal background. */
 export function terminalTheme(scheme: TermScheme): ITheme {
-  const background = scheme.id === DEFAULT_SCHEME.dark ? cssVar("--term", scheme.colors.background) : scheme.colors.background;
+  const background =
+    scheme.id === DEFAULT_SCHEME.dark ? cssVar("--term", scheme.colors.background) : scheme.colors.background;
   return { cursorAccent: background, ...scheme.colors, background };
 }
 

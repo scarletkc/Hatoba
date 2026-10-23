@@ -15,7 +15,10 @@ export type Screenshot = "ai-assistant" | "ai-approval" | "dashboard" | "sync-de
 
 export function screenshot(locale: Locale, name: Screenshot): ImageMetadata {
   const image =
-    locale === "en" ? english[`../../../../docs/media/${name}.png`] : translated[`../assets/screenshots/${FOLDER[locale]}/${name}.png`];
-  if (!image) throw new Error(`There is no ${name}.png screenshot for ${locale}. Capture it with scripts/media/screenshots.py.`);
+    locale === "en"
+      ? english[`../../../../docs/media/${name}.png`]
+      : translated[`../assets/screenshots/${FOLDER[locale]}/${name}.png`];
+  if (!image)
+    throw new Error(`There is no ${name}.png screenshot for ${locale}. Capture it with scripts/media/screenshots.py.`);
   return image.default;
 }

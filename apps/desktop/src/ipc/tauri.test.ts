@@ -13,7 +13,8 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
 const { createTauriApi } = await import("./tauri");
 
 /** The channel the last command was given, under its argument name. */
-const lastChannel = (name: string) => (invoke.mock.lastCall?.[1] as Record<string, { onmessage: (m: unknown) => void }>)[name];
+const lastChannel = (name: string) =>
+  (invoke.mock.lastCall?.[1] as Record<string, { onmessage: (m: unknown) => void }>)[name];
 
 describe("createTauriApi", () => {
   const api = createTauriApi();
@@ -26,8 +27,8 @@ describe("createTauriApi", () => {
   it("passes arguments under Rust's parameter names", async () => {
     await api.host_set_favorite("h1", true);
     expect(invoke).toHaveBeenLastCalledWith("host_set_favorite", { id: "h1", favorite: true });
-    await api.mcp_proxy_info("c1", "{\"a\":1}");
-    expect(invoke).toHaveBeenLastCalledWith("mcp_proxy_info", { conversationId: "c1", callArguments: "{\"a\":1}" });
+    await api.mcp_proxy_info("c1", '{"a":1}');
+    expect(invoke).toHaveBeenLastCalledWith("mcp_proxy_info", { conversationId: "c1", callArguments: '{"a":1}' });
     await api.ai_conversation_fork("c1", null, "Fork");
     expect(invoke).toHaveBeenLastCalledWith("ai_conversation_fork", { id: "c1", entryId: null, title: "Fork" });
     await api.app_info();

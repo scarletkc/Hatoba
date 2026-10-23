@@ -15,7 +15,9 @@ const t = messages(locale);
 ---
 
 <li class="file">
-  <Button variant="accent" icon="download" href={download.url}>{t.download.files[download.bundle]}</Button>
+  <Button variant="accent" icon="download" href={download.url}>
+    {t.download.files[download.bundle]}
+  </Button>
   <p class="name">
     <code>{download.name}</code>
     <span>{t.download.size(formatMegabytes(locale, download.size))}</span>
@@ -23,7 +25,11 @@ const t = messages(locale);
   <p class="sha" data-copy-scope>
     <span>{t.download.sha256}</span>
     <code>{download.sha256}</code>
-    <CopyButton text={download.sha256} label={`${t.download.copy} ${t.download.sha256}: ${download.name}`} copied={t.download.copied} />
+    <CopyButton
+      text={download.sha256}
+      label={`${t.download.copy} ${t.download.sha256}: ${download.name}`}
+      copied={t.download.copied}
+    />
   </p>
 </li>
 

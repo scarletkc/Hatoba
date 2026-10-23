@@ -405,7 +405,11 @@ export class LiveSession {
     if (!this.local) {
       // A saved host's last connected time and server OS; a quick connection's recent targets.
       if (this.target) void useRecentTargets.getState().load();
-      else void useVaultData.getState().reloadHosts().catch(() => {});
+      else
+        void useVaultData
+          .getState()
+          .reloadHosts()
+          .catch(() => {});
     }
     this.sendResize(); // the view may have been resized while connecting
     const early = earlyEvents.get(sid);

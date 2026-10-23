@@ -6,7 +6,14 @@ export type ListSort = "recent" | "name" | "address";
 /** Every order of the hosts page; the resource orders apply while resource usage shows (HOST-14). */
 export type HostSort = ListSort | Exclude<DashboardSort, "list" | "name">;
 export const LIST_SORTS: ListSort[] = ["recent", "name", "address"];
-export const STATS_SORTS: Exclude<DashboardSort, "list" | "name">[] = ["status", "cpu", "memory", "disk", "network", "uptime"];
+export const STATS_SORTS: Exclude<DashboardSort, "list" | "name">[] = [
+  "status",
+  "cpu",
+  "memory",
+  "disk",
+  "network",
+  "uptime",
+];
 
 export const isListSort = (sort: HostSort): sort is ListSort => (LIST_SORTS as HostSort[]).includes(sort);
 

@@ -48,20 +48,27 @@ describe("host key dialogs", () => {
     expect(dialog.textContent).toContain("SHA256:received-demo-key");
   });
 
-  it.each(["en", "zh-CN", "ja"] as const)("shows the other trusted key when asking to trust a new key type in %s", (locale) => {
-    const dialog = show({ known_key_type: "ssh-rsa", known_fingerprint: "SHA256:trusted-demo-rsa" }, locale);
-    expect(dialog.textContent).toContain(t("terminal.hostkey.additionalTitle", { host: "demo.example", port: 22 }));
-    expect(dialog.textContent).toContain(t("terminal.hostkey.additionalBody"));
-    expect(document.activeElement?.textContent).toBe(t("btn.cancel"));
-    expect(dialog.textContent).toContain("ssh-rsa");
-    expect(dialog.textContent).toContain("SHA256:trusted-demo-rsa");
-    expect(dialog.textContent).toContain("ssh-ed25519");
-    expect(dialog.textContent).not.toContain(t("terminal.hostkey.newBody"));
-    expect(dialog.textContent).not.toContain(t("terminal.hostkey.changedTitle"));
-  });
+  it.each(["en", "zh-CN", "ja"] as const)(
+    "shows the other trusted key when asking to trust a new key type in %s",
+    (locale) => {
+      const dialog = show({ known_key_type: "ssh-rsa", known_fingerprint: "SHA256:trusted-demo-rsa" }, locale);
+      expect(dialog.textContent).toContain(t("terminal.hostkey.additionalTitle", { host: "demo.example", port: 22 }));
+      expect(dialog.textContent).toContain(t("terminal.hostkey.additionalBody"));
+      expect(document.activeElement?.textContent).toBe(t("btn.cancel"));
+      expect(dialog.textContent).toContain("ssh-rsa");
+      expect(dialog.textContent).toContain("SHA256:trusted-demo-rsa");
+      expect(dialog.textContent).toContain("ssh-ed25519");
+      expect(dialog.textContent).not.toContain(t("terminal.hostkey.newBody"));
+      expect(dialog.textContent).not.toContain(t("terminal.hostkey.changedTitle"));
+    },
+  );
 
   it("keeps the changed-key warning and focuses Disconnect", () => {
-    const dialog = show({ kind: "changed", known_key_type: "ssh-ed25519", known_fingerprint: "SHA256:trusted-demo-key" });
+    const dialog = show({
+      kind: "changed",
+      known_key_type: "ssh-ed25519",
+      known_fingerprint: "SHA256:trusted-demo-key",
+    });
     expect(dialog.textContent).toContain(t("terminal.hostkey.changedTitle"));
     expect(dialog.textContent).toContain("SHA256:trusted-demo-key");
     expect(document.activeElement?.textContent).toBe(t("terminal.hostkey.abort"));

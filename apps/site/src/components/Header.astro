@@ -25,35 +25,66 @@ const download = localePath(locale, "/download/");
       <span class="wide">Hatoba</span>
     </a>
     <ul class="links">
-      <li class="features"><Button variant="night" size="md" href={`${localePath(locale)}#features`}>{t.nav.features}</Button></li>
-      <li><Button variant="night" size="md" href={download} aria-current={current === download ? "page" : undefined}>{t.nav.download}</Button></li>
-      <li>
-        <Button variant="night" size="md" href="/docs/" hreflang="en" aria-current={current.startsWith("/docs/") ? "page" : undefined}>{t.nav.docs}</Button>
+      <li class="features">
+        <Button variant="night" size="md" href={`${localePath(locale)}#features`}>
+          {t.nav.features}
+        </Button>
       </li>
       <li>
-        <Button variant="night" size="md" class="github" href={REPO_URL} icon="github" iconSize={20} aria-label={t.nav.github}><span>{t.nav.github}</span></Button>
+        <Button variant="night" size="md" href={download} aria-current={current === download ? "page" : undefined}>
+          {t.nav.download}
+        </Button>
+      </li>
+      <li>
+        <Button
+          variant="night"
+          size="md"
+          href="/docs/"
+          hreflang="en"
+          aria-current={current.startsWith("/docs/") ? "page" : undefined}
+        >
+          {t.nav.docs}
+        </Button>
+      </li>
+      <li>
+        <Button
+          variant="night"
+          size="md"
+          class="github"
+          href={REPO_URL}
+          icon="github"
+          iconSize={20}
+          aria-label={t.nav.github}
+        >
+          <span>{t.nav.github}</span>
+        </Button>
       </li>
       <li>
         <details class="lang">
-          <Button as="summary" variant="night" size="md" icon="globe" class="lang-button" aria-label={`${t.nav.language}: ${LANGUAGE_NAME[locale]}`}>
+          <Button
+            as="summary"
+            variant="night"
+            size="md"
+            icon="globe"
+            class="lang-button"
+            aria-label={`${t.nav.language}: ${LANGUAGE_NAME[locale]}`}
+          >
             <span>{LANGUAGE_NAME[locale]}</span>
           </Button>
           <ul class="menu">
-            {
-              LOCALES.map((other) => (
-                <li>
-                  <a
-                    href={localePath(other, translated ? path : "/")}
-                    hreflang={LANG[other]}
-                    data-locale={other}
-                    lang={LANG[other]}
-                    aria-current={other === locale ? "true" : undefined}
-                  >
-                    {LANGUAGE_NAME[other]}
-                  </a>
-                </li>
-              ))
-            }
+            {LOCALES.map((other) => (
+              <li>
+                <a
+                  href={localePath(other, translated ? path : "/")}
+                  hreflang={LANG[other]}
+                  data-locale={other}
+                  lang={LANG[other]}
+                  aria-current={other === locale ? "true" : undefined}
+                >
+                  {LANGUAGE_NAME[other]}
+                </a>
+              </li>
+            ))}
           </ul>
         </details>
       </li>

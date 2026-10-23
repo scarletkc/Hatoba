@@ -545,7 +545,9 @@
 .approval {
   gap: var(--space-8);
   padding: 10px 11px 11px;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orange) 60%, transparent), 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--orange) 60%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.05);
   background: color-mix(in srgb, var(--orange) 5%, var(--win));
 }
 

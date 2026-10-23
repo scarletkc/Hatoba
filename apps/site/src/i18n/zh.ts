@@ -102,7 +102,8 @@ export const zh: Messages = {
     thisDevice: "适用于此设备",
     requirements: {
       windows: "Windows 10 或 11（x64）。",
-      linux: "x86_64。同步把凭据保存在 Secret Service 中，因此需要 GNOME Keyring、KWallet 或其他 Secret Service 提供程序。",
+      linux:
+        "x86_64。同步把凭据保存在 Secret Service 中，因此需要 GNOME Keyring、KWallet 或其他 Secret Service 提供程序。",
       macos: "Apple 芯片，macOS 13 或更高版本。此版本为实验性版本。",
     },
     files: {
@@ -116,7 +117,8 @@ export const zh: Messages = {
     packageManager: "使用包管理器",
     packages: {
       windows: "从 [Scoop](https://scoop.sh) 的 Extras bucket 安装 Hatoba，之后用 `scoop update hatoba` 更新：",
-      linux: "在 Arch Linux 及其衍生发行版上，用 yay 等 AUR 助手从 AUR 安装 [`hatoba-bin`](https://aur.archlinux.org/packages/hatoba-bin)，之后它会随系统一起更新：",
+      linux:
+        "在 Arch Linux 及其衍生发行版上，用 yay 等 AUR 助手从 AUR 安装 [`hatoba-bin`](https://aur.archlinux.org/packages/hatoba-bin)，之后它会随系统一起更新：",
     },
     sha256: "SHA-256",
     copy: "复制",

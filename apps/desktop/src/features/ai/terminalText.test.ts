@@ -1,8 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { cleanOutput, OutputCapture, readBuffer, screenNote, SCREEN_NOTE_LINES, stripAnsi, type BufferLike } from "./terminalText";
+import {
+  cleanOutput,
+  OutputCapture,
+  readBuffer,
+  screenNote,
+  SCREEN_NOTE_LINES,
+  stripAnsi,
+  type BufferLike,
+} from "./terminalText";
 
 /** A fake xterm buffer: `[text, isWrapped]` rows, each padded to `cols` like xterm's cells. */
-function buffer(rows: [string, boolean?][], baseY: number, type: "normal" | "alternate" = "normal", cols = 10): BufferLike {
+function buffer(
+  rows: [string, boolean?][],
+  baseY: number,
+  type: "normal" | "alternate" = "normal",
+  cols = 10,
+): BufferLike {
   return {
     type,
     length: rows.length,
@@ -29,9 +42,19 @@ describe("readBuffer (AI-11)", () => {
   ];
 
   it("returns the last lines up to the last one with text, joining soft wraps, and counts all lines", () => {
-    expect(readBuffer(buffer(rows, 2), 6, 2)).toEqual({ text: "defghij klmnop\n$", alternate: false, shown: 2, total: 5 });
+    expect(readBuffer(buffer(rows, 2), 6, 2)).toEqual({
+      text: "defghij klmnop\n$",
+      alternate: false,
+      shown: 2,
+      total: 5,
+    });
     // The count reaches into the scrollback when the screen has fewer lines.
-    expect(readBuffer(buffer(rows, 2), 6, 4)).toEqual({ text: "old 2\n$ echo abc\ndefghij klmnop\n$", alternate: false, shown: 4, total: 5 });
+    expect(readBuffer(buffer(rows, 2), 6, 4)).toEqual({
+      text: "old 2\n$ echo abc\ndefghij klmnop\n$",
+      alternate: false,
+      shown: 4,
+      total: 5,
+    });
   });
 
   it("keeps spaces at the wrap point and trims trailing blank lines", () => {
@@ -40,9 +63,19 @@ describe("readBuffer (AI-11)", () => {
   });
 
   it("stops at the first row and reads a wrapped line whole", () => {
-    expect(readBuffer(buffer(rows, 2), 6, 1000)).toEqual({ text: "old 1\nold 2\n$ echo abc\ndefghij klmnop\n$", alternate: false, shown: 5, total: 5 });
+    expect(readBuffer(buffer(rows, 2), 6, 1000)).toEqual({
+      text: "old 1\nold 2\n$ echo abc\ndefghij klmnop\n$",
+      alternate: false,
+      shown: 5,
+      total: 5,
+    });
     const wrapped = buffer([["aaaaaaaaaa"], ["bbbbbbbbbb", true], ["cc", true], ["$ "]], 3);
-    expect(readBuffer(wrapped, 1, 2)).toEqual({ text: "aaaaaaaaaabbbbbbbbbbcc\n$", alternate: false, shown: 2, total: 2 });
+    expect(readBuffer(wrapped, 1, 2)).toEqual({
+      text: "aaaaaaaaaabbbbbbbbbbcc\n$",
+      alternate: false,
+      shown: 2,
+      total: 2,
+    });
     // A wrapped line above the ones read counts once.
     expect(readBuffer(wrapped, 1, 1)).toEqual({ text: "$", alternate: false, shown: 1, total: 2 });
   });
@@ -67,7 +100,13 @@ describe("readBuffer (AI-11)", () => {
 
 describe("screenNote (AI-46)", () => {
   it("takes the screen's last lines up to the last one with text, without scrollback", () => {
-    const rows: [string, boolean?][] = [["old"], ...Array.from({ length: 30 }, (_, i): [string] => [`line ${i}`]), ["$ "], [""], [""]];
+    const rows: [string, boolean?][] = [
+      ["old"],
+      ...Array.from({ length: 30 }, (_, i): [string] => [`line ${i}`]),
+      ["$ "],
+      [""],
+      [""],
+    ];
     const s = screenNote(buffer(rows, 1, "normal"), 33);
     expect(s.alternate).toBe(false);
     const lines = s.text.split("\n");
@@ -76,7 +115,10 @@ describe("screenNote (AI-46)", () => {
     expect(lines.at(-1)).toBe("$");
     expect(s.text).not.toContain("old");
     // A short screen goes whole.
-    expect(screenNote(buffer([["$ make"], ["error"], ["$ "]], 0), 3)).toEqual({ text: "$ make\nerror\n$", alternate: false });
+    expect(screenNote(buffer([["$ make"], ["error"], ["$ "]], 0), 3)).toEqual({
+      text: "$ make\nerror\n$",
+      alternate: false,
+    });
   });
 
   it("takes the whole screen of a full-screen program", () => {

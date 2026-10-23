@@ -89,7 +89,7 @@ export function nextBatch<T>(calls: readonly T[], joins: (call: T) => boolean): 
 /** `calls` split into the batches they run in, in order. */
 export function toolBatches<T>(calls: readonly T[], joins: (call: T) => boolean): T[][] {
   const batches: T[][] = [];
-  for (let rest = calls; rest.length > 0; ) {
+  for (let rest = calls; rest.length > 0;) {
     const batch = nextBatch(rest, joins);
     batches.push(batch);
     rest = rest.slice(batch.length);
@@ -125,7 +125,8 @@ export async function runConcurrently<T>(
   };
   for (const call of calls) {
     const limit = limitOf(call);
-    while ((running.size >= MAX_CONCURRENT_CALLS || (limit && room.full(limit))) && starts(call)) await Promise.race([change, room.change]);
+    while ((running.size >= MAX_CONCURRENT_CALLS || (limit && room.full(limit))) && starts(call))
+      await Promise.race([change, room.change]);
     if (!starts(call)) break;
     started++;
     const release = limit ? room.take(limit) : () => {};

@@ -19,43 +19,53 @@ const { title, description, editUrl, version } = doc.data;
 const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
 ---
 
-<Base locale="en" title={pageTitle("en", doc.id === OVERVIEW ? "Documentation" : title)} description={description} path={docPath(doc.id)} translated={false}>
+<Base
+  locale="en"
+  title={pageTitle("en", doc.id === OVERVIEW ? "Documentation" : title)}
+  description={description}
+  path={docPath(doc.id)}
+  translated={false}
+>
   <div class="container docs">
     <nav class="sidebar" aria-label="Documentation">
       <details open>
         <summary>Contents</summary>
-        {
-          groups.map((group) => (
-            <div class="group">
-              <p class="group-title">{group.title}</p>
-              <ul>
-                {group.pages.map((page) => (
-                  <li>
-                    <a href={docPath(page.slug)} aria-current={page.slug === doc.id ? "page" : undefined}>
-                      {page.slug === OVERVIEW ? "Overview" : page.title}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))
-        }
+        {groups.map((group) => (
+          <div class="group">
+            <p class="group-title">{group.title}</p>
+            <ul>
+              {group.pages.map((page) => (
+                <li>
+                  <a href={docPath(page.slug)} aria-current={page.slug === doc.id ? "page" : undefined}>
+                    {page.slug === OVERVIEW ? "Overview" : page.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </details>
     </nav>
     <article>
       <SectionHeader as="h1" size="title" title={heading}>
-        <p class="version">{version ? `Describes Hatoba ${version}.` : "Describes the development version of Hatoba."}</p>
+        <p class="version">
+          {version ? `Describes Hatoba ${version}.` : "Describes the development version of Hatoba."}
+        </p>
       </SectionHeader>
       <div class="prose">
         <Content />
       </div>
       <p class="edit">
-        <Link href={editUrl} icon="external">Edit this page on GitHub</Link>
+        <Link href={editUrl} icon="external">
+          Edit this page on GitHub
+        </Link>
       </p>
     </article>
   </div>
   <!-- A <template> would keep the CodeBlock's script from running, so the source is a hidden div. -->
-  <div id="code-block" hidden><CodeBlock code="" copyLabel="Copy" copied="Copied" /></div>
+  <div id="code-block" hidden>
+    <CodeBlock code="" copyLabel="Copy" copied="Copied" />
+  </div>
 </Base>
 
 <script>

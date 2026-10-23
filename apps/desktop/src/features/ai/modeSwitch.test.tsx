@@ -23,7 +23,14 @@ const provider: AiProviderView = {
   has_api_key: false,
   auth_header: "x-api-key",
   models: [
-    { id: "m1", name: "Model 1", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null },
+    {
+      id: "m1",
+      name: "Model 1",
+      context_window: null,
+      max_output_tokens: null,
+      efforts: null,
+      adaptive_thinking: null,
+    },
     { id: "fast", name: "Fast", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null },
   ],
   updated_at: 0,
@@ -36,7 +43,8 @@ const settings = (judge_model: AiSettingsView["judge_model"]): AiSettingsView =>
   builtin_skill_enabled: true,
   custom_instructions: "",
   send_terminal_screen: true,
-  memory: true, text_size: 13,
+  memory: true,
+  text_size: 13,
   judge_model,
 });
 
@@ -47,7 +55,10 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  useAi.setState({ slots: { [HOME_SLOT]: blankSlot("manual") }, catalog: { providers: [provider], settings: settings(null), loaded: true } });
+  useAi.setState({
+    slots: { [HOME_SLOT]: blankSlot("manual") },
+    catalog: { providers: [provider], settings: settings(null), loaded: true },
+  });
 });
 
 function Harness() {
@@ -67,7 +78,8 @@ function render(): HTMLButtonElement {
   return host.querySelector<HTMLButtonElement>(`button[aria-label^="${t("ai.mode")}:"]`)!;
 }
 
-const item = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("[role=menu] button")].find((b) => b.textContent?.startsWith(label));
+const item = (label: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>("[role=menu] button")].find((b) => b.textContent?.startsWith(label));
 
 describe("the permission mode switch (AI-16, AI-47)", () => {
   it("offers Auto only once a judge is chosen, and links to Settings → AI until then", () => {
@@ -82,7 +94,9 @@ describe("the permission mode switch (AI-16, AI-47)", () => {
   });
 
   it("switches to Auto without asking, and shows its name beside its icon", () => {
-    useAi.setState({ catalog: { providers: [provider], settings: settings({ provider_id: "p1", model_id: "fast" }), loaded: true } });
+    useAi.setState({
+      catalog: { providers: [provider], settings: settings({ provider_id: "p1", model_id: "fast" }), loaded: true },
+    });
     const button = render();
     act(() => button.click());
     expect(item(t("ai.mode.chooseJudge"))).toBeUndefined();
@@ -94,7 +108,9 @@ describe("the permission mode switch (AI-16, AI-47)", () => {
   });
 
   it("takes a judge whose model is gone for none", () => {
-    useAi.setState({ catalog: { providers: [provider], settings: settings({ provider_id: "p1", model_id: "gone" }), loaded: true } });
+    useAi.setState({
+      catalog: { providers: [provider], settings: settings({ provider_id: "p1", model_id: "gone" }), loaded: true },
+    });
     const button = render();
     act(() => button.click());
     expect(item(t("ai.mode.auto"))?.disabled).toBe(true);

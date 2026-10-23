@@ -20,7 +20,12 @@ interface Box {
  * holds the zoom too, but also the display scale, which would shrink every drop's coordinates (a
  * 200%-scaled Linux desktop halves them).
  */
-export function dropPointToCss(pos: { x: number; y: number }, platform: Platform, devicePixelRatio: number, zoom: number) {
+export function dropPointToCss(
+  pos: { x: number; y: number },
+  platform: Platform,
+  devicePixelRatio: number,
+  zoom: number,
+) {
   const scale = (platform === "windows" ? devicePixelRatio : zoom) || 1;
   return { x: pos.x / scale, y: pos.y / scale };
 }

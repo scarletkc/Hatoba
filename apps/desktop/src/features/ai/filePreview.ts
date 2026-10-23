@@ -20,7 +20,12 @@ export interface FilePreviewState {
  * pause in typing, against the same read. Nothing is asked while `enabled` is false (a card of another
  * tool).
  */
-export function useFilePreview(slotId: string, callId: string, edited: string | null, enabled: boolean): FilePreviewState {
+export function useFilePreview(
+  slotId: string,
+  callId: string,
+  edited: string | null,
+  enabled: boolean,
+): FilePreviewState {
   const [state, setState] = useState<FilePreviewState>({ preview: null, loading: enabled, failure: null });
   const asked = useRef(false);
   useEffect(() => {

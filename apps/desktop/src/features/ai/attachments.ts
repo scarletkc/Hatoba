@@ -236,7 +236,9 @@ function fileAttachment(name: string, text: string): FileAttachment {
  * checks of `checkFile` and `textFile`), made into an attachment the same way, or the reason it is
  * refused. The size cap is checked again here.
  */
-export function droppedFile(result: DroppedFile): { ok: true; file: FileAttachment } | { ok: false; name: string; reason: FileRefusal } {
+export function droppedFile(
+  result: DroppedFile,
+): { ok: true; file: FileAttachment } | { ok: false; name: string; reason: FileRefusal } {
   const name = baseName(result.name);
   if (result.status === "refused") return { ok: false, name, reason: result.reason };
   if (new TextEncoder().encode(result.text).length > FILE_MAX_BYTES) return { ok: false, name, reason: "too_large" };
@@ -328,8 +330,14 @@ const NOTE_ORDER = [
   "mcp_tools",
 ] as const satisfies readonly Note["kind"][];
 
-const attr = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const unattr = (s: string) => s.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+const attr = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const unattr = (s: string) =>
+  s
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
 
 /**
  * A closing tag of the block's kind inside the text gets a backslash after its `<` (and one more on
@@ -370,21 +378,44 @@ function attributes(a: Attachment): [string, string][] {
     case "diagnostics":
       return [["host", a.host]];
     case "selection":
-      return [["host", a.host], ["lines", String(a.lines)], ...(a.truncated ? [["truncated", "true"] as [string, string]] : [])];
+      return [
+        ["host", a.host],
+        ["lines", String(a.lines)],
+        ...(a.truncated ? [["truncated", "true"] as [string, string]] : []),
+      ];
     case "paste":
       return [["lines", String(a.lines)]];
     case "file":
-      return [["name", a.name], ["lines", String(a.lines)]];
+      return [
+        ["name", a.name],
+        ["lines", String(a.lines)],
+      ];
     case "host_file":
-      return [["host", a.host], ["path", a.path], ["lines", String(a.lines)]];
+      return [
+        ["host", a.host],
+        ["path", a.path],
+        ["lines", String(a.lines)],
+      ];
     case "host_directory":
-      return [["host", a.host], ["path", a.path], ["entries", String(a.entries)], ...(a.truncated ? [["truncated", "true"] as [string, string]] : [])];
+      return [
+        ["host", a.host],
+        ["path", a.path],
+        ["entries", String(a.entries)],
+        ...(a.truncated ? [["truncated", "true"] as [string, string]] : []),
+      ];
     case "mcp_resource":
-      return [["server", a.server], ["uri", a.uri], ["lines", String(a.lines)]];
+      return [
+        ["server", a.server],
+        ["uri", a.uri],
+        ["lines", String(a.lines)],
+      ];
     case "skill":
       return [["name", a.name]];
     case "mcp_prompt":
-      return [["server", a.server], ["name", a.name]];
+      return [
+        ["server", a.server],
+        ["name", a.name],
+      ];
   }
 }
 
@@ -395,7 +426,8 @@ function block(a: Attachment): string {
 const TERMINAL_BODY = {
   attached:
     "A terminal is attached from this message on. Before this message none was, so replies that said they could not read a screen or run commands were right at the time.",
-  detached: "No terminal is attached from this message on. Screens and command output before this message came from the terminal that was attached then.",
+  detached:
+    "No terminal is attached from this message on. Screens and command output before this message came from the terminal that was attached then.",
 } as const;
 
 const PERMISSION_BODY = {
@@ -414,21 +446,59 @@ const INTERRUPTED_BODY =
  * does the same.
  */
 export function noteBlock(n: Note): string {
-  if (n.kind === "mcp_tools") return writeBlock(n.kind, [["servers", String(n.servers)], ["tools", String(n.tools)]], n.body);
+  if (n.kind === "mcp_tools")
+    return writeBlock(
+      n.kind,
+      [
+        ["servers", String(n.servers)],
+        ["tools", String(n.tools)],
+      ],
+      n.body,
+    );
   if (n.kind === "memory")
-    return writeBlock(n.kind, [["entries", String(n.entries)], ...(n.host === undefined ? [] : [["conversation_host", noteText(n.host)] as [string, string]])], n.body);
+    return writeBlock(
+      n.kind,
+      [
+        ["entries", String(n.entries)],
+        ...(n.host === undefined ? [] : [["conversation_host", noteText(n.host)] as [string, string]]),
+      ],
+      n.body,
+    );
   if (n.kind === "terminal_state")
-    return writeBlock(n.kind, [["host", noteText(n.host)], ["alternate_screen", String(n.alternate)], ["lines", String(n.lines)]], n.body);
+    return writeBlock(
+      n.kind,
+      [
+        ["host", noteText(n.host)],
+        ["alternate_screen", String(n.alternate)],
+        ["lines", String(n.lines)],
+      ],
+      n.body,
+    );
   if (n.kind === "interrupted") return writeBlock(n.kind, [], INTERRUPTED_BODY);
   if (n.kind === "terminal_change") return writeBlock(n.kind, [["to", n.to]], TERMINAL_BODY[n.to]);
   if (n.kind === "permission_mode") return writeBlock(n.kind, [["mode", n.mode]], PERMISSION_BODY[n.mode]);
-  if (n.kind === "file_revert") return writeBlock(n.kind, [["path", noteText(n.path)], ["tool_call_id", noteText(n.toolCallId)]], n.body);
+  if (n.kind === "file_revert")
+    return writeBlock(
+      n.kind,
+      [
+        ["path", noteText(n.path)],
+        ["tool_call_id", noteText(n.toolCallId)],
+      ],
+      n.body,
+    );
   const from = noteText(n.from);
   const body =
     n.kind === "model_change"
       ? "Earlier replies in this conversation came from another model."
       : `The conversation moved to another host. Screens and command output before this message came from ${from ? `"${from}"` : "another host"}.`;
-  return writeBlock(n.kind, [["from", from], ["to", noteText(n.to)]], body);
+  return writeBlock(
+    n.kind,
+    [
+      ["from", from],
+      ["to", noteText(n.to)],
+    ],
+    body,
+  );
 }
 
 /** As Rust's `MAX_SCREEN_CHARS` (AI-46): a longer screen keeps its first quarter and the rest from its end. */
@@ -518,40 +588,74 @@ function blockOf(tag: string, attrs: [string, string][], body: string): Block | 
     }
     case "permission_mode": {
       const mode = names === "mode" ? value(0) : "";
-      return mode === "manual" || mode === "auto" || mode === "bypass" ? { kind: "note", note: { kind: tag, mode } } : null;
+      return mode === "manual" || mode === "auto" || mode === "bypass"
+        ? { kind: "note", note: { kind: tag, mode } }
+        : null;
     }
     case "memory":
       // Notes stored before the conversation's host had its own attribute name it `host`.
       if ((names === "entries,conversation_host" || names === "entries,host") && DIGITS.test(value(0)))
         return { kind: "note", note: { kind: tag, entries: Number(value(0)), host: value(1), body } };
-      return names === "entries" && DIGITS.test(value(0)) ? { kind: "note", note: { kind: tag, entries: Number(value(0)), body } } : null;
+      return names === "entries" && DIGITS.test(value(0))
+        ? { kind: "note", note: { kind: tag, entries: Number(value(0)), body } }
+        : null;
     case "file_revert":
-      return names === "path,tool_call_id" ? { kind: "note", note: { kind: tag, path: value(0), toolCallId: value(1), body } } : null;
+      return names === "path,tool_call_id"
+        ? { kind: "note", note: { kind: tag, path: value(0), toolCallId: value(1), body } }
+        : null;
     case "terminal_state":
-      return names === "host,alternate_screen,lines" && (value(1) === "true" || value(1) === "false") && DIGITS.test(value(2))
-        ? { kind: "note", note: { kind: tag, host: value(0), alternate: value(1) === "true", lines: Number(value(2)), body } }
+      return names === "host,alternate_screen,lines" &&
+        (value(1) === "true" || value(1) === "false") &&
+        DIGITS.test(value(2))
+        ? {
+            kind: "note",
+            note: { kind: tag, host: value(0), alternate: value(1) === "true", lines: Number(value(2)), body },
+          }
         : null;
     case "mcp_tools":
       return names === "servers,tools" && DIGITS.test(value(0)) && DIGITS.test(value(1))
         ? { kind: "note", note: { kind: tag, servers: Number(value(0)), tools: Number(value(1)), body } }
         : null;
     case TAGS.selection:
-      if ((names === "host,lines" || (names === "host,lines,truncated" && value(2) === "true")) && DIGITS.test(value(1)))
-        return attachment({ kind: "selection", host: value(0), lines: Number(value(1)), truncated: attrs.length === 3, text: body });
+      if (
+        (names === "host,lines" || (names === "host,lines,truncated" && value(2) === "true")) &&
+        DIGITS.test(value(1))
+      )
+        return attachment({
+          kind: "selection",
+          host: value(0),
+          lines: Number(value(1)),
+          truncated: attrs.length === 3,
+          text: body,
+        });
       return null;
     case TAGS.diagnostics:
       return names === "host" ? attachment({ kind: "diagnostics", host: value(0), text: body }) : null;
     case TAGS.paste:
-      return names === "lines" && DIGITS.test(value(0)) ? attachment({ kind: "paste", lines: Number(value(0)), text: body }) : null;
+      return names === "lines" && DIGITS.test(value(0))
+        ? attachment({ kind: "paste", lines: Number(value(0)), text: body })
+        : null;
     case TAGS.file:
-      return names === "name,lines" && DIGITS.test(value(1)) ? attachment({ kind: "file", name: value(0), lines: Number(value(1)), text: body }) : null;
+      return names === "name,lines" && DIGITS.test(value(1))
+        ? attachment({ kind: "file", name: value(0), lines: Number(value(1)), text: body })
+        : null;
     case TAGS.host_file:
       return names === "host,path,lines" && DIGITS.test(value(2))
         ? attachment({ kind: "host_file", host: value(0), path: value(1), lines: Number(value(2)), text: body })
         : null;
     case TAGS.host_directory:
-      if ((names === "host,path,entries" || (names === "host,path,entries,truncated" && value(3) === "true")) && DIGITS.test(value(2)))
-        return attachment({ kind: "host_directory", host: value(0), path: value(1), entries: Number(value(2)), truncated: attrs.length === 4, text: body });
+      if (
+        (names === "host,path,entries" || (names === "host,path,entries,truncated" && value(3) === "true")) &&
+        DIGITS.test(value(2))
+      )
+        return attachment({
+          kind: "host_directory",
+          host: value(0),
+          path: value(1),
+          entries: Number(value(2)),
+          truncated: attrs.length === 4,
+          text: body,
+        });
       return null;
     case TAGS.mcp_resource:
       return names === "server,uri,lines" && DIGITS.test(value(2))
@@ -560,7 +664,9 @@ function blockOf(tag: string, attrs: [string, string][], body: string): Block | 
     case TAGS.skill:
       return names === "name" ? attachment({ kind: "skill", name: value(0), text: body }) : null;
     case TAGS.mcp_prompt:
-      return names === "server,name" ? attachment({ kind: "mcp_prompt", server: value(0), name: value(1), text: body }) : null;
+      return names === "server,name"
+        ? attachment({ kind: "mcp_prompt", server: value(0), name: value(1), text: body })
+        : null;
     default:
       return null;
   }
@@ -579,11 +685,17 @@ function leadingBlock(text: string): { block: Block; rest: string } | null {
   const attrs = [...m[2].matchAll(/ ([a-z_]+)="([^"]*)"/g)].map((a): [string, string] => [a[1], unattr(a[2])]);
   if (!blockOf(tag, attrs, "")) return null;
   const close = `\n</${tag}>`;
-  for (let from = m[0].length; ; ) {
+  for (let from = m[0].length; ;) {
     const at = text.indexOf(close, from);
     if (at < 0) return null;
     const after = text.slice(at + close.length);
-    const rest = after.startsWith("\n\n") ? after.slice(2) : after.startsWith("\n") ? after.slice(1) : after === "" ? "" : null;
+    const rest = after.startsWith("\n\n")
+      ? after.slice(2)
+      : after.startsWith("\n")
+        ? after.slice(1)
+        : after === ""
+          ? ""
+          : null;
     if (rest !== null) return { block: blockOf(tag, attrs, unescapeBody(text.slice(m[0].length, at), tag))!, rest };
     from = at + 1;
   }
@@ -603,7 +715,11 @@ export function parseMessage(text: string): MessageParts {
     if (!b) return parts;
     if (b.block.kind === "note") {
       const note = b.block.note;
-      if (parts.attachments.length > 0 || (note.kind !== "file_revert" && parts.notes.some((n) => n.kind === note.kind))) return parts;
+      if (
+        parts.attachments.length > 0 ||
+        (note.kind !== "file_revert" && parts.notes.some((n) => n.kind === note.kind))
+      )
+        return parts;
       parts.notes.push(note);
     } else {
       const a = b.block.attachment;

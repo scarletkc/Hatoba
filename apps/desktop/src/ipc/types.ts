@@ -81,11 +81,7 @@ export type SshErrorKind =
   | "other";
 
 export type KeyParseErrorKind =
-  | "unsupported_format"
-  | "passphrase_required"
-  | "wrong_passphrase"
-  | "unsupported_algorithm"
-  | "invalid";
+  "unsupported_format" | "passphrase_required" | "wrong_passphrase" | "unsupported_algorithm" | "invalid";
 
 /** Every command rejects with this shape. `detail` is technical English text, safe to show. */
 export interface AppError {
@@ -472,7 +468,8 @@ export interface MountView {
 }
 
 /** Why the dashboard does not sign in to a host on its own (HOST-14). */
-export type DashboardHold = "password" | "passphrase" | "prompt" | "host_key_new" | "host_key_changed" | "sign_in_failed";
+export type DashboardHold =
+  "password" | "passphrase" | "prompt" | "host_key_new" | "host_key_changed" | "sign_in_failed";
 
 /** Streamed on the channel of `dashboard_watch` (HOST-14), each naming its host. */
 export type DashboardEvent =
@@ -731,7 +728,8 @@ export interface DeployPlan {
   vault_url: string | null;
 }
 
-export type DeployStep = "verify" | "inspect" | "create_database" | "migrate" | "upload" | "setup_token" | "route" | "wait";
+export type DeployStep =
+  "verify" | "inspect" | "create_database" | "migrate" | "upload" | "setup_token" | "route" | "wait";
 export type DeployStepStatus = "running" | "done" | "skipped";
 
 export interface DeployProgress {
@@ -1270,7 +1268,15 @@ export type AiEntryView =
       usage: AiUsage | null;
     }
   /** `auto`: what the judge decided when Auto mode decided the call (AI-47). */
-  | { role: "tool"; entry_id: string; created_at: number; tool_call_id: string; status: AiToolStatus; content: string; auto: AiAutoVerdict | null }
+  | {
+      role: "tool";
+      entry_id: string;
+      created_at: number;
+      tool_call_id: string;
+      status: AiToolStatus;
+      content: string;
+      auto: AiAutoVerdict | null;
+    }
   | { role: "summary"; entry_id: string; created_at: number; text: string };
 
 export interface AiConversationDetail {
@@ -1457,7 +1463,15 @@ export type AiFileChangeState = "written" | "unfinished" | "reverted" | "dropped
  * `unfinished` (when an error ended it rather than the time) and `failed`. `symbolic_link`: a link is in the place
  * of the file the call created, and neither it nor its target is deleted.
  */
-export type AiRevertFailure = "disconnected" | "other_server" | "permission_denied" | "not_text" | "symbolic_link" | "timed_out" | "unfinished" | "failed";
+export type AiRevertFailure =
+  | "disconnected"
+  | "other_server"
+  | "permission_denied"
+  | "not_text"
+  | "symbolic_link"
+  | "timed_out"
+  | "unfinished"
+  | "failed";
 
 /**
  * The outcome of a revert (AI-41). `reverted`: the file holds what it held before the call again, or no longer
@@ -1726,7 +1740,8 @@ export interface AiSearchHit {
 export type DroppedFileRefusal = "image" | "too_large" | "binary" | "unreadable";
 
 /** A text file dropped on the AI panel in the desktop app (AI-35), named by its base name only, never its path. */
-export type DroppedFile = { status: "ok"; name: string; text: string } | { status: "refused"; name: string; reason: DroppedFileRefusal };
+export type DroppedFile =
+  { status: "ok"; name: string; text: string } | { status: "refused"; name: string; reason: DroppedFileRefusal };
 
 /** One entry of a directory on the tab's host, for the panel's `@` menu (AI-51). */
 export interface AiHostEntry {
@@ -1736,10 +1751,12 @@ export interface AiHostEntry {
 }
 
 /** Why a path on the tab's host cannot be listed or attached (AI-51). `wrong_kind`: a directory to read, or a file to list. */
-export type AiHostRefusal = "disconnected" | "not_found" | "wrong_kind" | "not_regular" | "permission_denied" | "too_large" | "binary" | "failed";
+export type AiHostRefusal =
+  "disconnected" | "not_found" | "wrong_kind" | "not_regular" | "permission_denied" | "too_large" | "binary" | "failed";
 
 /** A directory on the tab's host (AI-51): its entries sorted by name, or why it cannot be listed. `path` as the host resolved it. */
-export type AiHostListing = { status: "ok"; path: string; entries: AiHostEntry[]; cut: boolean } | { status: "refused"; reason: AiHostRefusal };
+export type AiHostListing =
+  { status: "ok"; path: string; entries: AiHostEntry[]; cut: boolean } | { status: "refused"; reason: AiHostRefusal };
 
 /** A text file on the tab's host for an `@` mention (AI-51), or why it cannot be attached. */
 export type AiHostFile = { status: "ok"; path: string; text: string } | { status: "refused"; reason: AiHostRefusal };

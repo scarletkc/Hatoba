@@ -12,12 +12,27 @@ const assistant = (id: string, text: string, calls: number | string[] = 0, at = 
   model_id: "m",
   text,
   reasoning: "Thinking it over.",
-  tool_calls: (typeof calls === "number" ? Array.from({ length: calls }, (_, i) => `${id}c${i}`) : calls).map((call) => ({ id: call, name: "run_command", arguments: "{}" })),
+  tool_calls: (typeof calls === "number" ? Array.from({ length: calls }, (_, i) => `${id}c${i}`) : calls).map(
+    (call) => ({ id: call, name: "run_command", arguments: "{}" }),
+  ),
   finish: calls === 0 || (Array.isArray(calls) && calls.length === 0) ? "stop" : "tool_calls",
   usage: null,
 });
-const tool = (id: string, call: string, at = 0): AiEntryView => ({ role: "tool", entry_id: id, created_at: at, tool_call_id: call, status: "ok", content: "output", auto: null });
-const summary = (id: string, at: number): AiEntryView => ({ role: "summary", entry_id: id, created_at: at, text: "Summary." });
+const tool = (id: string, call: string, at = 0): AiEntryView => ({
+  role: "tool",
+  entry_id: id,
+  created_at: at,
+  tool_call_id: call,
+  status: "ok",
+  content: "output",
+  auto: null,
+});
+const summary = (id: string, at: number): AiEntryView => ({
+  role: "summary",
+  entry_id: id,
+  created_at: at,
+  text: "Summary.",
+});
 
 describe("replies", () => {
   it("joins a reply's text across its tool calls, under its last entry", () => {
@@ -44,7 +59,14 @@ describe("replies", () => {
   });
 
   it("ends a reply that stopped after its tool calls when their results came", () => {
-    const { ends, open } = replies([user("u1", "Check", 1), assistant("a1", "Checking.", 1, 2), tool("t1", "a1c0", 90), assistant("a2", "", 1, 95), tool("t2", "a2c0", 300), summary("s1", 400)]);
+    const { ends, open } = replies([
+      user("u1", "Check", 1),
+      assistant("a1", "Checking.", 1, 2),
+      tool("t1", "a1c0", 90),
+      assistant("a2", "", 1, 95),
+      tool("t2", "a2c0", 300),
+      summary("s1", 400),
+    ]);
     expect([...ends]).toEqual([["a2", { text: "Checking.", at: 300 }]]);
     expect(open).toBe("a2");
   });
@@ -80,7 +102,12 @@ describe("replies", () => {
   });
 
   it("keeps a reply without text, and has no open reply after the user's last message", () => {
-    const { ends, open } = replies([user("u1", "Run it"), assistant("a1", " ", 1, 2), tool("t1", "a1c0", 3), user("u2", "Again", 4)]);
+    const { ends, open } = replies([
+      user("u1", "Run it"),
+      assistant("a1", " ", 1, 2),
+      tool("t1", "a1c0", 3),
+      user("u2", "Again", 4),
+    ]);
     expect([...ends]).toEqual([["a1", { text: "", at: 3 }]]);
     expect(open).toBeNull();
   });

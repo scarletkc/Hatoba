@@ -12,7 +12,9 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 describe("the description of Hatoba", () => {
   it("is the one the README, package.json, and the app share", () => {
     expect(JSON.parse(read("package.json")).description).toBe(en.meta.description);
-    expect(JSON.parse(read("apps/desktop/src-tauri/tauri.conf.json")).bundle.shortDescription).toBe(en.meta.description);
+    expect(JSON.parse(read("apps/desktop/src-tauri/tauri.conf.json")).bundle.shortDescription).toBe(
+      en.meta.description,
+    );
     expect(read("README.md")).toContain(`**${en.meta.description}**`);
   });
 

@@ -66,7 +66,9 @@ describe("site styles", () => {
   });
 
   it("take colours from tokens", () => {
-    const raw = found.filter((d) => /#[0-9a-f]{3,8}\b|\b(rgba?|hsla?|oklch|lab)\(/i.test(d.value.replace(/url\([^)]*\)/g, "")));
+    const raw = found.filter((d) =>
+      /#[0-9a-f]{3,8}\b|\b(rgba?|hsla?|oklch|lab)\(/i.test(d.value.replace(/url\([^)]*\)/g, "")),
+    );
     expect(raw.map((d) => d.at)).toEqual([]);
   });
 
@@ -77,14 +79,19 @@ describe("site styles", () => {
 
   it("take shadows and durations from tokens", () => {
     const raw = found.filter(
-      (d) => (d.prop === "box-shadow" && !/^(none|var\(--shadow-[\w-]+\))$/.test(d.value)) || (TIMED.test(d.prop) && /(?<![\w-])\d*\.?\d+m?s\b/.test(d.value)),
+      (d) =>
+        (d.prop === "box-shadow" && !/^(none|var\(--shadow-[\w-]+\))$/.test(d.value)) ||
+        (TIMED.test(d.prop) && /(?<![\w-])\d*\.?\d+m?s\b/.test(d.value)),
     );
     expect(raw.map((d) => d.at)).toEqual([]);
   });
 
   it("name tokens that exist", () => {
     const unknown = found.flatMap((d) =>
-      [...d.value.matchAll(/var\((--[\w-]+)/g)].map((match) => match[1]).filter((name) => !tokens.has(name) && !d.local.has(name)).map((name) => `${d.at} (${name})`),
+      [...d.value.matchAll(/var\((--[\w-]+)/g)]
+        .map((match) => match[1])
+        .filter((name) => !tokens.has(name) && !d.local.has(name))
+        .map((name) => `${d.at} (${name})`),
     );
     expect(unknown).toEqual([]);
   });

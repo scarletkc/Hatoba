@@ -1,4 +1,12 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
@@ -48,7 +56,10 @@ export function AddButton({
   const terminal = useTabs((st) => st.tabs.some((x) => x.id === slotId && x.status === "connected"));
   const servers = useMcp((st) => st.servers);
   const status = useMcp((st) => st.status);
-  const rows = useMemo(() => (servers ? toolsMenuRows(servers, status, slot.mcpOff) : []), [servers, status, slot.mcpOff]);
+  const rows = useMemo(
+    () => (servers ? toolsMenuRows(servers, status, slot.mcpOff) : []),
+    [servers, status, slot.mcpOff],
+  );
   // AI-32: a server the conversation uses failed.
   const failed = failedServers(rows).length > 0;
   const label = failed ? `${t("ai.add")} · ${t("ai.tools.someFailed")}` : t("ai.add");
@@ -116,7 +127,17 @@ export function AddButton({
 /**
  * AI-50 `/mcp`: the MCP servers of `McpList`, above the input box.
  */
-export function McpPopover({ slotId, slot, anchor, onClose }: { slotId: string; slot: Slot; anchor: DOMRect; onClose: (restoreFocus: boolean) => void }) {
+export function McpPopover({
+  slotId,
+  slot,
+  anchor,
+  onClose,
+}: {
+  slotId: string;
+  slot: Slot;
+  anchor: DOMRect;
+  onClose: (restoreFocus: boolean) => void;
+}) {
   const t = useT();
   const servers = useMcp((st) => st.servers);
   const failed = useMcp((st) => st.failed);
@@ -133,13 +154,26 @@ export function McpPopover({ slotId, slot, anchor, onClose }: { slotId: string; 
  * Settings → AI. `/mcp` shows them, and the + menu's tools menu, whose first row (`head`) goes back. `onManage`: the
  * menu closes for the settings.
  */
-function McpList({ slotId, slot, head, onManage }: { slotId: string; slot: Slot; head?: ReactNode; onManage: () => void }) {
+function McpList({
+  slotId,
+  slot,
+  head,
+  onManage,
+}: {
+  slotId: string;
+  slot: Slot;
+  head?: ReactNode;
+  onManage: () => void;
+}) {
   const t = useT();
   const servers = useMcp((st) => st.servers);
   const status = useMcp((st) => st.status);
   const loaded = servers !== null;
   const failed = useMcp((st) => st.failed);
-  const rows = useMemo(() => (servers ? toolsMenuRows(servers, status, slot.mcpOff) : []), [servers, status, slot.mcpOff]);
+  const rows = useMemo(
+    () => (servers ? toolsMenuRows(servers, status, slot.mcpOff) : []),
+    [servers, status, slot.mcpOff],
+  );
 
   useEffect(() => {
     void loadMcp();
@@ -284,7 +318,15 @@ function Popover({
 
   if (locked) return null;
   return createPortal(
-    <div ref={ref} role="dialog" aria-label={label} tabIndex={-1} className={cx(s.popover, overlayStyles.popIn)} style={pos} onKeyDown={onKeyDown}>
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={label}
+      tabIndex={-1}
+      className={cx(s.popover, overlayStyles.popIn)}
+      style={pos}
+      onKeyDown={onKeyDown}
+    >
       {children(onClose)}
     </div>,
     document.body,
@@ -337,7 +379,15 @@ function MainView({
   if (view !== "main") {
     // The item that opened the list, as its first row, takes it back.
     const head = (
-      <button ref={backRow} type="button" className={s.item} title={t("btn.back")} aria-label={t("btn.back")} data-item onClick={goBack}>
+      <button
+        ref={backRow}
+        type="button"
+        className={s.item}
+        title={t("btn.back")}
+        aria-label={t("btn.back")}
+        data-item
+        onClick={goBack}
+      >
         <Icon name="caret-left" className={s.itemIcon} />
         <span className={cx(s.itemLabel, s.itemTitle)}>{view === "skills" ? t("ai.add.skills") : t("ai.tools")}</span>
       </button>
@@ -397,14 +447,22 @@ function MainView({
         <span className={s.itemHint}>/</span>
       </button>
       {/* The row toggles too, a larger target than the switch. */}
-      <div className={cx(s.item, !terminal && s.itemDisabled)} onClick={(e) => terminal && !(e.target as Element).closest("button") && setSlotScreen(slotId, !on)}>
+      <div
+        className={cx(s.item, !terminal && s.itemDisabled)}
+        onClick={(e) => terminal && !(e.target as Element).closest("button") && setSlotScreen(slotId, !on)}
+      >
         <Icon name="terminal-window" className={s.itemIcon} />
         <span className={s.itemText}>
           <span className={s.itemLabel}>{t("ai.screen")}</span>
           {!terminal && <span className={s.itemNote}>{t("ai.screen.noTerminal")}</span>}
         </span>
         <span className={s.itemSwitch}>
-          <Switch checked={terminal && on} disabled={!terminal} label={t("ai.screen")} onChange={(v) => setSlotScreen(slotId, v)} />
+          <Switch
+            checked={terminal && on}
+            disabled={!terminal}
+            label={t("ai.screen")}
+            onChange={(v) => setSlotScreen(slotId, v)}
+          />
         </span>
       </div>
       <div className={s.separator} />
@@ -428,7 +486,15 @@ function MainView({
 }
 
 /** The + menu's Skills: the enabled skills, each of which starts the box with its command (AI-50). */
-function SkillList({ head, onPick, onManage }: { head: ReactNode; onPick: (name: string) => void; onManage: () => void }) {
+function SkillList({
+  head,
+  onPick,
+  onManage,
+}: {
+  head: ReactNode;
+  onPick: (name: string) => void;
+  onManage: () => void;
+}) {
   const t = useT();
   const skills = useSkills((st) => st.skills);
   return (
@@ -442,7 +508,14 @@ function SkillList({ head, onPick, onManage }: { head: ReactNode; onPick: (name:
       )}
       {skills?.length === 0 && <HintText className={s.note}>{t("ai.add.skillsEmpty")}</HintText>}
       {skills?.map((skill) => (
-        <button key={skill.name} type="button" className={s.item} data-item title={skill.description || undefined} onClick={() => onPick(skill.name)}>
+        <button
+          key={skill.name}
+          type="button"
+          className={s.item}
+          data-item
+          title={skill.description || undefined}
+          onClick={() => onPick(skill.name)}
+        >
           <Icon name="book-open-text" className={s.itemIcon} />
           <span className={s.itemText}>
             <span className={s.itemLabel}>/{skill.name}</span>
@@ -459,7 +532,11 @@ function SkillList({ head, onPick, onManage }: { head: ReactNode; onPick: (name:
 function ServerRow({ row, onChange }: { row: ToolsMenuRow; onChange: (on: boolean) => void }) {
   const t = useT();
   const failed = row.state === "failed";
-  const state = !row.on ? t("ai.tools.off") : row.state === "running" ? t("ai.tools.running", { n: row.tools }) : t(STATE_LABEL[row.state]);
+  const state = !row.on
+    ? t("ai.tools.off")
+    : row.state === "running"
+      ? t("ai.tools.running", { n: row.tools })
+      : t(STATE_LABEL[row.state]);
   return (
     <ListRow
       size="sm"

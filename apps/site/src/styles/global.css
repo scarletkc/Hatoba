@@ -18,7 +18,9 @@
   ascent-override: 89.2%;
   descent-override: 21.3%;
   line-gap-override: 0%;
-  unicode-range: U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F, U+A720-A7FF, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F,
+    U+A720-A7FF, U+FEFF, U+FFFD;
 }
 
 @font-face {
@@ -28,9 +30,11 @@
   font-stretch: 50% 109%;
   size-adjust: 100.2%;
   ascent-override: 87.8%;
-  descent-override: 21.0%;
+  descent-override: 21%;
   line-gap-override: 0%;
-  unicode-range: U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F, U+A720-A7FF, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F,
+    U+A720-A7FF, U+FEFF, U+FFFD;
 }
 
 @font-face {
@@ -40,9 +44,11 @@
   font-stretch: 50% 109%;
   size-adjust: 95.6%;
   ascent-override: 92.1%;
-  descent-override: 22.0%;
+  descent-override: 22%;
   line-gap-override: 0%;
-  unicode-range: U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F, U+A720-A7FF, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F,
+    U+A720-A7FF, U+FEFF, U+FFFD;
 }
 
 @font-face {
@@ -54,7 +60,9 @@
   ascent-override: 89.2%;
   descent-override: 21.3%;
   line-gap-override: 0%;
-  unicode-range: U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F, U+A720-A7FF, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F,
+    U+A720-A7FF, U+FEFF, U+FFFD;
 }
 
 @font-face {
@@ -66,7 +74,9 @@
   ascent-override: 85.2%;
   descent-override: 20.3%;
   line-gap-override: 0%;
-  unicode-range: U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F, U+A720-A7FF, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F,
+    U+A720-A7FF, U+FEFF, U+FFFD;
 }
 
 @font-face {
@@ -78,7 +88,9 @@
   ascent-override: 72.2%;
   descent-override: 17.2%;
   line-gap-override: 0%;
-  unicode-range: U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F, U+A720-A7FF, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F,
+    U+A720-A7FF, U+FEFF, U+FFFD;
 }
 
 @font-face {
@@ -86,11 +98,13 @@
   src: local("Arial Bold"), local("Arial-BoldMT"), local("Liberation Sans Bold"), local("Helvetica Bold");
   font-weight: 750 1000;
   font-stretch: 122% 200%;
-  size-adjust: 129.0%;
+  size-adjust: 129%;
   ascent-override: 68.2%;
   descent-override: 16.3%;
   line-gap-override: 0%;
-  unicode-range: U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F, U+A720-A7FF, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F,
+    U+A720-A7FF, U+FEFF, U+FFFD;
 }
 *,
 *::before,

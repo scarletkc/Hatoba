@@ -6,7 +6,11 @@ interface Props {
 const { items } = Astro.props;
 ---
 
-<ul class="ring-list">{items.map((item) => <li>{item}</li>)}</ul>
+<ul class="ring-list">
+  {items.map((item) => (
+    <li>{item}</li>
+  ))}
+</ul>
 
 <style>
   .ring-list {

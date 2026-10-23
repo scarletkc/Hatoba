@@ -25,7 +25,10 @@ function shown(text: string): { text: string; escaped: boolean } {
 export function FileChange({ state, replaceAll }: { state: FilePreviewState; replaceAll?: boolean }) {
   const t = useT();
   const { preview, loading, failure } = state;
-  const lines = useMemo(() => (preview?.after != null ? diffLines(preview.before ?? "", preview.after) : null), [preview]);
+  const lines = useMemo(
+    () => (preview?.after != null ? diffLines(preview.before ?? "", preview.after) : null),
+    [preview],
+  );
   const rows = useMemo(() => (lines ? withContext(lines) : []), [lines]);
   const stats = lines ? diffStats(lines) : null;
   // Every row is checked for hidden characters, rendered or not, so the chip covers the whole change.
@@ -42,10 +45,7 @@ export function FileChange({ state, replaceAll }: { state: FilePreviewState; rep
   const [shownRows, setShownRows] = useState(PAGE_ROWS);
   const left = cells.length - shownRows;
 
-  if (!preview && loading)
-    return (
-      <StatusLine tone="progress">{t("ai.approval.readingFile")}</StatusLine>
-    );
+  if (!preview && loading) return <StatusLine tone="progress">{t("ai.approval.readingFile")}</StatusLine>;
   if (!preview) return <ErrorText>{failure}</ErrorText>;
   const path = shown(preview.path);
 
@@ -54,12 +54,14 @@ export function FileChange({ state, replaceAll }: { state: FilePreviewState; rep
       {path.text && (
         <div className={s.head}>
           <Icon name="file-text" size={14} className={s.fileIcon} />
-          <span className={cx(s.path, "selectable")}>
-            {path.text}
-          </span>
+          <span className={cx(s.path, "selectable")}>{path.text}</span>
           {loading && <Spinner size={12} />}
           {stats && (stats.added > 0 || stats.removed > 0) && (
-            <span className={s.stats} title={t("ai.approval.diffStats", stats)} aria-label={t("ai.approval.diffStats", stats)}>
+            <span
+              className={s.stats}
+              title={t("ai.approval.diffStats", stats)}
+              aria-label={t("ai.approval.diffStats", stats)}
+            >
               {stats.added > 0 && <span className={s.added}>+{stats.added}</span>}
               {stats.removed > 0 && <span className={s.removed}>−{stats.removed}</span>}
             </span>

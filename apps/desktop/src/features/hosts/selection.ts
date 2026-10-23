@@ -14,7 +14,13 @@ export const ALONE: PickKeys = { range: false, add: false };
  * adds `id` or takes it out again. `id` comes last, as the row the arrow keys move on from. Quick connect rows are
  * not in `hosts` and drop out, as they are only ever selected alone.
  */
-export function pickHost(hosts: readonly string[], selected: readonly string[], anchor: string | null, id: string, keys: PickKeys): string[] {
+export function pickHost(
+  hosts: readonly string[],
+  selected: readonly string[],
+  anchor: string | null,
+  id: string,
+  keys: PickKeys,
+): string[] {
   if (!keys.range && !keys.add) return [id];
   const listed = new Set(hosts);
   const kept = keys.add ? selected.filter((x) => listed.has(x) && x !== id) : [];

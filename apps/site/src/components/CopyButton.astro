@@ -17,7 +17,15 @@ interface Props {
 const { text, label, copied, class: className } = Astro.props;
 ---
 
-<Button variant="quiet" size="sm" iconOnly label={label} class:list={["copy", className]} data-copy={text} data-copied={copied}>
+<Button
+  variant="quiet"
+  size="sm"
+  iconOnly
+  label={label}
+  class:list={["copy", className]}
+  data-copy={text}
+  data-copied={copied}
+>
   <span class="glyphs" aria-hidden="true">
     <Icon name="copy" size={16} class="idle" />
     <Icon name="check" size={16} class="done" />
@@ -29,7 +37,8 @@ const { text, label, copied, class: className } = Astro.props;
   // One listener for every Copy button, the ones a page adds later included.
   const timers = new WeakMap<HTMLElement, number>();
   document.addEventListener("click", async (event) => {
-    const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>("button[data-copied]") : null;
+    const button =
+      event.target instanceof Element ? event.target.closest<HTMLButtonElement>("button[data-copied]") : null;
     if (!button) return;
     const code = button.closest("[data-copy-scope]")?.querySelector("code");
     try {

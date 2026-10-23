@@ -19,7 +19,13 @@ export function codeGroups(code: string): string[] {
  * The recovery code as 8 groups with copy / save-as-text / print actions (design §05 step 3), plus the
  * VAULT-02 confirmation: tick "I've saved it". `onConfirmedChange` reports whether it is ticked.
  */
-export function RecoveryCodeSection({ code, onConfirmedChange }: { code: string; onConfirmedChange: (ok: boolean) => void }) {
+export function RecoveryCodeSection({
+  code,
+  onConfirmedChange,
+}: {
+  code: string;
+  onConfirmedChange: (ok: boolean) => void;
+}) {
   const t = useT();
   const groups = codeGroups(code);
   const [copied, setCopied] = useState(false);
@@ -59,7 +65,11 @@ export function RecoveryCodeSection({ code, onConfirmedChange }: { code: string;
         <div className={s.head}>
           <span className={s.title}>{t("vault.code.label")}</span>
           {/* A check rather than "Copied", which would push the links after it along. */}
-          <LinkButton icon={copied ? "check" : "copy"} aria-label={copied ? t("btn.copied") : undefined} onClick={() => void copy()}>
+          <LinkButton
+            icon={copied ? "check" : "copy"}
+            aria-label={copied ? t("btn.copied") : undefined}
+            onClick={() => void copy()}
+          >
             {t("btn.copy")}
           </LinkButton>
           <LinkButton icon="download-simple" onClick={() => void saveText()}>

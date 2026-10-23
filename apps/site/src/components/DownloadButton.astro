@@ -39,7 +39,9 @@ const platforms = Object.keys(targets) as Platform[];
   {...Object.fromEntries(platforms.map((platform) => [`data-${platform}-href`, targets[platform]]))}
 >
   <span class="for-all">{t.hero.allDownloads}</span>
-  {platforms.map((platform) => <span class={`for-${platform}`}>{t.hero.downloadFor(t.platforms[platform])}</span>)}
+  {platforms.map((platform) => (
+    <span class={`for-${platform}`}>{t.hero.downloadFor(t.platforms[platform])}</span>
+  ))}
 </Button>
 
 <script>

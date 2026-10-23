@@ -117,13 +117,41 @@ describe("permission modes (§13.5)", () => {
   });
 
   it("runs everything in bypass mode", () => {
-    for (const kind of ["read_terminal", "run_command", "send_input", "read_file", "edit_file", "write_file", "grep", "glob", "web_search", "fetch_url", "read_skill", "mcp"] as const) {
+    for (const kind of [
+      "read_terminal",
+      "run_command",
+      "send_input",
+      "read_file",
+      "edit_file",
+      "write_file",
+      "grep",
+      "glob",
+      "web_search",
+      "fetch_url",
+      "read_skill",
+      "mcp",
+    ] as const) {
       expect(needsApproval(kind, "bypass")).toBe(false);
     }
   });
 
   it("asks in Auto about what manual approval asks about, for its judge to decide (AI-47)", () => {
-    for (const kind of ["read_terminal", "run_command", "send_input", "read_file", "edit_file", "write_file", "grep", "glob", "web_search", "fetch_url", "read_skill", "search_tools", "mcp", "unknown"] as const) {
+    for (const kind of [
+      "read_terminal",
+      "run_command",
+      "send_input",
+      "read_file",
+      "edit_file",
+      "write_file",
+      "grep",
+      "glob",
+      "web_search",
+      "fetch_url",
+      "read_skill",
+      "search_tools",
+      "mcp",
+      "unknown",
+    ] as const) {
       expect(needsApproval(kind, "auto")).toBe(needsApproval(kind, "manual"));
       expect(mustAsk({ kind, mode: "auto", allowed: false })).toBe(mustAsk({ kind, mode: "manual", allowed: false }));
       expect(mustAsk({ kind, mode: "auto", allowed: true })).toBe(false);
@@ -151,9 +179,18 @@ describe("read_terminal arguments (AI-11)", () => {
 
 describe("send_input arguments (AI-13)", () => {
   it("parses text, key and wait with defaults and clamps", () => {
-    expect(parseSendInput('{"text":"ls -la","key":"enter"}')).toEqual({ ok: true, value: { text: "ls -la", keys: ["enter"], waitSeconds: 10 } });
-    expect(parseSendInput('{"text":"q","wait_seconds":500}')).toEqual({ ok: true, value: { text: "q", keys: [], waitSeconds: 120 } });
-    expect(parseSendInput('{"key":"CTRL_C","wait_seconds":0}')).toEqual({ ok: true, value: { text: "", keys: ["ctrl+C"], waitSeconds: 1 } });
+    expect(parseSendInput('{"text":"ls -la","key":"enter"}')).toEqual({
+      ok: true,
+      value: { text: "ls -la", keys: ["enter"], waitSeconds: 10 },
+    });
+    expect(parseSendInput('{"text":"q","wait_seconds":500}')).toEqual({
+      ok: true,
+      value: { text: "q", keys: [], waitSeconds: 120 },
+    });
+    expect(parseSendInput('{"key":"CTRL_C","wait_seconds":0}')).toEqual({
+      ok: true,
+      value: { text: "", keys: ["ctrl+C"], waitSeconds: 1 },
+    });
   });
 
   it("rejects bad keys, bad types and empty input", () => {
@@ -164,14 +201,27 @@ describe("send_input arguments (AI-13)", () => {
   });
 
   it("accepts ordered keys, retaining the legacy key before them", () => {
-    expect(parseSendInput('{"keys":["ctrl+x","n"]}')).toEqual({ ok: true, value: { text: "", keys: ["ctrl+x", "n"], waitSeconds: 10 } });
-    expect(parseSendInput('{"text":"x","key":"esc","keys":[":","w","q","enter"]}')).toEqual({ ok: true, value: { text: "x", keys: ["esc", ":", "w", "q", "enter"], waitSeconds: 10 } });
-    for (const keys of [null, "enter", ["enter", 1], ["enter", ""], ["enter", "not_a_key"], []]) expect(parseSendInput(JSON.stringify({ keys })).ok).toBe(false);
+    expect(parseSendInput('{"keys":["ctrl+x","n"]}')).toEqual({
+      ok: true,
+      value: { text: "", keys: ["ctrl+x", "n"], waitSeconds: 10 },
+    });
+    expect(parseSendInput('{"text":"x","key":"esc","keys":[":","w","q","enter"]}')).toEqual({
+      ok: true,
+      value: { text: "x", keys: ["esc", ":", "w", "q", "enter"], waitSeconds: 10 },
+    });
+    for (const keys of [null, "enter", ["enter", 1], ["enter", ""], ["enter", "not_a_key"], []])
+      expect(parseSendInput(JSON.stringify({ keys })).ok).toBe(false);
   });
 
   it("treats optional null fields as absent", () => {
-    expect(parseSendInput('{"text":"ls","key":null,"keys":null}')).toEqual({ ok: true, value: { text: "ls", keys: [], waitSeconds: 10 } });
-    expect(parseSendInput('{"text":null,"key":"enter","keys":null}')).toEqual({ ok: true, value: { text: "", keys: ["enter"], waitSeconds: 10 } });
+    expect(parseSendInput('{"text":"ls","key":null,"keys":null}')).toEqual({
+      ok: true,
+      value: { text: "ls", keys: [], waitSeconds: 10 },
+    });
+    expect(parseSendInput('{"text":null,"key":"enter","keys":null}')).toEqual({
+      ok: true,
+      value: { text: "", keys: ["enter"], waitSeconds: 10 },
+    });
     expect(parseSendInput('{"keys":null}').ok).toBe(false);
   });
 
@@ -216,7 +266,9 @@ describe("display helpers", () => {
     expect(callSummary("read_file", '{"path":"/var/log/syslog","offset":200}')).toBe("/var/log/syslog:200");
     expect(callSummary("edit_file", '{"path":"~/.bashrc","old_string":"a","new_string":"b"}')).toBe("~/.bashrc");
     expect(callSummary("write_file", '{"path":"/srv/new.txt","content":"x"}')).toBe("/srv/new.txt");
-    expect(callSummary("grep", '{"pattern":"listen 8080","path":"/etc/nginx","glob":"*.conf"}')).toBe("listen 8080 · /etc/nginx · *.conf");
+    expect(callSummary("grep", '{"pattern":"listen 8080","path":"/etc/nginx","glob":"*.conf"}')).toBe(
+      "listen 8080 · /etc/nginx · *.conf",
+    );
     expect(callSummary("glob", '{"pattern":"**/*.conf"}')).toBe("**/*.conf");
   });
 
@@ -255,7 +307,13 @@ describe("asking with MCP tools and Allow for this conversation (AI-19, AI-31)",
       name: "mcp__github__list_issues",
       tool: "list_issues",
       description: "Lists issues.",
-      annotations: { title: null, read_only_hint: true, destructive_hint: null, idempotent_hint: null, open_world_hint: null },
+      annotations: {
+        title: null,
+        read_only_hint: true,
+        destructive_hint: null,
+        idempotent_hint: null,
+        open_world_hint: null,
+      },
       always_allow,
     },
   });
@@ -305,7 +363,9 @@ describe("asking with MCP tools and Allow for this conversation (AI-19, AI-31)",
   });
 
   it("tells the model when a server was switched off during the turn (AI-30)", () => {
-    expect(mcpOffResult("github")).toBe('The MCP server "github" was switched off for this conversation, so the tool did not run.');
+    expect(mcpOffResult("github")).toBe(
+      'The MCP server "github" was switched off for this conversation, so the tool did not run.',
+    );
   });
 
   it("runs any call an approval covers without asking", () => {
@@ -325,7 +385,8 @@ describe("asking with MCP tools and Allow for this conversation (AI-19, AI-31)",
   });
 
   it("labels built-in, MCP and unknown tools", () => {
-    const t = (key: string, params?: Record<string, string | number>) => (params ? `${key}:${JSON.stringify(params)}` : key);
+    const t = (key: string, params?: Record<string, string | number>) =>
+      params ? `${key}:${JSON.stringify(params)}` : key;
     expect(toolLabel(t, "run_command")).toBe("ai.tool.run_command");
     expect(toolLabel(t, "mcp__github__list_issues")).toBe('ai.tool.mcp:{"server":"github","tool":"list_issues"}');
     expect(toolLabel(t, "rm_rf")).toBe("rm_rf");
@@ -356,18 +417,30 @@ describe("approvals of commands, pages and tools (AI-19)", () => {
 
   it("reads a command in the syntax of the tab's shell", () => {
     const local: HostRef = { host_id: null, target: "local" };
-    expect(callAllowed("run_command", cmd("Get-ChildItem | Select-String x"), null, [], [], local, "powershell")).toBe(true);
+    expect(callAllowed("run_command", cmd("Get-ChildItem | Select-String x"), null, [], [], local, "powershell")).toBe(
+      true,
+    );
     expect(callAllowed("run_command", cmd("Get-ChildItem | Select-String x"), null, [], [], local)).toBe(false);
-    expect(callAllowed("run_command", cmd("NPM run build"), null, ["run_command:npm run"], [], local, "powershell")).toBe(true);
+    expect(
+      callAllowed("run_command", cmd("NPM run build"), null, ["run_command:npm run"], [], local, "powershell"),
+    ).toBe(true);
     expect(concurrencySafe("run_command", cmd("dir /s & ver"), "cmd")).toBe(true);
-    expect(allowanceScope("run_command", cmd("Remove-Item -Recurse build"), null, "powershell")).toEqual({ kind: "command", prefixes: ["Remove-Item"], savable: false });
+    expect(allowanceScope("run_command", cmd("Remove-Item -Recurse build"), null, "powershell")).toEqual({
+      kind: "command",
+      prefixes: ["Remove-Item"],
+      savable: false,
+    });
   });
 
   it("allows a page by its exact host name", () => {
     expect(callAllowed("fetch_url", { url: "https://docs.example.com/a" }, null, [], saved, null)).toBe(true);
-    expect(callAllowed("fetch_url", { url: "https://evil.docs.example.com.attacker.net/" }, null, [], saved, null)).toBe(false);
+    expect(
+      callAllowed("fetch_url", { url: "https://evil.docs.example.com.attacker.net/" }, null, [], saved, null),
+    ).toBe(false);
     expect(callAllowed("fetch_url", { url: "https://example.com/" }, null, [], saved, null)).toBe(false);
-    expect(callAllowed("fetch_url", { url: "https://example.com/x" }, null, ["fetch_url:example.com"], [], null)).toBe(true);
+    expect(callAllowed("fetch_url", { url: "https://example.com/x" }, null, ["fetch_url:example.com"], [], null)).toBe(
+      true,
+    );
     expect(callAllowed("fetch_url", { url: "not a url" }, null, ["fetch_url"], [], null)).toBe(false);
   });
 
@@ -399,13 +472,22 @@ describe("approvals of commands, pages and tools (AI-19)", () => {
       "git pull && rm x",
     ])
       expect(allowanceScope("run_command", cmd(line), null), line).toMatchObject({ kind: "command", savable: false });
-    expect(allowanceScope("run_command", cmd("/usr/bin/git pull"), null)).toMatchObject({ kind: "command", savable: true });
+    expect(allowanceScope("run_command", cmd("/usr/bin/git pull"), null)).toMatchObject({
+      kind: "command",
+      savable: true,
+    });
     expect(allowanceScope("run_command", cmd("sudo reboot"), null)).toBeNull();
-    expect(allowanceScope("fetch_url", { url: "https://Docs.Example.com/x?y" }, null)).toEqual({ kind: "domain", domain: "docs.example.com" });
+    expect(allowanceScope("fetch_url", { url: "https://Docs.Example.com/x?y" }, null)).toEqual({
+      kind: "domain",
+      domain: "docs.example.com",
+    });
     expect(allowanceScope("fetch_url", { url: "ftp://x" }, null)).toBeNull();
     expect(allowanceScope("write_file", {}, null)).toEqual({ kind: "tool", tool: "write_file" });
     expect(allowanceScope("read_file", {}, null)).toBeNull();
-    expect(grantKeys({ kind: "command", prefixes: ["git pull", "make"], savable: true })).toEqual(["run_command:git pull", "run_command:make"]);
+    expect(grantKeys({ kind: "command", prefixes: ["git pull", "make"], savable: true })).toEqual([
+      "run_command:git pull",
+      "run_command:make",
+    ]);
     expect(grantKeys({ kind: "domain", domain: "a.com" })).toEqual(["fetch_url:a.com"]);
   });
 
@@ -414,8 +496,12 @@ describe("approvals of commands, pages and tools (AI-19)", () => {
       { kind: "command", host_id: null, target: "root@10.0.0.5:22", value: "git pull" },
     ]);
     expect(savedFor({ kind: "command", prefixes: ["rm"], savable: false }, quick)).toEqual([]);
-    expect(savedFor({ kind: "tool", tool: "send_input" }, web)).toEqual([{ kind: "tool", host_id: "h-web", target: null, value: "send_input" }]);
-    expect(savedFor({ kind: "domain", domain: "a.com" }, web)).toEqual([{ kind: "domain", host_id: null, target: null, value: "a.com" }]);
+    expect(savedFor({ kind: "tool", tool: "send_input" }, web)).toEqual([
+      { kind: "tool", host_id: "h-web", target: null, value: "send_input" },
+    ]);
+    expect(savedFor({ kind: "domain", domain: "a.com" }, web)).toEqual([
+      { kind: "domain", host_id: null, target: null, value: "a.com" },
+    ]);
     expect(savedFor({ kind: "mcp", key: "mcp:s1:x" }, web)).toEqual([]);
     expect(urlDomain(" http://[::1]:8080/x ")).toBe("[::1]");
   });
@@ -423,10 +509,16 @@ describe("approvals of commands, pages and tools (AI-19)", () => {
 
 describe("the change of a file call from its arguments (AI-41)", () => {
   it("shows an edit's replaced text and a write's content, and nothing for other tools", () => {
-    const edit = callFileChange("edit_file", JSON.stringify({ path: "/etc/a.conf", old_string: "port 80\n", new_string: "port 8080\n" }));
+    const edit = callFileChange(
+      "edit_file",
+      JSON.stringify({ path: "/etc/a.conf", old_string: "port 80\n", new_string: "port 8080\n" }),
+    );
     expect(edit).toEqual({ path: "/etc/a.conf", before: "port 80\n", after: "port 8080\n", error: null, crlf: false });
     // Whether the write created the file is not in its arguments: the content shows as added, not as a new file.
-    expect(callFileChange("write_file", JSON.stringify({ path: "b", content: "x\n" }))).toMatchObject({ before: "", after: "x\n" });
+    expect(callFileChange("write_file", JSON.stringify({ path: "b", content: "x\n" }))).toMatchObject({
+      before: "",
+      after: "x\n",
+    });
     expect(callFileChange("read_file", JSON.stringify({ path: "b" }))).toBeNull();
     expect(callFileChange("edit_file", "{")).toBeNull();
   });
@@ -443,8 +535,14 @@ describe("calls through call_mcp_tool (AI-45)", () => {
   });
 
   it("name the tool and its arguments, an object or a string that holds one, as Rust reads them", () => {
-    expect(proxyCall("call_mcp_tool", '{"tool":"mcp__gh__x","arguments":{"a":1}}')).toEqual({ tool: "mcp__gh__x", arguments: '{"a":1}' });
-    expect(proxyCall("call_mcp_tool", '{"tool":" mcp__gh__x ","arguments":"{\\"a\\": 1}"}')).toEqual({ tool: "mcp__gh__x", arguments: '{"a":1}' });
+    expect(proxyCall("call_mcp_tool", '{"tool":"mcp__gh__x","arguments":{"a":1}}')).toEqual({
+      tool: "mcp__gh__x",
+      arguments: '{"a":1}',
+    });
+    expect(proxyCall("call_mcp_tool", '{"tool":" mcp__gh__x ","arguments":"{\\"a\\": 1}"}')).toEqual({
+      tool: "mcp__gh__x",
+      arguments: '{"a":1}',
+    });
     expect(proxyCall("call_mcp_tool", '{"tool":"mcp__gh__x"}')).toEqual({ tool: "mcp__gh__x", arguments: "{}" });
     expect(proxyCall("call_mcp_tool", '{"arguments":{}}')).toBeNull();
     expect(proxyCall("mcp__gh__x", '{"tool":"mcp__gh__y"}')).toBeNull();
@@ -453,14 +551,27 @@ describe("calls through call_mcp_tool (AI-45)", () => {
   });
 
   it("show as the tool they name, and an edit changes only that tool's arguments", () => {
-    const call = { id: "c1", name: "call_mcp_tool", arguments: '{"tool":"mcp__gh__create_issue","arguments":{"title":"x"}}' };
+    const call = {
+      id: "c1",
+      name: "call_mcp_tool",
+      arguments: '{"tool":"mcp__gh__create_issue","arguments":{"title":"x"}}',
+    };
     const shown = shownCall(call);
     expect(shown).toEqual({ id: "c1", name: "mcp__gh__create_issue", arguments: '{"title":"x"}' });
-    expect(toolLabel((key, params) => `${key}:${params?.server}/${params?.tool}`, shown.name)).toBe("ai.tool.mcp:gh/create_issue");
+    expect(toolLabel((key, params) => `${key}:${params?.server}/${params?.tool}`, shown.name)).toBe(
+      "ai.tool.mcp:gh/create_issue",
+    );
     expect(shownCall({ id: "c2", name: "run_command", arguments: "{}" }).name).toBe("run_command");
     // A call that names a built-in tool shows as the call it is, not as that tool.
-    const builtin = { id: "c3", name: "call_mcp_tool", arguments: '{"tool":"write_file","arguments":{"path":"/etc/hosts"}}' };
+    const builtin = {
+      id: "c3",
+      name: "call_mcp_tool",
+      arguments: '{"tool":"write_file","arguments":{"path":"/etc/hosts"}}',
+    };
     expect(shownCall(builtin)).toEqual(builtin);
-    expect(JSON.parse(proxyArguments(call.arguments, '{"title":"y"}'))).toEqual({ tool: "mcp__gh__create_issue", arguments: { title: "y" } });
+    expect(JSON.parse(proxyArguments(call.arguments, '{"title":"y"}'))).toEqual({
+      tool: "mcp__gh__create_issue",
+      arguments: { title: "y" },
+    });
   });
 });

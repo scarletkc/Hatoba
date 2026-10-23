@@ -36,13 +36,17 @@ export function SyncWizard() {
     [],
   );
 
-  const patch = <F,>(set: Dispatch<SetStateAction<F>>) => (p: Partial<F>) => set((f) => ({ ...f, ...p }));
+  const patch =
+    <F,>(set: Dispatch<SetStateAction<F>>) =>
+    (p: Partial<F>) =>
+      set((f) => ({ ...f, ...p }));
 
   if (step === 3 && remote) {
     const submit = (() => {
       switch (remote.kind) {
         case "config":
-          return (pw: string) => (remote.join ? api.sync_join(remote.config, pw) : api.sync_configure(remote.config, pw));
+          return (pw: string) =>
+            remote.join ? api.sync_join(remote.config, pw) : api.sync_configure(remote.config, pw);
         case "deployed":
           return (pw: string) => api.deploy_setup(remote.handle, pw);
         case "existing":

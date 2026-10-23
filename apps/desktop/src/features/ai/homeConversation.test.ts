@@ -19,7 +19,7 @@ const view: AiConversationView = {
   host_id: null,
   quick_target: null,
   origin: null,
-      local: null,
+  local: null,
   pinned: false,
   context_start: null,
   effort: null,
@@ -48,7 +48,9 @@ describe("offersHomeConversation (AI-09)", () => {
 
   it("does not offer it to a tab that already has a conversation or a message on its way", () => {
     expect(offersHomeConversation({ ...blankSlot("manual"), conversationId: "c2" }, homeSlot())).toBe(false);
-    expect(offersHomeConversation({ ...blankSlot("manual"), entries: [entry], turn: newTurn() }, homeSlot())).toBe(false);
+    expect(offersHomeConversation({ ...blankSlot("manual"), entries: [entry], turn: newTurn() }, homeSlot())).toBe(
+      false,
+    );
   });
 
   it("does not offer a home tab without a stored conversation with messages", () => {
@@ -86,10 +88,17 @@ describe("continueHomeConversation (AI-09)", () => {
   });
 
   it("keeps each input where it is when the tab's input holds something", () => {
-    setSlots(homeSlot({ draft: "home draft", extras: [{ id: "x1", attachment: paste }] }), { ...blankSlot("manual"), draft: "tab draft" });
+    setSlots(homeSlot({ draft: "home draft", extras: [{ id: "x1", attachment: paste }] }), {
+      ...blankSlot("manual"),
+      draft: "tab draft",
+    });
     continueHomeConversation(TAB);
     expect(getSlot(TAB)).toMatchObject({ conversationId: view.id, draft: "tab draft", extras: [] });
-    expect(getSlot(HOME_SLOT)).toMatchObject({ conversationId: null, draft: "home draft", extras: [{ id: "x1", attachment: paste }] });
+    expect(getSlot(HOME_SLOT)).toMatchObject({
+      conversationId: null,
+      draft: "home draft",
+      extras: [{ id: "x1", attachment: paste }],
+    });
   });
 
   it("counts the tab's selection and diagnostics chips as input it holds (AI-10)", () => {

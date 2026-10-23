@@ -21,7 +21,9 @@ const { locale } = Astro.props as { locale: Locale };
 const t = messages(locale);
 const release = await loadRelease();
 const description =
-  locale === "en" ? `${t.meta.downloadLead(release.version)} ${t.meta.description}.` : `${t.meta.downloadLead(release.version)}${t.meta.description}。`;
+  locale === "en"
+    ? `${t.meta.downloadLead(release.version)} ${t.meta.description}.`
+    : `${t.meta.downloadLead(release.version)}${t.meta.description}。`;
 ---
 
 <Base
@@ -39,66 +41,72 @@ const description =
           {t.download.released(release.version, formatDate(locale, release.publishedAt))}
           <a href={release.url}>{t.download.notes}</a>
         </p>
-        {
-          release.preview && (
-            <p class="released">
-              {t.download.preview(release.preview.version)} <a href={release.preview.url}>{t.download.previewLink}</a>
-            </p>
-          )
-        }
+        {release.preview && (
+          <p class="released">
+            {t.download.preview(release.preview.version)} <a href={release.preview.url}>{t.download.previewLink}</a>
+          </p>
+        )}
       </SectionHeader>
     </div>
   </NightBand>
 
   <div class="container platforms">
-    {
-      PLATFORMS.map((platform) => (
-        <section id={platform} class="platform" aria-labelledby={`${platform}-title`}>
-          <div class="about">
-            <div class="title">
-              <h2 id={`${platform}-title`}>{t.platforms[platform]}</h2>
-              <Badge class="this-device">{t.download.thisDevice}</Badge>
-            </div>
-            <p class="requirements">{t.download.requirements[platform]}</p>
+    {PLATFORMS.map((platform) => (
+      <section id={platform} class="platform" aria-labelledby={`${platform}-title`}>
+        <div class="about">
+          <div class="title">
+            <h2 id={`${platform}-title`}>{t.platforms[platform]}</h2>
+            <Badge class="this-device">{t.download.thisDevice}</Badge>
           </div>
-          <div class="get">
-            <ul class="files">
-              {release.downloads
-                .filter((download) => download.platform === platform)
-                .map((download) => (
-                  <DownloadFile locale={locale} download={download} />
-                ))}
-            </ul>
-            <h3>{t.download.install}</h3>
-            <p class="steps" set:html={inlineMarkdown(installSteps(locale, platform, release.names))} />
-            {PACKAGE_COMMANDS[platform] && (
-              <>
-                <h3>{t.download.packageManager}</h3>
-                <p class="steps" set:html={inlineMarkdown(t.download.packages[platform])} />
-                <div class="command">
-                  <CodeBlock
-                    code={PACKAGE_COMMANDS[platform].join("\n")}
-                    copyLabel={`${t.download.copy}: ${PACKAGE_COMMANDS[platform].join("; ")}`}
-                    copied={t.download.copied}
-                  />
-                </div>
-              </>
-            )}
-          </div>
-        </section>
-      ))
-    }
+          <p class="requirements">{t.download.requirements[platform]}</p>
+        </div>
+        <div class="get">
+          <ul class="files">
+            {release.downloads
+              .filter((download) => download.platform === platform)
+              .map((download) => (
+                <DownloadFile locale={locale} download={download} />
+              ))}
+          </ul>
+          <h3>{t.download.install}</h3>
+          <p class="steps" set:html={inlineMarkdown(installSteps(locale, platform, release.names))} />
+          {PACKAGE_COMMANDS[platform] && (
+            <>
+              <h3>{t.download.packageManager}</h3>
+              <p class="steps" set:html={inlineMarkdown(t.download.packages[platform])} />
+              <div class="command">
+                <CodeBlock
+                  code={PACKAGE_COMMANDS[platform].join("\n")}
+                  copyLabel={`${t.download.copy}: ${PACKAGE_COMMANDS[platform].join("; ")}`}
+                  copied={t.download.copied}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      </section>
+    ))}
   </div>
 
   <div class="container more">
     <p>
-      <a href={release.checksumsUrl}><code>SHA256SUMS.txt</code></a>
+      <a href={release.checksumsUrl}>
+        <code>SHA256SUMS.txt</code>
+      </a>
       {t.download.checksums}
     </p>
-    <p>{t.download.testing} <a href={`${REPO_URL}/issues`}>{t.download.issue}</a></p>
+    <p>
+      {t.download.testing} <a href={`${REPO_URL}/issues`}>{t.download.issue}</a>
+    </p>
     <ul>
-      <li><Link href={RELEASES_URL}>{t.download.allReleases}</Link></li>
-      <li><Link href={BUILD_FROM_SOURCE_URL} hreflang="en">{t.download.source}</Link></li>
+      <li>
+        <Link href={RELEASES_URL}>{t.download.allReleases}</Link>
+      </li>
+      <li>
+        <Link href={BUILD_FROM_SOURCE_URL} hreflang="en">
+          {t.download.source}
+        </Link>
+      </li>
     </ul>
   </div>
 </Base>

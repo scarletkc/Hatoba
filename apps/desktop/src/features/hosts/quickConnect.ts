@@ -119,7 +119,8 @@ export function parseQuickConnect(input: string): QuickParse | null {
   const dest = parseDestination(positionals[0]);
   if (!dest) return null;
   // Typed without "ssh", the input must be the destination itself; anything more is a search.
-  if (!command && (positionals.length > 1 || !(positionals[0].includes("@") || /^ssh:\/\//i.test(positionals[0])))) return null;
+  if (!command && (positionals.length > 1 || !(positionals[0].includes("@") || /^ssh:\/\//i.test(positionals[0]))))
+    return null;
   if (positionals.length > 1) problem ??= { kind: "command" };
 
   // As in ssh, -l and -p win over the user and port in the destination.
@@ -155,7 +156,10 @@ export function sameTarget(a: TypedTarget | QuickTarget, b: TypedTarget | QuickT
 export function savedHostFor(hosts: HostView[], target: TypedTarget | QuickTarget): HostView | undefined {
   const address = bare(target.address);
   const matches = hosts.filter(
-    (h) => bare(h.address) === address && h.port === target.port && (target.username === null || h.username === target.username),
+    (h) =>
+      bare(h.address) === address &&
+      h.port === target.port &&
+      (target.username === null || h.username === target.username),
   );
   return target.username === null && matches.length > 1 ? undefined : matches[0];
 }

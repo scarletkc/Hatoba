@@ -28,7 +28,15 @@ const VISITORS = [
   { name: "windows", platform: "Win32" },
   { name: "macos", platform: "MacIntel" },
   { name: "linux", platform: "Linux x86_64" },
-  { name: "phone", device: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, userAgent: "Mozilla/5.0 (Linux; Android 14) Mobile" } },
+  {
+    name: "phone",
+    device: {
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+      userAgent: "Mozilla/5.0 (Linux; Android 14) Mobile",
+    },
+  },
 ];
 
 const { origin, close } = await serve({ delay: { match: /\.woff2$/, ms: 400 } });
@@ -55,7 +63,10 @@ try {
             // What moved, to name in a failure.
             for (const { node } of entry.sources) {
               const element = node instanceof Element ? node : node?.parentElement;
-              if (element) window.__moved.push(`${element.localName}${element.id ? `#${element.id}` : ""}${element.className && typeof element.className === "string" ? `.${element.className.split(" ")[0]}` : ""} "${(node.textContent ?? "").trim().slice(0, 40)}"`);
+              if (element)
+                window.__moved.push(
+                  `${element.localName}${element.id ? `#${element.id}` : ""}${element.className && typeof element.className === "string" ? `.${element.className.split(" ")[0]}` : ""} "${(node.textContent ?? "").trim().slice(0, 40)}"`,
+                );
             }
           }
         }).observe({ type: "layout-shift", buffered: true });

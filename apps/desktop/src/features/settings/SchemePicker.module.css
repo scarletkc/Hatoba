@@ -42,7 +42,9 @@
 }
 
 .dark {
-  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.16);
+  box-shadow:
+    0 0 0 0.5px rgba(255, 255, 255, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.16);
 }
 
 .light {
@@ -50,11 +52,15 @@
 }
 
 .card:hover .term:not(.termOn) {
-  box-shadow: 0 0 0 1px var(--line2), 0 0 0 3.5px var(--fill);
+  box-shadow:
+    0 0 0 1px var(--line2),
+    0 0 0 3.5px var(--fill);
 }
 
 .termOn {
-  box-shadow: 0 0 0 2px var(--accent), 0 0 0 4.5px var(--accenttint);
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 0 4.5px var(--accenttint);
 }
 
 .card:focus-visible {

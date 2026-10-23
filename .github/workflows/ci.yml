@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
-    paths-ignore: ['**.md', 'docs/**']
+    paths-ignore: ["**.md", "docs/**"]
   # No paths filter: the ruleset on main requires these checks, so a skipped run would block the PR.
   pull_request:
   workflow_dispatch:
@@ -35,6 +35,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
       - run: pnpm --filter @hatoba/desktop typecheck
       - run: pnpm --filter @hatoba/desktop lint
       - run: pnpm --filter @hatoba/desktop test

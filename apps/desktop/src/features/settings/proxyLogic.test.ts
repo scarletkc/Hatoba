@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { authority, parseProxyUrl, passwordForInput, proxySummary, signInFromUrl, validateProxy, type ProxyFormValues } from "./proxyLogic";
+import {
+  authority,
+  parseProxyUrl,
+  passwordForInput,
+  proxySummary,
+  signInFromUrl,
+  validateProxy,
+  type ProxyFormValues,
+} from "./proxyLogic";
 
 describe("parseProxyUrl", () => {
   it("reads SOCKS5 and HTTP URLs with and without credentials", () => {
@@ -17,7 +25,13 @@ describe("parseProxyUrl", () => {
       username: "alice",
       password: "p@ss",
     });
-    expect(parseProxyUrl("SOCKS5H://[::1]")).toEqual({ kind: "socks5", address: "::1", port: null, username: "", password: "" });
+    expect(parseProxyUrl("SOCKS5H://[::1]")).toEqual({
+      kind: "socks5",
+      address: "::1",
+      port: null,
+      username: "",
+      password: "",
+    });
     expect(parseProxyUrl("socks://bob@10.0.0.1:1080")?.username).toBe("bob");
   });
 
@@ -34,13 +48,25 @@ describe("signInFromUrl", () => {
   const url = (text: string) => parseProxyUrl(text)!;
 
   it("never keeps a saved password for a URL without one", () => {
-    expect(signInFromUrl(url("http://new-proxy:3128"), true)).toEqual({ username: "", password: { mode: "clear", value: "" } });
-    expect(signInFromUrl(url("http://bob:@new-proxy:3128"), true)).toEqual({ username: "bob", password: { mode: "clear", value: "" } });
-    expect(signInFromUrl(url("http://bob@new-proxy:3128"), false)).toEqual({ username: "bob", password: { mode: "keep", value: "" } });
+    expect(signInFromUrl(url("http://new-proxy:3128"), true)).toEqual({
+      username: "",
+      password: { mode: "clear", value: "" },
+    });
+    expect(signInFromUrl(url("http://bob:@new-proxy:3128"), true)).toEqual({
+      username: "bob",
+      password: { mode: "clear", value: "" },
+    });
+    expect(signInFromUrl(url("http://bob@new-proxy:3128"), false)).toEqual({
+      username: "bob",
+      password: { mode: "keep", value: "" },
+    });
   });
 
   it("takes the password the URL has", () => {
-    expect(signInFromUrl(url("socks5://bob:pw@p:1080"), true)).toEqual({ username: "bob", password: { mode: "replace", value: "pw" } });
+    expect(signInFromUrl(url("socks5://bob:pw@p:1080"), true)).toEqual({
+      username: "bob",
+      password: { mode: "replace", value: "pw" },
+    });
   });
 });
 
@@ -56,7 +82,14 @@ describe("passwordForInput", () => {
 });
 
 describe("validateProxy", () => {
-  const ok: ProxyFormValues = { name: "Clash", kind: "socks5", address: "127.0.0.1", port: "7890", username: "", password: "" };
+  const ok: ProxyFormValues = {
+    name: "Clash",
+    kind: "socks5",
+    address: "127.0.0.1",
+    port: "7890",
+    username: "",
+    password: "",
+  };
 
   it("accepts a complete form", () => {
     expect(validateProxy(ok)).toEqual({});

@@ -51,7 +51,8 @@ export default defineMessages({
     "sync.dep.token.help": "「Account · Workers Scripts · Edit」和「Account · D1 · Edit」。",
     "sync.dep.createToken": "在 Cloudflare 中创建 Token",
     "sync.dep.accountId": "Account ID（可选）",
-    "sync.dep.accountId.hint": "账户所属的 Token 必须填写。在 Cloudflare 控制台的「Workers & Pages」→「Account Details」中可以找到。",
+    "sync.dep.accountId.hint":
+      "账户所属的 Token 必须填写。在 Cloudflare 控制台的「Workers & Pages」→「Account Details」中可以找到。",
     "sync.dep.accountId.enter": "粘贴 Account ID",
     "sync.dep.review.title": "确认部署内容",
     "sync.dep.account": "Cloudflare 账户",
@@ -64,9 +65,12 @@ export default defineMessages({
     "sync.dep.plan.dbUse": "使用空数据库 {name}",
     "sync.dep.plan.dbBound": "继续使用这个 Worker 的数据库 {name}",
     "sync.dep.plan.renamed": "数据库 {name} 里已有其他数据，所以改用 {other}。",
-    "sync.dep.plan.hasVault": "Worker {name} 已经保存了一个保险库。选择“连接”加入它，这台设备上的数据会合并进去；要部署新的 Worker，请在下面换一个名称。",
-    "sync.dep.plan.hasVaultNoUrl": "Worker {name} 已经保存了一个保险库，但它没有可用的 workers.dev 地址（例如只通过自定义域名访问），无法从这里连接。要加入它，请返回第一步，选择“连接已部署的 Worker”并填写它的地址；要部署新的 Worker，请在下面换一个名称。",
-    "sync.dep.plan.foreign": "账户中已有名为 {name} 的 Worker，但它不是 Hatoba 的同步 Worker，Hatoba 不会覆盖它。请在下面换一个名称。",
+    "sync.dep.plan.hasVault":
+      "Worker {name} 已经保存了一个保险库。选择“连接”加入它，这台设备上的数据会合并进去；要部署新的 Worker，请在下面换一个名称。",
+    "sync.dep.plan.hasVaultNoUrl":
+      "Worker {name} 已经保存了一个保险库，但它没有可用的 workers.dev 地址（例如只通过自定义域名访问），无法从这里连接。要加入它，请返回第一步，选择“连接已部署的 Worker”并填写它的地址；要部署新的 Worker，请在下面换一个名称。",
+    "sync.dep.plan.foreign":
+      "账户中已有名为 {name} 的 Worker，但它不是 Hatoba 的同步 Worker，Hatoba 不会覆盖它。请在下面换一个名称。",
     "sync.dep.subdomain": "workers.dev 子域名",
     "sync.dep.subdomain.hint": "这个账户还没有 workers.dev 子域名。它会出现在账户中每个 Worker 的地址里。",
     "sync.dep.names": "Worker 和数据库名称",
@@ -98,14 +102,17 @@ export default defineMessages({
     "sync.dep.ready": "同步 Worker 已上线。下一步，用主密码在它上面创建云端保险库。",
     "sync.dep.offline": "无法连接到 Cloudflare，请检查网络后重试。",
     "sync.wu.available": "同步 Worker 有新版本：{version} → {bundled}。",
-    "sync.wu.required": "这个版本的 Hatoba 无法与 Worker {version} 同步。更新 Worker 后会继续同步，在此期间的更改保存在本机，更新后上传。",
-    "sync.wu.app": "同步 Worker（{version}）需要更新版本的 Hatoba。更新 Hatoba 后会继续同步，在此期间的更改保存在本机。",
+    "sync.wu.required":
+      "这个版本的 Hatoba 无法与 Worker {version} 同步。更新 Worker 后会继续同步，在此期间的更改保存在本机，更新后上传。",
+    "sync.wu.app":
+      "同步 Worker（{version}）需要更新版本的 Hatoba。更新 Hatoba 后会继续同步，在此期间的更改保存在本机。",
     "sync.wu.update": "更新 Worker",
     "sync.wu.dismiss": "忽略",
     "sync.wu.checkApp": "检查更新",
     "sync.up.title": "更新同步 Worker",
     "sync.up.body": "把同步 Worker 更新到 {version}。云端保险库保持不变。",
-    "sync.up.buttonWarning": "如果这个 Worker 是用“部署到 Cloudflare”按钮部署的，你的仓库下次推送时 Cloudflare 会重新部署它，替换掉这次更新。这种情况下，请按升级步骤更新仓库中的 workers/sync。",
+    "sync.up.buttonWarning":
+      "如果这个 Worker 是用“部署到 Cloudflare”按钮部署的，你的仓库下次推送时 Cloudflare 会重新部署它，替换掉这次更新。这种情况下，请按升级步骤更新仓库中的 workers/sync。",
     "sync.up.guide": "升级步骤",
     "sync.up.workerName.hint": "这个 Worker 使用自定义域名，请填写它在 Cloudflare 中的名称。",
     "sync.up.review.title": "确认更新内容",
@@ -116,7 +123,8 @@ export default defineMessages({
     "sync.up.plan.missing": "这个账户中没有名为 {name} 的 Worker。请检查账户，或在下面填写正确的 Worker 名称。",
     "sync.up.plan.foreign": "Worker {name} 不是 Hatoba 的同步 Worker。请在下面填写正确的 Worker 名称。",
     "sync.up.plan.noVault": "Worker {name} 没有保存保险库，不是这台设备同步的 Worker。请在下面填写正确的 Worker 名称。",
-    "sync.up.plan.newer": "Worker {name} 已经是 {version}，比这个版本的 Hatoba 内置的 {bundled} 更新。Hatoba 不会用旧版本替换它。",
+    "sync.up.plan.newer":
+      "Worker {name} 已经是 {version}，比这个版本的 Hatoba 内置的 {bundled} 更新。Hatoba 不会用旧版本替换它。",
     "sync.up.update": "更新",
     "sync.up.run.title": "正在更新同步 Worker",
     "sync.up.run.ready": "同步 Worker 已更新",
@@ -152,7 +160,8 @@ export default defineMessages({
     "sync.uploading": "正在上传 {n} 项…",
     "sync.initializing": "正在初始化…",
     "sync.join.title": "输入云端保险库的主密码",
-    "sync.join.body": "这台设备上的数据会合并进云端保险库。之后这台设备改用这个主密码解锁，恢复码也换成云端保险库的恢复码，这台设备原来的恢复码将失效。",
+    "sync.join.body":
+      "这台设备上的数据会合并进云端保险库。之后这台设备改用这个主密码解锁，恢复码也换成云端保险库的恢复码，这台设备原来的恢复码将失效。",
     "sync.join.submit": "合并并开启同步",
     "sync.join.busy": "正在合并…",
 
@@ -281,7 +290,8 @@ export default defineMessages({
     "sync.wizard.steps": "Setup steps",
 
     "sync.w1.title": "Connect your own Cloudflare D1",
-    "sync.w1.body": "Hosts, keys and settings are encrypted on this device, then stored in a D1 database in your account.",
+    "sync.w1.body":
+      "Hosts, keys and settings are encrypted on this device, then stored in a D1 database in your account.",
     "sync.opt.deploy": "Deploy a Worker from Hatoba",
     "sync.opt.deploy.desc": "Creates the sync Worker and a D1 database in your account.",
     "sync.opt.worker": "Connect a deployed Worker",
@@ -292,8 +302,10 @@ export default defineMessages({
     "sync.howEncrypt": "How is my data encrypted?",
     "sync.enc.title": "How is my data encrypted?",
     "sync.enc.item": "Each item is encrypted on this device with AES-256-GCM, using a randomly generated vault key.",
-    "sync.enc.vault": "The vault key is itself encrypted with a key derived from your master password using Argon2id. The password is never uploaded.",
-    "sync.enc.cloud": "The Worker and D1 only ever hold ciphertext. Without your master password no one can decrypt it, including us.",
+    "sync.enc.vault":
+      "The vault key is itself encrypted with a key derived from your master password using Argon2id. The password is never uploaded.",
+    "sync.enc.cloud":
+      "The Worker and D1 only ever hold ciphertext. Without your master password no one can decrypt it, including us.",
 
     "sync.w2.title": "Deploy the Sync Worker",
     "sync.w2.body": "When deployment finishes, paste the Worker URL and Setup Token below.",
@@ -317,7 +329,8 @@ export default defineMessages({
     "sync.dep.token.help": "“Account · Workers Scripts · Edit” and “Account · D1 · Edit”.",
     "sync.dep.createToken": "Create a token in Cloudflare",
     "sync.dep.accountId": "Account ID (optional)",
-    "sync.dep.accountId.hint": "Required for an account-owned token. Find it in the Cloudflare dashboard under Workers & Pages → Account Details.",
+    "sync.dep.accountId.hint":
+      "Required for an account-owned token. Find it in the Cloudflare dashboard under Workers & Pages → Account Details.",
     "sync.dep.accountId.enter": "Paste the account ID",
     "sync.dep.review.title": "Review the Deployment",
     "sync.dep.account": "Cloudflare account",
@@ -330,16 +343,22 @@ export default defineMessages({
     "sync.dep.plan.dbUse": "Use the empty database {name}",
     "sync.dep.plan.dbBound": "Keep the Worker’s database {name}",
     "sync.dep.plan.renamed": "The database {name} already holds other data, so Hatoba uses {other}.",
-    "sync.dep.plan.hasVault": "The Worker {name} already holds a vault. Choose Connect to join it, and this device’s data is merged into it. To deploy a new Worker instead, choose another name below.",
-    "sync.dep.plan.hasVaultNoUrl": "The Worker {name} already holds a vault, but it has no workers.dev URL (it may be reachable only on a custom domain), so Hatoba can’t connect to it from here. To join it, go back to the first step, choose “Connect a deployed Worker” and enter its URL. To deploy a new Worker instead, choose another name below.",
-    "sync.dep.plan.foreign": "Your account already has a Worker named {name} that isn’t a Hatoba sync Worker, and Hatoba won’t overwrite it. Choose another name below.",
+    "sync.dep.plan.hasVault":
+      "The Worker {name} already holds a vault. Choose Connect to join it, and this device’s data is merged into it. To deploy a new Worker instead, choose another name below.",
+    "sync.dep.plan.hasVaultNoUrl":
+      "The Worker {name} already holds a vault, but it has no workers.dev URL (it may be reachable only on a custom domain), so Hatoba can’t connect to it from here. To join it, go back to the first step, choose “Connect a deployed Worker” and enter its URL. To deploy a new Worker instead, choose another name below.",
+    "sync.dep.plan.foreign":
+      "Your account already has a Worker named {name} that isn’t a Hatoba sync Worker, and Hatoba won’t overwrite it. Choose another name below.",
     "sync.dep.subdomain": "workers.dev subdomain",
-    "sync.dep.subdomain.hint": "This account has no workers.dev subdomain yet. It becomes part of the URL of every Worker in the account.",
+    "sync.dep.subdomain.hint":
+      "This account has no workers.dev subdomain yet. It becomes part of the URL of every Worker in the account.",
     "sync.dep.names": "Worker and database names",
     "sync.dep.workerName": "Worker name",
     "sync.dep.databaseName": "Database name",
-    "sync.dep.invalid.worker_name": "Use lowercase letters, digits, and hyphens, up to 63 characters, with no hyphen at the start or end.",
-    "sync.dep.invalid.subdomain": "Use lowercase letters, digits, and hyphens, up to 63 characters, with no hyphen at the start or end.",
+    "sync.dep.invalid.worker_name":
+      "Use lowercase letters, digits, and hyphens, up to 63 characters, with no hyphen at the start or end.",
+    "sync.dep.invalid.subdomain":
+      "Use lowercase letters, digits, and hyphens, up to 63 characters, with no hyphen at the start or end.",
     "sync.dep.invalid.database_name": "Use lowercase letters, digits, hyphens, and underscores, up to 60 characters.",
     "sync.dep.invalid.account_id": "This account ID doesn’t look right. Copy it again from the Cloudflare dashboard.",
     "sync.dep.deploy": "Deploy",
@@ -360,18 +379,22 @@ export default defineMessages({
     "sync.dep.remove": "Remove what Hatoba created",
     "sync.dep.removing": "Removing…",
     "sync.dep.removed": "Removed the Worker and database this deployment created.",
-    "sync.dep.waiting": "The Worker is deployed but doesn’t answer yet. A new workers.dev subdomain can take a few minutes to start working, so check again in a moment.",
+    "sync.dep.waiting":
+      "The Worker is deployed but doesn’t answer yet. A new workers.dev subdomain can take a few minutes to start working, so check again in a moment.",
     "sync.dep.ready": "The sync Worker is live. Next, your master password sets up the cloud vault on it.",
     "sync.dep.offline": "Can’t reach Cloudflare. Check your network and try again.",
     "sync.wu.available": "A sync Worker update is available: {version} → {bundled}.",
-    "sync.wu.required": "This version of Hatoba can’t sync with Worker {version}. Update the Worker to resume syncing. Changes you make meanwhile stay on this device and upload after the update.",
-    "sync.wu.app": "The sync Worker ({version}) needs a newer version of Hatoba. Update Hatoba to resume syncing. Changes you make meanwhile stay on this device.",
+    "sync.wu.required":
+      "This version of Hatoba can’t sync with Worker {version}. Update the Worker to resume syncing. Changes you make meanwhile stay on this device and upload after the update.",
+    "sync.wu.app":
+      "The sync Worker ({version}) needs a newer version of Hatoba. Update Hatoba to resume syncing. Changes you make meanwhile stay on this device.",
     "sync.wu.update": "Update Worker",
     "sync.wu.dismiss": "Dismiss",
     "sync.wu.checkApp": "Check for updates",
     "sync.up.title": "Update the Sync Worker",
     "sync.up.body": "Updates the sync Worker to {version}. Your cloud vault stays as it is.",
-    "sync.up.buttonWarning": "If you deployed this Worker with the Deploy to Cloudflare button, Cloudflare deploys it again from your repository on its next push, which replaces this update. In that case, update workers/sync in your repository with the upgrade steps.",
+    "sync.up.buttonWarning":
+      "If you deployed this Worker with the Deploy to Cloudflare button, Cloudflare deploys it again from your repository on its next push, which replaces this update. In that case, update workers/sync in your repository with the upgrade steps.",
     "sync.up.guide": "Upgrade steps",
     "sync.up.workerName.hint": "This Worker uses a custom domain, so enter its name in Cloudflare.",
     "sync.up.review.title": "Review the Update",
@@ -380,10 +403,13 @@ export default defineMessages({
     "sync.up.plan.migrations": "Apply {n} table changes to the database {name}",
     "sync.up.plan.migrations_one": "Apply 1 table change to the database {name}",
     "sync.up.plan.noMigrations": "No changes to the database {name}",
-    "sync.up.plan.missing": "Your account has no Worker named {name}. Check the account, or enter the right Worker name below.",
+    "sync.up.plan.missing":
+      "Your account has no Worker named {name}. Check the account, or enter the right Worker name below.",
     "sync.up.plan.foreign": "The Worker {name} isn’t a Hatoba sync Worker. Enter the right Worker name below.",
-    "sync.up.plan.noVault": "The Worker {name} holds no vault, so it isn’t the one this device syncs with. Enter the right Worker name below.",
-    "sync.up.plan.newer": "The Worker {name} already runs {version}, which is newer than the {bundled} in this version of Hatoba. Hatoba won’t replace it with an older one.",
+    "sync.up.plan.noVault":
+      "The Worker {name} holds no vault, so it isn’t the one this device syncs with. Enter the right Worker name below.",
+    "sync.up.plan.newer":
+      "The Worker {name} already runs {version}, which is newer than the {bundled} in this version of Hatoba. Hatoba won’t replace it with an older one.",
     "sync.up.update": "Update",
     "sync.up.run.title": "Updating the Sync Worker",
     "sync.up.run.ready": "Sync Worker Updated",
@@ -391,11 +417,13 @@ export default defineMessages({
     "sync.up.step.inspect": "Check the Worker and its database",
     "sync.up.step.migrate": "Update the tables",
     "sync.up.retryHint": "Retry continues from the step that failed. The Worker keeps working in the meantime.",
-    "sync.up.waiting": "The new Worker is uploaded but doesn’t answer with the new version yet. Check again in a moment.",
+    "sync.up.waiting":
+      "The new Worker is uploaded but doesn’t answer with the new version yet. Check again in a moment.",
     "sync.up.ready": "The Worker now runs {version}, and sync continues.",
 
     "sync.d1.title": "Enter an API Token",
-    "sync.d1.body": "Create a token in the Cloudflare dashboard with D1 edit permission only. It can usually edit every D1 database in your account.",
+    "sync.d1.body":
+      "Create a token in the Cloudflare dashboard with D1 edit permission only. It can usually edit every D1 database in your account.",
     "sync.accountId": "Account ID",
     "sync.apiToken": "API Token",
     "sync.token.err": "This token can’t edit D1. Add “Account · D1 · Edit” to it in Cloudflare.",
@@ -404,7 +432,8 @@ export default defineMessages({
     "sync.d1.verified": "Token is valid · {n} databases · {ms} ms",
     "sync.d1.verified_one": "Token is valid · 1 database · {ms} ms",
     "sync.d1.verifiedNoMs": "Token is valid",
-    "sync.d1.noDb": "This account has no D1 database yet. Create one first, for example with wrangler d1 create hatoba.",
+    "sync.d1.noDb":
+      "This account has no D1 database yet. Create one first, for example with wrangler d1 create hatoba.",
     "sync.d1.hasVault": "This database already holds a vault. Continue to join it from this device.",
     "sync.database": "Database",
     "sync.database.pending": "Choose after the token is verified",
@@ -419,7 +448,8 @@ export default defineMessages({
     "sync.uploading_one": "Uploading 1 item…",
     "sync.initializing": "Setting up…",
     "sync.join.title": "Enter the Cloud Vault’s Master Password",
-    "sync.join.body": "This device’s data is merged into the cloud vault. From then on this device unlocks with that vault’s master password, and that vault’s recovery code replaces this device’s, which stops working.",
+    "sync.join.body":
+      "This device’s data is merged into the cloud vault. From then on this device unlocks with that vault’s master password, and that vault’s recovery code replaces this device’s, which stops working.",
     "sync.join.submit": "Merge and Turn On Sync",
     "sync.join.busy": "Merging…",
 
@@ -453,7 +483,8 @@ export default defineMessages({
     "sync.device.stale": "Not seen in 14+ days",
     "sync.device.removeAria": "Remove device {name}",
     "sync.device.remove.title": "Remove “{name}”?",
-    "sync.device.remove.body": "Its sign-in is revoked, so it needs your master password again before it can sync. No data is deleted.",
+    "sync.device.remove.body":
+      "Its sign-in is revoked, so it needs your master password again before it can sync. No data is deleted.",
     "sync.device.remove.confirm": "Remove Device",
     "sync.security.title": "Everything is encrypted on your device before upload.",
     "sync.link.recovery": "Generate New Recovery Code",
@@ -560,9 +591,12 @@ export default defineMessages({
     "sync.opt.token.desc": "デプロイは不要です。D1 API トークンを直接使います。",
     "sync.howEncrypt": "データはどう暗号化される？",
     "sync.enc.title": "データはどう暗号化される？",
-    "sync.enc.item": "各データはこのデバイス上で AES-256-GCM により暗号化されます。鍵にはランダムに生成した保管庫キーを使います。",
-    "sync.enc.vault": "保管庫キーは、マスターパスワードから Argon2id で導出したキーで暗号化して保管されます。マスターパスワード自体はアップロードされません。",
-    "sync.enc.cloud": "Worker と D1 には暗号文しかありません。マスターパスワードがなければ、私たちを含め誰も復号できません。",
+    "sync.enc.item":
+      "各データはこのデバイス上で AES-256-GCM により暗号化されます。鍵にはランダムに生成した保管庫キーを使います。",
+    "sync.enc.vault":
+      "保管庫キーは、マスターパスワードから Argon2id で導出したキーで暗号化して保管されます。マスターパスワード自体はアップロードされません。",
+    "sync.enc.cloud":
+      "Worker と D1 には暗号文しかありません。マスターパスワードがなければ、私たちを含め誰も復号できません。",
 
     "sync.w2.title": "同期 Worker をデプロイ",
     "sync.w2.body": "デプロイが完了したら、Worker の URL と Setup Token を下に入力してください。",
@@ -586,7 +620,8 @@ export default defineMessages({
     "sync.dep.token.help": "「Account · Workers Scripts · Edit」と「Account · D1 · Edit」です。",
     "sync.dep.createToken": "Cloudflare でトークンを作成",
     "sync.dep.accountId": "Account ID（任意）",
-    "sync.dep.accountId.hint": "アカウント所有のトークンでは必須です。Cloudflare ダッシュボードの「Workers & Pages」→「Account Details」で確認できます。",
+    "sync.dep.accountId.hint":
+      "アカウント所有のトークンでは必須です。Cloudflare ダッシュボードの「Workers & Pages」→「Account Details」で確認できます。",
     "sync.dep.accountId.enter": "Account ID を貼り付け",
     "sync.dep.review.title": "デプロイ内容の確認",
     "sync.dep.account": "Cloudflare アカウント",
@@ -599,18 +634,25 @@ export default defineMessages({
     "sync.dep.plan.dbUse": "空のデータベース {name} を使用",
     "sync.dep.plan.dbBound": "Worker のデータベース {name} を引き続き使用",
     "sync.dep.plan.renamed": "データベース {name} にはすでに別のデータがあるため、{other} を使います。",
-    "sync.dep.plan.hasVault": "Worker {name} にはすでに保管庫があります。「接続」を選ぶとこの保管庫に参加し、このデバイスのデータはそこに統合されます。新しい Worker をデプロイするには、下で別の名前を選んでください。",
-    "sync.dep.plan.hasVaultNoUrl": "Worker {name} にはすでに保管庫がありますが、workers.dev の URL がない（カスタムドメインでのみ公開されている場合など）ため、ここからは接続できません。参加するには、最初の手順に戻って「デプロイ済みの Worker に接続」を選び、その URL を入力してください。新しい Worker をデプロイするには、下で別の名前を選んでください。",
-    "sync.dep.plan.foreign": "アカウントには Hatoba の同期 Worker ではない {name} という Worker がすでにあり、Hatoba は上書きしません。下で別の名前を選んでください。",
+    "sync.dep.plan.hasVault":
+      "Worker {name} にはすでに保管庫があります。「接続」を選ぶとこの保管庫に参加し、このデバイスのデータはそこに統合されます。新しい Worker をデプロイするには、下で別の名前を選んでください。",
+    "sync.dep.plan.hasVaultNoUrl":
+      "Worker {name} にはすでに保管庫がありますが、workers.dev の URL がない（カスタムドメインでのみ公開されている場合など）ため、ここからは接続できません。参加するには、最初の手順に戻って「デプロイ済みの Worker に接続」を選び、その URL を入力してください。新しい Worker をデプロイするには、下で別の名前を選んでください。",
+    "sync.dep.plan.foreign":
+      "アカウントには Hatoba の同期 Worker ではない {name} という Worker がすでにあり、Hatoba は上書きしません。下で別の名前を選んでください。",
     "sync.dep.subdomain": "workers.dev サブドメイン",
-    "sync.dep.subdomain.hint": "このアカウントにはまだ workers.dev サブドメインがありません。アカウント内のすべての Worker の URL に使われます。",
+    "sync.dep.subdomain.hint":
+      "このアカウントにはまだ workers.dev サブドメインがありません。アカウント内のすべての Worker の URL に使われます。",
     "sync.dep.names": "Worker とデータベースの名前",
     "sync.dep.workerName": "Worker 名",
     "sync.dep.databaseName": "データベース名",
-    "sync.dep.invalid.worker_name": "小文字の英字、数字、ハイフンを使い、63 文字以内にしてください。先頭と末尾にハイフンは使えません。",
-    "sync.dep.invalid.subdomain": "小文字の英字、数字、ハイフンを使い、63 文字以内にしてください。先頭と末尾にハイフンは使えません。",
+    "sync.dep.invalid.worker_name":
+      "小文字の英字、数字、ハイフンを使い、63 文字以内にしてください。先頭と末尾にハイフンは使えません。",
+    "sync.dep.invalid.subdomain":
+      "小文字の英字、数字、ハイフンを使い、63 文字以内にしてください。先頭と末尾にハイフンは使えません。",
     "sync.dep.invalid.database_name": "小文字の英字、数字、ハイフン、アンダースコアを使い、60 文字以内にしてください。",
-    "sync.dep.invalid.account_id": "この Account ID は正しくないようです。Cloudflare ダッシュボードからもう一度コピーしてください。",
+    "sync.dep.invalid.account_id":
+      "この Account ID は正しくないようです。Cloudflare ダッシュボードからもう一度コピーしてください。",
     "sync.dep.deploy": "デプロイ",
     "sync.dep.connect": "接続",
     "sync.dep.run.title": "同期 Worker をデプロイしています",
@@ -629,29 +671,38 @@ export default defineMessages({
     "sync.dep.remove": "Hatoba が作成したものを削除",
     "sync.dep.removing": "削除しています…",
     "sync.dep.removed": "今回のデプロイで作成された Worker とデータベースを削除しました。",
-    "sync.dep.waiting": "Worker はデプロイされましたが、まだ応答がありません。新しい workers.dev サブドメインが使えるようになるまで数分かかることがあります。少し待ってからもう一度確認してください。",
+    "sync.dep.waiting":
+      "Worker はデプロイされましたが、まだ応答がありません。新しい workers.dev サブドメインが使えるようになるまで数分かかることがあります。少し待ってからもう一度確認してください。",
     "sync.dep.ready": "同期 Worker が稼働しています。次に、マスターパスワードでその上にクラウドの保管庫を作成します。",
     "sync.dep.offline": "Cloudflare に接続できません。ネットワークを確認して、もう一度お試しください。",
     "sync.wu.available": "同期 Worker の新しいバージョンがあります：{version} → {bundled}。",
-    "sync.wu.required": "このバージョンの Hatoba は Worker {version} と同期できません。Worker を更新すると同期を再開します。その間の変更はこのデバイスに保存され、更新後に送信されます。",
-    "sync.wu.app": "同期 Worker（{version}）には新しいバージョンの Hatoba が必要です。Hatoba を更新すると同期を再開します。その間の変更はこのデバイスに保存されます。",
+    "sync.wu.required":
+      "このバージョンの Hatoba は Worker {version} と同期できません。Worker を更新すると同期を再開します。その間の変更はこのデバイスに保存され、更新後に送信されます。",
+    "sync.wu.app":
+      "同期 Worker（{version}）には新しいバージョンの Hatoba が必要です。Hatoba を更新すると同期を再開します。その間の変更はこのデバイスに保存されます。",
     "sync.wu.update": "Worker を更新",
     "sync.wu.dismiss": "閉じる",
     "sync.wu.checkApp": "アップデートを確認",
     "sync.up.title": "同期 Worker の更新",
     "sync.up.body": "同期 Worker を {version} に更新します。クラウドの保管庫はそのままです。",
-    "sync.up.buttonWarning": "この Worker を「Cloudflare にデプロイ」ボタンでデプロイした場合、次にリポジトリへプッシュしたときに Cloudflare が再デプロイし、この更新は置き換えられます。その場合は、アップグレード手順に従ってリポジトリの workers/sync を更新してください。",
+    "sync.up.buttonWarning":
+      "この Worker を「Cloudflare にデプロイ」ボタンでデプロイした場合、次にリポジトリへプッシュしたときに Cloudflare が再デプロイし、この更新は置き換えられます。その場合は、アップグレード手順に従ってリポジトリの workers/sync を更新してください。",
     "sync.up.guide": "アップグレード手順",
-    "sync.up.workerName.hint": "この Worker はカスタムドメインを使っているため、Cloudflare での名前を入力してください。",
+    "sync.up.workerName.hint":
+      "この Worker はカスタムドメインを使っているため、Cloudflare での名前を入力してください。",
     "sync.up.review.title": "更新内容の確認",
     "sync.up.plan.worker": "Worker {name} を {from} から {to} に更新",
     "sync.up.plan.workerTo": "Worker {name} を {to} に更新",
     "sync.up.plan.migrations": "データベース {name} に {n} 件のテーブル変更を適用",
     "sync.up.plan.noMigrations": "データベース {name} の変更はありません",
-    "sync.up.plan.missing": "アカウントに {name} という Worker はありません。アカウントを確認するか、下に正しい Worker 名を入力してください。",
-    "sync.up.plan.foreign": "Worker {name} は Hatoba の同期 Worker ではありません。下に正しい Worker 名を入力してください。",
-    "sync.up.plan.noVault": "Worker {name} には保管庫がないため、このデバイスが同期している Worker ではありません。下に正しい Worker 名を入力してください。",
-    "sync.up.plan.newer": "Worker {name} はすでに {version} で、このバージョンの Hatoba に含まれる {bundled} より新しいため、Hatoba は古いバージョンで置き換えません。",
+    "sync.up.plan.missing":
+      "アカウントに {name} という Worker はありません。アカウントを確認するか、下に正しい Worker 名を入力してください。",
+    "sync.up.plan.foreign":
+      "Worker {name} は Hatoba の同期 Worker ではありません。下に正しい Worker 名を入力してください。",
+    "sync.up.plan.noVault":
+      "Worker {name} には保管庫がないため、このデバイスが同期している Worker ではありません。下に正しい Worker 名を入力してください。",
+    "sync.up.plan.newer":
+      "Worker {name} はすでに {version} で、このバージョンの Hatoba に含まれる {bundled} より新しいため、Hatoba は古いバージョンで置き換えません。",
     "sync.up.update": "更新",
     "sync.up.run.title": "同期 Worker を更新しています",
     "sync.up.run.ready": "同期 Worker を更新しました",
@@ -659,19 +710,23 @@ export default defineMessages({
     "sync.up.step.inspect": "Worker とそのデータベースを確認",
     "sync.up.step.migrate": "テーブルを更新",
     "sync.up.retryHint": "再試行すると、失敗した手順から続行します。その間も Worker は動作し続けます。",
-    "sync.up.waiting": "新しい Worker はアップロードされましたが、まだ新しいバージョンで応答していません。少し待ってからもう一度確認してください。",
+    "sync.up.waiting":
+      "新しい Worker はアップロードされましたが、まだ新しいバージョンで応答していません。少し待ってからもう一度確認してください。",
     "sync.up.ready": "Worker は {version} になり、同期を続けます。",
 
     "sync.d1.title": "API トークンを入力",
-    "sync.d1.body": "Cloudflare ダッシュボードで、D1 の編集権限だけを付与したトークンを作成してください。このトークンは通常、アカウント内のすべての D1 データベースを編集できます。",
+    "sync.d1.body":
+      "Cloudflare ダッシュボードで、D1 の編集権限だけを付与したトークンを作成してください。このトークンは通常、アカウント内のすべての D1 データベースを編集できます。",
     "sync.accountId": "Account ID",
     "sync.apiToken": "API トークン",
-    "sync.token.err": "このトークンには D1 の編集権限がありません。Cloudflare で「Account · D1 · Edit」を追加してください。",
+    "sync.token.err":
+      "このトークンには D1 の編集権限がありません。Cloudflare で「Account · D1 · Edit」を追加してください。",
     "sync.token.edit": "Cloudflare でトークンを編集",
     "sync.d1.verify": "トークンを確認",
     "sync.d1.verified": "トークンは有効です · {n} 個のデータベース · {ms} ms",
     "sync.d1.verifiedNoMs": "トークンは有効です",
-    "sync.d1.noDb": "このアカウントにはまだ D1 データベースがありません。先に作成してください（例：wrangler d1 create hatoba）。",
+    "sync.d1.noDb":
+      "このアカウントにはまだ D1 データベースがありません。先に作成してください（例：wrangler d1 create hatoba）。",
     "sync.d1.hasVault": "このデータベースにはすでに保管庫があります。続行すると、このデバイスがそこに参加します。",
     "sync.database": "データベース",
     "sync.database.pending": "トークンを確認すると選択できます",
@@ -685,7 +740,8 @@ export default defineMessages({
     "sync.uploading": "{n} 件をアップロード中…",
     "sync.initializing": "初期化中…",
     "sync.join.title": "クラウドの保管庫のマスターパスワードを入力",
-    "sync.join.body": "このデバイスのデータはクラウドの保管庫に統合されます。以後このデバイスはその保管庫のマスターパスワードでロックを解除し、リカバリーコードもその保管庫のものに置き換わるため、このデバイスの元のリカバリーコードは使えなくなります。",
+    "sync.join.body":
+      "このデバイスのデータはクラウドの保管庫に統合されます。以後このデバイスはその保管庫のマスターパスワードでロックを解除し、リカバリーコードもその保管庫のものに置き換わるため、このデバイスの元のリカバリーコードは使えなくなります。",
     "sync.join.submit": "統合して同期をオン",
     "sync.join.busy": "統合しています…",
 
@@ -700,7 +756,8 @@ export default defineMessages({
     "sync.auth.login": "再ログイン",
     "sync.conflictBanner": "{n} 件の競合を自動的に解決しました",
     "sync.conflictBanner.view": "確認",
-    "sync.tooLarge.host": "ホスト「{name}」はデータが大きすぎて同期できません。メモや AI 向けメモ、環境変数を短くしてください。",
+    "sync.tooLarge.host":
+      "ホスト「{name}」はデータが大きすぎて同期できません。メモや AI 向けメモ、環境変数を短くしてください。",
     "sync.tooLarge.settings": "設定のデータが大きすぎて同期できません。カスタム指示を短くしてください。",
     "sync.tooLarge.item": "「{name}」はデータが大きすぎて同期できません。",
     "sync.sec.connection": "接続",
@@ -715,7 +772,8 @@ export default defineMessages({
     "sync.device.stale": "14 日以上同期されていません",
     "sync.device.removeAria": "デバイス {name} を削除",
     "sync.device.remove.title": "デバイス「{name}」を削除しますか？",
-    "sync.device.remove.body": "このデバイスのログインは無効になり、再び同期するにはマスターパスワードの再入力が必要になります。データは削除されません。",
+    "sync.device.remove.body":
+      "このデバイスのログインは無効になり、再び同期するにはマスターパスワードの再入力が必要になります。データは削除されません。",
     "sync.device.remove.confirm": "デバイスを削除",
     "sync.security.title": "すべてのデータは端末で暗号化されてからアップロードされます。",
     "sync.link.recovery": "新しいリカバリーコードを作成",

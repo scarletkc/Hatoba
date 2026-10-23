@@ -98,7 +98,8 @@ export function screenTail(buf: BufferLike, rows: number): string {
  * Escape sequences: CSI (7- and 8-bit), OSC (ended by BEL or ST), DCS / SOS / PM / APC strings, and
  * two-character ESC sequences such as `ESC =` or charset selection `ESC ( B`.
  */
-const ESCAPE = /\x1b\[[0-?]*[ -/]*[@-~]|\x9b[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?|\x1b[PX^_][^\x1b]*(?:\x1b\\)?|\x1b[ -/]*[0-~]?/y;
+const ESCAPE =
+  /\x1b\[[0-?]*[ -/]*[@-~]|\x9b[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?|\x1b[PX^_][^\x1b]*(?:\x1b\\)?|\x1b[ -/]*[0-~]?/y;
 
 /** Removes ANSI escape sequences. */
 export function stripAnsi(s: string): string {

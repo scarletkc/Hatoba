@@ -5,7 +5,17 @@ import { toast } from "@/components/overlay";
 import { Card, Chip, ErrorText, HintText, StatusLine, WarningText } from "@/components/patterns";
 import { readClipboard, writeClipboard } from "@/features/terminal/clipboard";
 import { formatDateTime, formatMessageTime, useT, useToday, type MessageKey } from "@/i18n";
-import type { AiAutoVerdict, AiEntryView, AiFileChange, AiFilePreview, AiFileRevert, AiToolCall, HostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
+import type {
+  AiAutoVerdict,
+  AiEntryView,
+  AiFileChange,
+  AiFilePreview,
+  AiFileRevert,
+  AiToolCall,
+  HostView,
+  McpToolAnnotations,
+  McpToolInfo,
+} from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import {
@@ -27,7 +37,16 @@ import { answersText, askText, verdictText } from "./autoText";
 import { FileChange } from "./FileChange";
 import { useFilePreview } from "./filePreview";
 import { useFollowBottom } from "./followBottom";
-import { composeMessage, fitsMessage, isLongPaste, makePaste, parseMessage, splitPermissionNote, type MessageParts, type Note } from "./attachments";
+import {
+  composeMessage,
+  fitsMessage,
+  isLongPaste,
+  makePaste,
+  parseMessage,
+  splitPermissionNote,
+  type MessageParts,
+  type Note,
+} from "./attachments";
 import type { ShellDialect } from "./commandRules";
 import { insertAtCaret, isPlainPasteKey } from "./Composer";
 import { forkPoints } from "./fork";
@@ -57,7 +76,15 @@ import {
   type Scope,
   type ToolKind,
 } from "./tools";
-import { callRevealKey, editedFiles, LOCAL_ENTRY, revealKey, type AutoAsk, type CallState, type LiveResponse } from "./turn";
+import {
+  callRevealKey,
+  editedFiles,
+  LOCAL_ENTRY,
+  revealKey,
+  type AutoAsk,
+  type CallState,
+  type LiveResponse,
+} from "./turn";
 import s from "./Messages.module.css";
 
 type ToolEntry = Extract<AiEntryView, { role: "tool" }>;
@@ -186,14 +213,20 @@ function KeysField({ id, keys, onChange }: { id: string; keys: string[]; onChang
         const next = typed();
         // What was typed becomes a chip where the input is, before the click or after it.
         let to = next !== keys && before(input.current!.getBoundingClientRect(), e.clientX, e.clientY) ? 1 : 0;
-        for (const chip of field.current!.querySelectorAll("[data-key]")) if (before(chip.getBoundingClientRect(), e.clientX, e.clientY)) to++;
+        for (const chip of field.current!.querySelectorAll("[data-key]"))
+          if (before(chip.getBoundingClientRect(), e.clientX, e.clientY)) to++;
         apply(next, to);
         input.current?.focus();
       }}
     >
       {keys.map((key, i) => (
         // The input stays last in the DOM and moves by `order`, so moving the caret never takes its focus.
-        <span key={i} data-key className={cx(s.keyChip, parseSendKey(key) === null && s.keyChipBad)} style={{ order: i < at ? 0 : 2 }}>
+        <span
+          key={i}
+          data-key
+          className={cx(s.keyChip, parseSendKey(key) === null && s.keyChipBad)}
+          style={{ order: i < at ? 0 : 2 }}
+        >
           {keyLabel(t, key)}
           <button
             type="button"
@@ -292,7 +325,17 @@ export function hostInfo(host: HostView | undefined): HostInfo | null {
 
 // ───────────────────────── the list ─────────────────────────
 
-export function MessageList({ slotId, slot, host, empty }: { slotId: string; slot: Slot; host: HostInfo | null; empty: ReactNode }) {
+export function MessageList({
+  slotId,
+  slot,
+  host,
+  empty,
+}: {
+  slotId: string;
+  slot: Slot;
+  host: HostInfo | null;
+  empty: ReactNode;
+}) {
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
   const { entries, turn, outcome } = slot;
@@ -308,7 +351,9 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
     return map;
   }, [entries]);
 
-  const contextAt = slot.conversation?.context_start ? entries.findIndex((e) => e.entry_id === slot.conversation?.context_start) : -1;
+  const contextAt = slot.conversation?.context_start
+    ? entries.findIndex((e) => e.entry_id === slot.conversation?.context_start)
+    : -1;
   const lastAssistant = useMemo(() => {
     for (let i = entries.length - 1; i >= 0; i--) if (entries[i].role === "assistant") return entries[i].entry_id;
     return null;
@@ -316,7 +361,10 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
   const replies = useMemo(() => findReplies(entries), [entries]);
   const firstUser = entries.find((e) => e.role === "user")?.entry_id;
   // AI-41: the changes of file tool calls this device keeps, by response and call.
-  const changes = useMemo(() => new Map(slot.fileChanges.map((c) => [`${c.response_id}:${c.tool_call_id}`, c])), [slot.fileChanges]);
+  const changes = useMemo(
+    () => new Map(slot.fileChanges.map((c) => [`${c.response_id}:${c.tool_call_id}`, c])),
+    [slot.fileChanges],
+  );
 
   // The user's own message brings the list back to the bottom, to follow the reply.
   const sending = entries[entries.length - 1]?.entry_id === LOCAL_ENTRY;
@@ -365,21 +413,29 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
   const conversationId = slot.conversationId;
   const forking = useAi((st) => !!conversationId && st.forking.includes(conversationId));
   const fork = (entryId: string) =>
-    canEdit && !slot.reverting && !forking && conversationId && forkable.has(entryId) ? () => void forkConversation(slotId, conversationId, entryId) : undefined;
+    canEdit && !slot.reverting && !forking && conversationId && forkable.has(entryId)
+      ? () => void forkConversation(slotId, conversationId, entryId)
+      : undefined;
 
   const isEmpty = entries.length === 0 && !turn && !slot.remoteRunning && !outcome;
   // AI-41: a revert waits until the conversation is idle, so the next message tells the model before it acts again.
   const busy = running || slot.compacting || slot.loading || slot.reverting;
 
   return (
-    <div ref={ref} className={s.list} data-text-scale onScroll={bottom.onScroll} onWheel={bottom.onWheel} onKeyDown={bottom.onKeyDown}>
+    <div
+      ref={ref}
+      className={s.list}
+      data-text-scale
+      onScroll={bottom.onScroll}
+      onWheel={bottom.onWheel}
+      onKeyDown={bottom.onKeyDown}
+    >
       {isEmpty && !slot.loading && empty}
-      {slot.loading && entries.length === 0 && (
-        <StatusLine tone="progress">{t("ai.loading")}</StatusLine>
-      )}
+      {slot.loading && entries.length === 0 && <StatusLine tone="progress">{t("ai.loading")}</StatusLine>}
       {entries.map((entry, i) => {
         const outside = contextAt > 0 && i < contextAt;
-        const divider = i === contextAt && contextAt > 0 ? <div className={s.contextDivider}>{t("ai.outsideContext")}</div> : null;
+        const divider =
+          i === contextAt && contextAt > 0 ? <div className={s.contextDivider}>{t("ai.outsideContext")}</div> : null;
         const key = `entry:${entry.entry_id}`;
         const flashed = flash === key;
         let body: ReactNode = null;
@@ -431,7 +487,12 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
             {divider}
             <div
               // A message just sent comes up into place; the stored copy that replaces it does not.
-              className={cx(s.item, outside && s.outside, flashed && entry.role !== "summary" && s.flash, entry.entry_id.startsWith("~") && s.enter)}
+              className={cx(
+                s.item,
+                outside && s.outside,
+                flashed && entry.role !== "summary" && s.flash,
+                entry.entry_id.startsWith("~") && s.enter,
+              )}
               data-reveal={key}
             >
               {body}
@@ -479,7 +540,12 @@ function CopyButton({ text }: { text: string }) {
       label={t(copied ? "btn.copied" : "btn.copy")}
       size={14}
       className={s.messageAction}
-      onClick={() => void writeClipboard(text).then(() => setCopied(true), () => toast(t("terminal.clipboardDenied"), "error"))}
+      onClick={() =>
+        void writeClipboard(text).then(
+          () => setCopied(true),
+          () => toast(t("terminal.clipboardDenied"), "error"),
+        )
+      }
     />
   );
 }
@@ -522,7 +588,9 @@ function UserMessage({
   const parts = useMemo(() => parseMessage(text), [text]);
   // AI-53: the memories a conversation starts with are the assistant's context, not a change to show.
   const notes = parts.notes
-    .filter((note) => note.kind !== "terminal_state" && note.kind !== "memory" && !(first && note.kind === "permission_mode"))
+    .filter(
+      (note) => note.kind !== "terminal_state" && note.kind !== "memory" && !(first && note.kind === "permission_mode"),
+    )
     .map((note, i) => <NoteDivider key={i} note={note} />);
   // AI-46: the screen the message showed is a collapsed block above its attachments.
   const screen = parts.notes.find((note) => note.kind === "terminal_state");
@@ -530,7 +598,13 @@ function UserMessage({
     return (
       <>
         {notes}
-        <EditMessage parts={parts} untracked={untracked() > 0} onCancel={() => setEditing(false)} onSend={onResend} onSent={() => setEditing(false)} />
+        <EditMessage
+          parts={parts}
+          untracked={untracked() > 0}
+          onCancel={() => setEditing(false)}
+          onSend={onResend}
+          onSent={() => setEditing(false)}
+        />
       </>
     );
   return (
@@ -539,7 +613,15 @@ function UserMessage({
       <div className={s.userRow}>
         <div className={s.userActions}>
           {parts.typed && <CopyButton text={parts.typed} />}
-          {onResend && <IconButton icon="pencil-simple" label={t("ai.edit")} size={14} className={s.messageAction} onClick={() => setEditing(true)} />}
+          {onResend && (
+            <IconButton
+              icon="pencil-simple"
+              label={t("ai.edit")}
+              size={14}
+              className={s.messageAction}
+              onClick={() => setEditing(true)}
+            />
+          )}
           {onFork && <ForkButton onFork={onFork} />}
         </div>
         <div className={s.userStack}>
@@ -631,7 +713,12 @@ function EditMessage({
   const send = async () => {
     if (!value.trim() || busy) return;
     setBusy(true);
-    const ok = await onSend(composeMessage(value.trim(), items.map((x) => x.attachment)));
+    const ok = await onSend(
+      composeMessage(
+        value.trim(),
+        items.map((x) => x.attachment),
+      ),
+    );
     setBusy(false);
     if (ok) onSent();
   };
@@ -681,7 +768,13 @@ function EditMessage({
           e.preventDefault();
           const paste = makePaste(text);
           if (!paste) return;
-          if (!fitsMessage(items.map((x) => x.attachment), paste)) return toast(tooMuchMessage(), "error");
+          if (
+            !fitsMessage(
+              items.map((x) => x.attachment),
+              paste,
+            )
+          )
+            return toast(tooMuchMessage(), "error");
           setItems((list) => [...list, { id: `a${++seq.current}`, attachment: paste }]);
         }}
         onKeyDown={(e) => {
@@ -712,7 +805,14 @@ function EditMessage({
         <Button size="sm" onClick={onCancel}>
           {t("btn.cancel")}
         </Button>
-        <Button size="sm" variant="primary" icon="arrow-up" busy={busy} disabled={!value.trim()} onClick={() => void send()}>
+        <Button
+          size="sm"
+          variant="primary"
+          icon="arrow-up"
+          busy={busy}
+          disabled={!value.trim()}
+          onClick={() => void send()}
+        >
           {t("ai.edit.send")}
         </Button>
       </div>
@@ -721,7 +821,17 @@ function EditMessage({
 }
 
 /** The reply of the turn: what streams of it, or until then what it waits for, in the place its text will take. */
-function LiveMessage({ slotId, live, pending, host }: { slotId: string; live: LiveResponse | null; pending: MessageKey | null; host: HostInfo | null }) {
+function LiveMessage({
+  slotId,
+  live,
+  pending,
+  host,
+}: {
+  slotId: string;
+  live: LiveResponse | null;
+  pending: MessageKey | null;
+  host: HostInfo | null;
+}) {
   return (
     <div className={cx(s.item, s.enter)}>
       <AssistantMessage
@@ -744,7 +854,9 @@ function LiveMessage({ slotId, live, pending, host }: { slotId: string; live: Li
  */
 function usePendingLine(slot: Slot): MessageKey | null {
   // AI-45: a message waits for the MCP servers its requests use before it is stored.
-  const mcpStarting = useMcp((st) => Object.values(st.status).some((x) => x.state === "starting" && !slot.mcpOff.includes(x.server_id)));
+  const mcpStarting = useMcp((st) =>
+    Object.values(st.status).some((x) => x.state === "starting" && !slot.mcpOff.includes(x.server_id)),
+  );
   const { turn } = slot;
   if (!turn || slot.remoteRunning) return null;
   const live = turn.live;
@@ -763,7 +875,11 @@ function PendingLine({ label }: { label: MessageKey }) {
   const t = useT();
   return (
     <div className={s.pending} role="status">
-      {label === "ai.reasoning.active" ? <Icon name="brain" size={14} /> : <span className={s.pendingDot} aria-hidden="true" />}
+      {label === "ai.reasoning.active" ? (
+        <Icon name="brain" size={14} />
+      ) : (
+        <span className={s.pendingDot} aria-hidden="true" />
+      )}
       <span className={s.shimmer}>{t(label)}</span>
     </div>
   );
@@ -820,7 +936,19 @@ function AssistantMessage({
       {!text.trim() && calls.length === 0 && !streaming && !noAnswerShown && <EmptyReply />}
       {calls.map((call) => {
         const reveal = entryId ? callRevealKey(entryId, call.id) : undefined;
-        return <ToolBlock key={call.id} slotId={slotId} call={call} view={view(call)} change={change?.(call)} busy={!!busy} host={host} reveal={reveal} flash={!!reveal && flash === reveal} />;
+        return (
+          <ToolBlock
+            key={call.id}
+            slotId={slotId}
+            call={call}
+            view={view(call)}
+            change={change?.(call)}
+            busy={!!busy}
+            host={host}
+            reveal={reveal}
+            flash={!!reveal && flash === reveal}
+          />
+        );
       })}
       {reply && (
         <div className={s.replyFoot}>
@@ -897,11 +1025,7 @@ function StatusChip({ view, name }: { view: CallView; name: string }) {
       return <Chip>{t("ai.call.cancelled")}</Chip>;
     }
     case "running":
-      return (
-        <Chip busy>
-          {t("ai.call.running")}
-        </Chip>
-      );
+      return <Chip busy>{t("ai.call.running")}</Chip>;
     case "judging":
       // AI-47: Auto asks its judge whether the call can run without the card.
       return (
@@ -982,14 +1106,21 @@ function ToolBlock({
     if (flash) setOpen(true);
   }, [flash]);
 
-  if (view.kind === "approval") return <ApprovalCard slotId={slotId} call={call} host={host} mcp={view.mcp ?? null} auto={view.auto ?? null} />;
+  if (view.kind === "approval")
+    return <ApprovalCard slotId={slotId} call={call} host={host} mcp={view.mcp ?? null} auto={view.auto ?? null} />;
   // AI-47: the judge's verdict, when Auto decided the call.
   const auto = view.kind === "result" ? view.entry.auto : null;
 
   return (
     <div className={cx(s.tool, flash && s.flash)} data-reveal={reveal}>
       <div className={s.toolHeadRow}>
-        <button type="button" className={s.toolHead} aria-expanded={open} aria-describedby={statusId} onClick={() => setOpen((v) => !v)}>
+        <button
+          type="button"
+          className={s.toolHead}
+          aria-expanded={open}
+          aria-describedby={statusId}
+          onClick={() => setOpen((v) => !v)}
+        >
           <Icon name={TOOL_ICON[kind]} size={14} className={s.toolIcon} />
           <span className={s.toolName}>{toolLabel(t, shown.name, shown.arguments)}</span>
           <span className={s.toolSummary}>{summary}</span>
@@ -1015,9 +1146,7 @@ function ToolBlock({
         )}
         <span id={statusId} className={s.toolStatus}>
           {change?.state === "reverted" ? (
-            <Chip icon="arrow-counter-clockwise">
-              {t("ai.revert.reverted")}
-            </Chip>
+            <Chip icon="arrow-counter-clockwise">{t("ai.revert.reverted")}</Chip>
           ) : (
             <StatusChip view={view} name={call.name} />
           )}
@@ -1117,7 +1246,9 @@ function CallChange({ slotId, call, change }: { slotId: string; call: AiToolCall
     };
   }, [slotId, responseId, callId, state]);
   const failed = keeps && kept === "failed";
-  const preview = failed ? null : ((keeps && kept !== "failed" ? kept : null) ?? callFileChange(call.name, call.arguments));
+  const preview = failed
+    ? null
+    : ((keeps && kept !== "failed" ? kept : null) ?? callFileChange(call.name, call.arguments));
   return (
     <>
       <div className={s.labelRow}>
@@ -1139,7 +1270,17 @@ function CallChange({ slotId, call, change }: { slotId: string; call: AiToolCall
  * what it held before, the block shows the diff from what it holds now back to that, links the later call that
  * wrote it too, and offers Restore anyway over exactly what the diff shows; or the failure.
  */
-function RevertChange({ slotId, change, busy, revert }: { slotId: string; change: AiFileChange; busy: boolean; revert: RevertState }) {
+function RevertChange({
+  slotId,
+  change,
+  busy,
+  revert,
+}: {
+  slotId: string;
+  change: AiFileChange;
+  busy: boolean;
+  revert: RevertState;
+}) {
   const t = useT();
   const { running, outcome, run } = revert;
   const result = outcome?.result;
@@ -1147,29 +1288,49 @@ function RevertChange({ slotId, change, busy, revert }: { slotId: string; change
   const laterEntry = useAi((st) => {
     const slot = st.slots[slotId];
     if (!slot) return null;
-    const at = slot.fileChanges.findIndex((c) => c.response_id === change.response_id && c.tool_call_id === change.tool_call_id);
+    const at = slot.fileChanges.findIndex(
+      (c) => c.response_id === change.response_id && c.tool_call_id === change.tool_call_id,
+    );
     const later = slot.fileChanges
       .slice(at + 1)
-      .filter((c) => c.server === change.server && c.path === change.path && (c.state === "written" || c.state === "unfinished"))
+      .filter(
+        (c) =>
+          c.server === change.server && c.path === change.path && (c.state === "written" || c.state === "unfinished"),
+      )
       .at(-1);
     if (!later) return null;
-    return slot.entries.find((e) => e.role === "tool" && e.tool_call_id === later.tool_call_id && e.entry_id > later.response_id)?.entry_id ?? null;
+    return (
+      slot.entries.find(
+        (e) => e.role === "tool" && e.tool_call_id === later.tool_call_id && e.entry_id > later.response_id,
+      )?.entry_id ?? null
+    );
   });
   return (
     <div className={s.revert}>
       <div className={s.revertRow}>
-        <Button size="sm" icon="arrow-counter-clockwise" busy={running === "revert"} disabled={busy || !!running} title={busy ? t("ai.revert.busy") : undefined} onClick={() => void run(false)}>
+        <Button
+          size="sm"
+          icon="arrow-counter-clockwise"
+          busy={running === "revert"}
+          disabled={busy || !!running}
+          title={busy ? t("ai.revert.busy") : undefined}
+          onClick={() => void run(false)}
+        >
           {t("ai.revert.action")}
         </Button>
       </div>
-      {change.state === "unfinished" && (
-        <WarningText>{t("ai.revert.unfinished")}</WarningText>
-      )}
+      {change.state === "unfinished" && <WarningText>{t("ai.revert.unfinished")}</WarningText>}
       {result?.status === "changed" && (
         <>
           <ErrorText>
             {outcome?.restore && `${t("ai.revert.changedAgain")} `}
-            {t(result.before === null ? "ai.revert.changedCreated" : result.current === null ? "ai.revert.gone" : "ai.revert.changed")}
+            {t(
+              result.before === null
+                ? "ai.revert.changedCreated"
+                : result.current === null
+                  ? "ai.revert.gone"
+                  : "ai.revert.changed",
+            )}
           </ErrorText>
           {result.later && (
             <HintText>
@@ -1184,9 +1345,28 @@ function RevertChange({ slotId, change, busy, revert }: { slotId: string; change
               )}
             </HintText>
           )}
-          <FileChange state={{ preview: { path: result.path, before: result.current, after: result.before ?? "", error: null, crlf: false }, loading: false, failure: null }} />
+          <FileChange
+            state={{
+              preview: {
+                path: result.path,
+                before: result.current,
+                after: result.before ?? "",
+                error: null,
+                crlf: false,
+              },
+              loading: false,
+              failure: null,
+            }}
+          />
           <div className={s.revertRow}>
-            <Button size="sm" variant="danger" icon={result.before === null ? "trash" : "arrow-counter-clockwise"} busy={running === "restore"} disabled={busy || !!running} onClick={() => void run(true)}>
+            <Button
+              size="sm"
+              variant="danger"
+              icon={result.before === null ? "trash" : "arrow-counter-clockwise"}
+              busy={running === "restore"}
+              disabled={busy || !!running}
+              onClick={() => void run(true)}
+            >
               {t(result.before === null ? "ai.revert.deleteAnyway" : "ai.revert.restore")}
             </Button>
           </div>
@@ -1195,7 +1375,9 @@ function RevertChange({ slotId, change, busy, revert }: { slotId: string; change
       {result?.status === "failed" && (
         <ErrorText>
           {revertFailure(t, result.reason, result.detail)}
-          {result.detail && result.reason !== "other_server" && <div className={cx(s.revertDetail, "selectable")}>{result.detail}</div>}
+          {result.detail && result.reason !== "other_server" && (
+            <div className={cx(s.revertDetail, "selectable")}>{result.detail}</div>
+          )}
         </ErrorText>
       )}
     </div>
@@ -1238,7 +1420,8 @@ function draftFrom(kind: ToolKind, args: Record<string, unknown>, json: string):
  */
 function argsFrom(kind: ToolKind, base: Record<string, unknown>, d: Draft): { json: string } | { error: true } {
   const num = (v: string) => (v.trim() === "" ? undefined : Number(v));
-  const without = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
+  const without = (o: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
   switch (kind) {
     case "run_command": {
       const workdir = d.dir === "" && typeof base.workdir !== "string" ? undefined : d.dir;
@@ -1247,7 +1430,17 @@ function argsFrom(kind: ToolKind, base: Record<string, unknown>, d: Draft): { js
     case "send_input": {
       const keys = d.keys;
       if (keys.some((key) => parseSendKey(key) === null)) return { error: true };
-      return { json: JSON.stringify(without({ ...base, text: readTerminalInput(d.main, typeof base.text === "string" ? base.text : ""), key: undefined, keys: keys.length ? keys : undefined, wait_seconds: num(d.wait) })) };
+      return {
+        json: JSON.stringify(
+          without({
+            ...base,
+            text: readTerminalInput(d.main, typeof base.text === "string" ? base.text : ""),
+            key: undefined,
+            keys: keys.length ? keys : undefined,
+            wait_seconds: num(d.wait),
+          }),
+        ),
+      };
     }
     case "fetch_url":
       return { json: JSON.stringify({ ...base, url: d.main.trim() }) };
@@ -1368,7 +1561,14 @@ interface AllowLabels {
  * The labels of a card's Allow for this conversation and Always allow (AI-19, AI-31), which name what they
  * cover; `local` for a call on this computer (§7.5).
  */
-function allowLabels(t: ReturnType<typeof useT>, scope: Scope, tool: string, mcp: McpToolInfo | null, bypass: boolean, local: boolean): AllowLabels {
+function allowLabels(
+  t: ReturnType<typeof useT>,
+  scope: Scope,
+  tool: string,
+  mcp: McpToolInfo | null,
+  bypass: boolean,
+  local: boolean,
+): AllowLabels {
   switch (scope.kind) {
     case "command": {
       const prefix = scope.prefixes.join(", ");
@@ -1376,8 +1576,12 @@ function allowLabels(t: ReturnType<typeof useT>, scope: Scope, tool: string, mcp
         here: t("ai.approval.allowCommandHere", { prefix }),
         hereHint: t("ai.approval.allowCommandHereHint", { prefix }),
         // Interpreters, deleting and the like are allowed for the conversation only (`savablePrefixes`).
-        always: scope.savable ? t(local ? "ai.approval.alwaysAllowLocalCommand" : "ai.approval.alwaysAllowCommand", { prefix }) : null,
-        alwaysHint: t(local ? "ai.approval.alwaysAllowLocalCommandHint" : "ai.approval.alwaysAllowCommandHint", { prefix }),
+        always: scope.savable
+          ? t(local ? "ai.approval.alwaysAllowLocalCommand" : "ai.approval.alwaysAllowCommand", { prefix })
+          : null,
+        alwaysHint: t(local ? "ai.approval.alwaysAllowLocalCommandHint" : "ai.approval.alwaysAllowCommandHint", {
+          prefix,
+        }),
       };
     }
     case "domain": {
@@ -1413,7 +1617,19 @@ function allowLabels(t: ReturnType<typeof useT>, scope: Scope, tool: string, mcp
  * `call_mcp_tool` call (AI-45) shows, and edits, the tool it names and that tool's own arguments. In Auto mode
  * (AI-47), it says why it asks.
  */
-function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call: AiToolCall; host: HostInfo | null; mcp: McpToolInfo | null; auto: AutoAsk | null }) {
+function ApprovalCard({
+  slotId,
+  call,
+  host,
+  mcp,
+  auto,
+}: {
+  slotId: string;
+  call: AiToolCall;
+  host: HostInfo | null;
+  mcp: McpToolInfo | null;
+  auto: AutoAsk | null;
+}) {
   const t = useT();
   const shown = useMemo(() => shownCall(call), [call]);
   const proxied = proxyCall(call.name, call.arguments) !== null;
@@ -1448,7 +1664,12 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
   let allow: AllowLabels | null = null;
   if (refusal === undefined) {
     const next = mode === "edit" ? argsFrom(kind, args, draft) : null;
-    const scope = allowanceScope(kind, next && "json" in next ? (parseArgs(next.json) ?? args) : args, mcp, host?.dialect);
+    const scope = allowanceScope(
+      kind,
+      next && "json" in next ? (parseArgs(next.json) ?? args) : args,
+      mcp,
+      host?.dialect,
+    );
     allow = scope && allowLabels(t, scope, label, mcp, bypass, !!host?.local);
   }
   const run = (allow?: Extract<Decision, { kind: "run" }>["allow"]) => {
@@ -1479,23 +1700,21 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
         <span className={s.gap} />
         <Chip tone="warning">{t("ai.call.approval")}</Chip>
       </div>
-      {kind === "mcp" ? (
-        mcp && (
-          <div className={s.approvalHost}>
-            <Icon name="plug" size={12} />
-            <span>{t("ai.approval.server")}</span>
-            <span className={s.hostName}>{mcp.server_name}</span>
-          </div>
-        )
-      ) : (
-        host && (
-          <div className={s.approvalHost}>
-            <Icon name={host.local ? "desktop" : "hard-drives"} size={12} />
-            <span className={s.hostName}>{host.name}</span>
-            <span className={s.hostTarget}>{host.target}</span>
-          </div>
-        )
-      )}
+      {kind === "mcp"
+        ? mcp && (
+            <div className={s.approvalHost}>
+              <Icon name="plug" size={12} />
+              <span>{t("ai.approval.server")}</span>
+              <span className={s.hostName}>{mcp.server_name}</span>
+            </div>
+          )
+        : host && (
+            <div className={s.approvalHost}>
+              <Icon name={host.local ? "desktop" : "hard-drives"} size={12} />
+              <span className={s.hostName}>{host.name}</span>
+              <span className={s.hostTarget}>{host.target}</span>
+            </div>
+          )}
       {auto && <AutoReason ask={auto} />}
       {mcp?.always_ask && bypass && <HintText>{t("ai.approval.alwaysAsk")}</HintText>}
       {mcp && mode !== "edit" && <McpDetails mcp={mcp} />}
@@ -1522,7 +1741,11 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
             />
           ) : (
             <>
-              {fileChange && <div className={s.label}>{kind === "edit_file" ? t("ai.approval.newString") : t("ai.approval.content")}</div>}
+              {fileChange && (
+                <div className={s.label}>
+                  {kind === "edit_file" ? t("ai.approval.newString") : t("ai.approval.content")}
+                </div>
+              )}
               <textarea
                 className={cx(s.input, s.textarea)}
                 value={draft.main}
@@ -1547,7 +1770,9 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
               />
             </>
           )}
-          {kind === "send_input" && readTerminalInput(draft.main, str(args.text)) !== draft.main && <HintText>{t("ai.approval.terminalEscapes")}</HintText>}
+          {kind === "send_input" && readTerminalInput(draft.main, str(args.text)) !== draft.main && (
+            <HintText>{t("ai.approval.terminalEscapes")}</HintText>
+          )}
           {invalid && kind !== "send_input" && <ErrorText>{t("ai.approval.invalidJson")}</ErrorText>}
           {kind === "run_command" && (
             <label className={s.inline}>
@@ -1565,7 +1790,15 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
           {kind === "run_command" && (
             <label className={s.inline}>
               {t("ai.approval.timeout")}
-              <input className={cx(s.input, s.number)} type="number" min={1} max={600} placeholder="120" value={draft.timeout} onChange={(e) => setDraft({ ...draft, timeout: e.target.value })} />
+              <input
+                className={cx(s.input, s.number)}
+                type="number"
+                min={1}
+                max={600}
+                placeholder="120"
+                value={draft.timeout}
+                onChange={(e) => setDraft({ ...draft, timeout: e.target.value })}
+              />
               {t("ai.approval.seconds")}
             </label>
           )}
@@ -1575,10 +1808,20 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
                 <label htmlFor={keysId}>{t("ai.approval.key")}</label>
                 <KeysField id={keysId} keys={draft.keys} onChange={(keys) => setDraft({ ...draft, keys })} />
               </div>
-              {draft.keys.some((key) => parseSendKey(key) === null) && <ErrorText>{t("ai.approval.invalidKey")}</ErrorText>}
+              {draft.keys.some((key) => parseSendKey(key) === null) && (
+                <ErrorText>{t("ai.approval.invalidKey")}</ErrorText>
+              )}
               <label className={s.inline}>
                 {t("ai.approval.wait")}
-                <input className={cx(s.input, s.number)} type="number" min={1} max={120} placeholder="10" value={draft.wait} onChange={(e) => setDraft({ ...draft, wait: e.target.value })} />
+                <input
+                  className={cx(s.input, s.number)}
+                  type="number"
+                  min={1}
+                  max={120}
+                  placeholder="10"
+                  value={draft.wait}
+                  onChange={(e) => setDraft({ ...draft, wait: e.target.value })}
+                />
                 {t("ai.approval.seconds")}
               </label>
             </>
@@ -1609,7 +1852,10 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
               <ShownInput text={str(args.url)} command />
               {(args.full_page === true || args.offset !== undefined) && (
                 <HintText>
-                  {[args.full_page === true && t("ai.approval.fullPage"), args.offset !== undefined && t("ai.approval.offset", { n: str(args.offset) })]
+                  {[
+                    args.full_page === true && t("ai.approval.fullPage"),
+                    args.offset !== undefined && t("ai.approval.offset", { n: str(args.offset) }),
+                  ]
                     .filter(Boolean)
                     .join(" · ")}
                 </HintText>
@@ -1691,7 +1937,12 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
           </LinkButton>
           {/* The model would see the call as stored, not as edited here, so not while editing. */}
           {question === null && mode === "view" && (
-            <LinkButton tone="muted" icon="chat-teardrop-dots" title={t("ai.side.askCardHint")} onClick={() => setQuestion(t("ai.side.suggest"))}>
+            <LinkButton
+              tone="muted"
+              icon="chat-teardrop-dots"
+              title={t("ai.side.askCardHint")}
+              onClick={() => setQuestion(t("ai.side.suggest"))}
+            >
               {t("ai.side.askCard")}
             </LinkButton>
           )}
@@ -1713,12 +1964,24 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
       )}
       {mode !== "reject" && allow && (
         <div className={s.allowRow}>
-          <LinkButton tone="muted" icon="chat-circle-dots" title={allow.hereHint} disabled={holdRun} onClick={() => run("conversation")}>
+          <LinkButton
+            tone="muted"
+            icon="chat-circle-dots"
+            title={allow.hereHint}
+            disabled={holdRun}
+            onClick={() => run("conversation")}
+          >
             {allow.here}
           </LinkButton>
           {/* Always allow covers manual mode; an MCP server set to Always ask still asks in bypass mode. */}
           {allow.always && (
-            <LinkButton tone="muted" icon="check-circle" title={allow.alwaysHint} disabled={holdRun} onClick={() => run("always")}>
+            <LinkButton
+              tone="muted"
+              icon="check-circle"
+              title={allow.alwaysHint}
+              disabled={holdRun}
+              onClick={() => run("always")}
+            >
               {allow.always}
             </LinkButton>
           )}
@@ -1735,16 +1998,10 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
   const t = useT();
   const { turn, outcome } = slot;
 
-  if (slot.remoteRunning)
-    return (
-      <StatusLine tone="progress">{t("ai.status.remote")}</StatusLine>
-    );
+  if (slot.remoteRunning) return <StatusLine tone="progress">{t("ai.status.remote")}</StatusLine>;
   // A running turn shows itself: its reply, what that reply waits for (`usePendingLine`), and its calls.
   if (turn) return null;
-  if (slot.compacting)
-    return (
-      <StatusLine tone="progress">{t("ai.status.compacting")}</StatusLine>
-    );
+  if (slot.compacting) return <StatusLine tone="progress">{t("ai.status.compacting")}</StatusLine>;
   if (!outcome) return null;
   const retry = slot.conversationId ? (
     <Button size="sm" icon="arrows-clockwise" onClick={() => void retryTurn(slotId)}>
@@ -1753,9 +2010,7 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
   ) : null;
   switch (outcome.reason) {
     case "stopped":
-      return (
-        <StatusLine icon="stop-circle">{t("ai.outcome.stopped")}</StatusLine>
-      );
+      return <StatusLine icon="stop-circle">{t("ai.outcome.stopped")}</StatusLine>;
     case "length":
       return <Banner icon="scissors" tone="warn" text={t("ai.outcome.length")} />;
     case "refused":
@@ -1791,23 +2046,39 @@ function SideBubble({ slotId, q }: { slotId: string; q: SideQuestion }) {
         <Chip title={t("ai.side.notSavedHint")}>{t("ai.side.notSaved")}</Chip>
         <span className={s.gap} />
         {running ? (
-          <IconButton icon="stop" label={t("ai.side.stop")} size={14} className={s.messageAction} onClick={() => stopSideQuestion(slotId)} />
+          <IconButton
+            icon="stop"
+            label={t("ai.side.stop")}
+            size={14}
+            className={s.messageAction}
+            onClick={() => stopSideQuestion(slotId)}
+          />
         ) : (
           q.phase === "done" && q.answer.trim() && <CopyButton text={q.answer} />
         )}
-        <IconButton icon="x" label={t("btn.close")} size={14} className={s.messageAction} onClick={() => dismissSideQuestion(slotId)} />
+        <IconButton
+          icon="x"
+          label={t("btn.close")}
+          size={14}
+          className={s.messageAction}
+          onClick={() => dismissSideQuestion(slotId)}
+        />
       </div>
       {parts.attachments.map((a, i) => (
         <AttachmentCardFor key={i} attachment={a} />
       ))}
       <div className={cx(s.sideQuestion, "selectable")}>{q.question}</div>
       {q.answer && <Markdown text={q.answer} streaming={q.phase === "streaming"} />}
-      {(q.phase === "waiting" || q.phase === "thinking") && <PendingLine label={q.phase === "thinking" ? "ai.reasoning.active" : "ai.status.waiting"} />}
-      {q.phase === "stopped" && (
-        <StatusLine icon="stop-circle">{t("ai.outcome.stopped")}</StatusLine>
+      {(q.phase === "waiting" || q.phase === "thinking") && (
+        <PendingLine label={q.phase === "thinking" ? "ai.reasoning.active" : "ai.status.waiting"} />
       )}
-      {q.phase === "done" && q.finish === "length" && <Banner icon="scissors" tone="warn" text={t("ai.outcome.length")} />}
-      {q.phase === "done" && q.finish === "refused" && <Banner icon="prohibit" tone="warn" text={t("ai.outcome.refused")} />}
+      {q.phase === "stopped" && <StatusLine icon="stop-circle">{t("ai.outcome.stopped")}</StatusLine>}
+      {q.phase === "done" && q.finish === "length" && (
+        <Banner icon="scissors" tone="warn" text={t("ai.outcome.length")} />
+      )}
+      {q.phase === "done" && q.finish === "refused" && (
+        <Banner icon="prohibit" tone="warn" text={t("ai.outcome.refused")} />
+      )}
       {q.phase === "done" && !q.answer.trim() && q.finish !== "refused" && <EmptyReply />}
       {q.phase === "error" && (
         <Banner
@@ -1826,7 +2097,19 @@ function SideBubble({ slotId, q }: { slotId: string; q: SideQuestion }) {
   );
 }
 
-function Banner({ icon, tone, text, detail, action }: { icon: string; tone: "warn" | "error"; text: string; detail?: string; action?: ReactNode }) {
+function Banner({
+  icon,
+  tone,
+  text,
+  detail,
+  action,
+}: {
+  icon: string;
+  tone: "warn" | "error";
+  text: string;
+  detail?: string;
+  action?: ReactNode;
+}) {
   return (
     <div className={cx(s.banner, tone === "error" ? s.bannerError : s.bannerWarn)} role="status">
       <Icon name={icon} size={16} className={s.bannerIcon} />

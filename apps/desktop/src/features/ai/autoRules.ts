@@ -37,7 +37,19 @@ import { keySequence, parseSendKey } from "./sendKeys";
  * system runs `RM`), and also as a mere argument (`man shutdown`), since a false alarm only costs a click.
  * `mkfs` counts with any suffix (`mkfs.ext4`). `rm` counts only when it is recursive: see {@link namedCommand}.
  */
-export const ALWAYS_ASK_COMMANDS: readonly string[] = ["shred", "dd", "mkfs", "wipefs", "fdisk", "sfdisk", "parted", "shutdown", "reboot", "poweroff", "halt"];
+export const ALWAYS_ASK_COMMANDS: readonly string[] = [
+  "shred",
+  "dd",
+  "mkfs",
+  "wipefs",
+  "fdisk",
+  "sfdisk",
+  "parted",
+  "shutdown",
+  "reboot",
+  "poweroff",
+  "halt",
+];
 
 /**
  * What a PowerShell or Command Prompt tab also always asks about, in lowercase: formatting and wiping disks and
@@ -45,7 +57,14 @@ export const ALWAYS_ASK_COMMANDS: readonly string[] = ["shred", "dd", "mkfs", "w
  * as it is always run, since `npm run format` and `dotnet format` format code. Deleting asks when it is
  * recursive: see {@link namedCommand}.
  */
-export const WINDOWS_ALWAYS_ASK_COMMANDS: readonly string[] = ["diskpart", "format-volume", "clear-disk", "remove-partition", "stop-computer", "restart-computer"];
+export const WINDOWS_ALWAYS_ASK_COMMANDS: readonly string[] = [
+  "diskpart",
+  "format-volume",
+  "clear-disk",
+  "remove-partition",
+  "stop-computer",
+  "restart-computer",
+];
 
 /** PowerShell's and Command Prompt's commands that delete files and folders: `Remove-Item` and its aliases, `del`, `erase`, `rd` and `rmdir`. */
 const WINDOWS_DELETES: readonly string[] = ["remove-item", "ri", "rm", "rmdir", "rd", "del", "erase"];
@@ -96,7 +115,8 @@ export function hardRule({ kind, args, mcp, screen, dialect = "posix" }: HardRul
   const value = kind === "run_command" ? args.command : args.text;
   const text = typeof value === "string" ? value : "";
   if (HIDDEN.test(text)) return { kind: "hidden" };
-  if (kind === "run_command" && typeof args.workdir === "string" && HIDDEN.test(args.workdir)) return { kind: "hidden" };
+  if (kind === "run_command" && typeof args.workdir === "string" && HIDDEN.test(args.workdir))
+    return { kind: "hidden" };
   // Printable keys also type text. Keep their order when checking a command split across calls.
   let typed = text;
   if (kind === "send_input") {
@@ -141,7 +161,8 @@ function commandRule(lines: readonly string[], dialect: ShellDialect): HardRule 
  * hold them (the joiners in emoji and in Persian or Indic text); every other control character, and the
  * bidirectional and other zero-width format characters, are not.
  */
-const MCP_HIDDEN = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u061c\u200b\u200e\u200f\u202a-\u202e\u2060-\u2069\ufeff]/;
+const MCP_HIDDEN =
+  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u061c\u200b\u200e\u200f\u202a-\u202e\u2060-\u2069\ufeff]/;
 
 /** The strings of an MCP call's arguments, through nested objects and arrays: the objects' keys, and the values. */
 function mcpStrings(args: unknown): { keys: string[]; values: string[] } {
@@ -224,7 +245,13 @@ function windowsCommand(line: string): string | null {
       const name = windowsName(shown);
       const formats = name === "format" && /^[a-z]:/i.test(words[i + 1] ?? "");
       if (WINDOWS_DELETES.includes(name)) deletes ??= shown;
-      else if (formats || ALWAYS_ASK_COMMANDS.includes(name) || WINDOWS_ALWAYS_ASK_COMMANDS.includes(name) || name.startsWith("mkfs.")) return shown;
+      else if (
+        formats ||
+        ALWAYS_ASK_COMMANDS.includes(name) ||
+        WINDOWS_ALWAYS_ASK_COMMANDS.includes(name) ||
+        name.startsWith("mkfs.")
+      )
+        return shown;
     }
   }
   return deletes && recursive ? `${deletes} ${recursive}` : null;

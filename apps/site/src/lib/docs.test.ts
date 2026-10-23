@@ -30,7 +30,10 @@ group("the docs", () => {
   });
 
   it("put a page missing from the sidebar under More", () => {
-    const groups = sidebar([{ slug: "sftp", title: "SFTP file panel" }, { slug: "new-page", title: "New page" }]);
+    const groups = sidebar([
+      { slug: "sftp", title: "SFTP file panel" },
+      { slug: "new-page", title: "New page" },
+    ]);
     expect(groups.map((g) => g.title)).toEqual(["Terminal and files", "More"]);
   });
 });
@@ -38,14 +41,22 @@ group("the docs", () => {
 group("adapt", () => {
   it("turns mentions into links and names the label columns", () => {
     const titles = new Map([["ai-panel", "AI assistant panel"]]);
-    const text = adapt("See `references/ai-panel.md` and `references/gone.md`.\n\n| en | zh-CN | ja |\n|---|---|---|", titles, "1.2.3");
-    expect(text).toBe("See [AI assistant panel](/docs/ai-panel/) and `references/gone.md`.\n\n| English | 简体中文 | 日本語 |\n|---|---|---|");
+    const text = adapt(
+      "See `references/ai-panel.md` and `references/gone.md`.\n\n| en | zh-CN | ja |\n|---|---|---|",
+      titles,
+      "1.2.3",
+    );
+    expect(text).toBe(
+      "See [AI assistant panel](/docs/ai-panel/) and `references/gone.md`.\n\n| English | 简体中文 | 日本語 |\n|---|---|---|",
+    );
   });
 });
 
 group("describe", () => {
   it("keeps a short paragraph and strips Markdown", () => {
-    expect(describe("Open **SFTP** with [the button](/x/) and `Ctrl+O`.")).toBe("Open SFTP with the button and Ctrl+O.");
+    expect(describe("Open **SFTP** with [the button](/x/) and `Ctrl+O`.")).toBe(
+      "Open SFTP with the button and Ctrl+O.",
+    );
   });
 
   it("cuts a long paragraph at a sentence or a word", () => {

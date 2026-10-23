@@ -10,7 +10,14 @@ import { checkWorkerVersion } from "./worker-version.mjs";
 const npm = (json) => `${JSON.stringify(json, null, 2)}\n`;
 
 const packageJson = (version, { dependencies = { hono: "^4.0.0" }, devDependencies = { vitest: "^4.0.0" } } = {}) =>
-  npm({ name: "@hatoba/sync-worker", version, private: true, scripts: { test: "vitest run" }, dependencies, devDependencies });
+  npm({
+    name: "@hatoba/sync-worker",
+    version,
+    private: true,
+    scripts: { test: "vitest run" },
+    dependencies,
+    devDependencies,
+  });
 
 const packageLock = (version, packages = {}) =>
   npm({
@@ -19,7 +26,12 @@ const packageLock = (version, packages = {}) =>
     lockfileVersion: 3,
     requires: true,
     packages: {
-      "": { name: "@hatoba/sync-worker", version, dependencies: { hono: "^4.0.0" }, devDependencies: { vitest: "^4.0.0" } },
+      "": {
+        name: "@hatoba/sync-worker",
+        version,
+        dependencies: { hono: "^4.0.0" },
+        devDependencies: { vitest: "^4.0.0" },
+      },
       "node_modules/hono": { version: "4.0.0", license: "MIT" },
       "node_modules/vitest": { version: "4.0.0", dev: true, license: "MIT" },
       ...packages,
@@ -27,9 +39,13 @@ const packageLock = (version, packages = {}) =>
   });
 
 const tsconfig = (compilerOptions = {}, include = ["src", "test"]) =>
-  npm({ compilerOptions: { target: "ES2022", strict: true, verbatimModuleSyntax: true, noEmit: true, ...compilerOptions }, include });
+  npm({
+    compilerOptions: { target: "ES2022", strict: true, verbatimModuleSyntax: true, noEmit: true, ...compilerOptions },
+    include,
+  });
 
-const configTs = (version) => `export const API_VERSION = 1;\n/** Keep in sync with package.json (enforced by a test). */\nexport const VERSION = "${version}";\n`;
+const configTs = (version) =>
+  `export const API_VERSION = 1;\n/** Keep in sync with package.json (enforced by a test). */\nexport const VERSION = "${version}";\n`;
 
 const WORKER = {
   "workers/sync/package.json": packageJson("0.1.0"),
@@ -47,7 +63,8 @@ const WORKER = {
 function repository(t, files = WORKER) {
   const root = mkdtempSync(join(tmpdir(), "hatoba-worker-version-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const run = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const run = (...args) =>
+    execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   const write = (path, contents) => {
     mkdirSync(dirname(join(root, path)), { recursive: true });
     writeFileSync(join(root, path), contents);
@@ -83,11 +100,20 @@ test("passes when the Worker did not change", (t) => {
 
 test("fails when the Worker changes without a version raise, and names each change", (t) => {
   const changes = {
-    "workers/sync/src/index.ts": ["workers/sync/src/index.ts", 'export default { fetch: () => new Response("changed") };\n'],
+    "workers/sync/src/index.ts": [
+      "workers/sync/src/index.ts",
+      'export default { fetch: () => new Response("changed") };\n',
+    ],
     "a new source file": ["workers/sync/src/routes/new.ts", "export {};\n"],
     "a new migration": ["workers/sync/migrations/0002_more.sql", "ALTER TABLE items ADD COLUMN v INTEGER;\n"],
-    "wrangler.toml": ["workers/sync/wrangler.toml", 'name = "hatoba-sync"\nmain = "src/index.ts"\ncompatibility_date = "2026-10-01"\n'],
-    "config.ts outside VERSION": ["workers/sync/src/config.ts", configTs("0.1.0").replace("API_VERSION = 1", "API_VERSION = 2")],
+    "wrangler.toml": [
+      "workers/sync/wrangler.toml",
+      'name = "hatoba-sync"\nmain = "src/index.ts"\ncompatibility_date = "2026-10-01"\n',
+    ],
+    "config.ts outside VERSION": [
+      "workers/sync/src/config.ts",
+      configTs("0.1.0").replace("API_VERSION = 1", "API_VERSION = 2"),
+    ],
   };
   for (const [name, [path, contents]] of Object.entries(changes)) {
     const repo = repository(t);
@@ -95,7 +121,10 @@ test("fails when the Worker changes without a version raise, and names each chan
     const result = repo.check();
     assert.equal(result.ok, false, name);
     assert.ok(result.message.startsWith("The sync Worker changed since main ("), result.message);
-    assert.ok(result.message.includes(`but its version is still 0.1.0. Changed:\n  ${path}\nRaise the Worker version`), result.message);
+    assert.ok(
+      result.message.includes(`but its version is still 0.1.0. Changed:\n  ${path}\nRaise the Worker version`),
+      result.message,
+    );
     assert.ok(result.message.endsWith("node scripts/release/bump.mjs --worker patch"), result.message);
   }
 });
@@ -103,13 +132,24 @@ test("fails when the Worker changes without a version raise, and names each chan
 test("counts the dependencies the bundle includes, and not devDependencies", (t) => {
   const runtime = repository(t);
   runtime.write("workers/sync/package.json", packageJson("0.1.0", { dependencies: { hono: "^4.1.0" } }));
-  runtime.write("workers/sync/package-lock.json", packageLock("0.1.0", { "node_modules/hono": { version: "4.1.0", license: "MIT" } }));
+  runtime.write(
+    "workers/sync/package-lock.json",
+    packageLock("0.1.0", { "node_modules/hono": { version: "4.1.0", license: "MIT" } }),
+  );
   const result = runtime.check();
   assert.equal(result.ok, false);
-  assert.ok(result.message.includes("Changed:\n  workers/sync/package-lock.json (dependencies)\n  workers/sync/package.json (dependencies)\n"), result.message);
+  assert.ok(
+    result.message.includes(
+      "Changed:\n  workers/sync/package-lock.json (dependencies)\n  workers/sync/package.json (dependencies)\n",
+    ),
+    result.message,
+  );
 
   const dev = repository(t);
-  dev.write("workers/sync/package.json", packageJson("0.1.0", { devDependencies: { vitest: "^4.1.0", wrangler: "^4.0.0" } }));
+  dev.write(
+    "workers/sync/package.json",
+    packageJson("0.1.0", { devDependencies: { vitest: "^4.1.0", wrangler: "^4.0.0" } }),
+  );
   dev.write(
     "workers/sync/package-lock.json",
     packageLock("0.1.0", {
@@ -124,8 +164,8 @@ test("counts the dependencies the bundle includes, and not devDependencies", (t)
 test("counts the tsconfig.json options esbuild reads, and not the type-checking ones", (t) => {
   for (const [name, contents] of Object.entries({
     "a bundling option": tsconfig({ useDefineForClassFields: false }),
-    "extends": npm({ extends: "./base.json", ...JSON.parse(tsconfig()) }),
-    "comments": `// Bundling\n${tsconfig()}`,
+    extends: npm({ extends: "./base.json", ...JSON.parse(tsconfig()) }),
+    comments: `// Bundling\n${tsconfig()}`,
   })) {
     const repo = repository(t);
     repo.write("workers/sync/tsconfig.json", contents);
@@ -135,7 +175,10 @@ test("counts the tsconfig.json options esbuild reads, and not the type-checking 
   }
 
   const typeCheck = repository(t);
-  typeCheck.write("workers/sync/tsconfig.json", tsconfig({ noUncheckedIndexedAccess: true, noEmit: false }, ["src", "test", "vitest.config.ts"]));
+  typeCheck.write(
+    "workers/sync/tsconfig.json",
+    tsconfig({ noUncheckedIndexedAccess: true, noEmit: false }, ["src", "test", "vitest.config.ts"]),
+  );
   assert.ok(typeCheck.check().ok, typeCheck.check().message);
 });
 
@@ -167,7 +210,10 @@ test("compares with where the branch left the base, not with the base's tip", (t
   repo.run("switch", "--quiet", "feature");
   const result = repo.check();
   assert.equal(result.ok, false);
-  assert.ok(result.message.includes("but its version is still 0.1.0. Changed:\n  workers/sync/src/index.ts\n"), result.message);
+  assert.ok(
+    result.message.includes("but its version is still 0.1.0. Changed:\n  workers/sync/src/index.ts\n"),
+    result.message,
+  );
 });
 
 test("refuses a lower version", (t) => {
@@ -187,13 +233,18 @@ test("names each Worker version file when they disagree", (t) => {
   repo.write("workers/sync/package.json", packageJson("0.1.1"));
   assert.throws(
     () => repo.check(),
-    (error) => error.message.includes("workers/sync/package.json: 0.1.1") && error.message.includes("workers/sync/src/config.ts: 0.1.0"),
+    (error) =>
+      error.message.includes("workers/sync/package.json: 0.1.1") &&
+      error.message.includes("workers/sync/src/config.ts: 0.1.0"),
   );
 });
 
 test("explains a base it cannot find", (t) => {
   const repo = repository(t);
-  assert.throws(() => checkWorkerVersion(repo.root, "upstream/main"), /^Error: Cannot find where HEAD branched from upstream\/main\. Fetch upstream\/main/);
+  assert.throws(
+    () => checkWorkerVersion(repo.root, "upstream/main"),
+    /^Error: Cannot find where HEAD branched from upstream\/main\. Fetch upstream\/main/,
+  );
 });
 
 test("passes when the base has no Worker", (t) => {

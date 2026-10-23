@@ -28,7 +28,9 @@ vi.mock("@/ipc/api", async (importActual) => ({
 
 vi.mock("./store", () => {
   const state = () => ({ prefs: { auto_update_check: backend.autoCheck }, info: { package_manager: backend.manager } });
-  return { useApp: Object.assign((select: (st: ReturnType<typeof state>) => unknown) => select(state()), { getState: state }) };
+  return {
+    useApp: Object.assign((select: (st: ReturnType<typeof state>) => unknown) => select(state()), { getState: state }),
+  };
 });
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -36,7 +38,12 @@ vi.mock("./store", () => {
 const found = (version: string | null): UpdateCheck => ({
   current_version: "0.1.0",
   update: version
-    ? { version, notes: "## New\n\nThings.", published_at: 1_790_856_000_000, release_url: `https://github.com/scarletkc/Hatoba/releases/tag/v${version}` }
+    ? {
+        version,
+        notes: "## New\n\nThings.",
+        published_at: 1_790_856_000_000,
+        release_url: `https://github.com/scarletkc/Hatoba/releases/tag/v${version}`,
+      }
     : null,
 });
 const offline: AppError = { code: "sync_offline", detail: "GitHub could not be reached" };

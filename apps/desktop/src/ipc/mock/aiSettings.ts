@@ -109,9 +109,30 @@ export function createAiSettingsMock(): AiSettingsApi {
           has_api_key: true,
           auth_header: "x-api-key",
           models: [
-            { id: "claude-sonnet-5-5", name: "Claude Sonnet 5.5", context_window: 1_000_000, max_output_tokens: 128_000, efforts: [...ALL_LEVELS], adaptive_thinking: true },
-            { id: "claude-haiku-5-5", name: "Claude Haiku 5.5", context_window: 1_000_000, max_output_tokens: 128_000, efforts: [...ALL_LEVELS], adaptive_thinking: true },
-            { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5", context_window: 200_000, max_output_tokens: 64_000, efforts: [], adaptive_thinking: false },
+            {
+              id: "claude-sonnet-5-5",
+              name: "Claude Sonnet 5.5",
+              context_window: 1_000_000,
+              max_output_tokens: 128_000,
+              efforts: [...ALL_LEVELS],
+              adaptive_thinking: true,
+            },
+            {
+              id: "claude-haiku-5-5",
+              name: "Claude Haiku 5.5",
+              context_window: 1_000_000,
+              max_output_tokens: 128_000,
+              efforts: [...ALL_LEVELS],
+              adaptive_thinking: true,
+            },
+            {
+              id: "claude-haiku-4-5-20251001",
+              name: "Claude Haiku 4.5",
+              context_window: 200_000,
+              max_output_tokens: 64_000,
+              efforts: [],
+              adaptive_thinking: false,
+            },
           ],
           updated_at: Date.now() - 86_400_000,
         },
@@ -123,8 +144,22 @@ export function createAiSettingsMock(): AiSettingsApi {
           has_api_key: false,
           auth_header: "x-api-key",
           models: [
-            { id: "qwen3:8b", name: "qwen3:8b", context_window: 40_960, max_output_tokens: null, efforts: null, adaptive_thinking: null },
-            { id: "gpt-oss:20b", name: "gpt-oss:20b", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null },
+            {
+              id: "qwen3:8b",
+              name: "qwen3:8b",
+              context_window: 40_960,
+              max_output_tokens: null,
+              efforts: null,
+              adaptive_thinking: null,
+            },
+            {
+              id: "gpt-oss:20b",
+              name: "gpt-oss:20b",
+              context_window: null,
+              max_output_tokens: null,
+              efforts: null,
+              adaptive_thinking: null,
+            },
           ],
           updated_at: Date.now() - 3_600_000,
         },
@@ -136,7 +171,16 @@ export function createAiSettingsMock(): AiSettingsApi {
           base_url: "https://api.typesafe.ai/v1",
           has_api_key: true,
           auth_header: "x-api-key",
-          models: [{ id: "jev-latest", name: "Jev", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null }],
+          models: [
+            {
+              id: "jev-latest",
+              name: "Jev",
+              context_window: null,
+              max_output_tokens: null,
+              efforts: null,
+              adaptive_thinking: null,
+            },
+          ],
           updated_at: Date.now() - 1_800_000,
         },
       ];
@@ -173,7 +217,8 @@ export function createAiSettingsMock(): AiSettingsApi {
     custom_instructions: flags.has("instructions") ? INSTRUCTIONS_DEMO : "",
     send_terminal_screen: true,
     // AI-47: Auto mode's judge, a fast model of a configured provider.
-    judge_model: providers.length && !flags.has("nojudge") ? { provider_id: "p-anthropic", model_id: "claude-haiku-5-5" } : null,
+    judge_model:
+      providers.length && !flags.has("nojudge") ? { provider_id: "p-anthropic", model_id: "claude-haiku-5-5" } : null,
     memory: true,
     text_size: AI_TEXT_SIZE_DEFAULT,
   };
@@ -214,11 +259,20 @@ export function createAiSettingsMock(): AiSettingsApi {
     return parsed.username || parsed.password ? "invalid" : null;
   };
 
-  const savedKey = (input: { id: string | null; api_key: string | null }, list: { id: string; has_api_key: boolean }[]) =>
-    input.api_key === null ? (list.find((p) => p.id === input.id)?.has_api_key ?? false) : input.api_key !== "";
+  const savedKey = (
+    input: { id: string | null; api_key: string | null },
+    list: { id: string; has_api_key: boolean }[],
+  ) => (input.api_key === null ? (list.find((p) => p.id === input.id)?.has_api_key ?? false) : input.api_key !== "");
 
   // Anthropic's list carries each model's thinking levels and adaptive thinking (AI-05).
-  const claude = (id: string, name: string, context: number, output: number, efforts: AiEffort[], adaptive: boolean): AiModel => ({
+  const claude = (
+    id: string,
+    name: string,
+    context: number,
+    output: number,
+    efforts: AiEffort[],
+    adaptive: boolean,
+  ): AiModel => ({
     id,
     name,
     context_window: context,
@@ -234,13 +288,22 @@ export function createAiSettingsMock(): AiSettingsApi {
     claude("claude-haiku-4-5-20251001", "Claude Haiku 4.5", 200_000, 64_000, [], false),
   ];
   const plain = (ids: string[]): AiModel[] =>
-    ids.map((m) => ({ id: m, name: m, context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null }));
+    ids.map((m) => ({
+      id: m,
+      name: m,
+      context_window: null,
+      max_output_tokens: null,
+      efforts: null,
+      adaptive_thinking: null,
+    }));
 
   const modelsFor = (input: AiProviderInput): AiModel[] => {
     const host = hostOf(input.base_url) ?? "";
     if (input.protocol === "anthropic") return claudeModels;
     if (input.protocol === "system_one")
-      return /\/ai\/run/.test(input.base_url) ? plain(["@cf/cloudflare/clef", "@cf/cloudflare/clef-flash"]) : plain(["jev-latest"]);
+      return /\/ai\/run/.test(input.base_url)
+        ? plain(["@cf/cloudflare/clef", "@cf/cloudflare/clef-flash"])
+        : plain(["jev-latest"]);
     if (/openrouter/i.test(input.base_url)) {
       return Array.from({ length: 150 }, (_, i) => {
         const vendor = ["openai", "anthropic", "google", "meta-llama", "mistralai", "qwen"][i % 6];
@@ -272,7 +335,11 @@ export function createAiSettingsMock(): AiSettingsApi {
     ai_providers_list: async () => providers.map(clone),
     ai_provider_save: async (input) => {
       if (urlProblem(input.base_url)) {
-        const err: AppError = { code: "invalid_input", detail: "the base URL must not contain a user name or password", field: "base_url" };
+        const err: AppError = {
+          code: "invalid_input",
+          detail: "the base URL must not contain a user name or password",
+          field: "base_url",
+        };
         throw err;
       }
       await wait(150);
@@ -322,7 +389,12 @@ export function createAiSettingsMock(): AiSettingsApi {
       if (urlProblem(input.base_url)) return { ok: false, failure: "invalid_url", status: null, message: null };
       const host = hostOf(input.base_url) ?? "";
       if (host.endsWith(".invalid")) {
-        return { ok: false, failure: "network", status: null, message: `error sending request for url (${input.base_url}): dns error` };
+        return {
+          ok: false,
+          failure: "network",
+          status: null,
+          message: `error sending request for url (${input.base_url}): dns error`,
+        };
       }
       const hasKey = savedKey(input, providers);
       if (!isLocalHost(host) && !hasKey && !(input.api_key ?? "")) {
@@ -330,7 +402,12 @@ export function createAiSettingsMock(): AiSettingsApi {
       }
       const first = input.models[0]?.id;
       if (first && /nope/i.test(first)) {
-        return { ok: false, failure: "unknown_model", status: 404, message: `The model \`${first}\` does not exist or you do not have access to it.` };
+        return {
+          ok: false,
+          failure: "unknown_model",
+          status: 404,
+          message: `The model \`${first}\` does not exist or you do not have access to it.`,
+        };
       }
       return { ok: true, failure: null, status: 200, message: null };
     },
@@ -414,7 +491,8 @@ export function createAiSettingsMock(): AiSettingsApi {
     },
     search_provider_test: async (input) => {
       await wait(700);
-      if (flags.has("testfail")) return { ok: false, failure: "auth", status: 401, message: "Invalid subscription token." };
+      if (flags.has("testfail"))
+        return { ok: false, failure: "auth", status: 401, message: "Invalid subscription token." };
       if (input.kind === "searxng" && ((input.base_url ?? "").includes(".invalid") || !hostOf(input.base_url ?? ""))) {
         return { ok: false, failure: "network", status: null, message: "error sending request: dns error" };
       }
@@ -424,24 +502,48 @@ export function createAiSettingsMock(): AiSettingsApi {
     ai_settings_save: async (patch) => {
       // Like Rust (AI-36).
       if (patch.custom_instructions !== undefined && byteCount(patch.custom_instructions) > INSTRUCTIONS_MAX_BYTES)
-        throw { code: "invalid_input", detail: "custom instructions are limited to 32 KB", field: "custom_instructions" } satisfies AppError;
+        throw {
+          code: "invalid_input",
+          detail: "custom instructions are limited to 32 KB",
+          field: "custom_instructions",
+        } satisfies AppError;
       // Like Rust (AI-47): a System One model cannot chat.
       const chosen = patch.default_model && providers.find((p) => p.id === patch.default_model?.provider_id);
       if (chosen && chosen.protocol === "system_one")
-        throw { code: "invalid_input", detail: "a System One model cannot chat", field: "default_model" } satisfies AppError;
+        throw {
+          code: "invalid_input",
+          detail: "a System One model cannot chat",
+          field: "default_model",
+        } satisfies AppError;
       // Like Rust (TERM-13).
-      const text_size = patch.text_size === undefined ? {} : { text_size: Math.min(AI_TEXT_SIZE_MAX, Math.max(AI_TEXT_SIZE_MIN, patch.text_size)) };
+      const text_size =
+        patch.text_size === undefined
+          ? {}
+          : { text_size: Math.min(AI_TEXT_SIZE_MAX, Math.max(AI_TEXT_SIZE_MIN, patch.text_size)) };
       settings = applyPatch(settings, structuredClone({ ...patch, ...text_size }));
     },
     // AI-47: Test beside the judge, with fixed answers (`JUDGE_SAMPLES`); like Rust, the judge must be listed.
     ai_judge_test: async (judge) => {
       const chosen = judge ?? settings.judge_model;
-      const listed = chosen && providers.find((p) => p.id === chosen.provider_id)?.models.some((m) => m.id === chosen.model_id);
-      if (!chosen || !listed) throw { code: "invalid_input", detail: "the judge model is not listed", field: "judge_model" } satisfies AppError;
+      const listed =
+        chosen && providers.find((p) => p.id === chosen.provider_id)?.models.some((m) => m.id === chosen.model_id);
+      if (!chosen || !listed)
+        throw {
+          code: "invalid_input",
+          detail: "the judge model is not listed",
+          field: "judge_model",
+        } satisfies AppError;
       await wait(flags.has("judgeslow") ? 4000 : 1200);
       return JUDGE_SAMPLES.map((sample): AiJudgeSampleOutcome => {
         const verdict: AiAutoVerdict = flags.has("judgefail")
-          ? { provider_id: chosen.provider_id, model_id: chosen.model_id, decision: "ask", answers: [], concerns: [], failure: "timeout" }
+          ? {
+              provider_id: chosen.provider_id,
+              model_id: chosen.model_id,
+              decision: "ask",
+              answers: [],
+              concerns: [],
+              failure: "timeout",
+            }
           : {
               provider_id: chosen.provider_id,
               model_id: chosen.model_id,
@@ -479,7 +581,16 @@ const JUDGE_SAMPLES: {
   answers: [string, number][];
   concerns: string[];
 }[] = (() => {
-  const command = (requested: number, forbidden: number, changes: number, destroys: number, secrets: number, sends: number, security: number, unseen: number): [string, number][] => [
+  const command = (
+    requested: number,
+    forbidden: number,
+    changes: number,
+    destroys: number,
+    secrets: number,
+    sends: number,
+    security: number,
+    unseen: number,
+  ): [string, number][] => [
     ["requested", requested],
     ["forbidden", forbidden],
     ["changes_anything", changes],
@@ -494,8 +605,20 @@ const JUDGE_SAMPLES: {
     ["url_carries_data", carries],
   ];
   return [
-    { name: "disk_space", expected: "run", decision: "run", answers: command(0.41, 0.01, 0.03, 0.01, 0.01, 0.01, 0.01, 0.01), concerns: [] },
-    { name: "restart_requested", expected: "run", decision: "run", answers: command(0.96, 0.02, 0.93, 0.04, 0.01, 0.01, 0.03, 0.01), concerns: [] },
+    {
+      name: "disk_space",
+      expected: "run",
+      decision: "run",
+      answers: command(0.41, 0.01, 0.03, 0.01, 0.01, 0.01, 0.01, 0.01),
+      concerns: [],
+    },
+    {
+      name: "restart_requested",
+      expected: "run",
+      decision: "run",
+      answers: command(0.96, 0.02, 0.93, 0.04, 0.01, 0.01, 0.03, 0.01),
+      concerns: [],
+    },
     {
       name: "delete_unrequested",
       expected: "ask",
@@ -546,8 +669,20 @@ const JUDGE_SAMPLES: {
       concerns: ["requested", "changes_anything", "destroys_data"],
     },
     { name: "docs_page", expected: "run", decision: "run", answers: fetch(0.01, 0.02), concerns: [] },
-    { name: "token_in_url", expected: "ask", decision: "ask", answers: fetch(0.02, 0.94), concerns: ["url_carries_data"] },
-    { name: "input_read", expected: "run", decision: "run", answers: command(0.93, 0.01, 0.02, 0.01, 0.01, 0.02, 0.01, 0.01), concerns: [] },
+    {
+      name: "token_in_url",
+      expected: "ask",
+      decision: "ask",
+      answers: fetch(0.02, 0.94),
+      concerns: ["url_carries_data"],
+    },
+    {
+      name: "input_read",
+      expected: "run",
+      decision: "run",
+      answers: command(0.93, 0.01, 0.02, 0.01, 0.01, 0.02, 0.01, 0.01),
+      concerns: [],
+    },
     {
       name: "answer_unrequested",
       expected: "ask",
@@ -561,7 +696,13 @@ const JUDGE_SAMPLES: {
 /** Like Rust: trimmed, and a domain in lowercase. */
 function normalizeAllowance(a: AiAllowance): AiAllowance {
   const value = a.value.trim();
-  return { kind: a.kind, host_id: a.host_id?.trim() || null, target: a.target?.trim() || null, value: a.kind === "domain" ? value.toLowerCase() : value };
+  return {
+    kind: a.kind,
+    host_id: a.host_id?.trim() || null,
+    target: a.target?.trim() || null,
+    value: a.kind === "domain" ? value.toLowerCase() : value,
+  };
 }
 
-const sameAllowance = (a: AiAllowance, b: AiAllowance) => a.kind === b.kind && a.host_id === b.host_id && a.target === b.target && a.value === b.value;
+const sameAllowance = (a: AiAllowance, b: AiAllowance) =>
+  a.kind === b.kind && a.host_id === b.host_id && a.target === b.target && a.value === b.value;

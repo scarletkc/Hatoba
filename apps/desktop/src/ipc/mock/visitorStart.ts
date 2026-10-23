@@ -41,5 +41,10 @@ function fillSecrets() {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   };
   const scan = () => document.querySelectorAll<HTMLInputElement>("input[type=password]").forEach(fill);
-  new MutationObserver(scan).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "readonly"] });
+  new MutationObserver(scan).observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["disabled", "readonly"],
+  });
 }

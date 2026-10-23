@@ -47,10 +47,7 @@ type FieldKey = "name" | "address" | "port" | "username" | "password" | "key" | 
 type Errors = Partial<Record<FieldKey, string>>;
 
 type TestState =
-  | { state: "idle" }
-  | { state: "running" }
-  | { state: "ok"; text: string }
-  | { state: "error"; text: string };
+  { state: "idle" } | { state: "running" } | { state: "ok"; text: string } | { state: "error"; text: string };
 
 const BACKEND_FIELDS: Record<string, FieldKey> = {
   name: "name",
@@ -133,7 +130,22 @@ export function HostEditPage({
     setForm((f) => ({ ...f, ...p }));
     if (field) setErrors((e) => (e[field] ? { ...e, [field]: undefined } : e));
     // A test result describes the old connection settings.
-    if (Object.keys(p).some((k) => ["address", "port", "username", "authKind", "password", "keyId", "jumpHostId", "proxyMode", "proxyId", "replacing"].includes(k)))
+    if (
+      Object.keys(p).some((k) =>
+        [
+          "address",
+          "port",
+          "username",
+          "authKind",
+          "password",
+          "keyId",
+          "jumpHostId",
+          "proxyMode",
+          "proxyId",
+          "replacing",
+        ].includes(k),
+      )
+    )
       setTest({ state: "idle" });
   };
 
@@ -150,9 +162,11 @@ export function HostEditPage({
       else if (hostId && jumpChainReaches(hosts, form.jumpHostId, hostId)) e.jump = t("hosts.err.jumpLoop");
     }
     // Ignored behind a jump host, so it only matters without one.
-    if (!form.jumpHostId && form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId)) e.proxy = t("hosts.err.proxyDeleted");
+    if (!form.jumpHostId && form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId))
+      e.proxy = t("hosts.err.proxyDeleted");
     // The field says so itself; this only keeps the form from saving.
-    if (byteCount(form.aiNotes) > HOST_NOTES_MAX_BYTES) e.aiNotes = t("ai.instructions.tooLong", { max: HOST_NOTES_MAX_BYTES.toLocaleString(t.locale) });
+    if (byteCount(form.aiNotes) > HOST_NOTES_MAX_BYTES)
+      e.aiNotes = t("ai.instructions.tooLong", { max: HOST_NOTES_MAX_BYTES.toLocaleString(t.locale) });
     return e;
   };
 
@@ -225,7 +239,10 @@ export function HostEditPage({
       } else {
         setTest({
           state: "error",
-          text: errorMessage(t, r.error ?? { code: "ssh", detail: "" }, { host: form.address, port: Number(form.port) }),
+          text: errorMessage(t, r.error ?? { code: "ssh", detail: "" }, {
+            host: form.address,
+            port: Number(form.port),
+          }),
         });
       }
     } catch (err) {
@@ -274,7 +291,13 @@ export function HostEditPage({
   // Enter in a single-line field saves (tag input handles its own Enter).
   const onKeyDown = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement;
-    if (e.key === "Enter" && !isImeEvent(e) && !e.defaultPrevented && target.tagName === "INPUT" && target.getAttribute("type") !== "checkbox") {
+    if (
+      e.key === "Enter" &&
+      !isImeEvent(e) &&
+      !e.defaultPrevented &&
+      target.tagName === "INPUT" &&
+      target.getAttribute("type") !== "checkbox"
+    ) {
       e.preventDefault();
       void save();
     }
@@ -290,7 +313,11 @@ export function HostEditPage({
       { value: null, label: t("hosts.f.none") },
       ...hosts
         .filter((h) => h.id !== hostId)
-        .map((h) => ({ value: h.id, label: h.name, hint: `${h.username ? `${h.username}@` : ""}${h.address}:${h.port}` })),
+        .map((h) => ({
+          value: h.id,
+          label: h.name,
+          hint: `${h.username ? `${h.username}@` : ""}${h.address}:${h.port}`,
+        })),
     ],
     [hosts, hostId, t],
   );
@@ -304,7 +331,9 @@ export function HostEditPage({
     { value: "device_default", label: t("hosts.f.proxyDefault"), hint: defaultHint },
     { value: "direct", label: t("hosts.f.proxyDirect") },
     ...proxies.map((p) => ({ value: `proxy:${p.id}`, label: p.name, hint: proxySummary(p) })),
-    ...(form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId) ? [{ value: proxyValue, label: t("hosts.f.proxyDeleted") }] : []),
+    ...(form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId)
+      ? [{ value: proxyValue, label: t("hosts.f.proxyDeleted") }]
+      : []),
   ];
   const setProxy = (value: string) =>
     value.startsWith("proxy:")
@@ -368,7 +397,11 @@ export function HostEditPage({
                   onChange={(e) => patch({ name: e.target.value }, "name")}
                 />
               </FormRow>
-              <FormRow label={t("hosts.f.address")} htmlFor="host-address" error={[errors.address, errors.port].filter(Boolean).join(" ") || null}>
+              <FormRow
+                label={t("hosts.f.address")}
+                htmlFor="host-address"
+                error={[errors.address, errors.port].filter(Boolean).join(" ") || null}
+              >
                 <div className={s.addrRow}>
                   <TextField
                     id="host-address"
@@ -447,11 +480,15 @@ export function HostEditPage({
                         autoComplete="new-password"
                         value={form.password}
                         invalid={!!errors.password}
-                        placeholder={form.replacing ? t("hosts.f.passwordNewPlaceholder") : t("hosts.f.passwordPlaceholder")}
+                        placeholder={
+                          form.replacing ? t("hosts.f.passwordNewPlaceholder") : t("hosts.f.passwordPlaceholder")
+                        }
                         onChange={(e) => patch({ password: e.target.value }, "password")}
                       />
                       {form.replacing && (
-                        <LinkButton onClick={() => patch({ replacing: false, password: "" })}>{t("hosts.f.keepSaved")}</LinkButton>
+                        <LinkButton onClick={() => patch({ replacing: false, password: "" })}>
+                          {t("hosts.f.keepSaved")}
+                        </LinkButton>
                       )}
                     </div>
                   )}
@@ -537,7 +574,9 @@ export function HostEditPage({
                         onChange={setProxy}
                       />
                     </div>
-                    <LinkButton onClick={() => useApp.getState().openSettings(true, "proxies")}>{t("hosts.f.manageProxies")}</LinkButton>
+                    <LinkButton onClick={() => useApp.getState().openSettings(true, "proxies")}>
+                      {t("hosts.f.manageProxies")}
+                    </LinkButton>
                   </div>
                   {form.jumpHostId && <HintText>{t("hosts.f.proxyJumpHint")}</HintText>}
                 </div>

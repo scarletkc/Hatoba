@@ -109,7 +109,13 @@ function OptionCard({
   onSelect: () => void;
 }) {
   return (
-    <button type="button" role="radio" aria-checked={selected} className={cx(s.option, selected && s.optionOn)} onClick={onSelect}>
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      className={cx(s.option, selected && s.optionOn)}
+      onClick={onSelect}
+    >
       <span className={cx(s.radio, selected && s.radioOn)}>{selected && <span className={s.radioDot} />}</span>
       <span className={s.optionText}>
         <span className={s.optionTitle}>{title}</span>

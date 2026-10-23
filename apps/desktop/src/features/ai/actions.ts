@@ -174,7 +174,11 @@ export function turnContext(slotId: string): AiTurnContext | null {
     effort: slotEffort(slotId),
     host_id: attached ? attached.tab.hostId : (conversation?.host_id ?? null),
     target: attached ? attached.tab.target : (conversation?.quick_target ?? null),
-    local: attached ? localOf(attached.tab) : conversation?.local ? { device: conversation.local, shell: null, kind: null } : null,
+    local: attached
+      ? localOf(attached.tab)
+      : conversation?.local
+        ? { device: conversation.local, shell: null, kind: null }
+        : null,
     tab: connected,
     session_id: connected ? (attached.tab.sessionId ?? null) : null,
     disabled_mcp_servers: slot.mcpOff,
@@ -193,20 +197,29 @@ function localOf(tab: SessionTab): AiTurnContext["local"] {
 function applyEvent(slotId: string, ev: AiTurnEvent) {
   patchSlot(slotId, (s) => {
     const before = s.conversation?.context_start ?? null;
-    const next = reduceTurnEvent({ entries: s.entries, turn: s.turn, outcome: s.outcome, contextStart: before, effortIgnored: s.effortIgnored }, ev);
+    const next = reduceTurnEvent(
+      { entries: s.entries, turn: s.turn, outcome: s.outcome, contextStart: before, effortIgnored: s.effortIgnored },
+      ev,
+    );
     return {
       entries: next.entries,
       turn: next.turn,
       outcome: next.outcome,
       effortIgnored: next.effortIgnored ?? s.effortIgnored,
-      conversation: s.conversation && next.contextStart !== before ? { ...s.conversation, context_start: next.contextStart } : s.conversation,
+      conversation:
+        s.conversation && next.contextStart !== before
+          ? { ...s.conversation, context_start: next.contextStart }
+          : s.conversation,
     };
   });
 }
 
 /** The conversation view a command returned, without moving `context_start` back past a summary the turn already stored. */
 function withContext(s: Slot, view: AiConversationView): AiConversationView {
-  return { ...view, context_start: laterContextStart(s.entries, s.conversation?.context_start ?? null, view.context_start) };
+  return {
+    ...view,
+    context_start: laterContextStart(s.entries, s.conversation?.context_start ?? null, view.context_start),
+  };
 }
 
 // ───────────────────────── the turn runner ─────────────────────────
@@ -518,7 +531,7 @@ class TurnRunner {
       if (!this.active || this.stopping) return;
       this.rejected = false;
       this.prefetch(convId, calls);
-      for (let rest = calls; rest.length > 0; ) {
+      for (let rest = calls; rest.length > 0;) {
         // §13.1: decided as each batch starts, with the mode and the approvals the calls before it left.
         const joins = await this.joins(convId);
         if (!this.acting) return;
@@ -530,7 +543,13 @@ class TurnRunner {
           // A call that waited for room starts only while it still needs no card: a switch to a stricter mode
           // applies to the turn's next call (§13.5), and the calls left run as the next batches.
           const starts = (call: AiToolCall) => this.acting && this.joinsNow(convId)(call);
-          done = await runConcurrently(batch, limit, (call, release) => this.runAlongside(convId, call, release), starts, this.room);
+          done = await runConcurrently(
+            batch,
+            limit,
+            (call, release) => this.runAlongside(convId, call, release),
+            starts,
+            this.room,
+          );
         }
         if (done === 0) {
           if (!this.acting) return;
@@ -570,7 +589,10 @@ class TurnRunner {
     return (call) => {
       const kind = toolKind(call.name);
       const args = parseArgs(call.arguments) ?? {};
-      return concurrencySafe(kind, args, dialect) && !mustAsk({ kind, mode, allowed: callAllowed(kind, args, null, grants, saved, host, dialect) });
+      return (
+        concurrencySafe(kind, args, dialect) &&
+        !mustAsk({ kind, mode, allowed: callAllowed(kind, args, null, grants, saved, host, dialect) })
+      );
     };
   }
 
@@ -619,7 +641,8 @@ class TurnRunner {
       }
       if (!this.acting) return;
       // AI-30: a server switched off in the tools menu runs nothing more, in this turn too.
-      if (mcp && getSlot(this.slotId).mcpOff.includes(mcp.server_id)) return this.answer(convId, call.id, mcpOffResult(mcp.server_name));
+      if (mcp && getSlot(this.slotId).mcpOff.includes(mcp.server_id))
+        return this.answer(convId, call.id, mcpOffResult(mcp.server_name));
     }
     // AI-19: the approvals the user chose for this conversation and saved on this device, which name the
     // tab's host for commands and tools; and §13.5's commands that only read, in the tab's shell's syntax.
@@ -629,12 +652,21 @@ class TurnRunner {
     const mode = callMode(this.mode, getSlot(this.slotId).mode);
     const saved = kind !== "mcp" && needsApproval(kind, mode) ? await savedAllowances().catch(() => []) : [];
     if (!this.acting) return;
-    const allowed = callAllowed(kind, parseArgs(call.arguments) ?? {}, mcp, useAi.getState().allowed[convId] ?? [], saved, host, dialect);
+    const allowed = callAllowed(
+      kind,
+      parseArgs(call.arguments) ?? {},
+      mcp,
+      useAi.getState().allowed[convId] ?? [],
+      saved,
+      host,
+      dialect,
+    );
     let edited: string | null = null;
     let judged = false;
     if (mustAsk({ kind, mode, allowed, mcp })) {
       // AI-47: in Auto, the judge decides first whether the card shows, unless a hard rule shows it.
-      const auto: AutoOutcome | null = mode === "auto" ? await this.judge(convId, call, kind, mcp) : { run: false, ask: null, judged: false };
+      const auto: AutoOutcome | null =
+        mode === "auto" ? await this.judge(convId, call, kind, mcp) : { run: false, ask: null, judged: false };
       if (!auto || !this.acting) return;
       judged = auto.judged;
       if (!auto.run) {
@@ -694,14 +726,20 @@ class TurnRunner {
    * the verdict on `ask`. A switch to manual approval meanwhile applies to the call (§13.5): its card shows as in
    * manual approval, and its result goes without the verdict. Null when the turn stopped meanwhile.
    */
-  private async judge(convId: string, call: AiToolCall, kind: ToolKind, mcp: McpToolInfo | null): Promise<AutoOutcome | null> {
+  private async judge(
+    convId: string,
+    call: AiToolCall,
+    kind: ToolKind,
+    mcp: McpToolInfo | null,
+  ): Promise<AutoOutcome | null> {
     const prefetched = this.verdicts.get(call.id);
     this.verdicts.delete(call.id);
     const screen = kind === "send_input" ? this.screenLines() : null;
     // A `call_mcp_tool` call's rules read the arguments of the tool it names (AI-45).
     const args = parseArgs(shownCall(call).arguments) ?? {};
     const dialect = dialectOf(this.target()?.tab.local?.kind);
-    const rule: HardRule | null = hardRule({ kind, args, mcp, screen, dialect }) ?? (this.rejected ? { kind: "after_reject" } : null);
+    const rule: HardRule | null =
+      hardRule({ kind, args, mcp, screen, dialect }) ?? (this.rejected ? { kind: "after_reject" } : null);
     if (rule) return { run: false, ask: { rule }, judged: false };
     this.setCall({ id: call.id, state: "judging", mcp });
     let verdict = await (prefetched ?? this.askJudge(convId, call.id, screen));
@@ -715,7 +753,9 @@ class TurnRunner {
       if (!this.acting) return null;
     }
     if (callMode(this.mode, getSlot(this.slotId).mode) !== "auto") return { run: false, ask: null, judged: false };
-    return verdict.decision === "run" ? { run: true, ask: null, judged: true } : { run: false, ask: { verdict }, judged: true };
+    return verdict.decision === "run"
+      ? { run: true, ask: null, judged: true }
+      : { run: false, ask: { verdict }, judged: true };
   }
 
   /** AI-47: asks the judge about a call; an error asking is a verdict that asks, saying so. */
@@ -774,16 +814,27 @@ class TurnRunner {
   /** Runs a call; `judged`: Auto decided it (AI-47), so its result goes with the judge's verdict. */
   private async execute(convId: string, call: AiToolCall, kind: ToolKind, edited: string | null, judged: boolean) {
     const args = edited ?? call.arguments;
-    const error = (content: string): AiToolResultInput => ({ status: "error", content, edited_arguments: edited, judged });
+    const error = (content: string): AiToolResultInput => ({
+      status: "error",
+      content,
+      edited_arguments: edited,
+      judged,
+    });
     if (kind === "unknown") return this.report(convId, call.id, error(`There is no tool named "${call.name}".`));
 
     const target = this.target();
     if (needsSession(kind)) {
       if (!target) return this.report(convId, call.id, error(NO_TAB));
-      if (!target.session || target.session.status !== "connected" || !target.tab.sessionId) return this.report(convId, call.id, error(DISCONNECTED));
+      if (!target.session || target.session.status !== "connected" || !target.tab.sessionId)
+        return this.report(convId, call.id, error(DISCONNECTED));
     }
     try {
-      if (kind === "read_terminal") return this.report(convId, call.id, { ...readTerminal(target!.session!, args), edited_arguments: edited, judged });
+      if (kind === "read_terminal")
+        return this.report(convId, call.id, {
+          ...readTerminal(target!.session!, args),
+          edited_arguments: edited,
+          judged,
+        });
       if (kind === "send_input") {
         // Another turn may have taken the terminal while this call waited for approval. This turn takes it once it
         // types, so a call that types nothing (invalid arguments, a write that failed) leaves it as it was.
@@ -862,15 +913,21 @@ function liveChips(slotId: string): InputChip[] {
  * message that was not sent, `restore` puts its chips still in `kept` back in their places: the selection
  * while the tab's selection is the same, the diagnostics while the tab has none. It returns the others.
  */
-function inputMessage(slotId: string, typed: string, beside: QueuedMessage | null): { message: QueuedMessage; left: PendingAttachment[] } {
+function inputMessage(
+  slotId: string,
+  typed: string,
+  beside: QueuedMessage | null,
+): { message: QueuedMessage; left: PendingAttachment[] } {
   const picked = pickInput(liveChips(slotId), getSlot(slotId).extras, beside ? messageAttachments(beside) : []);
   const { seq, hidden: hiddenBefore } = tabSelection(slotId);
   const restore = (kept: readonly Attachment[]) => {
     const stray: InputChip[] = [];
     for (const chip of picked.chips) {
       if (!kept.includes(chip)) continue;
-      if (chip.kind === "selection" && tabSelection(slotId).seq === seq) setTabSelection(slotId, (sel) => ({ ...sel, hidden: hiddenBefore }));
-      else if (chip.kind === "diagnostics" && !useAi.getState().diagnostics[slotId]) useAi.setState((st) => ({ diagnostics: { ...st.diagnostics, [slotId]: chip } }));
+      if (chip.kind === "selection" && tabSelection(slotId).seq === seq)
+        setTabSelection(slotId, (sel) => ({ ...sel, hidden: hiddenBefore }));
+      else if (chip.kind === "diagnostics" && !useAi.getState().diagnostics[slotId])
+        useAi.setState((st) => ({ diagnostics: { ...st.diagnostics, [slotId]: chip } }));
       else stray.push(chip);
     }
     return stray;
@@ -962,7 +1019,13 @@ export function discardQueued(slotId: string) {
 export function removeQueuedAttachment(slotId: string, attachment: Attachment) {
   patchSlot(slotId, (s) =>
     s.queued
-      ? { queued: { ...s.queued, chips: s.queued.chips.filter((c) => c !== attachment), extras: s.queued.extras.filter((x) => x.attachment !== attachment) } }
+      ? {
+          queued: {
+            ...s.queued,
+            chips: s.queued.chips.filter((c) => c !== attachment),
+            extras: s.queued.extras.filter((x) => x.attachment !== attachment),
+          },
+        }
       : {},
   );
 }
@@ -1015,12 +1078,17 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
       // The vault locked, or the tab closed, meanwhile. A new conversation left in the background has no slot to open
       // again, so what went back into its input area goes to its tab (AI-07).
       const target = runner.slotId;
-      if (target in useAi.getState().slots && inBackground(target) && !getSlot(target).conversationId) clearBackground(target);
+      if (target in useAi.getState().slots && inBackground(target) && !getSlot(target).conversationId)
+        clearBackground(target);
       return true;
     }
     const target = runner.slotId;
     rememberChoices(target, conv.id);
-    patchSlot(target, (s) => ({ conversationId: conv.id, conversation: withContext(s, conv), entries: placeUserEntry(s.entries, started.user_entry) }));
+    patchSlot(target, (s) => ({
+      conversationId: conv.id,
+      conversation: withContext(s, conv),
+      entries: placeUserEntry(s.entries, started.user_entry),
+    }));
     return true;
   } catch (e) {
     // The conversation may have moved meanwhile (Connect to host, or into the background, AI-07); its runner moved
@@ -1072,7 +1140,8 @@ function giveBackSideInput(convId: string, id: number) {
   const { message } = taken;
   const stray = message.restore(message.chips).map((attachment) => ({ id: `x${++extraSeq}`, attachment }));
   const target = slotOf(convId);
-  if (target) patchSlot(target, (s) => ({ draft: s.draft || taken.raw, extras: [...stray, ...message.extras, ...s.extras] }));
+  if (target)
+    patchSlot(target, (s) => ({ draft: s.draft || taken.raw, extras: [...stray, ...message.extras, ...s.extras] }));
 }
 
 /**
@@ -1243,7 +1312,9 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
       changes: revert,
       server,
       revert: (change) =>
-        slotBusy(slotId) ? Promise.resolve<AiFileRevert>({ status: "failed", reason: "failed", detail: t("ai.revert.busy") }) : revertChange(slotId, id, change),
+        slotBusy(slotId)
+          ? Promise.resolve<AiFileRevert>({ status: "failed", reason: "failed", detail: t("ai.revert.busy") })
+          : revertChange(slotId, id, change),
       diff: (change) => fileChangeDiff(slotId, change).catch(() => null),
     });
     if (!send) return false;
@@ -1262,14 +1333,30 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
   // Rust keeps the notes of the message it replaces (AI-05, AI-09), so its dividers stay while it is sent;
   // the screen and the permission mode it works out again (AI-46, §13.5).
   const original = now.entries.find((e) => e.entry_id === entryId);
-  const kept = original?.role === "user" ? parseMessage(original.text).notes.filter((n) => n.kind !== "terminal_state" && n.kind !== "permission_mode") : [];
-  const local: AiEntryView = { role: "user", entry_id: LOCAL_ENTRY, created_at: Date.now(), text: composeMessage(text, [], kept) };
-  patchSlot(slotId, (s) => ({ entries: [...entriesBefore(s.entries, entryId), local], turn: newTurn(), outcome: null, effortIgnored: false }));
+  const kept =
+    original?.role === "user"
+      ? parseMessage(original.text).notes.filter((n) => n.kind !== "terminal_state" && n.kind !== "permission_mode")
+      : [];
+  const local: AiEntryView = {
+    role: "user",
+    entry_id: LOCAL_ENTRY,
+    created_at: Date.now(),
+    text: composeMessage(text, [], kept),
+  };
+  patchSlot(slotId, (s) => ({
+    entries: [...entriesBefore(s.entries, entryId), local],
+    turn: newTurn(),
+    outcome: null,
+    effortIgnored: false,
+  }));
   try {
     const started = await api.ai_edit_resend(id, entryId, text, context, runner.onEvent);
     if (useAi.getState().history) void loadHistory();
     if (runner.gone) return true;
-    patchSlot(runner.slotId, (s) => ({ conversation: withContext(s, started.conversation), entries: placeUserEntry(s.entries, started.user_entry) }));
+    patchSlot(runner.slotId, (s) => ({
+      conversation: withContext(s, started.conversation),
+      entries: placeUserEntry(s.entries, started.user_entry),
+    }));
     return true;
   } catch (e) {
     runner.dispose();
@@ -1299,7 +1386,11 @@ function restoreDraft(slotId: string, text: string) {
   const extras: PendingAttachment[] = attachments.flatMap((a): PendingAttachment[] => {
     if (a.kind === "selection" || a.kind === "diagnostics") return [];
     const by =
-      a.kind === "skill" ? a.name : a.kind === "mcp_prompt" ? prompts.find((p) => p.server === a.server && p.prompt.name === a.name)?.command : undefined;
+      a.kind === "skill"
+        ? a.name
+        : a.kind === "mcp_prompt"
+          ? prompts.find((p) => p.server === a.server && p.prompt.name === a.name)?.command
+          : undefined;
     return [{ id: `x${++extraSeq}`, attachment: a, ...(by ? { command: by } : {}) }];
   });
   patchSlot(slotId, (s) => messageBack(s, { typed, chips: [], extras, restore: () => [] }));
@@ -1334,7 +1425,8 @@ export async function stopTurn(slotId: string) {
 
 /** AI-41: reads again the file changes of every open conversation, as the size limit spans them all. */
 function refreshAllFileChanges() {
-  for (const s of Object.values(useAi.getState().slots)) if (s.conversationId) void refreshFileChanges(s.conversationId);
+  for (const s of Object.values(useAi.getState().slots))
+    if (s.conversationId) void refreshFileChanges(s.conversationId);
 }
 
 /** AI-41: reads again which changes of the conversation's file tool calls this device keeps, for the slot that holds it then. */
@@ -1350,7 +1442,10 @@ export async function refreshFileChanges(convId: string) {
 }
 
 /** AI-41: what a call changed, from the snapshot this device keeps; null once it was reverted or dropped. Rejects when it cannot be read. */
-export async function fileChangeDiff(slotId: string, change: Pick<AiFileChange, "response_id" | "tool_call_id">): Promise<AiFilePreview | null> {
+export async function fileChangeDiff(
+  slotId: string,
+  change: Pick<AiFileChange, "response_id" | "tool_call_id">,
+): Promise<AiFilePreview | null> {
   const convId = getSlot(slotId).conversationId;
   if (!convId) return null;
   return api.ai_file_change_diff(convId, change.response_id, change.tool_call_id);
@@ -1374,8 +1469,16 @@ export async function revertFileChange(
   const ok = options.restore
     ? await confirm({
         ...(change.created
-          ? { title: t("ai.revert.deleteAnywayTitle", { path }), body: t("ai.revert.deleteAnywayBody"), confirmLabel: t("ai.revert.deleteAnyway") }
-          : { title: t("ai.revert.restoreTitle", { path }), body: t(options.recreate ? "ai.revert.recreateBody" : "ai.revert.restoreBody"), confirmLabel: t("ai.revert.restore") }),
+          ? {
+              title: t("ai.revert.deleteAnywayTitle", { path }),
+              body: t("ai.revert.deleteAnywayBody"),
+              confirmLabel: t("ai.revert.deleteAnyway"),
+            }
+          : {
+              title: t("ai.revert.restoreTitle", { path }),
+              body: t(options.recreate ? "ai.revert.recreateBody" : "ai.revert.restoreBody"),
+              confirmLabel: t("ai.revert.restore"),
+            }),
         danger: true,
       })
     : await fileChangeDiff(slotId, change).then(
@@ -1390,7 +1493,13 @@ export async function revertFileChange(
   options.onStart?.();
   patchSlot(slotId, { reverting: true });
   try {
-    const outcome = await api.ai_file_revert(convId, change.response_id, change.tool_call_id, revertSession(slotId), !!options.restore);
+    const outcome = await api.ai_file_revert(
+      convId,
+      change.response_id,
+      change.tool_call_id,
+      revertSession(slotId),
+      !!options.restore,
+    );
     if (outcome.status === "reverted") {
       markReverted(slotId, convId, change);
       // Nothing to write: a revert whose result was lost did it already, or the write never changed the file.
@@ -1428,13 +1537,23 @@ function revertSession(slotId: string): string | null {
 
 function markReverted(slotId: string, convId: string, change: AiFileChange) {
   const same = (c: AiFileChange) => c.response_id === change.response_id && c.tool_call_id === change.tool_call_id;
-  patchSlot(slotId, (s) => (s.conversationId === convId ? { fileChanges: s.fileChanges.map((c) => (same(c) ? { ...c, state: "reverted" as const } : c)) } : {}));
+  patchSlot(slotId, (s) =>
+    s.conversationId === convId
+      ? { fileChanges: s.fileChanges.map((c) => (same(c) ? { ...c, state: "reverted" as const } : c)) }
+      : {},
+  );
 }
 
 /** AI-26, AI-41: reverts a change an edit is about to delete the call of; an error is a failure the edit's dialog lists. */
 async function revertChange(slotId: string, convId: string, change: AiFileChange): Promise<AiFileRevert> {
   try {
-    const outcome = await api.ai_file_revert(convId, change.response_id, change.tool_call_id, revertSession(slotId), false);
+    const outcome = await api.ai_file_revert(
+      convId,
+      change.response_id,
+      change.tool_call_id,
+      revertSession(slotId),
+      false,
+    );
     if (outcome.status === "reverted") markReverted(slotId, convId, change);
     return outcome;
   } catch (e) {
@@ -1499,7 +1618,10 @@ function toBackground(slotId: string) {
 }
 
 /** Two input areas' unsent text and attachments as one, `first`'s before `then`'s. */
-function joinInput(first: Pick<Slot, "draft" | "extras">, then: Pick<Slot, "draft" | "extras">): Pick<Slot, "draft" | "extras"> {
+function joinInput(
+  first: Pick<Slot, "draft" | "extras">,
+  then: Pick<Slot, "draft" | "extras">,
+): Pick<Slot, "draft" | "extras"> {
   const draft = !first.draft.trim() ? then.draft : then.draft.trim() ? `${first.draft}\n\n${then.draft}` : first.draft;
   return { draft, extras: [...first.extras, ...then.extras] };
 }
@@ -1757,7 +1879,20 @@ export function resetForLock() {
       Object.entries(st.slots).map(([id, s]) => [
         id,
         // File changes name servers and paths: conversation plaintext too.
-        { ...s, conversation: null, entries: [], fileChanges: [], reverting: false, turn: null, outcome: null, effortIgnored: false, remoteRunning: false, compacting: false, side: null, loading: !!s.conversationId },
+        {
+          ...s,
+          conversation: null,
+          entries: [],
+          fileChanges: [],
+          reverting: false,
+          turn: null,
+          outcome: null,
+          effortIgnored: false,
+          remoteRunning: false,
+          compacting: false,
+          side: null,
+          loading: !!s.conversationId,
+        },
       ]),
     ),
   }));
@@ -1795,7 +1930,9 @@ export function setSlotEffort(slotId: string, effort: AiEffort | "default") {
 /** AI-30: switches an MCP server off (or back on) for the slot's conversation until the app quits. */
 export function setMcpServerOff(slotId: string, serverId: string, off: boolean) {
   const slot = getSlot(slotId);
-  const mcpOff = off ? [...slot.mcpOff.filter((x) => x !== serverId), serverId] : slot.mcpOff.filter((x) => x !== serverId);
+  const mcpOff = off
+    ? [...slot.mcpOff.filter((x) => x !== serverId), serverId]
+    : slot.mcpOff.filter((x) => x !== serverId);
   patchSlot(slotId, { mcpOff });
   const id = slot.conversationId;
   if (id) useAi.setState((st) => ({ mcpOff: { ...st.mcpOff, [id]: mcpOff } }));
@@ -2129,10 +2266,17 @@ export async function exportConversation(id: string) {
     const host = useVaultData.getState().hosts.find((h) => h.id === conversation.host_id);
     const when = new Intl.DateTimeFormat(getLocale(), { dateStyle: "medium", timeStyle: "short" });
     const text = conversationMarkdown(
-      { conversation, entries: detail.entries, host: host ? { name: host.name, target: `${host.username}@${host.address}:${host.port}` } : null },
+      {
+        conversation,
+        entries: detail.entries,
+        host: host ? { name: host.name, target: `${host.username}@${host.address}:${host.port}` } : null,
+      },
       { t, time: (ms) => when.format(ms) },
     );
-    const path = await pickSavePath(exportFileName(conversation.title, t("ai.export.fileName")), { name: "Markdown", extension: "md" });
+    const path = await pickSavePath(exportFileName(conversation.title, t("ai.export.fileName")), {
+      name: "Markdown",
+      extension: "md",
+    });
     if (!path) return;
     await api.save_text_file(path, text);
     toast(t("ai.export.done"), "success");

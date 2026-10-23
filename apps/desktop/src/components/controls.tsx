@@ -41,7 +41,9 @@ export function Icon({
 
 /** A disclosure's caret, which turns to point down as it opens. */
 export function DisclosureCaret({ open, size, className }: { open: boolean; size?: number; className?: string }) {
-  return <Icon name="caret-right" size={size} className={cx(s.disclosureCaret, open && s.disclosureCaretOpen, className)} />;
+  return (
+    <Icon name="caret-right" size={size} className={cx(s.disclosureCaret, open && s.disclosureCaretOpen, className)} />
+  );
 }
 
 /** The app icon (`src-tauri/app-icon.svg`). `className` sets its size. */
@@ -61,7 +63,18 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = "default", size = "md", icon, trailingIcon, busy, className, children, disabled, type = "button", ...rest },
+  {
+    variant = "default",
+    size = "md",
+    icon,
+    trailingIcon,
+    busy,
+    className,
+    children,
+    disabled,
+    type = "button",
+    ...rest
+  },
   ref,
 ) {
   return (
@@ -148,7 +161,13 @@ export function IconButton({
       type={type}
       aria-label={label}
       title={label}
-      className={cx(s.iconButton, small && s.iconButtonSmall, danger && s.iconButtonDanger, active && s.iconButtonActive, className)}
+      className={cx(
+        s.iconButton,
+        small && s.iconButtonSmall,
+        danger && s.iconButtonDanger,
+        active && s.iconButtonActive,
+        className,
+      )}
       {...rest}
     >
       <Icon name={icon} size={size} fill={fill} />
@@ -212,11 +231,12 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
   );
 });
 
-export const TextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
-  function TextArea({ className, ...rest }, ref) {
-    return <textarea ref={ref} spellCheck={false} className={cx(s.textarea, className)} {...rest} />;
-  },
-);
+export const TextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function TextArea(
+  { className, ...rest },
+  ref,
+) {
+  return <textarea ref={ref} spellCheck={false} className={cx(s.textarea, className)} {...rest} />;
+});
 
 export interface SegmentOption<V extends string> {
   value: V;
@@ -314,13 +334,25 @@ export function Stepper({
 }) {
   return (
     <div className={s.stepper}>
-      <button type="button" aria-label={downLabel} title={downLabel} disabled={value <= min} onClick={() => onChange(value - 1)}>
+      <button
+        type="button"
+        aria-label={downLabel}
+        title={downLabel}
+        disabled={value <= min}
+        onClick={() => onChange(value - 1)}
+      >
         <Icon name="minus" />
       </button>
       <span className={s.stepValue} aria-live="polite">
         {value}
       </span>
-      <button type="button" aria-label={upLabel} title={upLabel} disabled={value >= max} onClick={() => onChange(value + 1)}>
+      <button
+        type="button"
+        aria-label={upLabel}
+        title={upLabel}
+        disabled={value >= max}
+        onClick={() => onChange(value + 1)}
+      >
         <Icon name="plus" />
       </button>
     </div>

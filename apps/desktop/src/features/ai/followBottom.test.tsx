@@ -35,7 +35,8 @@ beforeAll(() => {
   });
 });
 afterAll(() => {
-  for (const key of ["scrollHeight", "clientHeight", "scrollTop"]) delete (HTMLElement.prototype as unknown as Record<string, unknown>)[key];
+  for (const key of ["scrollHeight", "clientHeight", "scrollTop"])
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>)[key];
 });
 
 // The observer the hook makes, to report a size change as the browser would.
@@ -57,7 +58,14 @@ function List({ content, live }: { content: number; live: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   bottom = useFollowBottom(ref, live);
   return (
-    <div ref={ref} data-content={content} data-view={100} onScroll={bottom.onScroll} onWheel={bottom.onWheel} onKeyDown={bottom.onKeyDown}>
+    <div
+      ref={ref}
+      data-content={content}
+      data-view={100}
+      onScroll={bottom.onScroll}
+      onWheel={bottom.onWheel}
+      onKeyDown={bottom.onKeyDown}
+    >
       <p>reply</p>
       <textarea />
       <div className="inner" style={{ overflowY: "auto" }} data-content={200} data-view={50} />

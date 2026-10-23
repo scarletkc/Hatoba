@@ -33,49 +33,56 @@ const AI_PANEL = { x: 2002, y: 172, w: 878, h: 1200 };
 const DEPLOY_DIALOG = { x: 941, y: 418, w: 1152, h: 1053 };
 ---
 
-<Base locale={locale} title={pageTitle(locale)} description={t.meta.description} path="/" jsonLd={softwareApplication(locale, release)} heroHeader>
+<Base
+  locale={locale}
+  title={pageTitle(locale)}
+  description={t.meta.description}
+  path="/"
+  jsonLd={softwareApplication(locale, release)}
+  heroHeader
+>
   <NightBand class="hero">
     <div class="container intro">
       <h1 class="wordmark wide">Hatoba</h1>
       <p class="lead">{t.meta.description}</p>
       <div class="actions">
         <DownloadButton locale={locale} release={release} />
-        <Button variant="outline" href={REPO_URL} icon="github" iconSize={20}>{t.hero.github}</Button>
+        <Button variant="outline" href={REPO_URL} icon="github" iconSize={20}>
+          {t.hero.github}
+        </Button>
       </div>
-      <p class="available"><a href={localePath(locale, "/download/")}>{t.hero.available(release.version)}</a></p>
+      <p class="available">
+        <a href={localePath(locale, "/download/")}>{t.hero.available(release.version)}</a>
+      </p>
     </div>
     <div class="horizon" data-demo={demo} data-demo-title={t.demo.title} style={`--ratio: ${hero.height / hero.width}`}>
       <div class="stage">
-        {
-          demo && (
-            <div class="demo-bar" hidden>
-              <p>{t.demo.note}</p>
-              <div class="demo-actions">
-                <Button variant="night" size="sm" icon="restart" data-demo-restart>
-                  {t.demo.restart}
-                </Button>
-                <Button variant="night" size="sm" icon="external" href={demo} target="_blank" rel="noopener">
-                  {t.demo.newTab}
-                </Button>
-                <Button variant="night" size="sm" icon="close" data-demo-close>
-                  {t.demo.close}
-                </Button>
-              </div>
+        {demo && (
+          <div class="demo-bar" hidden>
+            <p>{t.demo.note}</p>
+            <div class="demo-actions">
+              <Button variant="night" size="sm" icon="restart" data-demo-restart>
+                {t.demo.restart}
+              </Button>
+              <Button variant="night" size="sm" icon="external" href={demo} target="_blank" rel="noopener">
+                {t.demo.newTab}
+              </Button>
+              <Button variant="night" size="sm" icon="close" data-demo-close>
+                {t.demo.close}
+              </Button>
             </div>
-          )
-        }
+          </div>
+        )}
         <Window class="rise">
           <Shot src={hero} alt={t.hero.alt} width="min(1100px, 100vw - 48px)" eager />
-          {
-            demo && (
-              <Button variant="pier" class="try" data-demo-open hidden>
-                <span class="try-icon">
-                  <Icon name="play" />
-                </span>
-                {t.demo.try}
-              </Button>
-            )
-          }
+          {demo && (
+            <Button variant="pier" class="try" data-demo-open hidden>
+              <span class="try-icon">
+                <Icon name="play" />
+              </span>
+              {t.demo.try}
+            </Button>
+          )}
         </Window>
       </div>
       <Sea depth="var(--sea-depth)" />
@@ -101,7 +108,12 @@ const DEPLOY_DIALOG = { x: 941, y: 418, w: 1152, h: 1053 };
     </div>
     <div class="media">
       <Window class="dialog">
-        <Shot src={screenshot(locale, "sync-deploy")} alt={t.sync.alt} width="min(560px, 100vw - 32px)" crop={DEPLOY_DIALOG} />
+        <Shot
+          src={screenshot(locale, "sync-deploy")}
+          alt={t.sync.alt}
+          width="min(560px, 100vw - 32px)"
+          crop={DEPLOY_DIALOG}
+        />
       </Window>
     </div>
   </Section>
@@ -112,14 +124,12 @@ const DEPLOY_DIALOG = { x: 941, y: 418, w: 1152, h: 1053 };
       <Shot src={screenshot(locale, "dashboard")} alt={t.essentials.alt} width="min(1180px, 100vw - 32px)" />
     </Window>
     <dl>
-      {
-        t.essentials.items.map((item) => (
-          <div>
-            <dt>{item.term}</dt>
-            <dd>{item.text}</dd>
-          </div>
-        ))
-      }
+      {t.essentials.items.map((item) => (
+        <div>
+          <dt>{item.term}</dt>
+          <dd>{item.text}</dd>
+        </div>
+      ))}
     </dl>
   </Section>
 
@@ -128,7 +138,11 @@ const DEPLOY_DIALOG = { x: 941, y: 418, w: 1152, h: 1053 };
     <div class="text">
       <p>{t.security.body}</p>
       <p>{t.security.openSource}</p>
-      <p><a href={SECURITY_MODEL_URL} hreflang="en">{t.security.link}</a></p>
+      <p>
+        <a href={SECURITY_MODEL_URL} hreflang="en">
+          {t.security.link}
+        </a>
+      </p>
     </div>
   </Section>
 
@@ -137,7 +151,9 @@ const DEPLOY_DIALOG = { x: 941, y: 418, w: 1152, h: 1053 };
       <SectionHeader as="h2" size="h1" align="center" title={t.cta.title} lead={t.cta.body} />
       <div class="actions">
         <DownloadButton locale={locale} release={release} />
-        <Button variant="outline" href={localePath(locale, "/download/")}>{t.hero.allDownloads}</Button>
+        <Button variant="outline" href={localePath(locale, "/download/")}>
+          {t.hero.allDownloads}
+        </Button>
       </div>
     </div>
   </NightBand>

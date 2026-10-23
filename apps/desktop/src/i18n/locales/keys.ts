@@ -199,7 +199,8 @@ export default defineMessages({
 
     "keys.delete.title": "鍵「{name}」を削除しますか？",
     "keys.delete.body": "この鍵は保管庫から完全に削除され、元に戻せません。",
-    "keys.delete.used": "次の {n} 台のホストがこの鍵を使っています。削除すると、これらは「毎回入力」認証に切り替わります。",
+    "keys.delete.used":
+      "次の {n} 台のホストがこの鍵を使っています。削除すると、これらは「毎回入力」認証に切り替わります。",
     "keys.delete.confirm": "鍵を削除",
     "keys.delete.done": "鍵「{name}」を削除しました",
 

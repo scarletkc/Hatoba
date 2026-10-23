@@ -15,7 +15,9 @@ export const LOCAL_TARGET = "local";
 /** The host a tab's calls are approved for (AI-19). */
 export function hostRefOf(source: TabSource): HostRef {
   if (source.local) return { host_id: null, target: LOCAL_TARGET };
-  return source.hostId !== null ? { host_id: source.hostId, target: null } : { host_id: null, target: formatTarget(recordedTarget(source.target)) };
+  return source.hostId !== null
+    ? { host_id: source.hostId, target: null }
+    : { host_id: null, target: formatTarget(recordedTarget(source.target)) };
 }
 
 /** AI-19: the approvals saved on this device, which Rust keeps sealed; null until read after an unlock. */

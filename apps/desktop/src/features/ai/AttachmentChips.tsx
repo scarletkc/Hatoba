@@ -91,20 +91,32 @@ function useTabHostName(slotId: string): string {
 function useSelectionAttachment(slotId: string): SelectionAttachment | null {
   const sel = useAi((st) => st.selections[slotId]) ?? NO_SELECTION;
   const host = useTabHostName(slotId);
-  return useMemo(() => (slotId !== HOME_SLOT && chipShown(sel, sel.hidden) ? makeAttachment(host, sel.text) : null), [slotId, sel, host]);
+  return useMemo(
+    () => (slotId !== HOME_SLOT && chipShown(sel, sel.hidden) ? makeAttachment(host, sel.text) : null),
+    [slotId, sel, host],
+  );
 }
 
 /**
  * The tab's own chips the input area shows (AI-10): its diagnostics and its selection, unless a message gave
  * back one of that kind (§13.1), which goes with the next message in its place.
  */
-function useShownChips(slotId: string): { diagnostics: DiagnosticsAttachment | null; selection: SelectionAttachment | null } {
+function useShownChips(slotId: string): {
+  diagnostics: DiagnosticsAttachment | null;
+  selection: SelectionAttachment | null;
+} {
   const diagnostics = useAi((st) => (slotId === HOME_SLOT ? undefined : st.diagnostics[slotId]));
   const extras = useAi((st) => st.slots[slotId]?.extras);
   const selection = useSelectionAttachment(slotId);
   return useMemo(() => {
-    const shown = pickInput([...(diagnostics ? [diagnostics] : []), ...(selection ? [selection] : [])], extras ?? []).chips;
-    return { diagnostics: shown.find((c) => c.kind === "diagnostics") ?? null, selection: shown.find((c) => c.kind === "selection") ?? null };
+    const shown = pickInput(
+      [...(diagnostics ? [diagnostics] : []), ...(selection ? [selection] : [])],
+      extras ?? [],
+    ).chips;
+    return {
+      diagnostics: shown.find((c) => c.kind === "diagnostics") ?? null,
+      selection: shown.find((c) => c.kind === "selection") ?? null,
+    };
   }, [diagnostics, selection, extras]);
 }
 
@@ -113,7 +125,11 @@ export function usePendingAttachments(slotId: string): Attachment[] {
   const { diagnostics, selection } = useShownChips(slotId);
   const extras = useAi((st) => st.slots[slotId]?.extras);
   return useMemo(
-    () => [...(diagnostics ? [diagnostics] : []), ...(selection ? [selection] : []), ...(extras ?? []).map((x) => x.attachment)],
+    () => [
+      ...(diagnostics ? [diagnostics] : []),
+      ...(selection ? [selection] : []),
+      ...(extras ?? []).map((x) => x.attachment),
+    ],
     [diagnostics, selection, extras],
   );
 }
@@ -123,7 +139,13 @@ export function usePendingAttachments(slotId: string): Attachment[] {
  * from the terminal's error card, the terminal selection (AI-10), then long pastes and text files
  * in the order they were added (AI-35).
  */
-export function ComposerAttachments({ slotId, onPasteAsText }: { slotId: string; onPasteAsText: (id: string, text: string) => void }) {
+export function ComposerAttachments({
+  slotId,
+  onPasteAsText,
+}: {
+  slotId: string;
+  onPasteAsText: (id: string, text: string) => void;
+}) {
   const { diagnostics, selection } = useShownChips(slotId);
   const extras = useAi((st) => st.slots[slotId]?.extras);
   if (!selection && !diagnostics && !extras?.length) return null;
@@ -144,7 +166,13 @@ export function ComposerAttachments({ slotId, onPasteAsText }: { slotId: string;
 }
 
 /** §13.1: the chips of the queued message, each of which × takes out of it. */
-export function QueuedAttachments({ attachments, onRemove }: { attachments: Attachment[]; onRemove: (a: Attachment) => void }) {
+export function QueuedAttachments({
+  attachments,
+  onRemove,
+}: {
+  attachments: Attachment[];
+  onRemove: (a: Attachment) => void;
+}) {
   if (attachments.length === 0) return null;
   return (
     <div className={s.attachments}>
@@ -271,7 +299,15 @@ function previewOf(text: string): { body: string; more: number } {
  * The chip of any attachment kind. `onPasteAsText` adds Paste as Text to a long paste's preview,
  * which moves the text into the input box.
  */
-export function AttachmentChipFor({ attachment: a, onRemove, onPasteAsText }: { attachment: Attachment; onRemove: () => void; onPasteAsText?: () => void }) {
+export function AttachmentChipFor({
+  attachment: a,
+  onRemove,
+  onPasteAsText,
+}: {
+  attachment: Attachment;
+  onRemove: () => void;
+  onPasteAsText?: () => void;
+}) {
   const t = useT();
   const platform = useApp((st) => st.info.platform);
   const { body, more } = previewOf(a.text);
@@ -300,7 +336,9 @@ export function AttachmentChipFor({ attachment: a, onRemove, onPasteAsText }: { 
           badge={a.truncated ? t("ai.selection.truncated") : undefined}
           previewTitle={t("ai.selection.preview")}
           removeLabel={t("ai.selection.remove")}
-          head={a.host ? t("ai.selection.from", { host: placeLabel(t, a.host, useApp.getState().info.device_name) }) : ""}
+          head={
+            a.host ? t("ai.selection.from", { host: placeLabel(t, a.host, useApp.getState().info.device_name) }) : ""
+          }
           body={body}
           more={moreText}
           onRemove={onRemove}
@@ -319,7 +357,11 @@ export function AttachmentChipFor({ attachment: a, onRemove, onPasteAsText }: { 
           more={moreText}
           action={
             onPasteAsText
-              ? { label: t("ai.paste.asText"), title: t("ai.paste.shortcut", { key: shortcutLabel(platform, "Ctrl+Shift+V", "⌘⇧V") }), onClick: onPasteAsText }
+              ? {
+                  label: t("ai.paste.asText"),
+                  title: t("ai.paste.shortcut", { key: shortcutLabel(platform, "Ctrl+Shift+V", "⌘⇧V") }),
+                  onClick: onPasteAsText,
+                }
               : undefined
           }
           onRemove={onRemove}
@@ -371,7 +413,12 @@ export function shownAttachment(
 ): { icon: string; title: string; name: string; from: string; badge?: string } {
   switch (a.kind) {
     case "host_file":
-      return { icon: "file-text", title: t("ai.file", { name: pathName(a.path), n: a.lines }), name: pathName(a.path), from: t("ai.mention.from", { host: placeLabel(t, a.host, useApp.getState().info.device_name), path: a.path }) };
+      return {
+        icon: "file-text",
+        title: t("ai.file", { name: pathName(a.path), n: a.lines }),
+        name: pathName(a.path),
+        from: t("ai.mention.from", { host: placeLabel(t, a.host, useApp.getState().info.device_name), path: a.path }),
+      };
     case "host_directory":
       return {
         icon: "folder-open",
@@ -381,16 +428,38 @@ export function shownAttachment(
         badge: a.truncated ? t("ai.selection.truncated") : undefined,
       };
     case "mcp_resource":
-      return { icon: "database", title: t("ai.file", { name: pathName(a.uri), n: a.lines }), name: pathName(a.uri), from: t("ai.mention.resourceFrom", { server: a.server, uri: a.uri }) };
+      return {
+        icon: "database",
+        title: t("ai.file", { name: pathName(a.uri), n: a.lines }),
+        name: pathName(a.uri),
+        from: t("ai.mention.resourceFrom", { server: a.server, uri: a.uri }),
+      };
     case "skill":
       return { icon: "book-open-text", title: t("ai.cmd.skillChip", { name: a.name }), name: `/${a.name}`, from: "" };
     case "mcp_prompt":
-      return { icon: "chat-text", title: t("ai.cmd.promptChip", { name: a.name }), name: a.name, from: t("ai.cmd.promptFrom", { server: a.server }) };
+      return {
+        icon: "chat-text",
+        title: t("ai.cmd.promptChip", { name: a.name }),
+        name: a.name,
+        from: t("ai.cmd.promptFrom", { server: a.server }),
+      };
   }
 }
 
 /** A sent attachment above the user's message: collapsed to its label, the text when opened. */
-function AttachmentCard({ icon, title, host, badge, body }: { icon: string; title: string; host?: string; badge?: string; body: string }) {
+function AttachmentCard({
+  icon,
+  title,
+  host,
+  badge,
+  body,
+}: {
+  icon: string;
+  title: string;
+  host?: string;
+  badge?: string;
+  body: string;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <div className={cx(s.card, open && s.cardOpen)} data-selection-open={open}>
@@ -441,7 +510,15 @@ export function AttachmentCardFor({ attachment: a }: { attachment: Attachment })
       return <AttachmentCard icon="file-text" title={t("ai.file", { name: a.name, n: a.lines })} body={a.text} />;
     default: {
       const shown = shownAttachment(t, a);
-      return <AttachmentCard icon={shown.icon} title={shown.title} host={shown.from || undefined} badge={shown.badge} body={a.text} />;
+      return (
+        <AttachmentCard
+          icon={shown.icon}
+          title={shown.title}
+          host={shown.from || undefined}
+          badge={shown.badge}
+          body={a.text}
+        />
+      );
     }
   }
 }

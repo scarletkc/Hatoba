@@ -153,7 +153,12 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
 
   const title = t("sidebar.forwards");
   const addButton = (
-    <Button variant="primary" icon="plus" disabled={!ready || hosts.length === 0} onClick={() => setDialog({ forward: null })}>
+    <Button
+      variant="primary"
+      icon="plus"
+      disabled={!ready || hosts.length === 0}
+      onClick={() => setDialog({ forward: null })}
+    >
       {t("hosts.fwd.add")}
     </Button>
   );
@@ -175,7 +180,12 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
       <div className={s.page}>
         <PageHeader title={title} count={t("hosts.fwd.count", { n: 0 })} />
         <div className={s.emptyWrap}>
-          <EmptyState icon="arrows-left-right" title={t("hosts.fwd.empty")} body={t("hosts.fwd.emptyBody")} actions={addButton} />
+          <EmptyState
+            icon="arrows-left-right"
+            title={t("hosts.fwd.empty")}
+            body={t("hosts.fwd.emptyBody")}
+            actions={addButton}
+          />
         </div>
         {dialogs}
       </div>
@@ -189,9 +199,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
       </PageHeader>
       <div className={s.scroll}>
         <div className={s.column}>
-          {loadFailed && (
-            <ErrorText icon="warning-circle">{t("hosts.fwd.loadFailed")}</ErrorText>
-          )}
+          {loadFailed && <ErrorText icon="warning-circle">{t("hosts.fwd.loadFailed")}</ErrorText>}
           {sections.map(({ host, forwards }) => {
             const conn = connections.find((x) => x.host_id === host.id);
             return (
@@ -235,7 +243,11 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                                 disabled={pending.has(f.id) || starting.has(f.id) || stopping.has(f.id)}
                                 onClick={() => void (address !== null ? stop(f) : start(f))}
                               >
-                                {address !== null ? t("terminal.fwd.stop") : failure ? t("btn.retry") : t("terminal.fwd.start")}
+                                {address !== null
+                                  ? t("terminal.fwd.stop")
+                                  : failure
+                                    ? t("btn.retry")
+                                    : t("terminal.fwd.start")}
                               </Button>
                               <span className={s.actions}>
                                 <IconButton
@@ -290,11 +302,23 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
  * Where a running forward listens, as it started: an edit to its rule applies at its next start. This computer's
  * address copies; a remote forward's is on the server, where nothing here connects to it.
  */
-function RunningAddress({ running: { kind, address }, onCopy }: { running: RunningForwardView; onCopy(address: string): void }) {
+function RunningAddress({
+  running: { kind, address },
+  onCopy,
+}: {
+  running: RunningForwardView;
+  onCopy(address: string): void;
+}) {
   const t = useT();
-  if (kind === "remote") return <span className={s.serverAddress}>{t("terminal.fwd.onServer", { addr: address })}</span>;
+  if (kind === "remote")
+    return <span className={s.serverAddress}>{t("terminal.fwd.onServer", { addr: address })}</span>;
   return (
-    <button type="button" className={s.address} title={t("terminal.fwd.copy", { addr: address })} onClick={() => onCopy(address)}>
+    <button
+      type="button"
+      className={s.address}
+      title={t("terminal.fwd.copy", { addr: address })}
+      onClick={() => onCopy(address)}
+    >
       {address}
     </button>
   );

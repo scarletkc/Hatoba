@@ -27,7 +27,11 @@ export function findPrompt(slotId: string, name: string): PromptCommand | undefi
  * for an `mcp__…` command that names no prompt of a running server (one still starting, say), which would otherwise
  * go as plain text without its prompt.
  */
-export async function attachCommand(slotId: string, name: string, args: string): Promise<"attached" | "none" | "failed"> {
+export async function attachCommand(
+  slotId: string,
+  name: string,
+  args: string,
+): Promise<"attached" | "none" | "failed"> {
   const generation = slotGeneration(slotId);
   const attach = (attachment: Parameters<typeof addAttachment>[1]): "attached" | "failed" =>
     slotGeneration(slotId) === generation && addAttachment(slotId, attachment, name) ? "attached" : "failed";
@@ -35,7 +39,9 @@ export async function attachCommand(slotId: string, name: string, args: string):
   if (prompt) {
     const names = prompt.prompt.arguments.map((a) => a.name);
     const values = promptArguments(args, names);
-    const missing = prompt.prompt.arguments.find((a) => a.required && !values.some((v) => v.name === a.name && v.value));
+    const missing = prompt.prompt.arguments.find(
+      (a) => a.required && !values.some((v) => v.name === a.name && v.value),
+    );
     if (missing) {
       toast(t("ai.cmd.prompt.missing", { name: missing.name, command: `/${name}` }), "error");
       return "failed";
@@ -64,7 +70,8 @@ export async function attachCommand(slotId: string, name: string, args: string):
 
 /** Why a path on the tab's host was not attached (`read`) or listed (`list`). */
 export function hostRefusal(reason: AiHostRefusal, path: string, op: "read" | "list"): string {
-  if (reason === "wrong_kind") return t(op === "read" ? "ai.mention.refused.isFolder" : "ai.mention.refused.notFolder", { path });
+  if (reason === "wrong_kind")
+    return t(op === "read" ? "ai.mention.refused.isFolder" : "ai.mention.refused.notFolder", { path });
   return t(`ai.mention.refused.${reason}`, { path });
 }
 
@@ -77,7 +84,13 @@ export async function attachHostFile(slotId: string, sessionId: string, path: st
       return false;
     }
     const text = file.text.replace(/\r\n?/g, "\n");
-    return addAttachment(slotId, { kind: "host_file", host: selectionHost(slotId), path: file.path, lines: lineCount(text), text });
+    return addAttachment(slotId, {
+      kind: "host_file",
+      host: selectionHost(slotId),
+      path: file.path,
+      lines: lineCount(text),
+      text,
+    });
   } catch (e) {
     toast(aiErrorMessage(e), "error");
     return false;
@@ -111,7 +124,13 @@ export async function attachResource(slotId: string, item: ResourceItem): Promis
   try {
     const raw = await api.mcp_resource_read(item.serverId, item.resource.uri);
     const text = raw.replace(/\r\n?/g, "\n");
-    return addAttachment(slotId, { kind: "mcp_resource", server: item.server, uri: item.resource.uri, lines: lineCount(text), text });
+    return addAttachment(slotId, {
+      kind: "mcp_resource",
+      server: item.server,
+      uri: item.resource.uri,
+      lines: lineCount(text),
+      text,
+    });
   } catch (e) {
     toast(aiErrorMessage(e), "error");
     return false;

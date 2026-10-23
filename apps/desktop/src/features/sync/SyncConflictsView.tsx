@@ -93,7 +93,8 @@ function ConflictCard({
     if (field === "jump_host" && v === "deleted") return { text: t("sync.value.jump_host.deleted"), dim: false };
     // A host's proxy (SSH-13): "proxy:" and a saved proxy's name, or one of these three.
     if (field === "proxy" && v?.startsWith("proxy:")) return { text: v.slice("proxy:".length), dim: false };
-    if (field === "proxy" && (v === "device_default" || v === "direct" || v === "deleted")) return { text: t(`sync.value.proxy.${v}`), dim: false };
+    if (field === "proxy" && (v === "device_default" || v === "direct" || v === "deleted"))
+      return { text: t(`sync.value.proxy.${v}`), dim: false };
     if (v === null || v === "") return { text: deleted ? "—" : t("sync.cf.none"), dim: true };
     return { text: v, dim: false };
   };
@@ -125,8 +126,12 @@ function ConflictCard({
                 <span className={s.diffDot} />
                 {fieldLabel(t, r.field)}
               </span>
-              <span className={`${s.diffValue} ${mono ? s.mono : ""} ${local.dim ? s.dim : ""} selectable`}>{local.text}</span>
-              <span className={`${s.diffValue} ${mono ? s.mono : ""} ${remote.dim ? s.dim : ""} selectable`}>{remote.text}</span>
+              <span className={`${s.diffValue} ${mono ? s.mono : ""} ${local.dim ? s.dim : ""} selectable`}>
+                {local.text}
+              </span>
+              <span className={`${s.diffValue} ${mono ? s.mono : ""} ${remote.dim ? s.dim : ""} selectable`}>
+                {remote.text}
+              </span>
             </div>
           );
         })}

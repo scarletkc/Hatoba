@@ -66,7 +66,16 @@ export interface DeployForm {
 export type StepState = "running" | "done" | "skipped" | "failed";
 
 /** Steps 1 to 8, in the order the spec numbers them. */
-export const DEPLOY_STEPS: DeployStep[] = ["verify", "inspect", "create_database", "migrate", "upload", "setup_token", "route", "wait"];
+export const DEPLOY_STEPS: DeployStep[] = [
+  "verify",
+  "inspect",
+  "create_database",
+  "migrate",
+  "upload",
+  "setup_token",
+  "route",
+  "wait",
+];
 
 export const EMPTY_DEPLOY: DeployForm = {
   phase: "token",

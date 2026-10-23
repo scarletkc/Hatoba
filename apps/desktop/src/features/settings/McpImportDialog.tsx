@@ -32,7 +32,13 @@ function readJsonFile(): Promise<string | null> {
  * added and what is skipped, then import. Environment variable and header values move into the vault; the text is not
  * kept once the dialog closes.
  */
-export function McpImportDialog({ onClose, onImported }: { onClose: () => void; onImported: (added: McpServerView[]) => void }) {
+export function McpImportDialog({
+  onClose,
+  onImported,
+}: {
+  onClose: () => void;
+  onImported: (added: McpServerView[]) => void;
+}) {
   const t = useT();
   const ids = { form: useId(), text: useId() };
   const [text, setText] = useState("");
@@ -178,17 +184,26 @@ export function McpImportDialog({ onClose, onImported }: { onClose: () => void; 
                         <span className={s.foundName}>{server.name}</span>
                         <Chip mono>{t(`aiSettings.mcp.kind.${server.transport.kind}` as MessageKey)}</Chip>
                       </div>
-                      <div className={cx(s.commandLine, s.commandLineRow, "selectable")}>{transportSummary(server.transport)}</div>
-                      {(server.transport.kind === "stdio" ? server.transport.env_keys : server.transport.header_keys).length > 0 && (
+                      <div className={cx(s.commandLine, s.commandLineRow, "selectable")}>
+                        {transportSummary(server.transport)}
+                      </div>
+                      {(server.transport.kind === "stdio" ? server.transport.env_keys : server.transport.header_keys)
+                        .length > 0 && (
                         <HintText>
-                          {t(server.transport.kind === "stdio" ? "aiSettings.mcp.imp.envNames" : "aiSettings.mcp.imp.headerNames", {
-                            names: (server.transport.kind === "stdio" ? server.transport.env_keys : server.transport.header_keys).join(", "),
-                          })}
+                          {t(
+                            server.transport.kind === "stdio"
+                              ? "aiSettings.mcp.imp.envNames"
+                              : "aiSettings.mcp.imp.headerNames",
+                            {
+                              names: (server.transport.kind === "stdio"
+                                ? server.transport.env_keys
+                                : server.transport.header_keys
+                              ).join(", "),
+                            },
+                          )}
                         </HintText>
                       )}
-                      {server.exists && (
-                        <WarningText>{t("aiSettings.mcp.imp.exists")}</WarningText>
-                      )}
+                      {server.exists && <WarningText>{t("aiSettings.mcp.imp.exists")}</WarningText>}
                     </div>
                   ))}
                 </Group>
@@ -210,9 +225,7 @@ export function McpImportDialog({ onClose, onImported }: { onClose: () => void; 
           </>
         )}
 
-        {error && (
-          <ErrorText className={cx(s.problem, s.pre, "selectable")}>{error}</ErrorText>
-        )}
+        {error && <ErrorText className={cx(s.problem, s.pre, "selectable")}>{error}</ErrorText>}
       </form>
     </Sheet>
   );

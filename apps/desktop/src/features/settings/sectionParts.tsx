@@ -4,7 +4,15 @@ import { ListRow, StatusLine } from "@/components/patterns";
 import s from "./AiPane.module.css";
 
 /** A loading or load-failed row inside a section's group. */
-export function StatusRow({ tone, action, children }: { tone: "progress" | "error"; action?: ReactNode; children: ReactNode }) {
+export function StatusRow({
+  tone,
+  action,
+  children,
+}: {
+  tone: "progress" | "error";
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     // A progress line is a status region itself.
     <ListRow role={tone === "error" ? "status" : undefined} trailing={action}>
@@ -14,7 +22,17 @@ export function StatusRow({ tone, action, children }: { tone: "progress" | "erro
 }
 
 /** What a section shows when it has nothing yet: an icon, a title, a sentence, and the actions. */
-export function EmptyBlock({ icon, title, body, children }: { icon: string; title: string; body: string; children?: ReactNode }) {
+export function EmptyBlock({
+  icon,
+  title,
+  body,
+  children,
+}: {
+  icon: string;
+  title: string;
+  body: string;
+  children?: ReactNode;
+}) {
   return (
     <div className={s.empty}>
       <div className={s.emptyIcon}>

@@ -85,7 +85,13 @@ function CodeBlock({ children }: { children?: ReactNode }) {
       <pre ref={ref} className="selectable">
         {children}
       </pre>
-      <button type="button" className={s.copy} title={t(copied ? "btn.copied" : "btn.copy")} aria-label={t("btn.copy")} onClick={() => void copy()}>
+      <button
+        type="button"
+        className={s.copy}
+        title={t(copied ? "btn.copied" : "btn.copy")}
+        aria-label={t("btn.copy")}
+        onClick={() => void copy()}
+      >
         <Icon name={copied ? "check" : "copy"} size={14} />
       </button>
     </div>

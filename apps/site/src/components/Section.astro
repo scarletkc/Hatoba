@@ -14,7 +14,9 @@ const { tone = "paper", continues = false, id, class: className } = Astro.props;
 ---
 
 <section id={id} class:list={["section", tone, { continues }]}>
-  <div class:list={["container", className]}><slot /></div>
+  <div class:list={["container", className]}>
+    <slot />
+  </div>
 </section>
 
 <style>

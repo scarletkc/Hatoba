@@ -31,5 +31,7 @@ export function formatDate(locale: Locale, iso: string): string {
 }
 
 export function formatMegabytes(locale: Locale, bytes: number): string {
-  return new Intl.NumberFormat(LANG[locale], { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(bytes / 1024 / 1024);
+  return new Intl.NumberFormat(LANG[locale], { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(
+    bytes / 1024 / 1024,
+  );
 }

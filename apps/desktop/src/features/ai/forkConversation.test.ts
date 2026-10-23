@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AiConversationDetail, AiConversationView, AiEntryView, AiProviderView, AiSendStarted, AiTurnEvent } from "@/ipc/types";
+import type {
+  AiConversationDetail,
+  AiConversationView,
+  AiEntryView,
+  AiProviderView,
+  AiSendStarted,
+  AiTurnEvent,
+} from "@/ipc/types";
 import { newSideQuestion } from "./side";
 import { newTurn } from "./turn";
 
@@ -22,11 +29,15 @@ vi.mock("@/ipc/api", async (importActual) => ({
   },
 }));
 const toast = vi.fn();
-vi.mock("@/components/overlay", async (importActual) => ({ ...(await importActual<typeof import("@/components/overlay")>()), toast: (...args: unknown[]) => toast(...args) }));
+vi.mock("@/components/overlay", async (importActual) => ({
+  ...(await importActual<typeof import("@/components/overlay")>()),
+  toast: (...args: unknown[]) => toast(...args),
+}));
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 
-const { compactConversation, forkConversation, newConversation, openConversation, sendMessage } = await import("./actions");
+const { compactConversation, forkConversation, newConversation, openConversation, sendMessage } =
+  await import("./actions");
 const { blankSlot, getSlot, HOME_SLOT, patchSlot, slotOf, useAi } = await import("./store");
 
 const conversation = (id: string, title: string): AiConversationView => ({
@@ -35,7 +46,7 @@ const conversation = (id: string, title: string): AiConversationView => ({
   host_id: null,
   quick_target: null,
   origin: null,
-      local: null,
+  local: null,
   pinned: false,
   context_start: null,
   effort: null,
@@ -53,7 +64,16 @@ const provider: AiProviderView = {
   base_url: "http://127.0.0.1/v1",
   has_api_key: false,
   auth_header: "x-api-key",
-  models: [{ id: "m1", name: "Model 1", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null }],
+  models: [
+    {
+      id: "m1",
+      name: "Model 1",
+      context_window: null,
+      max_output_tokens: null,
+      efforts: null,
+      adaptive_thinking: null,
+    },
+  ],
   updated_at: 0,
 };
 
@@ -75,7 +95,14 @@ beforeEach(() => {
   send.mockReset();
   compact.mockReset();
   useAi.setState({ catalog: { providers: [provider], settings: null, loaded: true } });
-  useAi.setState({ history: null, forking: [], background: {}, slots: { [HOME_SLOT]: { ...blankSlot("manual"), conversationId: original.id, conversation: original, entries: [entry] } } });
+  useAi.setState({
+    history: null,
+    forking: [],
+    background: {},
+    slots: {
+      [HOME_SLOT]: { ...blankSlot("manual"), conversationId: original.id, conversation: original, entries: [entry] },
+    },
+  });
 });
 
 describe("forkConversation (AI-43)", () => {
@@ -140,7 +167,10 @@ describe("forkConversation (AI-43)", () => {
   it("opens a fork from History over the active tab's turn waiting for approval, which goes on in the background (AI-07)", async () => {
     const other = conversation("c3", "Restart nginx");
     const waiting = { ...newTurn(), phase: "tools" as const, calls: [{ id: "call-1", state: "approval" as const }] };
-    useAi.setState({ history: [original, other], slots: { [HOME_SLOT]: { ...blankSlot("manual"), conversationId: other.id, conversation: other, turn: waiting } } });
+    useAi.setState({
+      history: [original, other],
+      slots: { [HOME_SLOT]: { ...blankSlot("manual"), conversationId: other.id, conversation: other, turn: waiting } },
+    });
     fork.mockResolvedValue(copy);
     await forkConversation(HOME_SLOT, original.id, null);
     expect(fork).toHaveBeenCalledWith(original.id, null, "Disk usage (fork)");
@@ -154,7 +184,12 @@ describe("forkConversation (AI-43)", () => {
 
   it("opens the fork although the turn under way when Fork was chosen went on while Rust copied", async () => {
     const other = conversation("c3", "Restart nginx");
-    useAi.setState({ history: [original, other], slots: { [HOME_SLOT]: { ...blankSlot("manual"), conversationId: other.id, conversation: other, turn: newTurn() } } });
+    useAi.setState({
+      history: [original, other],
+      slots: {
+        [HOME_SLOT]: { ...blankSlot("manual"), conversationId: other.id, conversation: other, turn: newTurn() },
+      },
+    });
     const finish = held();
     const pending = forkConversation(HOME_SLOT, original.id, null);
     const reply: AiEntryView = { ...entry, entry_id: "e2", text: "Restarting." };
@@ -168,7 +203,12 @@ describe("forkConversation (AI-43)", () => {
 
   it("leaves a slot where a message started a turn that ended while Rust copied, after the one under way when Fork was chosen", async () => {
     const other = conversation("c3", "Restart nginx");
-    useAi.setState({ history: [original, other], slots: { [HOME_SLOT]: { ...blankSlot("manual"), conversationId: other.id, conversation: other, remoteRunning: true } } });
+    useAi.setState({
+      history: [original, other],
+      slots: {
+        [HOME_SLOT]: { ...blankSlot("manual"), conversationId: other.id, conversation: other, remoteRunning: true },
+      },
+    });
     const finish = held();
     const pending = forkConversation(HOME_SLOT, original.id, null);
     patchSlot(HOME_SLOT, { remoteRunning: false });
@@ -187,7 +227,12 @@ describe("forkConversation (AI-43)", () => {
 
   it("leaves a slot that showed another conversation while Rust copied, and then the one under way again", async () => {
     const other = conversation("c3", "Restart nginx");
-    useAi.setState({ history: [original, other], slots: { [HOME_SLOT]: { ...blankSlot("manual"), conversationId: other.id, conversation: other, turn: newTurn() } } });
+    useAi.setState({
+      history: [original, other],
+      slots: {
+        [HOME_SLOT]: { ...blankSlot("manual"), conversationId: other.id, conversation: other, turn: newTurn() },
+      },
+    });
     const finish = held();
     const pending = forkConversation(HOME_SLOT, original.id, null);
     newConversation(HOME_SLOT);

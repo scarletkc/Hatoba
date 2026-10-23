@@ -11,7 +11,9 @@
   inset: var(--win-pad);
   border-radius: var(--radius-xl);
   overflow: hidden;
-  box-shadow: var(--shadow-window), 0 0 0 0.5px var(--winline);
+  box-shadow:
+    var(--shadow-window),
+    0 0 0 0.5px var(--winline);
 }
 
 /* The window's content fades in as the app opens and as the vault unlocks. */

@@ -37,7 +37,9 @@ export function statusText(t: T, readout: HostReadout | undefined): { text: stri
       return { text: t("dashboard.state.offline"), tone: "dim" };
     case "unsupported":
       return {
-        text: r?.system ? t("dashboard.state.unsupported", { system: r.system }) : t("dashboard.state.unsupportedUnknown"),
+        text: r?.system
+          ? t("dashboard.state.unsupported", { system: r.system })
+          : t("dashboard.state.unsupportedUnknown"),
         tone: "dim",
       };
     case "held": {
@@ -54,7 +56,10 @@ export function statusText(t: T, readout: HostReadout | undefined): { text: stri
  * The status as a card shows it in place of readings: an icon (none while connecting, which spins), a short
  * title, and the reason apart from it.
  */
-export function statusParts(t: T, readout: HostReadout | undefined): { icon: string | null; title: string; detail: string | null; tone: Tone } {
+export function statusParts(
+  t: T,
+  readout: HostReadout | undefined,
+): { icon: string | null; title: string; detail: string | null; tone: Tone } {
   const r = readout;
   const reason = r?.error ? errorMessage(t, r.error) : null;
   switch (r?.phase ?? "waiting") {

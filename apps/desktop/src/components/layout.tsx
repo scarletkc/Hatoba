@@ -53,7 +53,10 @@ export const SearchField = forwardRef<
     fill?: boolean;
     className?: string;
   }
->(function SearchField({ value, onChange, placeholder, shortcut, width, onFocus, onBlur, popup, clearLabel, fill, className }, ref) {
+>(function SearchField(
+  { value, onChange, placeholder, shortcut, width, onFocus, onBlur, popup, clearLabel, fill, className },
+  ref,
+) {
   return (
     <label
       className={cx(l.search, fill && l.searchFill, className)}

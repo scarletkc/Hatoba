@@ -45,7 +45,14 @@ function installErrorKey(error: AppError): MessageKey {
 /** The update row's status line, or null before the first check. */
 function updateStatus(
   t: T,
-  { checking, error, install, installError, found, checked }: {
+  {
+    checking,
+    error,
+    install,
+    installError,
+    found,
+    checked,
+  }: {
     checking: boolean;
     error: AppError | null;
     install: Install | null;
@@ -60,7 +67,12 @@ function updateStatus(
   if (checking) return busy(t("settings.about.checking"));
   if (error) return failed(t(error.code === "sync_offline" ? "settings.about.offline" : "settings.about.failed"));
   if (installError) return failed(t(installErrorKey(installError)));
-  if (found) return { tone: "neutral", icon: "arrow-circle-up", text: t("settings.about.available", { version: found.version }) };
+  if (found)
+    return {
+      tone: "neutral",
+      icon: "arrow-circle-up",
+      text: t("settings.about.available", { version: found.version }),
+    };
   if (checked) return { tone: "success", text: t("settings.about.latest") };
   return null;
 }
@@ -94,8 +106,12 @@ export async function confirmInstall(t: T, target: AvailableUpdate) {
       title: t("settings.about.install.title", { version: target.version }),
       body: (
         <>
-          {sessions > 0 && <span className={s.consequence}>{t("settings.about.install.sessions", { n: sessions })}</span>}
-          {transfers > 0 && <span className={s.consequence}>{t("settings.about.install.transfers", { n: transfers })}</span>}
+          {sessions > 0 && (
+            <span className={s.consequence}>{t("settings.about.install.sessions", { n: sessions })}</span>
+          )}
+          {transfers > 0 && (
+            <span className={s.consequence}>{t("settings.about.install.transfers", { n: transfers })}</span>
+          )}
         </>
       ),
       confirmLabel: t("settings.about.install.confirm"),
@@ -135,7 +151,12 @@ export function AboutPane() {
       <div className={s.header}>
         <AppLogo className={s.logo} />
         <div className={s.name}>Hatoba</div>
-        <button type="button" className={s.version} title={t("settings.about.copyVersion")} onClick={() => void copy(version)}>
+        <button
+          type="button"
+          className={s.version}
+          title={t("settings.about.copyVersion")}
+          onClick={() => void copy(version)}
+        >
           {t("settings.about.version", { version })}
         </button>
       </div>
@@ -148,14 +169,27 @@ export function AboutPane() {
               <span className={s.progress}>
                 {status && (
                   <span role="status">
-                    <StatusLine tone={status.tone} icon={status.icon} className={cx(s.status, status.icon && s.available)}>
+                    <StatusLine
+                      tone={status.tone}
+                      icon={status.icon}
+                      className={cx(s.status, status.icon && s.available)}
+                    >
                       {status.text}
                     </StatusLine>
                   </span>
                 )}
                 {install && (
-                  <span className={s.track} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined}>
-                    <span className={percent === null ? `${s.fill} ${s.fillUnknown}` : s.fill} style={percent === null ? undefined : { width: `${percent}%` }} />
+                  <span
+                    className={s.track}
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={percent ?? undefined}
+                  >
+                    <span
+                      className={percent === null ? `${s.fill} ${s.fillUnknown}` : s.fill}
+                      style={percent === null ? undefined : { width: `${percent}%` }}
+                    />
                   </span>
                 )}
                 {manager && <span>{managerText(t, manager)}</span>}
@@ -193,7 +227,9 @@ export function AboutPane() {
           <div className={s.notesHead}>
             <span className={s.notesTitle}>{t("settings.about.notes", { version: update.version })}</span>
             {update.published_at !== null && (
-              <span className={s.notesDate}>{t("settings.about.published", { date: formatDate(update.published_at) })}</span>
+              <span className={s.notesDate}>
+                {t("settings.about.published", { date: formatDate(update.published_at) })}
+              </span>
             )}
           </div>
           {update.notes && (

@@ -24,10 +24,16 @@ describe("notes as dividers (AI-05, AI-09)", () => {
   });
 
   it("name models by their names, with the IDs in the tooltip", () => {
-    const note = { kind: "model_change", from: "Claude Sonnet 5.5 (claude-sonnet-5-5)", to: "Claude Opus 5.5 (claude-opus-5-5)" } as const;
+    const note = {
+      kind: "model_change",
+      from: "Claude Sonnet 5.5 (claude-sonnet-5-5)",
+      to: "Claude Opus 5.5 (claude-opus-5-5)",
+    } as const;
     expect(noteLabel(tr("zh-CN"), note)).toBe("已切换到 Claude Opus 5.5（之前是 Claude Sonnet 5.5）");
     expect(noteLabel(tr("en"), note)).toBe("Switched to Claude Opus 5.5 (was Claude Sonnet 5.5)");
-    expect(noteTitle(tr("en"), note)).toBe("Switched to Claude Opus 5.5 (claude-opus-5-5) (was Claude Sonnet 5.5 (claude-sonnet-5-5))");
+    expect(noteTitle(tr("en"), note)).toBe(
+      "Switched to Claude Opus 5.5 (claude-opus-5-5) (was Claude Sonnet 5.5 (claude-sonnet-5-5))",
+    );
     expect(noteLabel(tr("en"), { ...note, from: "qwen3:8b" })).toBe("Switched to Claude Opus 5.5 (was qwen3:8b)");
   });
 
@@ -61,12 +67,16 @@ describe("notes as dividers (AI-05, AI-09)", () => {
   });
 
   it("come out of a stored message in order, apart from its bubble", () => {
-    const stored = composeMessage("Why?", [{ kind: "paste", lines: 1, text: "x" }], [
-      { kind: "model_change", from: "A (a)", to: "B (b)" },
-      { kind: "terminal_change", to: "attached" },
-      { kind: "host_change", from: "one", to: "two" },
-      { kind: "interrupted" },
-    ]);
+    const stored = composeMessage(
+      "Why?",
+      [{ kind: "paste", lines: 1, text: "x" }],
+      [
+        { kind: "model_change", from: "A (a)", to: "B (b)" },
+        { kind: "terminal_change", to: "attached" },
+        { kind: "host_change", from: "one", to: "two" },
+        { kind: "interrupted" },
+      ],
+    );
     const parts = parseMessage(stored);
     expect(parts.notes.map((n) => noteLabel(tr("en"), n))).toEqual([
       "Previous reply stopped",
@@ -101,7 +111,12 @@ describe("the list of deferred MCP tools (AI-45)", () => {
   });
 
   it("comes after the other notes", () => {
-    const list = { kind: "mcp_tools", servers: 0, tools: 0, body: "No MCP tools are available from this message on." } as const;
+    const list = {
+      kind: "mcp_tools",
+      servers: 0,
+      tools: 0,
+      body: "No MCP tools are available from this message on.",
+    } as const;
     const text = composeMessage("q", [], [list, { kind: "interrupted" }]);
     expect(text.startsWith("<interrupted>")).toBe(true);
     expect(parseMessage(text).notes.map((n) => n.kind)).toEqual(["interrupted", "mcp_tools"]);

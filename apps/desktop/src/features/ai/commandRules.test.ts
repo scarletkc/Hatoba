@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { allowancePrefixes, commandAllowed, dialectOf, readsOnlyCommand, savablePrefixes, splitCommands } from "./commandRules";
+import {
+  allowancePrefixes,
+  commandAllowed,
+  dialectOf,
+  readsOnlyCommand,
+  savablePrefixes,
+  splitCommands,
+} from "./commandRules";
 
 describe("splitCommands", () => {
   it("splits at pipes, lists and line breaks, removing quotes", () => {
@@ -292,19 +299,89 @@ describe("options known to only read (§13.5)", () => {
   // abbreviated, and a value the option takes, attached or in the next word, which is never read as an option.
   const cases: Record<string, [string[], string[]]> = {
     tail: [
-      ["tail -n20 x", "tail -qn 5 a b", "tail -n -5 x", "tail -c +10 x", "tail --lines=5 x", "tail --bytes 100 x", "tail -20 x", "tail -20c x", "tail +5 x", "tail -", "tail -- -f"],
-      ["tail -F x", "tail -qf x", "tail --follow x", "tail --retry x", "tail --pid=1 x", "tail -s 1 x", "tail -20f x", "tail +5f x", "tail +f x", "tail -x x"],
+      [
+        "tail -n20 x",
+        "tail -qn 5 a b",
+        "tail -n -5 x",
+        "tail -c +10 x",
+        "tail --lines=5 x",
+        "tail --bytes 100 x",
+        "tail -20 x",
+        "tail -20c x",
+        "tail +5 x",
+        "tail -",
+        "tail -- -f",
+      ],
+      [
+        "tail -F x",
+        "tail -qf x",
+        "tail --follow x",
+        "tail --retry x",
+        "tail --pid=1 x",
+        "tail -s 1 x",
+        "tail -20f x",
+        "tail +5f x",
+        "tail +f x",
+        "tail -x x",
+      ],
     ],
     sort: [
-      ["sort -k3 -nr x", "sort -t: -k3,3n /etc/passwd", "sort -t ':' -k 3 x", "sort -to x", "sort --key=2 --field-separator=, x", "sort -S 1G -hr x", "sort --check=quiet x", "sort -- -o"],
-      ["sort -uo out in", "sort -no out in", "sort --out=x in", "sort --compress-program=gzip x", "sort -T /tmp x", "sort --temporary-directory=/tmp x", "sort -x in"],
+      [
+        "sort -k3 -nr x",
+        "sort -t: -k3,3n /etc/passwd",
+        "sort -t ':' -k 3 x",
+        "sort -to x",
+        "sort --key=2 --field-separator=, x",
+        "sort -S 1G -hr x",
+        "sort --check=quiet x",
+        "sort -- -o",
+      ],
+      [
+        "sort -uo out in",
+        "sort -no out in",
+        "sort --out=x in",
+        "sort --compress-program=gzip x",
+        "sort -T /tmp x",
+        "sort --temporary-directory=/tmp x",
+        "sort -x in",
+      ],
     ],
     file: [
-      ["file -b --mime-type x", "file -bi x", "file -L x", "file -m magic x", "file -f list.txt", "file -F: x", "file -e elf x", "file --exclude=elf x", "file -- -C"],
-      ["file --compile -m magic", "file -bC -m magic", "file -p x", "file --preserve-date x", "file -z x.gz", "file -Z x.gz", "file --uncompress x.gz", "file -S x", "file --no-sandbox x"],
+      [
+        "file -b --mime-type x",
+        "file -bi x",
+        "file -L x",
+        "file -m magic x",
+        "file -f list.txt",
+        "file -F: x",
+        "file -e elf x",
+        "file --exclude=elf x",
+        "file -- -C",
+      ],
+      [
+        "file --compile -m magic",
+        "file -bC -m magic",
+        "file -p x",
+        "file --preserve-date x",
+        "file -z x.gz",
+        "file -Z x.gz",
+        "file --uncompress x.gz",
+        "file -S x",
+        "file --no-sandbox x",
+      ],
     ],
     ss: [
-      ["ss -s", "ss -tan state established", "ss -o state established '( dport = :ssh )'", "ss -A tcp,udp", "ss -Atcp", "ss --query=tcp", "ss -f inet", "ss -N ns1 -t", "ss -HO"],
+      [
+        "ss -s",
+        "ss -tan state established",
+        "ss -o state established '( dport = :ssh )'",
+        "ss -A tcp,udp",
+        "ss -Atcp",
+        "ss --query=tcp",
+        "ss -f inet",
+        "ss -N ns1 -t",
+        "ss -HO",
+      ],
       ["ss --kill", "ss -tK", "ss -D /tmp/x", "ss --diag=/tmp/x", "ss -E", "ss --events", "ss -tE", "ss --no-such"],
     ],
     journalctl: [
@@ -344,8 +421,29 @@ describe("options known to only read (§13.5)", () => {
       ],
     ],
     rg: [
-      ["rg -i -g '*.ts' TODO", "rg -g'*.ts' TODO", "rg -C3 foo", "rg -uuu foo", "rg --type=rust foo", "rg -t py -l foo", "rg --json foo", "rg -e -foo x", "rg -- --pre x", "rg --files", "rg -. foo", "rg --max-depth 2 foo"],
-      ["rg --pre=sh x", "rg --pr sh x", "rg -z foo", "rg --search-zip foo", "rg -iz foo", "rg --pre-glob '*.pdf' foo", "rg --no-such foo"],
+      [
+        "rg -i -g '*.ts' TODO",
+        "rg -g'*.ts' TODO",
+        "rg -C3 foo",
+        "rg -uuu foo",
+        "rg --type=rust foo",
+        "rg -t py -l foo",
+        "rg --json foo",
+        "rg -e -foo x",
+        "rg -- --pre x",
+        "rg --files",
+        "rg -. foo",
+        "rg --max-depth 2 foo",
+      ],
+      [
+        "rg --pre=sh x",
+        "rg --pr sh x",
+        "rg -z foo",
+        "rg --search-zip foo",
+        "rg -iz foo",
+        "rg --pre-glob '*.pdf' foo",
+        "rg --no-such foo",
+      ],
     ],
     find: [
       [
@@ -365,7 +463,16 @@ describe("options known to only read (§13.5)", () => {
         // `-delete` is the name looked for.
         "find . -name -delete",
       ],
-      ["find . -fprintf /tmp/x '%p'", "find . -fprint0 /tmp/x", "find . -okdir rm ;", "find . -name x -o -delete", "find . -maxdepth 1 -delete", "find -D . -delete", "find . -foo", "find -Z ."],
+      [
+        "find . -fprintf /tmp/x '%p'",
+        "find . -fprint0 /tmp/x",
+        "find . -okdir rm ;",
+        "find . -name x -o -delete",
+        "find . -maxdepth 1 -delete",
+        "find -D . -delete",
+        "find . -foo",
+        "find -Z .",
+      ],
     ],
     docker: [
       [
@@ -408,9 +515,21 @@ describe("options known to only read (§13.5)", () => {
       ],
     ],
     git: [
-      ["git remote", "git remote show", "git remote show -n origin", "git remote show origin -n", "git remote get-url origin"],
+      [
+        "git remote",
+        "git remote show",
+        "git remote show -n origin",
+        "git remote show origin -n",
+        "git remote get-url origin",
+      ],
       // Asks the remote for its branches, through core.sshCommand or a credential helper.
-      ["git remote show origin", "git remote show -- origin", "git remote show -- -n", "git remote show -v origin", "git remote -v show origin"],
+      [
+        "git remote show origin",
+        "git remote show -- origin",
+        "git remote show -- -n",
+        "git remote show -v origin",
+        "git remote -v show origin",
+      ],
     ],
   };
 
@@ -424,7 +543,8 @@ describe("options known to only read (§13.5)", () => {
   it("checks the same options in PowerShell", () => {
     expect(readsOnlyCommand("rg -g '*.ts' TODO", "powershell")).toBe(true);
     expect(readsOnlyCommand("docker logs -n 50 web", "powershell")).toBe(true);
-    for (const line of ["rg -z foo", "docker logs --follow web", "podman logs -n -f web"]) expect(readsOnlyCommand(line, "powershell"), line).toBe(false);
+    for (const line of ["rg -z foo", "docker logs --follow web", "podman logs -n -f web"])
+      expect(readsOnlyCommand(line, "powershell"), line).toBe(false);
   });
 });
 
@@ -446,7 +566,14 @@ describe("allowed prefixes (AI-19)", () => {
   });
 
   it("never matches through redirection, substitution, background jobs, sudo or variables", () => {
-    for (const line of ["git pull > /tmp/x", "git pull $(id)", "git pull `id`", "git pull &", "sudo git pull", "GIT_SSH_COMMAND=x git pull"]) {
+    for (const line of [
+      "git pull > /tmp/x",
+      "git pull $(id)",
+      "git pull `id`",
+      "git pull &",
+      "sudo git pull",
+      "GIT_SSH_COMMAND=x git pull",
+    ]) {
       expect(commandAllowed(line, ["git pull", "sudo", "sudo git"]), line).toBe(false);
     }
   });
@@ -467,7 +594,10 @@ describe("allowancePrefixes", () => {
   });
 
   it("leaves out read-only commands and repeats", () => {
-    expect(allowancePrefixes("cd /srv/app && git pull && systemctl restart app && systemctl status app")).toEqual(["git pull", "systemctl restart"]);
+    expect(allowancePrefixes("cd /srv/app && git pull && systemctl restart app && systemctl status app")).toEqual([
+      "git pull",
+      "systemctl restart",
+    ]);
     expect(allowancePrefixes("nginx -t && nginx -s reload")).toEqual(["nginx"]);
   });
 
@@ -500,7 +630,12 @@ describe("allowancePrefixes", () => {
   });
 
   it("matches what it offers", () => {
-    for (const line of ["systemctl restart nginx", "cd /x && make install && ./post.sh", "npm run build -- --prod", "printf 'x' | uniq - out"]) {
+    for (const line of [
+      "systemctl restart nginx",
+      "cd /x && make install && ./post.sh",
+      "npm run build -- --prod",
+      "printf 'x' | uniq - out",
+    ]) {
       expect(commandAllowed(line, allowancePrefixes(line)!), line).toBe(true);
     }
   });
@@ -519,11 +654,32 @@ describe("PowerShell command lines (§13.5)", () => {
 
   it("splits at pipes, lists, statements and line breaks, and arguments at commas, removing quotes", () => {
     expect(
-      splitCommands(`Get-ChildItem -Path 'C:\\Program Files' -Recurse | Select-String "a b" && Get-Date; gci\nGet-Process`, "powershell")?.map((c) => c.words),
-    ).toEqual([["Get-ChildItem", "-Path", "C:\\Program Files", "-Recurse"], ["Select-String", "a b"], ["Get-Date"], ["gci"], ["Get-Process"]]);
-    expect(splitCommands("Select-Object Name,Id , CPU", "powershell")?.[0].words).toEqual(["Select-Object", "Name", "Id", "CPU"]);
-    expect(splitCommands(`Write-Output 'it''s' "say ""hi"""`, "powershell")?.[0].words).toEqual(["Write-Output", "it's", 'say "hi"']);
-    expect(splitCommands("gci |\n  Measure-Object", "powershell")?.map((c) => c.words)).toEqual([["gci"], ["Measure-Object"]]);
+      splitCommands(
+        `Get-ChildItem -Path 'C:\\Program Files' -Recurse | Select-String "a b" && Get-Date; gci\nGet-Process`,
+        "powershell",
+      )?.map((c) => c.words),
+    ).toEqual([
+      ["Get-ChildItem", "-Path", "C:\\Program Files", "-Recurse"],
+      ["Select-String", "a b"],
+      ["Get-Date"],
+      ["gci"],
+      ["Get-Process"],
+    ]);
+    expect(splitCommands("Select-Object Name,Id , CPU", "powershell")?.[0].words).toEqual([
+      "Select-Object",
+      "Name",
+      "Id",
+      "CPU",
+    ]);
+    expect(splitCommands(`Write-Output 'it''s' "say ""hi"""`, "powershell")?.[0].words).toEqual([
+      "Write-Output",
+      "it's",
+      'say "hi"',
+    ]);
+    expect(splitCommands("gci |\n  Measure-Object", "powershell")?.map((c) => c.words)).toEqual([
+      ["gci"],
+      ["Measure-Object"],
+    ]);
     expect(splitCommands("ls *.log", "powershell")?.[0].globs).toEqual([false, false]);
   });
 
@@ -666,13 +822,11 @@ describe("Command Prompt command lines (§13.5)", () => {
   const cmd = (line: string) => readsOnlyCommand(line, "cmd");
 
   it("splits at pipes and lists, and arguments at commas, semicolons and equal signs, removing quotes", () => {
-    expect(splitCommands('dir "C:\\Program Files" /s | findstr /i x & ver && type a.txt || echo no', "cmd")?.map((c) => c.words)).toEqual([
-      ["dir", "C:\\Program Files", "/s"],
-      ["findstr", "/i", "x"],
-      ["ver"],
-      ["type", "a.txt"],
-      ["echo", "no"],
-    ]);
+    expect(
+      splitCommands('dir "C:\\Program Files" /s | findstr /i x & ver && type a.txt || echo no', "cmd")?.map(
+        (c) => c.words,
+      ),
+    ).toEqual([["dir", "C:\\Program Files", "/s"], ["findstr", "/i", "x"], ["ver"], ["type", "a.txt"], ["echo", "no"]]);
     expect(splitCommands("dir a,b;c=d", "cmd")?.[0].words).toEqual(["dir", "a", "b", "c", "d"]);
   });
 
@@ -854,7 +1008,9 @@ describe("a run_command call's workdir (AI-12, §13.5)", () => {
     expect(allowancePrefixes("Get-ChildItem", "powershell", "\\\\server\\share")).toEqual(["cd \\\\server\\share"]);
     expect(commandAllowed("git status", ["cd C:\\src"], "cmd", "C:\\src")).toBe(true);
     expect(commandAllowed("git status", ["cd C:\\src"], "cmd", "D:\\other")).toBe(false);
-    expect(commandAllowed("msbuild app.sln", allowancePrefixes("msbuild app.sln", "cmd", "C:\\src")!, "cmd", "C:\\src")).toBe(true);
+    expect(
+      commandAllowed("msbuild app.sln", allowancePrefixes("msbuild app.sln", "cmd", "C:\\src")!, "cmd", "C:\\src"),
+    ).toBe(true);
     // A prefix cannot name a folder with a space.
     expect(allowancePrefixes("msbuild app.sln", "cmd", "C:\\My Projects")).toBeNull();
   });

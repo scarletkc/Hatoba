@@ -76,7 +76,8 @@
   --shadow-float: 0 12px 32px rgb(5 12 40 / 0.45);
 
   /* Type. */
-  --cjk: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC";
+  --cjk:
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC";
   --font: "Archivo Variable", "Archivo Fallback", var(--cjk), system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
@@ -152,7 +153,8 @@
 }
 
 :root:lang(ja) {
-  --cjk: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans CJK JP", "Source Han Sans JP";
+  --cjk:
+    "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans CJK JP", "Source Han Sans JP";
 }
 
 @media (prefers-color-scheme: dark) {

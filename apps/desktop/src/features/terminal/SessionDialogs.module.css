@@ -6,7 +6,9 @@
   padding: 22px 22px 18px;
   border-radius: var(--radius-xl);
   background: var(--sheet);
-  box-shadow: 0 0 0 0.5px var(--winline), var(--shadow);
+  box-shadow:
+    0 0 0 0.5px var(--winline),
+    var(--shadow);
   color: var(--fg);
   line-height: 1.4;
   animation: rise var(--motion-base) var(--ease-out);
@@ -14,7 +16,9 @@
 
 .cardDanger {
   width: 460px;
-  box-shadow: 0 0 0 1.5px var(--red), var(--shadow);
+  box-shadow:
+    0 0 0 1.5px var(--red),
+    var(--shadow);
 }
 
 /* Grows in place, as an alert does (overlay.module.css); with reduced motion it only fades. */

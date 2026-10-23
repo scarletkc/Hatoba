@@ -32,7 +32,10 @@ function rightClick(el: Element): boolean {
   return e.defaultPrevented;
 }
 
-const items = () => [...document.querySelectorAll("[role=menu] [role=menuitem]")].map((b) => `${b.textContent}${(b as HTMLButtonElement).disabled ? " (off)" : ""}`);
+const items = () =>
+  [...document.querySelectorAll("[role=menu] [role=menuitem]")].map(
+    (b) => `${b.textContent}${(b as HTMLButtonElement).disabled ? " (off)" : ""}`,
+  );
 
 describe("ContextMenuHost", () => {
   it("offers editing in a text field", () => {

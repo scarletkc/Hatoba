@@ -59,7 +59,8 @@ export function KeyDetail({
     }
   };
 
-  const editHost = (hostId: string) => useApp.getState().navigate({ kind: "host-edit", hostId, groupId: null, back: null });
+  const editHost = (hostId: string) =>
+    useApp.getState().navigate({ kind: "host-edit", hostId, groupId: null, back: null });
 
   return (
     <aside className={s.panel} aria-label={keyView.name}>
@@ -130,7 +131,10 @@ export function KeyDetail({
                 aria-label={t("keys.detail.editHost", { name: h.name })}
                 onClick={() => editHost(h.id)}
               >
-                <StatusDot size={6} color={h.id in probe ? (probe[h.id] ? "var(--green)" : "var(--red)") : "var(--fg3)"} />
+                <StatusDot
+                  size={6}
+                  color={h.id in probe ? (probe[h.id] ? "var(--green)" : "var(--red)") : "var(--fg3)"}
+                />
                 <span className={s.hostName}>{h.name}</span>
               </button>
             ))
