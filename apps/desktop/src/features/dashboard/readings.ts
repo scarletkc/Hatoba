@@ -17,7 +17,7 @@ export interface HostReadout {
   tab: boolean;
   hold: DashboardHold | null;
   error: AppError | null;
-  /** The system of a server that does not run Linux; empty when unknown. */
+  /** The system of a server that runs neither Linux nor macOS; empty when unknown. */
   system: string | null;
   /** The readings of the last few minutes, oldest first. They stay when the host stops answering. */
   history: StatsReading[];

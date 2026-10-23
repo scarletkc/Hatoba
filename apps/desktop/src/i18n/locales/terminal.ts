@@ -50,8 +50,8 @@ export default defineMessages({
     "terminal.stats.chartCpu": "最近的 CPU 占用",
     "terminal.stats.chartNet": "最近的网络速率",
     "terminal.stats.waiting": "正在读取…",
-    "terminal.stats.unsupported": "资源占用只支持 Linux 服务器。",
-    "terminal.stats.unsupportedSystem": "资源占用只支持 Linux 服务器，这台服务器运行的是 {system}。",
+    "terminal.stats.unsupported": "资源占用只支持 Linux 和 macOS 服务器。",
+    "terminal.stats.unsupportedSystem": "资源占用只支持 Linux 和 macOS 服务器，这台服务器运行的是 {system}。",
     "terminal.stats.failed": "资源占用读取已停止：{error}",
 
     // overflow / context menu
@@ -241,8 +241,8 @@ export default defineMessages({
     "terminal.stats.chartCpu": "Recent CPU usage",
     "terminal.stats.chartNet": "Recent network rates",
     "terminal.stats.waiting": "Reading…",
-    "terminal.stats.unsupported": "Resource usage is available only for Linux servers.",
-    "terminal.stats.unsupportedSystem": "Resource usage is available only for Linux servers. This server runs {system}.",
+    "terminal.stats.unsupported": "Resource usage is available only for Linux and macOS servers.",
+    "terminal.stats.unsupportedSystem": "Resource usage is available only for Linux and macOS servers. This server runs {system}.",
     "terminal.stats.failed": "Resource usage stopped: {error}",
 
     "terminal.menu.reconnect": "Reconnect",
@@ -423,8 +423,8 @@ export default defineMessages({
     "terminal.stats.chartCpu": "最近の CPU 使用率",
     "terminal.stats.chartNet": "最近のネットワーク速度",
     "terminal.stats.waiting": "読み取り中…",
-    "terminal.stats.unsupported": "リソース使用状況は Linux サーバーでのみ表示できます。",
-    "terminal.stats.unsupportedSystem": "リソース使用状況は Linux サーバーでのみ表示できます。このサーバーは {system} です。",
+    "terminal.stats.unsupported": "リソース使用状況は Linux と macOS のサーバーでのみ表示できます。",
+    "terminal.stats.unsupportedSystem": "リソース使用状況は Linux と macOS のサーバーでのみ表示できます。このサーバーは {system} です。",
     "terminal.stats.failed": "リソース使用状況の読み取りが止まりました: {error}",
 
     "terminal.menu.reconnect": "再接続",

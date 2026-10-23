@@ -27,13 +27,14 @@ Other labels: **Connecting…**, **Connected**, **Connection failed**, **Disconn
 
 ## Resource usage
 
-For a Linux server, the status bar can show CPU, memory and network rates (↓ received, ↑ sent). It is off until **Show Resource Usage** turns it on, and the choice is remembered for the host on this device; a quick connection keeps it only for its tab. A narrow window drops the rates, then everything but the gauge icon.
+For a Linux or macOS server, the status bar can show CPU, memory and network rates (↓ received, ↑ sent). It is off until **Show Resource Usage** turns it on, and the choice is remembered for the host on this device; a quick connection keeps it only for its tab. A narrow window drops the rates, then everything but the gauge icon.
 
 Clicking the readout opens a popover: CPU over the last 3 minutes with the number of cores and the load averages, memory and swap, network rates over the last 3 minutes with the interfaces counted (those of the default route), the disk usage of `/`, and the uptime. Pointing at a chart (or the arrow keys once it has focus) shows every value as it was at that moment. A meter turns orange at 80% and red at 95%. **Hide Resource Usage** at the bottom turns it off for the host.
 
-Hatoba reads `/proc` on the server every 2 seconds over the tab's own connection, by running `sh` on a separate channel; nothing is installed, and the process shows on the server (for example in `ps`) while the readout is sampled. Sampling pauses while the tab is in the background, the window is minimized, or the vault is locked, and a pause shows as a gap in the charts. The first reading after a pause has no CPU or network rate yet ("—"); the next one, 2 seconds later, does.
+Hatoba reads `/proc` on the server (on macOS, `iostat`, `vm_stat`, `sysctl`, `netstat` and `df`) every 2 seconds over the tab's own connection, by running `sh` on a separate channel; nothing is installed, and the process shows on the server (for example in `ps`) while the readout is sampled. Sampling pauses while the tab is in the background, the window is minimized, or the vault is locked, and a pause shows as a gap in the charts. The first reading after a pause has no CPU or network rate yet ("—"); the next one, 2 seconds later, does.
 
-- FreeBSD, NetBSD, macOS, Windows and other systems show "Resource usage is available only for Linux servers." with the system's name when known.
+- On macOS, memory in use is counted as Activity Monitor counts it (app memory, wired and compressed), and the disk is the APFS container of `/`, used as Finder shows it: its size less what is available.
+- FreeBSD, NetBSD, Windows and other systems show "Resource usage is available only for Linux and macOS servers." with the system's name when known.
 - If the readings stop (for example the server refused to run the command, or `sh` exited), the popover shows the reason and **Retry**.
 - In a container, `/proc` describes the host machine, so CPU and memory are the host's, not the container's.
 

@@ -48,7 +48,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Network | ネットワーク |
 | Disk | ディスク |
 | Reading… | 読み取り中… |
-| Resource usage is available only for Linux servers. | リソース使用状況は Linux サーバーでのみ表示できます。 |
+| Resource usage is available only for Linux and macOS servers. | リソース使用状況は Linux と macOS のサーバーでのみ表示できます。 |
 
 ### Menus
 

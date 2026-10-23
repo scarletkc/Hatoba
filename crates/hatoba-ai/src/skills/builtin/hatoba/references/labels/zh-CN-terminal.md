@@ -48,7 +48,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Network | 网络 |
 | Disk | 磁盘 |
 | Reading… | 正在读取… |
-| Resource usage is available only for Linux servers. | 资源占用只支持 Linux 服务器。 |
+| Resource usage is available only for Linux and macOS servers. | 资源占用只支持 Linux 和 macOS 服务器。 |
 
 ### Menus
 

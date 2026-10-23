@@ -481,8 +481,8 @@ pub struct MountView {
 pub enum StatsEvent {
     /// A reading, one per interval.
     Stats { stats: Box<ServerStatsView> },
-    /// The server does not run Linux; the last event. `system` is its name, such as `FreeBSD`,
-    /// or empty when unknown.
+    /// The server runs neither Linux nor macOS; the last event. `system` is its name, such as
+    /// `FreeBSD`, or empty when unknown.
     Unsupported { system: String },
     /// Sampling stopped on its own (the script failed or the connection ended); the last event.
     Ended { error: crate::error::AppError },
@@ -531,8 +531,8 @@ pub enum DashboardEvent {
         host_id: String,
         stats: Box<ServerStatsView>,
     },
-    /// The server does not run Linux, so only its online status shows. `system` is its name,
-    /// or empty when unknown.
+    /// The server runs neither Linux nor macOS, so only its online status shows. `system` is
+    /// its name, or empty when unknown.
     Unsupported { host_id: String, system: String },
     /// The connection needs the user; the dashboard waits for **Retry**, a change to the host,
     /// or a tab on it. `error` is the server's answer, when there was one.

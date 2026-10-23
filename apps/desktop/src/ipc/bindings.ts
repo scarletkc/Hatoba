@@ -1472,8 +1472,8 @@ export type DashboardEvent =
 /**  A reading, one per interval. */
 { kind: "stats"; host_id: string; stats: ServerStatsView } | 
 /**
- *  The server does not run Linux, so only its online status shows. `system` is its name,
- *  or empty when unknown.
+ *  The server runs neither Linux nor macOS, so only its online status shows. `system` is
+ *  its name, or empty when unknown.
  */
 { kind: "unsupported"; host_id: string; system: string } | 
 /**
@@ -2428,8 +2428,8 @@ export type StatsEvent =
 /**  A reading, one per interval. */
 { kind: "stats"; stats: ServerStatsView } | 
 /**
- *  The server does not run Linux; the last event. `system` is its name, such as `FreeBSD`,
- *  or empty when unknown.
+ *  The server runs neither Linux nor macOS; the last event. `system` is its name, such as
+ *  `FreeBSD`, or empty when unknown.
  */
 { kind: "unsupported"; system: string } | 
 /**  Sampling stopped on its own (the script failed or the connection ended); the last event. */

@@ -1,9 +1,10 @@
-//! Resource usage of a Linux server, sampled from `/proc` over the session (TERM-12).
+//! Resource usage of a Linux or macOS server, sampled over the session (TERM-12).
 //!
 //! [`SshSession::open_stats`] runs `sh -s` on an exec channel and sends it `stats.sh` on stdin,
 //! so nothing is installed on the server and the user's login shell only has to start `sh`.
-//! The script prints a block of `/proc` readings each interval; [`Parser`] turns each block into
-//! a [`Sample`], and two consecutive samples give the rates in [`ServerStats`].
+//! The script prints a block of `/proc` readings each interval, on macOS the same readings from
+//! its own tools in the same format; [`Parser`] turns each block into a [`Sample`], and two
+//! consecutive samples give the rates in [`ServerStats`].
 
 use std::time::Duration;
 
@@ -66,7 +67,8 @@ pub struct ServerStats {
     pub load: Option<[f64; 3]>,
     /// Physical memory.
     pub mem_total: Option<u64>,
-    /// Memory in use: the total less what the kernel counts as available.
+    /// Memory in use: the total less what the kernel counts as available (on macOS, what
+    /// Activity Monitor counts as used).
     pub mem_used: Option<u64>,
     /// Swap space; zero when the server has none.
     pub swap_total: Option<u64>,
@@ -86,7 +88,8 @@ pub struct ServerStats {
     pub net_interfaces: Vec<String>,
     /// Size of the root filesystem.
     pub disk_total: Option<u64>,
-    /// Space used on the root filesystem.
+    /// Space used on the root filesystem; on macOS, on its APFS container, whose volumes share
+    /// the space.
     pub disk_used: Option<u64>,
     /// Space available to unprivileged users on the root filesystem (`df` leaves out the
     /// blocks reserved for root, so used and available can add up to less than the total).
@@ -96,8 +99,9 @@ pub struct ServerStats {
     /// Every mounted filesystem that stores files, in the order `df` lists them, when sampling
     /// asked for them ([`SshSession::open_dashboard_stats`]): not the memory-backed or kernel
     /// ones, the layers of containers, read-only images, or the files a container runtime
-    /// mounts, and each device (each ZFS pool) once; `/` always. At most 32. They are read
-    /// every fifth reading, and the readings between repeat the last list.
+    /// mounts, and each device (each ZFS pool, each APFS container) once; `/` always. On macOS,
+    /// the filesystems Finder shows. At most 32. They are read every fifth reading, and the
+    /// readings between repeat the last list.
     pub mounts: Vec<MountStats>,
 }
 
@@ -121,8 +125,8 @@ pub struct MountStats {
 pub enum StatsEvent {
     /// A reading, one per interval.
     Stats(Box<ServerStats>),
-    /// The server does not run Linux, so there is nothing to read. Carries the system's name
-    /// (such as `FreeBSD`), empty when unknown. Sent once, last.
+    /// The server runs neither Linux nor macOS, so there is nothing to read. Carries the
+    /// system's name (such as `FreeBSD`), empty when unknown. Sent once, last.
     Unsupported(String),
     /// Sampling stopped on its own: the script failed or the connection ended. Sent once, last.
     Ended(SshError),
@@ -152,7 +156,7 @@ impl Drop for StatsHandle {
     }
 }
 
-/// Reports a system without `/proc` at once: nothing is run on the server.
+/// Reports a system the script does not read at once: nothing is run on the server.
 pub(crate) fn unsupported(system: &str) -> (StatsHandle, mpsc::Receiver<StatsEvent>) {
     let (tx, rx) = mpsc::channel(1);
     let _ = tx.try_send(StatsEvent::Unsupported(system.to_owned()));
@@ -573,17 +577,32 @@ fn stores_files(mount: &Mount) -> bool {
 }
 
 /// What makes two filesystems the same space: a device once whatever it is mounted on (a bind
-/// mount, a btrfs subvolume), a ZFS pool once for all its datasets, and anything else (network
-/// and FUSE filesystems, whose names need not be unique) by its name and mount point.
+/// mount, a btrfs subvolume), a ZFS pool once for all its datasets, an APFS container once for
+/// all its volumes, and anything else (network and FUSE filesystems, whose names need not be
+/// unique) by its name and mount point.
 fn space_of(mount: &Mount) -> String {
     if mount.fstype == "zfs" {
         let pool = mount.source.split('/').next().unwrap_or_default();
         format!("zfs:{pool}")
+    } else if mount.fstype == "apfs"
+        && let Some(container) = apfs_container(&mount.source)
+    {
+        format!("apfs:{container}")
     } else if mount.source.starts_with('/') {
         mount.source.clone()
     } else {
         format!("{}\0{}", mount.source, mount.mount_point)
     }
+}
+
+/// The container of an APFS volume, such as `/dev/disk3` for `/dev/disk3s5`, or for
+/// `/dev/disk3s1s1`, a snapshot of its first volume.
+fn apfs_container(source: &str) -> Option<&str> {
+    let number = source.strip_prefix("/dev/disk")?;
+    let digits = number
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(number.len());
+    (digits > 0).then(|| &source[.."/dev/disk".len() + digits])
 }
 
 const KB: u64 = 1024;
@@ -1045,6 +1064,157 @@ ext4 /dev/sdb1 500 400 100 80% /data
         parser.feed(b"\n@end\n", &mut out);
         assert_eq!(out.len(), 1);
         assert!(parser.buf.is_empty());
+    }
+
+    /// Two blocks as `stats.sh` printed them on macOS 26, the first with the filesystems.
+    const DARWIN_OUTPUT: &str = "\
+@cpus 12
+@cpu
+cpu 15 0 38 47
+@mem
+MemTotal: 16777216 kB
+MemAvailable: 12556464 kB
+SwapTotal: 0 kB
+SwapFree: 0 kB
+@net
+en0: 404605 0 0 0 0 0 0 0 282161
+@load
+20.84 4.51 1.60
+@uptime
+16.51
+@disk
+Filesystem     1024-blocks     Used Available Capacity  Mounted on
+/dev/disk4s1s1 128462848 81241344 47221504 21% /
+@mounts
+apfs /dev/disk4s1s1 128462848 81241348 47221500 21% /
+AppleVirtIOFS /dev/disk0 1562499960 1119279524 443220436 72% /Volumes/My Shared Files
+@end
+@cpu
+cpu 27 0 73 100
+@mem
+MemTotal: 16777216 kB
+MemAvailable: 12408784 kB
+SwapTotal: 0 kB
+SwapFree: 0 kB
+@net
+en0: 437231 0 0 0 0 0 0 0 303642
+@load
+20.84 4.51 1.60
+@uptime
+17.42
+@disk
+Filesystem     1024-blocks     Used Available Capacity  Mounted on
+/dev/disk4s1s1 128462848 81452416 47010432 21% /
+@end
+";
+
+    #[test]
+    fn macos_readings_parse_like_linux_ones() {
+        let samples = samples(DARWIN_OUTPUT);
+        assert_eq!(samples.len(), 2);
+        let first = samples[0].stats(None);
+        assert_eq!(first.cpus, Some(12));
+        assert_eq!(first.mem_total, Some(16_777_216 * KB));
+        assert_eq!(first.mem_used, Some((16_777_216 - 12_556_464) * KB));
+        assert_eq!((first.swap_total, first.swap_used), (Some(0), Some(0)));
+        assert_eq!(first.net_interfaces, ["en0"]);
+        assert_eq!(first.load, Some([20.84, 4.51, 1.60]));
+        assert_eq!(first.uptime_secs, Some(16));
+        assert_eq!(first.disk_used, Some(81_241_344 * KB));
+        let points: Vec<&str> = first
+            .mounts
+            .iter()
+            .map(|m| m.mount_point.as_str())
+            .collect();
+        assert_eq!(points, ["/", "/Volumes/My Shared Files"]);
+
+        // iostat's shares, added up: 47 of the 100 points since the first reading were busy.
+        let second = samples[1].stats(Some((&samples[0], Duration::from_secs(1))));
+        assert_eq!(second.cpu_percent, Some(47.0));
+        assert!(second.net_rx_rate.is_some());
+        assert_eq!(second.mounts, first.mounts);
+    }
+
+    #[test]
+    fn each_apfs_container_is_listed_once() {
+        let samples = samples(
+            "@mounts
+apfs /dev/disk3s1s1 1000 600 400 60% /
+apfs /dev/disk5s1 2000 500 1500 25% /Volumes/Work
+apfs /dev/disk5s2 2000 500 1500 25% /Volumes/Photos
+apfs /dev/disk12s1 3000 100 2900 4% /Volumes/Backup
+msdos /dev/disk6s1 100 10 90 10% /Volumes/CARD
+@end
+",
+        );
+        let points: Vec<String> = samples[0]
+            .stats(None)
+            .mounts
+            .into_iter()
+            .map(|m| m.mount_point)
+            .collect();
+        assert_eq!(
+            points,
+            ["/", "/Volumes/Work", "/Volumes/Backup", "/Volumes/CARD"]
+        );
+        assert_eq!(apfs_container("/dev/disk3s1s1"), Some("/dev/disk3"));
+        assert_eq!(apfs_container("/dev/disk"), None);
+        assert_eq!(apfs_container("map auto_home"), None);
+    }
+
+    /// The script on this machine, through the parser.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn the_script_reads_this_machine() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::process::{Command, Stdio};
+
+        let mut child = Command::new("sh")
+            .args(["-s", "--", "1", "mounts"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(SCRIPT.as_bytes())
+            .unwrap();
+        let mut parser = Parser::default();
+        let mut parsed = Vec::new();
+        let mut samples = Vec::new();
+        for line in BufReader::new(child.stdout.take().unwrap()).lines() {
+            parser.feed(format!("{}\n", line.unwrap()).as_bytes(), &mut parsed);
+            for output in parsed.drain(..) {
+                match output {
+                    Parsed::Sample(sample) => samples.push(*sample),
+                    Parsed::Unsupported(system) => panic!("unsupported {system}"),
+                }
+            }
+            if samples.len() == 2 {
+                break;
+            }
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+
+        let first = samples[0].stats(None);
+        assert!(first.cpus.unwrap() >= 1);
+        assert!(first.mem_total.unwrap() > first.mem_used.unwrap());
+        assert!(first.swap_total.is_some());
+        assert!(first.load.is_some());
+        assert!(first.uptime_secs.is_some());
+        assert!(first.disk_total.unwrap() >= first.disk_used.unwrap());
+        assert!(first.net_rx_total.is_some() || first.net_interfaces.is_empty());
+        assert!(
+            first.mounts.iter().any(|m| m.mount_point == "/"),
+            "{:?}",
+            first.mounts
+        );
+        let second = samples[1].stats(Some((&samples[0], Duration::from_secs(1))));
+        let cpu = second.cpu_percent.expect("a CPU share from two readings");
+        assert!((0.0..=100.0).contains(&cpu), "{cpu}");
     }
 
     #[test]

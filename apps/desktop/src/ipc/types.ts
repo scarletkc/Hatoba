@@ -485,7 +485,7 @@ export type DashboardEvent =
   /** Connected and reading, over the dashboard's own connection or a tab's. */
   | { kind: "reading"; host_id: string; os: string | null; tab: boolean }
   | { kind: "stats"; host_id: string; stats: ServerStatsView }
-  /** The server does not run Linux; only its online status shows. */
+  /** The server runs neither Linux nor macOS; only its online status shows. */
   | { kind: "unsupported"; host_id: string; system: string }
   /** The connection needs the user; held until **Retry**, a change to the host, or a tab on it. */
   | { kind: "held"; host_id: string; hold: DashboardHold; error: AppError | null }
@@ -495,7 +495,7 @@ export type DashboardEvent =
 /** Streamed on the channel of `ssh_stats_start` (TERM-12). `unsupported` and `ended` come last. */
 export type StatsEvent =
   | { kind: "stats"; stats: ServerStatsView }
-  /** The server does not run Linux; `system` is its name, such as `FreeBSD`, or empty. */
+  /** The server runs neither Linux nor macOS; `system` is its name, such as `FreeBSD`, or empty. */
   | { kind: "unsupported"; system: string }
   /** Sampling stopped on its own: the script failed or the connection ended. */
   | { kind: "ended"; error: AppError };

@@ -9,6 +9,9 @@ use common::*;
 use hatoba_ssh::{ServerStats, SshErrorKind, StatsEvent};
 use tokio::sync::mpsc;
 
+/// Whether the script reads this system: the harness's sshd runs on this machine.
+const READ: bool = cfg!(any(target_os = "linux", target_os = "macos"));
+
 macro_rules! server {
     () => {
         match SshdServer::start() {
@@ -35,7 +38,7 @@ async fn reading(rx: &mut mpsc::Receiver<StatsEvent>) -> ServerStats {
 async fn remote_loops(session: &hatoba_ssh::SshSession, secs: u32) -> u32 {
     // The brackets keep the pattern from matching the shell that runs pgrep.
     let (_, out) = session
-        .exec(&format!("pgrep -fc '[s]h -s -- {secs}$' || true"), None)
+        .exec(&format!("pgrep -f '[s]h -s -- {secs}$' | wc -l"), None)
         .await
         .unwrap();
     String::from_utf8_lossy(&out).trim().parse().unwrap_or(0)
@@ -47,7 +50,7 @@ async fn readings_arrive_each_interval_and_stop_with_the_handle() {
     let session = server.connect_key("ed25519", None).await;
     let (handle, mut rx) = session.open_stats(Duration::from_secs(1)).await.unwrap();
 
-    if !cfg!(target_os = "linux") {
+    if !READ {
         match next(&mut rx).await {
             Some(StatsEvent::Unsupported(system)) => assert!(!system.is_empty()),
             other => panic!("expected unsupported, got {other:?}"),
@@ -99,7 +102,7 @@ async fn dropping_the_handle_stops_sampling() {
     let server = server!();
     let session = server.connect_key("ed25519", None).await;
     let (handle, mut rx) = session.open_stats(Duration::from_secs(2)).await.unwrap();
-    if cfg!(target_os = "linux") {
+    if READ {
         reading(&mut rx).await;
     }
     drop(handle);
@@ -115,7 +118,7 @@ async fn sampling_ends_with_the_connection() {
     let server = server!();
     let session = server.connect_key("ed25519", None).await;
     let (_handle, mut rx) = session.open_stats(Duration::from_secs(1)).await.unwrap();
-    if !cfg!(target_os = "linux") {
+    if !READ {
         return;
     }
     reading(&mut rx).await;
@@ -136,7 +139,7 @@ async fn sampling_ends_with_the_connection() {
 #[tokio::test]
 async fn the_dashboard_also_reads_every_filesystem() {
     let server = server!();
-    if !cfg!(target_os = "linux") {
+    if !READ {
         return;
     }
     let session = server.connect_key("ed25519", None).await;

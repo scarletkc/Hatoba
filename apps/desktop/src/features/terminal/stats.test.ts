@@ -159,7 +159,7 @@ describe("resource usage sampling (TERM-12)", () => {
     expect(ipc.stops).toEqual([]);
   });
 
-  it("asks a server that is not Linux only once", () => {
+  it("asks a server that is neither Linux nor macOS only once", () => {
     startStats(sid);
     lastStart().emit({ kind: "unsupported", system: "FreeBSD" });
     expect(getSessionStats(sid)?.state).toEqual({ kind: "unsupported", system: "FreeBSD" });

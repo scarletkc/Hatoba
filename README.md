@@ -45,7 +45,8 @@ account.
   without installing anything on the servers.
 - **Terminal**: tabs, 256 colors and truecolor, CJK wide characters and input
   methods, confirmation before multi-line paste, search, clickable links, and
-  the CPU, memory, and network usage of Linux servers in the status bar.
+  the CPU, memory, and network usage of Linux and macOS servers in the status
+  bar.
 - **Local terminal**: tabs for the shells of your own computer, such as
   PowerShell, Command Prompt, Git Bash, and WSL distributions on Windows, or
   your login shell on macOS and Linux, beside the SSH tabs.

@@ -58,7 +58,7 @@ export function appendReading(history: StatsReading[], reading: StatsReading): S
   return [...recent(history, reading.at), reading];
 }
 
-/** Starts sampling a session's resource usage. A server already found not to run Linux is not asked again. */
+/** Starts sampling a session's resource usage. A server already found to run neither Linux nor macOS is not asked again. */
 export function startStats(sessionId: string, now = Date.now()) {
   const current = useStatsStore.getState().bySession[sessionId];
   if (current?.state.kind === "unsupported") return;

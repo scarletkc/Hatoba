@@ -1,6 +1,6 @@
 # Dashboard
 
-**Dashboard** at the top of the sidebar shows the online status and resource usage of every saved host on one page, without opening a tab on each. It reads Linux servers over SSH, as the terminal's resource usage does (see `references/terminal.md`): nothing is installed on the server and no Hatoba server is involved. The readings stay in memory on this device; they are never stored or synced.
+**Dashboard** at the top of the sidebar shows the online status and resource usage of every saved host on one page, without opening a tab on each. It reads Linux and macOS servers over SSH, as the terminal's resource usage does (see `references/terminal.md`): nothing is installed on the server and no Hatoba server is involved. The readings stay in memory on this device; they are never stored or synced.
 
 Other labels: **No Group**, **Filesystems**.
 
@@ -13,7 +13,7 @@ Other labels: **No Group**, **Filesystems**.
 - A value over its threshold shows in red. The thresholds are in Settings → General (90% by default; **Off** turns one off).
 - A host that stops answering keeps its last readings, dimmed, with the time they were read.
 - Click a card or row (or Tab to its name and press Enter) for the host's detail: CPU and network over the last 3 minutes, memory and swap, the filesystems, the total traffic of the counted interfaces (since each came up, usually at boot), the load and uptime. **Open Terminal** brings the host's tab to the front or opens one. Right-click a card or row for the same and **Edit**, which returns to the dashboard.
-- The filesystems are those that store files, at most 32: not memory-backed or kernel ones, container layers, read-only images such as snap packages, or the files a container runtime mounts, and each disk and each ZFS pool once. They are read every fifth reading.
+- The filesystems are those that store files, at most 32: not memory-backed or kernel ones, container layers, read-only images such as snap packages, or the files a container runtime mounts, and each disk, each ZFS pool and each APFS container once. On macOS they are `/` and the filesystems Finder shows, without read-only ones. They are read every fifth reading.
 
 ## How hosts are read
 
@@ -22,7 +22,7 @@ Other labels: **No Group**, **Filesystems**.
 - A host whose first hop (the host, or its outermost jump host) does not answer the online probe is shown **Offline** and is not signed in to until it answers; it is checked again every minute, or at once with **Retry** in its menu.
 - When a host's connection settings change (on another device, say), the dashboard connects again with the new ones and drops the readings made with the old ones.
 - **Opening a tab** or starting a forward on a host the dashboard is connected to takes over that connection: a tab opens its shell without signing in again, then sets the environment variables, and the forwards set to start with the connection start. Once no tab and no forward is left on it, the connection closes and the dashboard connects again.
-- Servers that do not run Linux show their online status only. The dashboard signs in once to find that out, and again only after the vault was locked or the host's connection settings changed.
+- Servers that run neither Linux nor macOS show their online status only. The dashboard signs in once to find that out, and again only after the vault was locked or the host's connection settings changed.
 
 Other labels: **Online**, **Waiting**, **Read over an open connection**, **Highlight CPU usage above**, **Highlight memory usage above**, **Highlight disk usage above**.
 
