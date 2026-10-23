@@ -311,8 +311,16 @@ mod tests {
         events: &mut mpsc::Receiver<PtyEvent>,
         needle: &str,
     ) -> (String, Option<Option<u32>>) {
+        output_within(events, needle, Duration::from_secs(20)).await
+    }
+
+    async fn output_within(
+        events: &mut mpsc::Receiver<PtyEvent>,
+        needle: &str,
+        wait: Duration,
+    ) -> (String, Option<Option<u32>>) {
         let mut text = String::new();
-        let deadline = Instant::now() + Duration::from_secs(20);
+        let deadline = Instant::now() + wait;
         loop {
             let Ok(event) = tokio::time::timeout_at(deadline, events.recv()).await else {
                 panic!("the shell did not answer in time; it printed {text:?}");
@@ -423,7 +431,10 @@ mod tests {
             };
             let (pty, mut events) = LocalPty::spawn(&shell, size(), &[], None).unwrap();
             pty.write(b"\x1b[1;1R".to_vec()).unwrap();
-            let (text, exited) = output_until(&mut events, "hatoba-ready").await;
+            // Windows PowerShell on a busy CI machine has stalled past 20 s before running the
+            // script; it reads each key after that in well under a second.
+            let (text, exited) =
+                output_within(&mut events, "hatoba-ready", Duration::from_secs(60)).await;
             assert!(
                 exited.is_none() && text.contains("hatoba-ready"),
                 "{}: {text}",
