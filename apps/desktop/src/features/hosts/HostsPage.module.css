@@ -195,6 +195,13 @@
   scrollbar-width: none;
 }
 
+/* A list item around each group's button, so the button stays a button to screen readers. */
+.groupItem {
+  display: flex;
+  flex: none;
+  min-width: 0;
+}
+
 .groupTile {
   display: inline-flex;
   align-items: center;

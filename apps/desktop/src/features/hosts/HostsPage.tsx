@@ -667,18 +667,18 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   const groupBar = group === null && groups.length > 0 && (
     <div className={s.groupBar} role="list" aria-label={t("sidebar.groups")}>
       {groups.map((g) => (
-        <button
-          key={g.id}
-          type="button"
-          role="listitem"
-          className={s.groupTile}
-          onClick={() => navigate({ kind: "hosts", group: g.id })}
-          onContextMenu={(e) => openGroupMenu(e, g)}
-        >
-          <Icon name="folder-simple" className={s.groupIcon} />
-          <span className={s.groupName}>{g.name}</span>
-          <span className={s.groupCount}>{hosts.filter((h) => h.group_id === g.id).length}</span>
-        </button>
+        <div key={g.id} role="listitem" className={s.groupItem}>
+          <button
+            type="button"
+            className={s.groupTile}
+            onClick={() => navigate({ kind: "hosts", group: g.id })}
+            onContextMenu={(e) => openGroupMenu(e, g)}
+          >
+            <Icon name="folder-simple" className={s.groupIcon} />
+            <span className={s.groupName}>{g.name}</span>
+            <span className={s.groupCount}>{hosts.filter((h) => h.group_id === g.id).length}</span>
+          </button>
+        </div>
       ))}
     </div>
   );
