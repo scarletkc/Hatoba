@@ -49,6 +49,7 @@
 .resizing,
 .resizing * {
   cursor: col-resize !important;
+  -webkit-user-select: none !important;
   user-select: none !important;
 }
 

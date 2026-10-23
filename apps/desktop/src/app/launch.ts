@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { launchAction } from "@/features/hosts/launchAction";
+import { useHostsUi } from "@/features/hosts/ui";
 import { connectHost, connectTarget } from "@/features/terminal/connect";
 import { api } from "@/ipc/api";
 import { useVaultData } from "./data";
@@ -18,6 +19,7 @@ function runLaunch(args: string[]) {
       break;
     case "search":
       useApp.getState().navigate({ kind: "hosts", group: null });
+      useHostsUi.getState().clearFilters();
       useTabs.getState().activate("home");
       useApp.getState().focusSearch(action.text);
       break;

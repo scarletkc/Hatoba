@@ -9,6 +9,7 @@ import { ForwardsPage } from "@/features/hosts/ForwardsPage";
 import { HostEditPage } from "@/features/hosts/HostEditPage";
 import { HostsPage } from "@/features/hosts/HostsPage";
 import { startForwardListeners } from "@/features/hosts/forwards";
+import { useHostsUi } from "@/features/hosts/ui";
 import { KeysPage } from "@/features/keys/KeysPage";
 import { Onboarding } from "@/features/onboarding/Onboarding";
 import { SettingsWindow } from "@/features/settings/SettingsWindow";
@@ -116,7 +117,10 @@ function Main() {
     switch (action) {
       case "search":
       case "newTab":
-        if (app.page.kind !== "hosts") app.navigate({ kind: "hosts", group: null });
+        if (app.page.kind !== "hosts") {
+          app.navigate({ kind: "hosts", group: null });
+          useHostsUi.getState().clearFilters();
+        }
         tabsState.activate("home");
         app.focusSearch();
         break;

@@ -498,6 +498,7 @@
 
 .lineBreak {
   color: var(--fg3);
+  -webkit-user-select: none;
   user-select: none;
 }
 

@@ -73,7 +73,7 @@ interface QuickRowItem {
  * Every saved host, or a group's (HOST-03), narrowed to favorites and tags, as a list or cards. With resource usage
  * on, the listed hosts are read in the background as the dashboard did (HOST-14).
  */
-export function HostsPage({ group }: { group: string | null }) {
+export function HostsPage({ group: requested }: { group: string | null }) {
   const t = useT();
   const platform = useApp((st) => st.info.platform);
   const hostProbe = useApp((st) => st.prefs.host_probe);
@@ -116,14 +116,15 @@ export function HostsPage({ group }: { group: string | null }) {
   const tagsMenu = useMenu();
   const tagsButton = useRef<HTMLButtonElement>(null);
   const columnsMenu = useMenu();
-  const columnsButton = useRef<HTMLButtonElement>(null);
   const importMenu = useMenu();
   const importButton = useRef<HTMLButtonElement>(null);
   const newMenu = useMenu();
   const newMenuButton = useRef<HTMLButtonElement>(null);
 
   const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
-  const scope = group ? groupMap.get(group) : undefined;
+  const scope = requested ? groupMap.get(requested) : undefined;
+  // A group that sync or another window deleted leaves every host.
+  const group = scope ? requested : null;
   const title = scope?.name ?? t("hosts.title");
   // Tags no host has any more drop out of the filter.
   const activeTags = useMemo(() => pickedTags.filter((tag) => tagList.some((x) => x.name === tag)), [pickedTags, tagList]);
@@ -723,20 +724,6 @@ export function HostsPage({ group }: { group: string | null }) {
       >
         {sortLabel(shownSort)}
       </Button>
-      {stats && view === "list" && (
-        <Button
-          ref={columnsButton}
-          size="sm"
-          icon="columns"
-          title={t("dashboard.columns")}
-          aria-label={t("dashboard.columns")}
-          aria-haspopup="menu"
-          aria-expanded={!!columnsMenu.anchor}
-          onClick={() => columnsButton.current && columnsMenu.openBelow(columnsButton.current, true)}
-        >
-          {t("dashboard.columns")}
-        </Button>
-      )}
       <label className={s.statsSwitch} title={t("hosts.stats.hint")}>
         <Switch checked={stats} label={t("hosts.stats")} onChange={(hosts_stats) => savePrefs({ hosts_stats })} />
         <span>{t("hosts.stats")}</span>
@@ -843,7 +830,13 @@ export function HostsPage({ group }: { group: string | null }) {
       <div ref={listRef} className={s.scroll} tabIndex={0} role="listbox" aria-label={title}>
         {view === "list" &&
           (stats ? (
-            <StatsHead columns={columns} t={t} measure={measureTable} />
+            <StatsHead
+              columns={columns}
+              t={t}
+              measure={measureTable}
+              columnsOpen={!!columnsMenu.anchor}
+              onColumns={(anchor) => columnsMenu.openBelow(anchor, true)}
+            />
           ) : (
             <div className={cx(layoutStyles.tableHead, s.cols, s.head)}>
               <span className={s.headName}>{t("hosts.col.name")}</span>

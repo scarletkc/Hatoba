@@ -360,14 +360,29 @@ export function useWidth(): [RefCallback<HTMLElement>, number | null] {
   return [ref, width];
 }
 
-export function StatsHead({ columns, t, measure }: { columns: DashboardColumn[]; t: T; measure: RefCallback<HTMLElement> }) {
+/** The table's head, with **Columns** in the place of Connect, so turning resource usage on moves nothing above the table. */
+export function StatsHead({
+  columns,
+  t,
+  measure,
+  columnsOpen,
+  onColumns,
+}: {
+  columns: DashboardColumn[];
+  t: T;
+  measure: RefCallback<HTMLElement>;
+  columnsOpen: boolean;
+  onColumns(anchor: HTMLElement): void;
+}) {
   return (
     <div ref={measure} className={cx(s.tableHead, s.grid)} style={gridOf(columns)}>
       <span className={s.headName}>{t("dashboard.col.name")}</span>
       {columns.map((c) => (
         <span key={c}>{t(`dashboard.col.${c}` as MessageKey)}</span>
       ))}
-      <span />
+      <span className={s.action}>
+        <IconButton small icon="columns" label={t("dashboard.columns")} aria-haspopup="menu" aria-expanded={columnsOpen} onClick={(e) => onColumns(e.currentTarget)} />
+      </span>
     </div>
   );
 }

@@ -304,7 +304,7 @@
 
 .fav {
   font-size: var(--icon-12);
-  color: var(--fg3);
+  color: var(--orange);
   flex: none;
 }
 

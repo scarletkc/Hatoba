@@ -13,7 +13,7 @@ export function GroupDialog({ group, count, onClose }: { group: GroupView | null
   const [name, setName] = useState(group?.name ?? "");
   const [busy, setBusy] = useState(false);
   const save = async () => {
-    if (!name.trim()) return;
+    if (busy || !name.trim()) return;
     setBusy(true);
     try {
       await api.group_save({ id: group?.id ?? null, name: name.trim(), parent_id: group?.parent_id ?? null, sort: group?.sort ?? count });
