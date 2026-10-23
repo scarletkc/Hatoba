@@ -1,10 +1,9 @@
-import { memo, useCallback, useState, type CSSProperties, type MouseEvent, type RefCallback } from "react";
-import { Button, Icon, IconButton, Spinner } from "@/components/controls";
+import { memo, useCallback, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefCallback } from "react";
+import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
 import { Tag } from "@/components/layout";
 import { Card, Chip } from "@/components/patterns";
 import { OsIcon } from "@/features/hosts/OsIcon";
 import { formatLoad, formatPercent, formatRate, formatUptime, type StatsReading } from "@/features/terminal/stats";
-import { connectHost } from "@/features/terminal/connect";
 import { formatBytes, formatMessageTime, useT, type MessageKey } from "@/i18n";
 import type { GroupView, HostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
@@ -24,7 +23,7 @@ import {
   type DashboardColumn,
 } from "./logic";
 import type { HostReadout } from "./readings";
-import { statusColor, statusText } from "./status";
+import { statusColor, statusParts, statusText } from "./status";
 import s from "./views.module.css";
 
 type T = ReturnType<typeof useT>;
@@ -67,42 +66,29 @@ export function canRetry(readout: HostReadout | undefined): boolean {
   return readout?.phase === "failed" || (readout?.phase === "held" && readout.hold !== "password");
 }
 
-/** **Connect** for a host that needs the user, **Retry** for one that failed or is held; icons in a table row. */
-function StatusActions({ host, readout, t, compact }: { host: HostView; readout: HostReadout | undefined; t: T; compact?: boolean }) {
-  const held = readout?.phase === "held";
-  const retry = canRetry(readout);
-  if (!retry && !held) return null;
+/** **Retry** as an icon in a table row, for a host that failed or is held. */
+function RetryIcon({ host, readout, t }: { host: HostView; readout: HostReadout | undefined; t: T }) {
+  if (!canRetry(readout)) return null;
   return (
     <span className={s.actions} onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-      {held &&
-        (compact ? (
-          <IconButton icon="plugs-connected" label={t("hosts.connect")} onClick={() => void connectHost(host.id)} />
-        ) : (
-          <Button size="xs" variant="primary" onClick={() => void connectHost(host.id)}>
-            {t("hosts.connect")}
-          </Button>
-        ))}
-      {retry &&
-        (compact ? (
-          <IconButton icon="arrow-clockwise" label={t("btn.retry")} onClick={() => retryHost(host.id)} />
-        ) : (
-          <Button size="xs" onClick={() => retryHost(host.id)}>
-            {t("btn.retry")}
-          </Button>
-        ))}
+      <IconButton icon="arrow-clockwise" label={t("btn.retry")} onClick={() => retryHost(host.id)} />
     </span>
   );
 }
 
-/** **Watch Resource Usage**, or the group's, for a host that is left out. */
-function IncludeButton({ host, groups, t }: { host: HostView; groups: ReadonlyMap<string, GroupView>; t: T }) {
-  const toggle = dashboardSwitch(host, groups);
+/** A text button on a card, which neither selects nor connects the card. */
+function CardLink({ label, onClick }: { label: string; onClick(): void }) {
   return (
-    <span className={s.actions} onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-      <Button size="xs" onClick={toggle.run}>
-        {t(toggle.key)}
-      </Button>
-    </span>
+    <LinkButton
+      className={s.cardLink}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
+    >
+      {label}
+    </LinkButton>
   );
 }
 
@@ -113,14 +99,17 @@ function statusLine(t: T, readout: HostReadout | undefined, reading: StatsReadin
   return { ...status, full: read ? `${status.text} · ${read}` : status.text };
 }
 
-/** The Connect button a row or card shows under the pointer or while selected. */
-function ConnectButton({ id, view, className }: { id: string; view: View; className: string }) {
+/**
+ * The Connect button a row or card shows under the pointer or while selected, and always while the host needs the
+ * user to sign in.
+ */
+function ConnectButton({ id, view, shown, className }: { id: string; view: View; shown: boolean; className: string }) {
   return (
     <Button
       size="xs"
       variant="primary"
       tabIndex={-1}
-      className={className}
+      className={cx(className, shown && s.connectShown)}
       onClick={(e) => {
         e.stopPropagation();
         view.onConnect(id);
@@ -131,25 +120,19 @@ function ConnectButton({ id, view, className }: { id: string; view: View; classN
   );
 }
 
-// ───────────────────────── Cards ─────────────────────────
+/** The root filesystem, or the fullest one once it is past the threshold. */
+function shownDisk(reading: StatsReading | undefined, threshold: number): { mount: string; percent: number | null } {
+  const fullest = fullestMount(reading);
+  return fullest && pastThreshold(fullest.percent, threshold) ? fullest : { mount: "/", percent: rootPercent(reading) };
+}
 
-/** A labelled meter that turns red past its threshold. */
-function Meter({ label, sub, percent, alert, alertLabel }: { label: string; sub?: string; percent: number | null; alert: boolean; alertLabel: string }) {
-  return (
-    <div className={cx(s.meterRow, alert && s.alert)} title={alert ? alertLabel : undefined}>
-      <span className={s.meterLabel}>
-        {label}
-        {sub && <span className={s.meterSub}>{sub}</span>}
-      </span>
-      <span className={s.meter} role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent == null ? undefined : Math.round(percent)}>
-        <span className={s.meterFill} style={{ width: `${percent ?? 0}%` }} />
-      </span>
-      <span className={s.meterValue}>
-        {alert && <Icon name="warning" fill />}
-        {percent == null ? "—" : formatPercent(percent)}
-      </span>
-    </div>
-  );
+/** Every filesystem, for the disk's tooltip. */
+function mountsTitle(r: StatsReading): string {
+  const lines = r.mounts.map((m) => {
+    const p = mountPercent(m);
+    return `${m.mount_point}  ${p == null ? "—" : formatPercent(p)}  (${formatBytes(m.used)} / ${formatBytes(m.total)})`;
+  });
+  return lines.join("\n");
 }
 
 function rates(r: StatsReading): string | null {
@@ -157,44 +140,123 @@ function rates(r: StatsReading): string | null {
   return `↓ ${r.net_rx_rate != null ? formatRate(r.net_rx_rate) : "—"} ↑ ${r.net_tx_rate != null ? formatRate(r.net_tx_rate) : "—"}`;
 }
 
-/** CPU, memory and the root filesystem as meters, then the rates, load and uptime. */
-function Readings({ reading, alerts, t }: { reading: StatsReading; alerts: Alerts; t: T }) {
+// ───────────────────────── Cards ─────────────────────────
+
+/** A labelled meter that turns red past its threshold: a row of the meters' grid. */
+function Meter({ label, sub, percent, alert, title }: { label: string; sub?: string; percent: number | null; alert: boolean; title?: string }) {
+  return (
+    <>
+      <span className={s.meterLabel} title={title}>
+        {label}
+        {sub && <span className={s.meterSub}>{sub}</span>}
+      </span>
+      <span
+        className={cx(s.meter, alert && s.alert)}
+        title={title}
+        role="meter"
+        aria-label={sub ? `${label} ${sub}` : label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent == null ? undefined : Math.round(percent)}
+      >
+        <span className={s.meterFill} style={{ width: `${percent ?? 0}%` }} />
+      </span>
+      <span className={cx(s.meterValue, alert && s.alert)} title={title}>
+        {alert && <Icon name="warning" fill />}
+        {percent == null ? "—" : formatPercent(percent)}
+      </span>
+    </>
+  );
+}
+
+/** CPU, memory, and the disk the table shows, as meters. */
+function Meters({ reading, alerts, t }: { reading: StatsReading; alerts: Alerts; t: T }) {
   const mem = memPercent(reading);
-  const root = rootPercent(reading);
-  // Every other filesystem over the threshold, beside the root filesystem's bar.
-  const overs = reading.mounts
-    .filter((m) => m.mount_point !== "/")
-    .map((m) => ({ mount: m.mount_point, percent: mountPercent(m) }))
-    .filter((m) => pastThreshold(m.percent, alerts.disk));
+  const disk = shownDisk(reading, alerts.disk);
+  const over = (n: number) => t("dashboard.alert", { n });
+  return (
+    <div className={s.meters}>
+      <Meter
+        label={t("terminal.stats.cpu")}
+        percent={reading.cpu_percent}
+        alert={pastThreshold(reading.cpu_percent, alerts.cpu)}
+        title={pastThreshold(reading.cpu_percent, alerts.cpu) ? over(alerts.cpu) : undefined}
+      />
+      <Meter label={t("terminal.stats.mem")} percent={mem} alert={pastThreshold(mem, alerts.mem)} title={pastThreshold(mem, alerts.mem) ? over(alerts.mem) : undefined} />
+      <Meter
+        label={t("terminal.stats.disk")}
+        sub={disk.mount}
+        percent={disk.percent}
+        alert={pastThreshold(disk.percent, alerts.disk)}
+        title={mountsTitle(reading) || undefined}
+      />
+    </div>
+  );
+}
+
+/** Under the meters: the rates, then the load and uptime. */
+function DetailLines({ reading, t }: { reading: StatsReading; t: T }) {
   const load = formatLoad(reading.load);
-  const net = rates(reading);
   const details = [
     load ? t("terminal.stats.load", { load }) : null,
     reading.uptime_secs != null ? t("terminal.stats.uptime", { time: formatUptime(t.locale, reading.uptime_secs) }) : null,
   ].filter(Boolean);
   return (
-    <div className={s.readings}>
-      <Meter
-        label={t("terminal.stats.cpu")}
-        percent={reading.cpu_percent}
-        alert={pastThreshold(reading.cpu_percent, alerts.cpu)}
-        alertLabel={t("dashboard.alert", { n: alerts.cpu })}
-      />
-      <Meter label={t("terminal.stats.mem")} percent={mem} alert={pastThreshold(mem, alerts.mem)} alertLabel={t("dashboard.alert", { n: alerts.mem })} />
-      <Meter
-        label={t("terminal.stats.disk")}
-        sub="/"
-        percent={root}
-        alert={pastThreshold(root, alerts.disk)}
-        alertLabel={t("dashboard.alert", { n: alerts.disk })}
-      />
-      {overs.length > 0 && (
-        <div className={cx(s.detail, s.alertText)} title={overs.map((m) => `${m.mount} ${formatPercent(m.percent!)}`).join("\n")}>
-          <Icon name="warning" fill /> {overs.map((m) => `${m.mount} ${formatPercent(m.percent!)}`).join(" · ")}
+    <>
+      <div className={s.line}>
+        <span className={s.lineText}>{rates(reading)}</span>
+      </div>
+      <div className={s.line}>
+        <span className={s.lineText}>{details.join(" · ")}</span>
+      </div>
+    </>
+  );
+}
+
+/** Under readings from before the host stopped answering: what happened, then when they were read, and Retry. */
+function StaleLines({ host, readout, reading, t, now }: { host: HostView; readout: HostReadout | undefined; reading: StatsReading; t: T; now: number }) {
+  const status = statusText(t, readout);
+  const { icon } = statusParts(t, readout);
+  return (
+    <>
+      <div className={cx(s.line, s[status.tone])} title={status.text}>
+        {readout?.phase === "connecting" ? <Spinner size={10} /> : icon && <Icon name={icon} />}
+        <span className={s.lineText}>{status.text}</span>
+      </div>
+      <div className={s.line}>
+        <span className={s.lineText}>{t("dashboard.readAt", { time: formatMessageTime(t.locale, reading.at, now) })}</span>
+        {canRetry(readout) && <CardLink label={t("btn.retry")} onClick={() => retryHost(host.id)} />}
+      </div>
+    </>
+  );
+}
+
+/** The readings' place on a card without readings: what stands in their way, its reason, and what to do. */
+function CardState({
+  icon,
+  title,
+  detail,
+  tone,
+  action,
+}: {
+  icon: string | null;
+  title: string;
+  detail?: string | null;
+  tone: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className={s.state}>
+      {icon ? <Icon name={icon} className={cx(s.stateIcon, s[tone])} /> : <Spinner size={16} />}
+      <div className={cx(s.stateTitle, s[tone])} title={title}>
+        {title}
+      </div>
+      {detail && (
+        <div className={s.stateDetail} title={detail}>
+          {detail}
         </div>
       )}
-      {net && <div className={s.detail}>{net}</div>}
-      {details.length > 0 && <div className={s.detail}>{details.join(" · ")}</div>}
+      {action}
     </div>
   );
 }
@@ -210,13 +272,35 @@ interface ItemProps {
   view: View;
 }
 
-/** A host as a card: its readings while resource usage shows, else when it last connected. */
+/**
+ * A host as a card: its readings while resource usage shows, else when it last connected. Every card has the same
+ * parts at the same heights, whatever the host's state, so the cards of a row line up.
+ */
 export const HostCard = memo(function HostCard({ host, selected, readout, leftOut, list, view }: ItemProps) {
   const { t, now, interval, alerts, stats } = view;
-  const reading = stats && !leftOut ? latestReading(readout) : undefined;
-  const stale = stats && !leftOut && isStale(readout, now, interval);
-  const status = statusLine(t, readout, reading, stale, now);
+  const read = stats && !leftOut;
+  const reading = read ? latestReading(readout) : undefined;
+  const stale = read && isStale(readout, now, interval);
   const target = `${host.username ? `${host.username}@` : ""}${host.address}:${host.port}`;
+  const body = () => {
+    if (leftOut) {
+      const include = dashboardSwitch(host, view.groups);
+      return <CardState icon="eye-slash" title={t("dashboard.leftOutBadge")} tone="dim" action={<CardLink label={t(include.key)} onClick={include.run} />} />;
+    }
+    if (reading) {
+      return (
+        <>
+          <div className={cx(stale && s.stale)}>
+            <Meters reading={reading} alerts={alerts} t={t} />
+          </div>
+          {stale ? <StaleLines host={host} readout={readout} reading={reading} t={t} now={now} /> : <DetailLines reading={reading} t={t} />}
+        </>
+      );
+    }
+    const status = statusParts(t, readout);
+    const retry = canRetry(readout) ? <CardLink label={t("btn.retry")} onClick={() => retryHost(host.id)} /> : undefined;
+    return <CardState {...status} action={retry} />;
+  };
   return (
     <Card
       interactive
@@ -232,41 +316,15 @@ export const HostCard = memo(function HostCard({ host, selected, readout, leftOu
         <OsIcon os={(stats && readout?.os) || host.os} badge={stats ? statusColor(readout, !!leftOut) : list.dot} />
         <span className={s.name}>{host.name}</span>
         {host.favorite && <Icon name="star" fill className={s.fav} />}
-        <ConnectButton id={host.id} view={view} className={s.connect} />
+        <ConnectButton id={host.id} view={view} shown={read && readout?.phase === "held"} className={s.connect} />
       </div>
       <div className={s.target}>{target}</div>
-      {host.tags.length > 0 && (
-        <div className={s.tags}>
-          {host.tags.map((tag) => (
-            <Tag key={tag} name={tag} />
-          ))}
-        </div>
-      )}
-      {!stats ? (
-        <div className={cx(s.status, s.cardLast, list.failed && s.error)}>{list.last}</div>
-      ) : leftOut ? (
-        <div className={s.status}>
-          <Chip>{t("dashboard.leftOutBadge")}</Chip>
-          <IncludeButton host={host} groups={view.groups} t={t} />
-        </div>
-      ) : (
-        <>
-          {reading && (
-            <div className={cx(stale && s.stale)}>
-              <Readings reading={reading} alerts={alerts} t={t} />
-            </div>
-          )}
-          {(!reading || stale) && (
-            <div className={s.status}>
-              {readout?.phase === "connecting" && <Spinner size={12} />}
-              <span className={cx(s.statusText, s[status.tone])} title={status.full}>
-                {status.full}
-              </span>
-              <StatusActions host={host} readout={readout} t={t} />
-            </div>
-          )}
-        </>
-      )}
+      <div className={s.tags} title={host.tags.join(", ") || undefined}>
+        {host.tags.map((tag) => (
+          <Tag key={tag} name={tag} />
+        ))}
+      </div>
+      {stats ? <div className={s.body}>{body()}</div> : <div className={cx(s.cardLast, list.failed && s.error)}>{list.last}</div>}
     </Card>
   );
 });
@@ -327,15 +385,6 @@ function MiniMeter({ percent, alert, title }: { percent: number | null; alert: b
   );
 }
 
-/** Every filesystem, for the disk cell's tooltip. */
-function mountsTitle(r: StatsReading): string {
-  const lines = r.mounts.map((m) => {
-    const p = mountPercent(m);
-    return `${m.mount_point}  ${p == null ? "—" : formatPercent(p)}  (${formatBytes(m.used)} / ${formatBytes(m.total)})`;
-  });
-  return lines.join("\n");
-}
-
 /** A host's row with its readings, a column per value. */
 export const StatsRow = memo(function StatsRow({ host, selected, readout, leftOut, columns, view }: Omit<ItemProps, "list"> & { columns: DashboardColumn[] }) {
   const { t, now, interval, alerts } = view;
@@ -351,7 +400,7 @@ export const StatsRow = memo(function StatsRow({ host, selected, readout, leftOu
             <span className={cx(s.statusText, s[status.tone])} title={status.full}>
               {status.full}
             </span>
-            <StatusActions host={host} readout={readout} t={t} compact />
+            <RetryIcon host={host} readout={readout} t={t} />
           </span>
         );
       case "cpu":
@@ -361,13 +410,11 @@ export const StatsRow = memo(function StatsRow({ host, selected, readout, leftOu
         return <MiniMeter percent={p} alert={pastThreshold(p, alerts.mem)} />;
       }
       case "disk": {
-        const fullest = fullestMount(reading);
-        // The root filesystem, or the fullest one once it is past the threshold.
-        const shownMount = fullest && pastThreshold(fullest.percent, alerts.disk) ? fullest : { mount: "/", percent: rootPercent(reading) };
+        const disk = shownDisk(reading, alerts.disk);
         return (
           <MiniMeter
-            percent={shownMount.percent}
-            alert={pastThreshold(shownMount.percent, alerts.disk)}
+            percent={disk.percent}
+            alert={pastThreshold(disk.percent, alerts.disk)}
             title={reading ? mountsTitle(reading) || undefined : undefined}
           />
         );
@@ -402,7 +449,7 @@ export const StatsRow = memo(function StatsRow({ host, selected, readout, leftOu
         </span>
       ))}
       <span className={s.action}>
-        <ConnectButton id={host.id} view={view} className={s.connect} />
+        <ConnectButton id={host.id} view={view} shown={!leftOut && readout?.phase === "held"} className={s.connect} />
       </span>
     </div>
   );

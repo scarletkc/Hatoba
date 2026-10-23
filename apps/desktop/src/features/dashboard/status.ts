@@ -21,8 +21,10 @@ export function statusColor(readout: HostReadout | undefined, leftOut: boolean):
   }
 }
 
+type Tone = "normal" | "warn" | "error" | "dim";
+
 /** What the host's status says in words, and whether it is a problem. */
-export function statusText(t: T, readout: HostReadout | undefined): { text: string; tone: "normal" | "warn" | "error" | "dim" } {
+export function statusText(t: T, readout: HostReadout | undefined): { text: string; tone: Tone } {
   const r = readout;
   switch (r?.phase ?? "waiting") {
     case "waiting":
@@ -45,5 +47,36 @@ export function statusText(t: T, readout: HostReadout | undefined): { text: stri
     }
     case "failed":
       return { text: t("dashboard.failed", { error: r?.error ? errorMessage(t, r.error) : "" }), tone: "error" };
+  }
+}
+
+/**
+ * The status as a card shows it in place of readings: an icon (none while connecting, which spins), a short
+ * title, and the reason apart from it.
+ */
+export function statusParts(t: T, readout: HostReadout | undefined): { icon: string | null; title: string; detail: string | null; tone: Tone } {
+  const r = readout;
+  const reason = r?.error ? errorMessage(t, r.error) : null;
+  switch (r?.phase ?? "waiting") {
+    case "connecting":
+      return { icon: null, title: t("dashboard.state.connecting"), detail: null, tone: "dim" };
+    case "offline":
+      return { icon: "cloud-slash", title: t("dashboard.state.offline"), detail: null, tone: "dim" };
+    case "unsupported":
+      return { icon: "info", title: statusText(t, r).text, detail: null, tone: "dim" };
+    case "held": {
+      const hold = r!.hold ?? "sign_in_failed";
+      return {
+        icon: hold.startsWith("host_key") ? "fingerprint" : "lock-key",
+        title: t(`dashboard.hold.${hold}` as MessageKey),
+        detail: reason,
+        tone: "warn",
+      };
+    }
+    case "failed":
+      return { icon: "warning-circle", title: t("dashboard.state.failed"), detail: reason, tone: "error" };
+    default:
+      // Waiting, or connected before the first reading.
+      return { icon: "hourglass-medium", title: statusText(t, r).text, detail: null, tone: "dim" };
   }
 }

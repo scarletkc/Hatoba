@@ -26,7 +26,7 @@
   text-overflow: ellipsis;
 }
 
-/* Connect shows on the card or row under the pointer, or the selected one. */
+/* Connect shows on the card or row under the pointer, the selected one, and one whose host needs the user. */
 .connect {
   flex: none;
   margin-left: auto;
@@ -36,7 +36,8 @@
 .card:hover .connect,
 .cardSel .connect,
 .row:hover .connect,
-.rowSel .connect {
+.rowSel .connect,
+.connectShown {
   opacity: 1;
 }
 
@@ -70,17 +71,29 @@
   text-overflow: ellipsis;
 }
 
+/* One line of tags, kept when there are none; the ones that don't fit fade out at the edge, and all show on hover. */
 .tags {
   display: flex;
-  flex-wrap: wrap;
   gap: var(--space-4);
+  height: 20px;
   min-width: 0;
+  overflow: hidden;
+  mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
 }
 
-.readings {
+.tags > * {
+  flex: none;
+}
+
+/* The readings' place: three meters and two lines tall in every state, so the cards of a row line up and a
+   host keeps its card's size as its state changes. */
+.body {
+  --meter-line: calc(var(--text-sm) * 1.5);
+  --body-line: calc(var(--text-xs) * 1.5);
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
+  height: calc(3 * var(--meter-line) + 2 * var(--body-line) + 4 * var(--space-6));
   margin-top: 4px;
 }
 
@@ -89,15 +102,20 @@
   opacity: 0.45;
 }
 
-.meterRow {
+/* A grid of label, meter, and value, a row each, the labels as wide as the longest. */
+.meters {
   display: grid;
-  grid-template-columns: 62px minmax(0, 1fr) 46px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-auto-rows: var(--meter-line);
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--space-6) var(--space-8);
   font-size: var(--text-sm);
+  line-height: 1.5;
 }
 
 .meterLabel {
+  min-width: 40px;
+  max-width: 120px;
   color: var(--fg2);
   white-space: nowrap;
   overflow: hidden;
@@ -132,6 +150,7 @@
 }
 
 .meterValue {
+  min-width: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
@@ -149,30 +168,82 @@
   color: var(--red);
 }
 
-.alert .meter {
+.alert .meter,
+.meter.alert {
   --meter: var(--red);
 }
 
-.detail {
+/* A line under the meters. */
+.line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: var(--body-line);
+  min-width: 0;
   font-size: var(--text-xs);
+  line-height: 1.5;
   color: var(--fg2);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.line i {
+  flex: none;
+  font-size: var(--icon-12);
+}
+
+.lineText {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.detail.alertText {
-  color: var(--red);
+.cardLink {
+  flex: none;
+  margin-left: auto;
+  font-size: var(--text-xs);
 }
 
-.status {
+/* In place of readings: the state centered in the readings' place, its reason in at most two lines. */
+.state {
   display: flex;
+  flex: 1;
+  flex-direction: column;
   align-items: center;
-  gap: var(--space-6);
-  min-height: 24px;
-  margin-top: 2px;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 0;
+  text-align: center;
   font-size: var(--text-sm);
+  color: var(--fg2);
+}
+
+.stateIcon {
+  margin-bottom: 4px;
+  font-size: var(--icon-20);
+}
+
+.stateTitle {
+  max-width: 100%;
+  overflow: hidden;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.stateDetail {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.state .cardLink {
+  margin: 4px 0 0;
 }
 
 .statusText {

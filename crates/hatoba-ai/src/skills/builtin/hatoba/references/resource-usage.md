@@ -7,8 +7,9 @@ Other labels: **Filesystems**.
 ## On the hosts page
 
 - It reads the hosts the page lists: every host, or a group's, narrowed by **Favorites** and **Tags**. The search box does not change which hosts are read. The switch is kept on this device.
-- In **Cards**, a card shows the name, `user@address:port`, tags, the OS icon with a status badge, and CPU, memory and the root filesystem as bars, then the network rates, the load averages and the uptime. Every other filesystem over the disk threshold is named under the bars.
-- In **List**, a row has the status, CPU, memory, disk, network, load and uptime. **Columns** turns each of them on or off; a narrow window drops the last ones. Pointing at the disk cell lists the filesystems.
+- In **Cards**, a card shows the name, `user@address:port`, tags, the OS icon with a status badge, and CPU, memory and disk as bars, then the network rates, the load averages and the uptime. A host without readings shows its status in their place, with the reason and **Retry**.
+- In **List**, a row has the status, CPU, memory, disk, network, load and uptime. **Columns** turns each of them on or off; a narrow window drops the last ones.
+- Disk is the root filesystem, or the fullest one once it is over the disk threshold. Pointing at it lists the filesystems.
 - The sort order adds status (problems first), CPU, memory, disk (the fullest filesystem), network and uptime. Values sort highest first. A search keeps its own order.
 - A value over its threshold shows in red. The thresholds are in Settings → General (90% by default; **Off** turns one off).
 - A host that stops answering keeps its last readings, dimmed, with the time they were read.
