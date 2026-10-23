@@ -1284,9 +1284,11 @@ pub struct AiSettings {
     pub text_size: u32,
 }
 
-/// The AI panel's text sizes (TERM-13), in px.
+/// The smallest [`AiSettings::text_size`], in px (TERM-13).
 pub const AI_TEXT_SIZE_MIN: u32 = 11;
+/// The largest [`AiSettings::text_size`], in px.
 pub const AI_TEXT_SIZE_MAX: u32 = 24;
+/// The [`AiSettings::text_size`] of settings that have none: the panel's design size, in px.
 pub const AI_TEXT_SIZE_DEFAULT: u32 = 13;
 
 /// The longest [`AiSettings::custom_instructions`], in bytes of UTF-8 (AI-36). Plain text this long
