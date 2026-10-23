@@ -131,6 +131,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | en | zh-CN |
 |---|---|
 | Window and Notifications | 窗口与通知 |
+| Notifications | 通知 |
 | Command Line | 命令行 |
 | Host Monitoring | 主机监控 |
 | Language | 语言 |

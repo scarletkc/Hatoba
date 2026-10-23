@@ -61,7 +61,8 @@ export function GeneralPane() {
         <LanguageRow />
       </Group>
 
-      <Section title={t("settings.section.window")}>
+      {/* macOS has no close-button row, which leaves the notifications. */}
+      <Section title={t(platform === "macos" ? "settings.section.notifications" : "settings.section.window")}>
         {/* WIN-10: macOS's close button hides the window (MAC-06). */}
         {platform !== "macos" && (
           <SettingRow label={t("settings.closeAction")} hint={t("settings.closeAction.hint")}>

@@ -131,6 +131,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | en | ja |
 |---|---|
 | Window and Notifications | ウィンドウと通知 |
+| Notifications | 通知 |
 | Command Line | コマンドライン |
 | Host Monitoring | ホストの監視 |
 | Language | 言語 |

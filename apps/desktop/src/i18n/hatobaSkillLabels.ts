@@ -260,7 +260,7 @@ export const AREAS: Area[] = [
           "settings.tab.proxies", "settings.tab.security", "aiSettings.tab", "settings.tab.about",
         ],
         "General": [
-          "settings.section.window", "settings.section.cli", "settings.section.monitoring", "settings.language", "settings.language.system", "settings.language.zh", "settings.language.en",
+          "settings.section.window", "settings.section.notifications", "settings.section.cli", "settings.section.monitoring", "settings.language", "settings.language.system", "settings.language.zh", "settings.language.en",
           "settings.language.ja", "settings.probe", "settings.closeAction", "settings.closeAction.ask", "settings.closeAction.tray",
           "settings.closeAction.quit", "settings.aiNotifications", "settings.cli", "settings.cliAccess",
           "settings.cliAccess.activity", "settings.cliAccess.activity.details", "dashboard.settings.interval", "settings.backup", "settings.backup.button",

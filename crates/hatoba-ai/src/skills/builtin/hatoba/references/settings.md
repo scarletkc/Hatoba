@@ -4,7 +4,7 @@ Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS)
 
 ## General
 
-Language comes first, then three sections: **Window and Notifications**, **Command Line** and **Host Monitoring**. **Export Encrypted Backup** is last.
+Language comes first, then three sections: **Window and Notifications** (**Notifications** on macOS), **Command Line** and **Host Monitoring**. **Export Encrypted Backup** is last.
 
 - **Language**: **System Default** (the system language if it is Chinese, Japanese or English, otherwise English), **简体中文**, **English** or **日本語**. It takes effect immediately. Host names, commands and terminal output are never translated.
 - **Close Button** (Windows and Linux only): what the window's close button, Alt+F4 and the taskbar's Close do. **Ask every time** (default) asks whether to minimize Hatoba to the system tray or quit, and the question's **Remember my choice** sets this row. **Minimize to tray** hides the window while SSH sessions, port forwards and sync keep running; the tray icon brings it back. **Quit Hatoba** quits. Without a tray, on a Linux desktop with no StatusNotifier host such as GNOME without an extension, closing always quits. macOS has no such row: its red button hides the window, the Dock icon brings it back, and ⌘Q quits.

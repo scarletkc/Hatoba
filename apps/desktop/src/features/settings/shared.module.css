@@ -4,6 +4,11 @@
   gap: var(--space-12);
 }
 
+/* A section title sits closer to its own rows than to the group above it. */
+.pane > section:not(:first-child) {
+  margin-top: var(--space-8);
+}
+
 .row {
   display: flex;
   align-items: center;
