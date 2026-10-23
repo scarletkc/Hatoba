@@ -891,9 +891,11 @@ export interface LocalPrefs {
   lock_disconnects_sessions: boolean;
   /** SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it. */
   clipboard_clear_secs: number;
-  /** HOST-14: the dashboard shows cards or a table. */
-  dashboard_layout: "cards" | "table";
-  /** HOST-14: the table columns turned off. */
+  /** HOST-05: the hosts page lists the hosts or shows them as cards. */
+  hosts_view: "list" | "cards";
+  /** HOST-14: the hosts page shows resource usage, which reads the listed hosts in the background. */
+  hosts_stats: boolean;
+  /** HOST-14: the resource usage columns turned off. */
   dashboard_hidden_columns: string[];
   /** HOST-14: seconds between readings, 1 to 60. */
   dashboard_interval_secs: number;

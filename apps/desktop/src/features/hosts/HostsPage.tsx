@@ -28,7 +28,7 @@ import { connectHost, connectTarget } from "@/features/terminal/connect";
 import { useDocumentVisible } from "@/features/terminal/stats";
 import { formatRelative, useT, type Locale, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { GroupView, HostView, ImportSource, QuickTarget } from "@/ipc/types";
+import type { GroupView, HostView, ImportSource, LocalPrefs, QuickTarget } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { copyText } from "@/lib/native";
@@ -48,7 +48,7 @@ import {
 import { applyFilter, sortHosts } from "./order";
 import { useRecentTargets } from "./recent";
 import { buildHostIndex, searchHosts } from "./search";
-import { LIST_SORTS, STATS_SORTS, isListSort, useHostsUi, type HostSort, type HostsView, type ListSort } from "./ui";
+import { LIST_SORTS, STATS_SORTS, isListSort, useHostsUi, type HostSort, type ListSort } from "./ui";
 import s from "./HostsPage.module.css";
 
 const PROBE_INTERVAL_MS = 60_000;
@@ -85,7 +85,9 @@ export function HostsPage({ group }: { group: string | null }) {
   const tagList = useVaultData((st) => st.tags);
   const tabs = useTabs((st) => st.tabs);
   const recents = useRecentTargets((st) => st.targets);
-  const { selectedId, sort, favorites, tags: pickedTags, view, stats, select, setSort, setFavorites, setTags, setView, setStats } = useHostsUi();
+  const { selectedId, sort, favorites, tags: pickedTags, select, setSort, setFavorites, setTags } = useHostsUi();
+  const view = prefs.hosts_view;
+  const stats = prefs.hosts_stats;
   const readouts = useReadoutMap();
   const docVisible = useDocumentVisible();
 
@@ -714,10 +716,10 @@ export function HostsPage({ group }: { group: string | null }) {
         </Button>
       )}
       <label className={s.statsSwitch} title={t("hosts.stats.hint")}>
-        <Switch checked={stats} label={t("hosts.stats")} onChange={setStats} />
+        <Switch checked={stats} label={t("hosts.stats")} onChange={(hosts_stats) => savePrefs({ hosts_stats })} />
         <span>{t("hosts.stats")}</span>
       </label>
-      <Segmented<HostsView>
+      <Segmented<LocalPrefs["hosts_view"]>
         ariaLabel={t("hosts.view")}
         className={s.viewSwitch}
         value={view}
@@ -725,7 +727,7 @@ export function HostsPage({ group }: { group: string | null }) {
           { value: "list", label: t("hosts.view.list"), title: t("hosts.view.list"), icon: "rows" },
           { value: "cards", label: t("dashboard.layout.cards"), title: t("dashboard.layout.cards"), icon: "squares-four" },
         ]}
-        onChange={setView}
+        onChange={(hosts_view) => savePrefs({ hosts_view })}
       />
     </div>
   );

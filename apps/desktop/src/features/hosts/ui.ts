@@ -10,23 +10,20 @@ export const STATS_SORTS: Exclude<DashboardSort, "list" | "name">[] = ["status",
 
 export const isListSort = (sort: HostSort): sort is ListSort => (LIST_SORTS as HostSort[]).includes(sort);
 
-export type HostsView = "list" | "cards";
-
-/** Hosts page state that survives navigating to the editor and back. */
+/**
+ * Hosts page state that survives navigating to the editor and back. The view and whether resource usage shows are
+ * device-local prefs (`hosts_view`, `hosts_stats`).
+ */
 interface HostsUi {
   selectedId: string | null;
+  /** A resource order applies while resource usage shows; otherwise the latest connection comes first. */
   sort: HostSort;
   favorites: boolean;
   tags: string[];
-  view: HostsView;
-  /** Resource usage shows, which signs in to the listed hosts in the background (HOST-14). */
-  stats: boolean;
   select(id: string | null): void;
   setSort(sort: HostSort): void;
   setFavorites(favorites: boolean): void;
   setTags(tags: string[]): void;
-  setView(view: HostsView): void;
-  setStats(stats: boolean): void;
 }
 
 export const useHostsUi = create<HostsUi>((set) => ({
@@ -34,13 +31,8 @@ export const useHostsUi = create<HostsUi>((set) => ({
   sort: "recent",
   favorites: false,
   tags: [],
-  view: "list",
-  stats: false,
   select: (selectedId) => set({ selectedId }),
   setSort: (sort) => set({ sort }),
   setFavorites: (favorites) => set({ favorites }),
   setTags: (tags) => set({ tags }),
-  setView: (view) => set({ view }),
-  // Without readings, a resource order falls back to the latest connection first.
-  setStats: (stats) => set((st) => ({ stats, sort: stats || isListSort(st.sort) ? st.sort : "recent" })),
 }));

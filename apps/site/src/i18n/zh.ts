@@ -61,8 +61,8 @@ export const zh: Messages = {
         text: "分组、标签、收藏和模糊搜索。可以导入 ~/.ssh/config，通过 ProxyJump 或 SOCKS5、HTTP 代理连接，也可以直接输入 ssh user@host 连接，不必先保存主机。",
       },
       {
-        term: "仪表盘",
-        text: "在一个页面上查看所有已保存主机的状态、CPU、内存、磁盘和网络。数据通过 SSH 读取，服务器上无需安装任何东西。",
+        term: "资源占用",
+        text: "直接在主机页查看所有已保存主机的状态、CPU、内存、磁盘和网络。数据通过 SSH 读取，服务器上无需安装任何东西。",
       },
       {
         term: "终端",
@@ -75,7 +75,7 @@ export const zh: Messages = {
         text: "支持密码、Ed25519、ECDSA 和 RSA 密钥、ssh-agent 以及键盘交互式双重验证。可以导入 OpenSSH、PEM 和 PuTTY 密钥，也可以生成新密钥。",
       },
     ],
-    alt: "仪表盘，显示每台主机的 CPU、内存和磁盘使用情况",
+    alt: "卡片视图的主机页，显示每台主机的 CPU、内存和磁盘使用情况",
   },
   security: {
     title: "在你的设备上加密",

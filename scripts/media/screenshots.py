@@ -27,7 +27,8 @@ LOCALES = {
         "show_ai": "Show AI Panel",
         "run": "Run",
         "fixed": "Fixed.",
-        "dashboard": "Dashboard",
+        "cards": "Cards",
+        "stats": "Resource Usage",
         "sync": "Cloud Sync",
         "continue": "Continue",
         "deploy": "Deploy",
@@ -39,7 +40,8 @@ LOCALES = {
         "show_ai": "显示 AI 面板",
         "run": "运行",
         "fixed": "修好了。",
-        "dashboard": "仪表盘",
+        "cards": "卡片",
+        "stats": "资源占用",
         "sync": "云同步",
         "continue": "继续",
         "deploy": "部署",
@@ -51,7 +53,8 @@ LOCALES = {
         "show_ai": "AI パネルを表示",
         "run": "実行",
         "fixed": "修正しました。",
-        "dashboard": "ダッシュボード",
+        "cards": "カード",
+        "stats": "リソース使用状況",
         "sync": "クラウド同期",
         "continue": "続ける",
         "deploy": "デプロイ",
@@ -110,9 +113,10 @@ def main():
         pg.wait_for_timeout(5000)  # the answer finishes streaming
         shot(pg, "ai-assistant")
 
-        # Dashboard: every host's status and resource usage, once the first readings are in
+        # Resource usage: the hosts page as cards with every host's readings, once the first are in
         pg = page()
-        pg.get_by_text(label["dashboard"], exact=True).first.click()
+        pg.get_by_role("radio", name=label["cards"]).click()
+        pg.get_by_role("switch", name=label["stats"]).click()
         pg.wait_for_timeout(4000)
         shot(pg, "dashboard")
 

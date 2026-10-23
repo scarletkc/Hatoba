@@ -24,17 +24,15 @@ export interface Area {
 export const AREAS: Area[] = [
   {
     name: "app",
-    title: "the window, the host list, connecting and the dashboard",
+    title: "the window, the hosts page, connecting and resource usage",
     files: {
       "SKILL.md": {
         "Window layout": [
-          "sidebar.settings", "window.toggleSidebar", "dashboard.title", "sidebar.all", "sidebar.favorites",
-          "sidebar.recent", "sidebar.groups", "sidebar.newGroup", "sidebar.tags", "sidebar.vault", "sidebar.keys",
-          "sidebar.sync", "tray.lock", "tabs.newMenu", "terminal.local.thisComputer", "tabs.newTab", "tabs.close",
+          "sidebar.lock", "sidebar.settings", "hosts.title", "rail.forwards", "sidebar.forwards", "sidebar.keys",
+          "rail.sync", "sidebar.sync", "tabs.newMenu", "terminal.local.thisComputer", "tabs.newTab", "tabs.close",
           "ai.show", "ai.hide", "window.minimize", "window.maximize", "window.restore", "btn.close", "tray.open",
           "close.tray", "close.quit", "terminal.status.connected", "dashboard.state.connecting",
-          "terminal.status.failed", "terminal.status.disconnected", "terminal.find", "sidebar.forwards",
-          "terminal.sftp", "terminal.more", "settings.tab.general", "settings.tab.appearance", "settings.tab.terminal",
+          "terminal.status.failed", "terminal.status.disconnected", "terminal.find", "terminal.sftp", "terminal.more", "settings.tab.general", "settings.tab.appearance", "settings.tab.terminal",
           "settings.tab.proxies", "settings.tab.security", "aiSettings.tab", "settings.tab.about",
         ],
         "Project, feedback and newer information": [
@@ -43,12 +41,13 @@ export const AREAS: Area[] = [
         ],
       },
       "references/hosts-and-connecting.md": {
-        "The host list": [
-          "sidebar.all", "sidebar.favorites", "hosts.sort.recent", "hosts.search", "hosts.sort", "hosts.sort.name",
-          "hosts.sort.address", "hosts.newHost", "hosts.col.tags", "hosts.col.last", "hosts.connect", "hosts.failed",
+        "The hosts page": [
+          "hosts.title", "hosts.search", "hosts.import", "hosts.newHost", "sidebar.newGroup", "sidebar.favorites",
+          "sidebar.tags", "hosts.stats", "hosts.view.list", "dashboard.layout.cards", "hosts.sort", "hosts.sort.recent",
+          "hosts.sort.name", "hosts.sort.address", "hosts.col.tags", "hosts.col.last", "hosts.connect", "hosts.failed",
           "hosts.menu.edit", "hosts.menu.duplicate", "hosts.menu.favorite", "hosts.menu.unfavorite",
           "hosts.menu.copyAddress", "hosts.menu.copyPassword", "hosts.menu.delete", "sidebar.renameGroup",
-          "sidebar.deleteGroup", "settings.tab.general", "settings.probe",
+          "sidebar.deleteGroup", "hosts.emptyFilter.clear", "settings.tab.general", "settings.probe",
         ],
         "Quick connect": [
           "hosts.connect", "hosts.quick.notSaved", "hosts.quick.recent", "hosts.quick.recentTitle",
@@ -87,10 +86,11 @@ export const AREAS: Area[] = [
           "terminal.menu.reconnect", "terminal.more", "settings.sec.disconnect", "settings.tab.security",
         ],
       },
-      "references/dashboard.md": {
-        "": [
-          "dashboard.title", "dashboard.layout.cards", "dashboard.layout.table", "dashboard.columns",
-          "dashboard.sort.list", "dashboard.noGroup", "dashboard.openTerminal", "dashboard.filesystems",
+      "references/resource-usage.md": {
+        "": ["hosts.stats", "dashboard.openTerminal", "dashboard.filesystems"],
+        "On the hosts page": [
+          "sidebar.favorites", "sidebar.tags", "dashboard.layout.cards", "hosts.view.list", "dashboard.columns",
+          "hosts.menu.details", "hosts.connect",
         ],
         "How hosts are read": [
           "dashboard.state.reading", "dashboard.state.offline", "dashboard.state.waiting", "dashboard.viaTab",
@@ -104,7 +104,7 @@ export const AREAS: Area[] = [
         ],
         "Leaving hosts out": [
           "dashboard.leaveOut", "dashboard.include", "dashboard.leaveOutGroup", "dashboard.includeGroup",
-          "dashboard.showLeftOut", "dashboard.leftOutBadge",
+          "dashboard.leftOutBadge",
         ],
       },
       "references/command-line.md": {
@@ -241,7 +241,7 @@ export const AREAS: Area[] = [
           "settings.backup", "settings.backup.button", "settings.tab.general", "hosts.menu.copyPassword",
         ],
         "The Keys page": [
-          "sidebar.vault", "sidebar.keys", "keys.search", "keys.import", "keys.generate", "keys.col.name",
+          "sidebar.keys", "keys.search", "keys.import", "keys.generate", "keys.col.name",
           "keys.col.type", "keys.col.fingerprint", "keys.col.created", "keys.col.usedBy", "keys.unused",
           "keys.detail.publicKey", "keys.detail.privateKey", "keys.detail.usedHosts", "keys.detail.lastUsed",
           "keys.detail.copyPublic", "btn.copy", "btn.rename", "keys.action.deploy", "keys.action.delete",
@@ -317,7 +317,7 @@ export const AREAS: Area[] = [
     files: {
       "references/sync.md": {
         "": [
-          "sidebar.sync", "sidebar.vault", "sync.footer.none", "sync.footer.none_sub", "sync.footer.synced",
+          "rail.sync", "sidebar.sync", "sync.footer.none", "sync.footer.none_sub", "sync.footer.synced",
           "sync.footer.syncing", "sync.footer.offline", "sync.footer.offline_sub_none", "sync.footer.auth",
           "sync.footer.auth_sub", "sync.footer.error", "sync.footer.workerUpdate", "sync.footer.appUpdate",
           "sync.footer.conflict_sub",

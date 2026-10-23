@@ -324,7 +324,7 @@ export function HostEditPage({
     );
   }
 
-  const groupName = groups.find((g) => g.id === form.groupId)?.name ?? t("sidebar.all");
+  const groupName = groups.find((g) => g.id === form.groupId)?.name ?? t("hosts.title");
   const methodOptions = [
     { value: "password" as const, label: t("hosts.auth.password"), icon: "password" },
     { value: "key" as const, label: t("hosts.auth.key"), icon: "key" },

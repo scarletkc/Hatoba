@@ -1,6 +1,6 @@
 # Settings → AI
 
-Open Settings (the gear in the sidebar, or Ctrl+, / ⌘,) and choose the **AI** tab. It has these sections in order: Providers, Default Model, Web Search, Custom Instructions (`references/ai-instructions.md`), Terminal Screen, Memory (`references/ai-instructions.md`), Skills, MCP Servers, Auto Mode and This Device. Using the assistant is covered in `references/ai-panel.md`.
+Open Settings (the gear in the title bar, or Ctrl+, / ⌘,) and choose the **AI** tab. It has these sections in order: Providers, Default Model, Web Search, Custom Instructions (`references/ai-instructions.md`), Terminal Screen, Memory (`references/ai-instructions.md`), Skills, MCP Servers, Auto Mode and This Device. Using the assistant is covered in `references/ai-panel.md`.
 
 ## Providers
 

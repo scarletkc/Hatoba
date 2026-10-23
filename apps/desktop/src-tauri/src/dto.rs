@@ -1046,9 +1046,12 @@ pub struct LocalPrefs {
     pub lock_disconnects_sessions: bool,
     /// SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it.
     pub clipboard_clear_secs: u32,
-    /// HOST-14: the dashboard shows cards or a table.
-    pub dashboard_layout: DashboardLayout,
-    /// HOST-14: the table columns turned off.
+    /// HOST-05: the hosts page lists the hosts or shows them as cards.
+    pub hosts_view: HostsView,
+    /// HOST-14: the hosts page shows resource usage, which reads the listed hosts in the
+    /// background.
+    pub hosts_stats: bool,
+    /// HOST-14: the resource usage columns turned off.
     pub dashboard_hidden_columns: Vec<String>,
     /// HOST-14: seconds between readings, 1 to 60.
     pub dashboard_interval_secs: u32,
@@ -1082,7 +1085,8 @@ impl Default for LocalPrefs {
             lock_on_sleep: true,
             lock_disconnects_sessions: false,
             clipboard_clear_secs: 90,
-            dashboard_layout: DashboardLayout::Cards,
+            hosts_view: HostsView::List,
+            hosts_stats: false,
             dashboard_hidden_columns: Vec::new(),
             dashboard_interval_secs: 3,
             dashboard_cpu_alert: 90,
@@ -1106,9 +1110,9 @@ pub enum CloseAction {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum DashboardLayout {
+pub enum HostsView {
+    List,
     Cards,
-    Table,
 }
 
 impl LocalPrefs {

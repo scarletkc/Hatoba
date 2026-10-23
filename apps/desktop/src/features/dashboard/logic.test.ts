@@ -5,7 +5,6 @@ import {
   DASHBOARD_COLUMNS,
   fitColumns,
   fullestMount,
-  groupSections,
   isStale,
   leftOutBy,
   netRate,
@@ -151,16 +150,6 @@ describe("dashboard view", () => {
     expect(leftOutBy(host("d", { group_id: "off" }), groups)).toBe("group");
     expect(leftOutBy(host("f", { group_id: "off", dashboard: false }), groups)).toBe("host");
     expect(leftOutBy(host("c", { group_id: "on" }), groups)).toBeNull();
-  });
-
-  it("puts each group's hosts in a section, in the sidebar's order, then the rest", () => {
-    const hosts = [host("a", { group_id: "g2" }), host("b"), host("c", { group_id: "g1" }), host("d", { group_id: "gone" }), host("e", { group_id: "g2" })];
-    const sections = groupSections(hosts, [group("g1", 0), group("g2", 1), group("empty", 2)]);
-    expect(sections.map((s) => [s.group?.id ?? null, s.hosts.map((h) => h.id)])).toEqual([
-      ["g1", ["c"]],
-      ["g2", ["a", "e"]],
-      [null, ["b", "d"]],
-    ]);
   });
 
   it("sorts by a value, highest first, hosts without one last and ties in list order", () => {

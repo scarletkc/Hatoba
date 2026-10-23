@@ -167,9 +167,9 @@ The Sync Worker job in CI runs the same check against the base branch, and fails
 
 ## Fit pages beside the AI panel
 
-A page in the main area gets its narrowest in the smallest window (`MIN_SIZE` in [`platform/window.rs`](../apps/desktop/src-tauri/src/platform/window.rs)) with the sidebar and the AI panel open. Nothing on it may run under the AI panel or make the page scroll sideways at that width.
+A page in the main area gets its narrowest in the smallest window (`MIN_SIZE` in [`platform/window.rs`](../apps/desktop/src-tauri/src/platform/window.rs)) with the navigation rail and the AI panel open. Nothing on it may run under the AI panel or make the page scroll sideways at that width.
 
-- Put the page's controls in `PageHeader`, which moves them under the title and then wraps them onto more rows. Controls that would take several rows can show only their icons in a narrow page, as the dashboard's do.
+- Put the page's controls in `PageHeader`, which moves them under the title and then wraps them onto more rows. Controls that would take several rows can show only their icons in a narrow page, as the hosts page's view switch does.
 - A table drops its last columns instead of scrolling sideways: with container queries when its columns are fixed, as in `HostsPage.module.css`, or with `fitColumns` in `features/dashboard/logic.ts` when the user picks them.
 - Check a changed page with `pnpm dev` in a browser window of that size, in each language, since labels differ in length.
 
