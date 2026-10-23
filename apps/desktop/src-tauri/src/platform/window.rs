@@ -169,7 +169,8 @@ fn screen_key(m: &Monitor) -> ScreenKey {
 /// TERM-13: once the main window is on another screen, or its screen changed scale, zooms it again
 /// from `percent`, the device's preference, under that screen's limit: a window zoomed on a large
 /// screen and moved to a smaller one would otherwise keep a minimum size that does not fit there.
-/// Returns the new zoom, which the page learns from `window://zoom`; `None` while on the same screen.
+/// Returns the new zoom, which the page learns from `window://zoom`; `None` while on the same
+/// screen.
 pub fn follow_screen(window: &WebviewWindow, percent: impl FnOnce() -> u32) -> Option<ZoomView> {
     let key = window
         .current_monitor()
