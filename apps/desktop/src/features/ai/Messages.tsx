@@ -300,6 +300,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
   // and until then the list follows what grows in it on its own.
   const running = !!turn || slot.remoteRunning;
   const bottom = useFollowBottom(ref, running);
+  const pending = usePendingLine(slot);
 
   const results = useMemo(() => {
     const map = new Map<string, ToolEntry>();
@@ -438,7 +439,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
           </Fragment>
         );
       })}
-      {turn?.live && <LiveMessage slotId={slotId} live={turn.live} host={host} />}
+      {turn && (turn.live || pending) && <LiveMessage slotId={slotId} live={turn.live} pending={pending} host={host} />}
       <TurnStatus slotId={slotId} slot={slot} />
       {slot.effortIgnored && (
         <div role="status">
@@ -719,18 +720,51 @@ function EditMessage({
   );
 }
 
-function LiveMessage({ slotId, live, host }: { slotId: string; live: LiveResponse; host: HostInfo | null }) {
+/** The reply of the turn: what streams of it, or until then what it waits for, in the place its text will take. */
+function LiveMessage({ slotId, live, pending, host }: { slotId: string; live: LiveResponse | null; pending: MessageKey | null; host: HostInfo | null }) {
   return (
     <div className={cx(s.item, s.enter)}>
       <AssistantMessage
         slotId={slotId}
-        text={live.text}
-        reasoning={live.reasoning || null}
-        calls={live.toolCalls}
+        text={live?.text ?? ""}
+        reasoning={live?.reasoning || null}
+        calls={live?.toolCalls ?? []}
         view={() => ({ kind: "streaming" })}
         host={host}
         streaming
+        pending={pending}
       />
+    </div>
+  );
+}
+
+/**
+ * What the turn waits for while its reply has nothing to show (§9 states), or null: once something streams, while
+ * calls are handled, and while another device runs the conversation.
+ */
+function usePendingLine(slot: Slot): MessageKey | null {
+  // AI-45: a message waits for the MCP servers its requests use before it is stored.
+  const mcpStarting = useMcp((st) => Object.values(st.status).some((x) => x.state === "starting" && !slot.mcpOff.includes(x.server_id)));
+  const { turn } = slot;
+  if (!turn || slot.remoteRunning) return null;
+  const live = turn.live;
+  if (live && (live.text || live.reasoning || live.toolCalls.length > 0)) return null;
+  if (turn.calls.length > 0) return null;
+  if (turn.phase === "tools") return "ai.status.working";
+  if (turn.phase === "starting" && mcpStarting) return "ai.status.mcpStarting";
+  return live?.thinking ? "ai.reasoning.active" : "ai.status.waiting";
+}
+
+/**
+ * The first line of a reply with nothing to show yet. It has the reasoning header's place and size, so the header
+ * (the same "Thinking" with its caret) or the reply's text takes over where it stands.
+ */
+function PendingLine({ label }: { label: MessageKey }) {
+  const t = useT();
+  return (
+    <div className={s.pending} role="status">
+      {label === "ai.reasoning.active" ? <Icon name="brain" size={14} /> : <span className={s.pendingDot} aria-hidden="true" />}
+      <span className={s.shimmer}>{t(label)}</span>
     </div>
   );
 }
@@ -750,6 +784,7 @@ function AssistantMessage({
   flash,
   reply,
   onFork,
+  pending,
 }: {
   slotId: string;
   /** The stored entry; a reply still streaming has none. */
@@ -772,10 +807,13 @@ function AssistantMessage({
   reply?: ReplyEnd;
   /** AI-43: Fork from Here under the finished reply. */
   onFork?: () => void;
+  /** What a streaming reply with nothing to show waits for. */
+  pending?: MessageKey | null;
 }) {
   const thinking = !!streaming && !text && calls.length === 0;
   return (
     <div className={s.assistant}>
+      {pending && <PendingLine label={pending} />}
       {reasoning && <Reasoning text={reasoning} active={thinking} />}
       {text && <Markdown text={text} streaming={streaming && calls.length === 0} />}
       {/* No answer: nothing at all, or only reasoning. */}
@@ -1696,32 +1734,13 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
 function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
   const t = useT();
   const { turn, outcome } = slot;
-  // AI-45: a message waits for the MCP servers its requests use before it is stored.
-  const mcpStarting = useMcp((st) => Object.values(st.status).some((x) => x.state === "starting" && !slot.mcpOff.includes(x.server_id)));
 
   if (slot.remoteRunning)
     return (
       <StatusLine tone="progress">{t("ai.status.remote")}</StatusLine>
     );
-  if (turn) {
-    const live = turn.live;
-    // A streaming response shows itself (its reasoning header says it is thinking), and so does a call.
-    if (live && (live.text || live.reasoning || live.toolCalls.length > 0)) return null;
-    if (turn.calls.length > 0) return null;
-    const key: MessageKey =
-      turn.phase === "tools"
-        ? "ai.status.working"
-        : turn.phase === "starting" && mcpStarting
-          ? "ai.status.mcpStarting"
-          : live?.thinking
-            ? "ai.reasoning.active"
-            : "ai.status.waiting";
-    return (
-      <StatusLine tone="progress">
-        <span className={s.shimmer}>{t(key)}</span>
-      </StatusLine>
-    );
-  }
+  // A running turn shows itself: its reply, what that reply waits for (`usePendingLine`), and its calls.
+  if (turn) return null;
   if (slot.compacting)
     return (
       <StatusLine tone="progress">{t("ai.status.compacting")}</StatusLine>
@@ -1783,11 +1802,7 @@ function SideBubble({ slotId, q }: { slotId: string; q: SideQuestion }) {
       ))}
       <div className={cx(s.sideQuestion, "selectable")}>{q.question}</div>
       {q.answer && <Markdown text={q.answer} streaming={q.phase === "streaming"} />}
-      {(q.phase === "waiting" || q.phase === "thinking") && (
-        <StatusLine tone="progress">
-          <span className={s.shimmer}>{t(q.phase === "thinking" ? "ai.reasoning.active" : "ai.status.waiting")}</span>
-        </StatusLine>
-      )}
+      {(q.phase === "waiting" || q.phase === "thinking") && <PendingLine label={q.phase === "thinking" ? "ai.reasoning.active" : "ai.status.waiting"} />}
       {q.phase === "stopped" && (
         <StatusLine icon="stop-circle">{t("ai.outcome.stopped")}</StatusLine>
       )}
