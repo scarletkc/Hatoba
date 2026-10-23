@@ -576,6 +576,7 @@ export function HostsPage({ group }: { group: string | null }) {
     <>
       {importing && <ImportDialog source={importing} onClose={() => setImporting(null)} />}
       {editingGroup && <GroupDialog group={editingGroup === "new" ? null : editingGroup} count={groups.length} onClose={() => setEditingGroup(null)} />}
+      {groupMenu.anchor && ctxGroup && <Menu anchor={groupMenu.anchor} onClose={groupMenu.close} entries={groupEntries(ctxGroup)} />}
     </>
   );
 
@@ -610,13 +611,48 @@ export function HostsPage({ group }: { group: string | null }) {
     </div>
   );
 
-  // The vault has no hosts at all: design §01b. Quick connect still works from the search field.
+  // A group's page is a step down from every host, with the group's menu beside its name.
+  const titleNode = scope ? (
+    <span className={s.crumbs}>
+      <button type="button" className={s.crumb} onClick={() => navigate({ kind: "hosts", group: null })}>
+        {t("hosts.title")}
+      </button>
+      <Icon name="caret-right" className={s.crumbSep} />
+      <span className={s.crumbHere}>{scope.name}</span>
+      <IconButton icon="dots-three" label={t("dashboard.groupMenu")} onClick={(e) => openGroupMenu(e, scope)} />
+    </span>
+  ) : (
+    title
+  );
+
+  // At the top level, the groups to step into, as in Termius; every host is listed below them.
+  const groupBar = group === null && groups.length > 0 && (
+    <div className={s.groupBar} role="list" aria-label={t("sidebar.groups")}>
+      {groups.map((g) => (
+        <button
+          key={g.id}
+          type="button"
+          role="listitem"
+          className={s.groupTile}
+          onClick={() => navigate({ kind: "hosts", group: g.id })}
+          onContextMenu={(e) => openGroupMenu(e, g)}
+        >
+          <Icon name="folder-simple" className={s.groupIcon} />
+          <span className={s.groupName}>{g.name}</span>
+          <span className={s.groupCount}>{hosts.filter((h) => h.group_id === g.id).length}</span>
+        </button>
+      ))}
+    </div>
+  );
+
+  // No hosts at all (design §01b), though groups made meanwhile stay reachable. Quick connect still works from the search field.
   if (hosts.length === 0 && !query.trim()) {
     return (
       <div className={s.page} onKeyDown={onKeyDown}>
-        <PageHeader title={title} search={searchField}>
+        <PageHeader title={titleNode} search={searchField}>
           {newControls}
         </PageHeader>
+        {groupBar}
         <EmptyState
           icon="hard-drives"
           title={t("hosts.empty.title")}
@@ -649,20 +685,6 @@ export function HostsPage({ group }: { group: string | null }) {
     if (base.length > 0 || hosts.length === 0 || hasQuick || exact) return null;
     return filtering ? ("filter" as const) : ("group" as const);
   })();
-
-  // A group's page is a step down from every host, with the group's menu beside its name.
-  const titleNode = scope ? (
-    <span className={s.crumbs}>
-      <button type="button" className={s.crumb} onClick={() => navigate({ kind: "hosts", group: null })}>
-        {t("hosts.title")}
-      </button>
-      <Icon name="caret-right" className={s.crumbSep} />
-      <span className={s.crumbHere}>{scope.name}</span>
-      <IconButton icon="dots-three" label={t("dashboard.groupMenu")} onClick={(e) => openGroupMenu(e, scope)} />
-    </span>
-  ) : (
-    title
-  );
 
   const toolbar = (
     <div className={s.toolbar}>
@@ -729,26 +751,6 @@ export function HostsPage({ group }: { group: string | null }) {
         ]}
         onChange={(hosts_view) => savePrefs({ hosts_view })}
       />
-    </div>
-  );
-
-  // At the top level, the groups to step into, as in Termius; every host is listed below them.
-  const groupBar = group === null && groups.length > 0 && (
-    <div className={s.groupBar} role="list" aria-label={t("sidebar.groups")}>
-      {groups.map((g) => (
-        <button
-          key={g.id}
-          type="button"
-          role="listitem"
-          className={s.groupTile}
-          onClick={() => navigate({ kind: "hosts", group: g.id })}
-          onContextMenu={(e) => openGroupMenu(e, g)}
-        >
-          <Icon name="folder-simple" className={s.groupIcon} />
-          <span className={s.groupName}>{g.name}</span>
-          <span className={s.groupCount}>{hosts.filter((h) => h.group_id === g.id).length}</span>
-        </button>
-      ))}
     </div>
   );
 
@@ -960,7 +962,6 @@ export function HostsPage({ group }: { group: string | null }) {
         />
       )}
       {rowMenu.anchor && ctxHost && <Menu anchor={rowMenu.anchor} onClose={rowMenu.close} entries={menuEntries(ctxHost)} />}
-      {groupMenu.anchor && ctxGroup && <Menu anchor={groupMenu.anchor} onClose={groupMenu.close} entries={groupEntries(ctxGroup)} />}
       {detailHost && (
         <HostDetail
           host={detailHost}
