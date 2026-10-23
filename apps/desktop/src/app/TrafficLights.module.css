@@ -53,8 +53,7 @@
   --edge: #c9c9c8;
 }
 
-:root[data-theme="dark"] /* An inactive window greys them out until they are hovered, as a native one does. */
-.lights[data-inactive]:not(:hover) > span {
+:root[data-theme="dark"] .lights[data-inactive]:not(:hover) > span {
   --face: #4d4d4f;
   --edge: #5c5c5e;
 }

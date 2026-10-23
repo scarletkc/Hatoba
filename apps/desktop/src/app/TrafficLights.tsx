@@ -4,12 +4,17 @@ import type { Platform } from "@/lib/platform";
 import s from "./TrafficLights.module.css";
 
 /**
- * The macOS traffic lights, drawn for the browser mock (`pnpm dev`, the website's demo) with
- * `?platform=macos`, where no native window draws them. They sit where tao puts the native ones
- * in the window (platform/window.rs), so the title bar can be checked without a Mac. They do
- * nothing when clicked; the Tauri app never shows them.
+ * The macOS traffic lights, drawn in the browser mock on macOS, where no native window draws them:
+ * `pnpm dev` with `?platform=macos`, and the website's demo, which takes the visitor's platform.
+ * They sit where tao puts the native ones in the window (platform/window.rs), so the title bar can
+ * be checked without a Mac. They do nothing when clicked; the Tauri app never shows them.
  */
 export function TrafficLights({ platform }: { platform: Platform }) {
+  if (platform !== "macos" || isTauri()) return null;
+  return <Lights />;
+}
+
+function Lights() {
   const [focused, setFocused] = useState(() => document.hasFocus());
 
   useEffect(() => {
@@ -23,7 +28,6 @@ export function TrafficLights({ platform }: { platform: Platform }) {
     };
   }, []);
 
-  if (platform !== "macos" || isTauri()) return null;
   return (
     <div className={s.lights} aria-hidden data-inactive={focused ? undefined : true}>
       <span className={s.close}>
