@@ -15,7 +15,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Mentioned in Awesome Rust](https://img.shields.io/badge/mentioned%20in-Awesome%20Rust-FC60A8?logo=awesomelists&logoColor=white)](https://github.com/rust-unofficial/awesome-rust#applications)
 
-https://github.com/user-attachments/assets/2bd36c2f-6b4a-4fef-a1ac-c964ac5a83f8
+https://github.com/user-attachments/assets/cd33e989-36e3-4e17-bc7f-74d472c96078
 
 </div>
 
