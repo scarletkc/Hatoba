@@ -75,7 +75,8 @@ if [ "$system" = Darwin ]; then
     echo @disk
     df -kP / 2>/dev/null | awk 'NR > 1 && NF >= 6 { $3 = $2 - $4 } 1'
     # Every filesystem Finder shows, and /. The ones it hides (nobrowse), such as the system's
-    # other volumes and /dev, and read-only ones are left out.
+    # other volumes and /dev, and read-only ones are left out. Only APFS volumes take their
+    # container's use; other filesystems keep what df counts as used.
     if [ "$2" = mounts ] && [ $((n % 5)) -eq 0 ]; then
       echo @mounts
       { mount; echo @; $dft df -kP; } 2>/dev/null | awk '
@@ -93,7 +94,7 @@ if [ "$system" = Darwin ]; then
           if (i >= NF) next
           m = $(i + 1); for (k = i + 2; k <= NF; k++) m = m " " $k
           if (m != "/" && hidden[m]) next
-          $(i - 2) = $(i - 3) - $(i - 1)
+          if (type[m] == "apfs") $(i - 2) = $(i - 3) - $(i - 1)
           print ((m in type) ? type[m] : "-"), $0
         }
       '
