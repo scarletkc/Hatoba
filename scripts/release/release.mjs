@@ -348,7 +348,7 @@ async function gate(repository, root = ROOT) {
   const passed = runs.find((run) => ciCovers(run.head_sha, sha, root));
   if (!passed) {
     throw new Error(
-      `CI has not passed on ${sha.slice(0, 7)}, or on an earlier commit that differs from it only in files CI skips. Wait for CI on this commit to pass, or run CI on this branch from the Actions tab, then rerun this workflow.`,
+      `CI has not passed on ${sha.slice(0, 7)}, or on an earlier commit that differs from it only in files CI skips. Wait for CI on this commit to pass, or run CI on this branch from the Actions tab, then rerun this workflow, or run it for an earlier commit that CI passed on.`,
     );
   }
   console.log(`CI passed on ${passed.head_sha.slice(0, 7)}: ${passed.html_url}`);

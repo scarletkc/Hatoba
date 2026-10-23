@@ -1,9 +1,14 @@
 name: Release
 
-# Publishes the version in Cargo.toml as a GitHub Release of the selected commit, after approval in
-# the release environment. docs/releasing.md describes the steps.
+# Publishes the version in Cargo.toml as a GitHub Release of a commit on the selected branch, after
+# approval in the release environment. docs/releasing.md describes the steps.
 on:
   workflow_dispatch:
+    inputs:
+      commit:
+        description: Commit to release, on the selected branch (empty for its latest)
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -22,6 +27,7 @@ jobs:
       # Reads the CI runs and the release environment.
       actions: read
     outputs:
+      sha: ${{ steps.commit.outputs.sha }}
       version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
       prerelease: ${{ steps.release.outputs.prerelease }}
@@ -31,6 +37,22 @@ jobs:
           # The tags and history select the previous release and the changelog.
           fetch-depth: 0
           persist-credentials: false
+      # The commit asked for, which must be on the selected branch, as the signing environment
+      # allows only main; or else that branch's latest. The other jobs check out the same commit.
+      - id: commit
+        run: |
+          if ! sha=$(git rev-parse --verify --quiet "${COMMIT:-HEAD}^{commit}"); then
+            echo "'$COMMIT' is not a commit of this repository." >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$sha" HEAD; then
+            echo "$sha is not on $GITHUB_REF_NAME. Release a commit of the branch the workflow runs on." >&2
+            exit 1
+          fi
+          git checkout --quiet --detach "$sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+        env:
+          COMMIT: ${{ inputs.commit }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -61,6 +83,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.preflight.outputs.sha }}
           persist-credentials: false
       # No Rust cache: the installer is built from a clean target directory.
       - uses: dtolnay/rust-toolchain@stable
@@ -93,6 +116,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.preflight.outputs.sha }}
           persist-credentials: false
       - name: System dependencies
         run: |
@@ -128,6 +152,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.preflight.outputs.sha }}
           persist-credentials: false
       # No Rust cache: the app is built from a clean target directory.
       - uses: dtolnay/rust-toolchain@stable
@@ -163,6 +188,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.preflight.outputs.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -227,6 +253,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.preflight.outputs.sha }}
           persist-credentials: false
       - name: Set the version in the PKGBUILD
         run: sed -i -e "s/^pkgver=.*/pkgver=${VERSION}/" -e 's/^pkgrel=.*/pkgrel=1/' packaging/aur/PKGBUILD

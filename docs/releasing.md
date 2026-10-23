@@ -59,7 +59,7 @@ Commit the changes, open a pull request titled `chore(release): prepare vX.Y.Z`,
 
 ## Publish
 
-1. In **Actions → Release → Run workflow**, choose `main`.
+1. In **Actions → Release → Run workflow**, choose `main`. The workflow releases the latest commit on `main`, or the commit you enter under **Commit to release**, which must be on `main`: for example the release pull request's, while CI is still running on the commits merged after it. The installers are built from that commit, and the release tags it.
 2. **Preflight** runs the script tests and checks that:
    - the version files agree, and `vX.Y.Z` does not point to another commit
    - the release note is valid, or an earlier release exists to list changes from
