@@ -13,7 +13,7 @@ import s from "./Wizard.module.css";
 export function MethodStep({ method, onChange, onNext }: { method: Method; onChange: (m: Method) => void; onNext: () => void }) {
   const t = useT();
   const [explain, setExplain] = useState(false);
-  const cancel = () => useApp.getState().navigate({ kind: "hosts", filter: { kind: "all" } });
+  const cancel = () => useApp.getState().navigate({ kind: "hosts", group: null });
 
   const options: { value: Method; title: string; desc: string; icon: string; recommended?: boolean }[] = [
     { value: "deploy", title: t("sync.opt.deploy"), desc: t("sync.opt.deploy.desc"), icon: "cloud-arrow-up", recommended: true },

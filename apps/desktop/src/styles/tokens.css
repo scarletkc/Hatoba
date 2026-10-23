@@ -78,7 +78,7 @@
   --window-px: calc(1px / var(--ui-zoom));
 
   /* Sizes */
-  --sidebar-width: 228px;
+  --rail-width: 76px;
   --titlebar-height: 44px;
   --toolbar-height: 36px;
   --control-height: 28px;
@@ -87,7 +87,8 @@
 
   /* Light palette */
   --win: #ffffff;
-  --side: #ececf1;
+  --side-solid: #ececf1;
+  --side: var(--side-solid);
   --side-translucent: rgba(236, 236, 241, 0.6);
   --fg: #1d1d1f;
   --fg2: rgba(60, 60, 67, 0.75);
@@ -157,7 +158,8 @@
 
 :root[data-theme="dark"] {
   --win: #1e1e20;
-  --side: #2a2a2e;
+  --side-solid: #2a2a2e;
+  --side: var(--side-solid);
   --side-translucent: rgba(42, 42, 46, 0.58);
   --fg: #f5f5f7;
   --fg2: rgba(235, 235, 245, 0.64);
@@ -200,7 +202,7 @@
   --row: 32px;
 }
 
-/* Mica on Windows 11 (WIN-07): let the native material show through the sidebar */
+/* Mica on Windows 11 (WIN-07): let the native material show through the tab bar and the rail */
 :root[data-material="mica"] {
   --side: var(--side-translucent);
 }
@@ -237,6 +239,9 @@
    the title bar keeps its 44 window pixels as the interface zooms, while it can hold the 28 px tabs. */
 :root[data-platform="macos"] {
   --titlebar-height: max(calc(44 * var(--window-px)), 34px);
+  /* The traffic lights (x = 18 to 78 pt) stand on the rail, 18 pt from both its edges at 100% interface zoom and
+     below. Above 100% the rail grows with what it holds while they stay put, as by a wider Finder sidebar. */
+  --rail-width: max(96px, calc(96 * var(--window-px)));
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue",
     Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "PingFang SC", "Hiragino Sans GB",

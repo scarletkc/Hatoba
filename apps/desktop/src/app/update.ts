@@ -11,7 +11,7 @@ const TICK_MS = 60 * 60 * 1000;
 
 interface UpdateState {
   checking: boolean;
-  /** The last check that succeeded. A later failure keeps it, so the sidebar dot stays. */
+  /** The last check that succeeded. A later failure keeps it, so the Settings button's dot stays. */
   result: UpdateCheck | null;
   /** When `result` arrived, in milliseconds since the epoch. */
   checkedAt: number | null;
@@ -64,7 +64,7 @@ export const useUpdate = create<UpdateState>((set, get) => ({
 }));
 
 /**
- * The newer release that the sidebar dot and the tray menu offer. A copy that a package manager
+ * The newer release that the Settings button's dot and the tray menu offer. A copy that a package manager
  * installed offers none: the package manager updates it (spec §11).
  */
 export function useOfferedUpdate(): AvailableUpdate | null {

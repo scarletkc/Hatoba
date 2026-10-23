@@ -104,12 +104,12 @@ export async function closeSessionTab(tabId: string): Promise<void> {
 export function editSessionHost(hostId: string | null) {
   const host = hostById(hostId);
   if (!host) return;
-  useApp.getState().navigate({ kind: "host-edit", hostId: host.id, groupId: host.group_id, back: { kind: "all" } });
+  useApp.getState().navigate({ kind: "host-edit", hostId: host.id, groupId: host.group_id, back: null });
   useTabs.getState().activate("home");
 }
 
 /** "Save as Host…" for a quick connection: a new host, filled in with its target (HOST-12). */
 export function saveTargetAsHost(target: QuickTarget) {
-  useApp.getState().navigate({ kind: "host-edit", hostId: null, groupId: null, back: { kind: "all" }, prefill: target });
+  useApp.getState().navigate({ kind: "host-edit", hostId: null, groupId: null, back: null, prefill: target });
   useTabs.getState().activate("home");
 }

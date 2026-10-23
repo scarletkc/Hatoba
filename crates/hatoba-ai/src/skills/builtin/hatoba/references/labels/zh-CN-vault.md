@@ -76,7 +76,6 @@ The labels that these files name in English, as the interface shows them in Simp
 
 | en | zh-CN |
 |---|---|
-| Vault | 保险库 |
 | Keys | 密钥库 |
 | Search keys | 搜索密钥 |
 | Import… | 导入… |

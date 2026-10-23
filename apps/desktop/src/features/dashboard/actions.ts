@@ -1,4 +1,3 @@
-import { create } from "zustand";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useTabs } from "@/app/tabs";
@@ -7,20 +6,7 @@ import { connectHost } from "@/features/terminal/connect";
 import { t } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { GroupView, HostView } from "@/ipc/types";
-import { leftOutBy, type DashboardSort } from "./logic";
-
-/** Dashboard view state that survives leaving the page and coming back (HOST-14). */
-export const useDashboardUi = create<{
-  sort: DashboardSort;
-  showLeftOut: boolean;
-  setSort(sort: DashboardSort): void;
-  setShowLeftOut(show: boolean): void;
-}>((set) => ({
-  sort: "list",
-  showLeftOut: false,
-  setSort: (sort) => set({ sort }),
-  setShowLeftOut: (showLeftOut) => set({ showLeftOut }),
-}));
+import { leftOutBy } from "./logic";
 
 /** **Open Terminal**: brings the host's tab to the front, or opens one (which takes over the dashboard's connection). */
 export function openTerminal(hostId: string) {

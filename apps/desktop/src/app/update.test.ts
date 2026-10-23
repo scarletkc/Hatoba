@@ -48,7 +48,7 @@ async function load() {
   return import("./update");
 }
 
-/** What the sidebar dot and the tray menu offer, read as a component reads it. */
+/** What the Settings button's dot and the tray menu offer, read as a component reads it. */
 function offered({ useOfferedUpdate }: Awaited<ReturnType<typeof load>>): AvailableUpdate | null {
   let update: AvailableUpdate | null = null;
   const Probe = () => {
@@ -71,7 +71,7 @@ beforeEach(() => {
 });
 
 describe("update check", () => {
-  it("records a newer release, which lights the sidebar dot", async () => {
+  it("records a newer release, which lights the Settings button's dot", async () => {
     const update = await load();
     backend.answer = async () => found("0.2.0");
     await update.useUpdate.getState().check();

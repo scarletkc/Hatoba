@@ -76,7 +76,6 @@ The labels that these files name in English, as the interface shows them in Japa
 
 | en | ja |
 |---|---|
-| Vault | 保管庫 |
 | Keys | 鍵 |
 | Search keys | 鍵を検索 |
 | Import… | 読み込み… |

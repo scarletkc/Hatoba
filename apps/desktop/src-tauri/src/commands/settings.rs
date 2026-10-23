@@ -244,7 +244,7 @@ pub fn adopt_legacy_prefs_after_unlock(vault: &mut Vault) -> AppResult<bool> {
     adopt_legacy_prefs(vault)
 }
 
-/// The sidebar's star prompt (spec §9). The first read records when this device started waiting.
+/// The home tab's star prompt (spec §9). The first read records when this device started waiting.
 #[tauri::command]
 #[specta::specta]
 pub fn star_prompt_get(state: State<'_, AppState>) -> AppResult<StarPrompt> {

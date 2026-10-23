@@ -65,8 +65,8 @@ export const en = {
         text: "Groups, tags, favorites, and fuzzy search. Import ~/.ssh/config, connect through ProxyJump or a SOCKS5 or HTTP proxy, or type ssh user@host to connect without saving a host.",
       },
       {
-        term: "Dashboard",
-        text: "The status, CPU, memory, disks, and network of every saved host on one page, read over SSH with nothing to install on the servers.",
+        term: "Resource usage",
+        text: "The status, CPU, memory, disks, and network of every saved host, right on the hosts page, read over SSH with nothing to install on the servers.",
       },
       {
         term: "Terminal",
@@ -79,7 +79,7 @@ export const en = {
         text: "Passwords, Ed25519, ECDSA, and RSA keys, ssh-agent, and keyboard-interactive 2FA. Import OpenSSH, PEM, and PuTTY keys, or generate new ones.",
       },
     ],
-    alt: "The dashboard with the CPU, memory, and disk usage of every host",
+    alt: "The hosts page as cards, with the CPU, memory, and disk usage of every host",
   },
   security: {
     title: "Encrypted on your device",

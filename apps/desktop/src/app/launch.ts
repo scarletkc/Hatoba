@@ -1,12 +1,13 @@
 import { useEffect } from "react";
 import { launchAction } from "@/features/hosts/launchAction";
+import { useHostsUi } from "@/features/hosts/ui";
 import { connectHost, connectTarget } from "@/features/terminal/connect";
 import { api } from "@/ipc/api";
 import { useVaultData } from "./data";
 import { useApp } from "./store";
 import { useTabs } from "./tabs";
 
-/** Connects what a command line names, or shows it in the search box of All Hosts. */
+/** Connects what a command line names, or shows it in the hosts page's search box. */
 function runLaunch(args: string[]) {
   const action = launchAction(args, useVaultData.getState().hosts);
   switch (action?.kind) {
@@ -17,7 +18,8 @@ function runLaunch(args: string[]) {
       void connectTarget(action.target);
       break;
     case "search":
-      useApp.getState().navigate({ kind: "hosts", filter: { kind: "all" } });
+      useApp.getState().navigate({ kind: "hosts", group: null });
+      useHostsUi.getState().clearFilters();
       useTabs.getState().activate("home");
       useApp.getState().focusSearch(action.text);
       break;

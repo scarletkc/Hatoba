@@ -103,6 +103,7 @@
   line-height: 1.55;
   color: rgba(235, 235, 245, 0.72);
   text-wrap: pretty;
+  -webkit-user-select: text;
   user-select: text;
 }
 
@@ -114,6 +115,7 @@
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   color: rgba(235, 235, 245, 0.64);
+  -webkit-user-select: text;
   user-select: text;
 }
 

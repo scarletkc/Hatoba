@@ -14,7 +14,7 @@ Other labels: **Start**, **Connect**, **Save Your Recovery Code**.
 
 ## Locking and unlocking
 
-Lock with the lock button at the bottom of the sidebar, Ctrl+Shift+L (⌘L on macOS), or Settings → Security → **Lock Now**. Hatoba also locks when the computer has had no keyboard or mouse input for the time set in **Auto-Lock** (on Linux, only input in Hatoba's window counts), and when the computer goes to sleep, unless **Lock when the computer sleeps** is off.
+Lock with the lock button in the title bar, Ctrl+Shift+L (⌘L on macOS), or Settings → Security → **Lock Now**. Hatoba also locks when the computer has had no keyboard or mouse input for the time set in **Auto-Lock** (on Linux, only input in Hatoba's window counts), and when the computer goes to sleep, unless **Lock when the computer sleeps** is off.
 
 - Auto-Lock offers 1, 5, 15 (the default), 30 minutes, 1, 4 or 8 hours, or Never. Auto-Lock, **Lock when the computer sleeps** (on by default), **Disconnect all sessions when locked** and **Clear Clipboard** are kept on each device and do not sync.
 - Open SSH sessions stay connected behind the lock screen ("N sessions stay connected in the background"), unless **Disconnect all sessions when locked** is on. The AI assistant stops working and MCP servers stop when the vault locks.
@@ -36,7 +36,7 @@ Other labels: **Change Master Password**.
 
 ## The Keys page
 
-Open it from the sidebar (**Keys**, under **Vault**). It lists the SSH keys in the vault, searchable (**Search keys**), with the buttons **Import…** and **Generate Key**. Columns are Name, Type, Fingerprint, Created and Used By (the first host using the key, plus how many more, or **Unused**). Selecting a key opens a detail panel with its fingerprint, creation date, last use, the public key (**Copy**), the hosts that use it, and the actions **Rename**, **Deploy to Host…** and **Delete…**.
+Open it from the navigation rail (**Keys**). It lists the SSH keys in the vault, searchable (**Search keys**), with the buttons **Import…** and **Generate Key**. Columns are Name, Type, Fingerprint, Created and Used By (the first host using the key, plus how many more, or **Unused**). Selecting a key opens a detail panel with its fingerprint, creation date, last use, the public key (**Copy**), the hosts that use it, and the actions **Rename**, **Deploy to Host…** and **Delete…**.
 
 Other labels: **Public Key**, **Used by**, **Last used**, **Copy public key**.
 

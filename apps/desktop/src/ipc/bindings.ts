@@ -325,7 +325,7 @@ export const commands = {
 	/**  Readable while locked: the unlock screen needs the language. */
 	prefsGet: () => __TAURI_INVOKE<LocalPrefs>("prefs_get"),
 	prefsSave: (prefs: LocalPrefs) => __TAURI_INVOKE<null>("prefs_save", { prefs }),
-	/**  The sidebar's star prompt (spec §9). The first read records when this device started waiting. */
+	/**  The home tab's star prompt (spec §9). The first read records when this device started waiting. */
 	starPromptGet: () => __TAURI_INVOKE<StarPrompt>("star_prompt_get"),
 	/**  The user starred, opened the bug report form, or closed the prompt: it never shows again. */
 	starPromptDone: () => __TAURI_INVOKE<null>("star_prompt_done"),
@@ -1509,8 +1509,6 @@ export type DashboardHold =
 /**  The server rejected the saved credentials. Not tried again until **Retry**. */
 "sign_in_failed";
 
-export type DashboardLayout = "cards" | "table";
-
 export type Density = "regular" | "compact";
 
 export type DeployDatabaseAction = "create" | 
@@ -1839,6 +1837,8 @@ export type HostView = {
 	env: HostEnvVar[],
 };
 
+export type HostsView = "list" | "cards";
+
 /**  A host an import can create. */
 export type ImportCandidate = {
 	/**  Identifies it within the source, for `hosts_import`. */
@@ -1977,9 +1977,14 @@ export type LocalPrefs = {
 	lock_disconnects_sessions: boolean,
 	/**  SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it. */
 	clipboard_clear_secs: number,
-	/**  HOST-14: the dashboard shows cards or a table. */
-	dashboard_layout: DashboardLayout,
-	/**  HOST-14: the table columns turned off. */
+	/**  HOST-05: the hosts page lists the hosts or shows them as cards. */
+	hosts_view: HostsView,
+	/**
+	 *  HOST-14: the hosts page shows resource usage, which reads the listed hosts in the
+	 *  background.
+	 */
+	hosts_stats: boolean,
+	/**  HOST-14: the resource usage columns turned off. */
 	dashboard_hidden_columns: string[],
 	/**  HOST-14: seconds between readings, 1 to 60. */
 	dashboard_interval_secs: number,
@@ -2430,7 +2435,7 @@ export type SshErrorKind = "dns" | "refused" | "timeout" | "unreachable" | "auth
 /**  SSH-13: the host or the device default names a proxy that was deleted. */
 "proxy_missing" | "other";
 
-/**  Device-local state of the sidebar's GitHub star prompt (spec §9; never synced). */
+/**  Device-local state of the home tab's GitHub star prompt (spec §9; never synced). */
 export type StarPrompt = {
 	/**  When this device first read the state, Unix ms. The prompt waits a day from then. */
 	first_seen_at: number,

@@ -65,10 +65,6 @@ const FILES: &[(&str, &str)] = &[
         include_str!("builtin/hatoba/references/command-line.md"),
     ),
     (
-        "references/dashboard.md",
-        include_str!("builtin/hatoba/references/dashboard.md"),
-    ),
-    (
         "references/hosts-and-connecting.md",
         include_str!("builtin/hatoba/references/hosts-and-connecting.md"),
     ),
@@ -127,6 +123,10 @@ const FILES: &[(&str, &str)] = &[
     (
         "references/port-forwarding.md",
         include_str!("builtin/hatoba/references/port-forwarding.md"),
+    ),
+    (
+        "references/resource-usage.md",
+        include_str!("builtin/hatoba/references/resource-usage.md"),
     ),
     (
         "references/settings.md",

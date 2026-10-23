@@ -3,7 +3,7 @@ import { api } from "@/ipc/api";
 import type { GroupView, HostView, KeyView, ProxyView, TagCount } from "@/ipc/types";
 
 /**
- * Decrypted-vault metadata shown across the app (sidebar counts, host list, key pickers).
+ * Decrypted-vault metadata shown across the app (group counts, host list, key pickers).
  * Contains no secrets — only the DTOs the backend chooses to expose.
  */
 interface VaultData {

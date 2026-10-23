@@ -1,81 +1,6 @@
-/* The dashboard (HOST-14): a section per group, its hosts as cards or table rows. */
-
-.page {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  container-type: inline-size;
-}
-
-/* A narrow page (beside the AI panel, or in a small window) shows the Columns button and the layout
- * switch as icons, their titles naming them, so the header's controls fit in a row under the title. */
-@container (max-width: 620px) {
-  .columnsButton {
-    padding: 0 9px;
-  }
-
-  .columnsButton > span,
-  .layoutSwitch [role="radio"] > span {
-    display: none;
-  }
-
-  .layoutSwitch [role="radio"] {
-    padding: 0 10px;
-  }
-}
-
-/* The table drops the columns it has no room for (fitColumns) rather than scrolling sideways. */
-.scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding-bottom: 16px;
-}
-
-.section {
-  padding: 0 24px;
-}
-
-.sectionHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-  height: 32px;
-  margin-top: 10px;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--fg2);
-}
-
-.sectionIcon {
-  font-size: var(--icon-14);
-}
-
-.sectionTitle {
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sectionCount {
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
-}
-
-.leftOutText {
-  text-decoration: line-through;
-  text-decoration-color: var(--fg3);
-}
+/* The hosts page's cards, and its table with resource usage (HOST-14). */
 
 /* ───────── Cards ───────── */
-
-.cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
-  gap: var(--space-12);
-}
 
 /* A Card, laid out as a column. */
 .card {
@@ -86,26 +11,38 @@
   outline: none;
 }
 
-/* The name opens the host's detail from the keyboard; a click anywhere on the card or row does too. */
-.nameButton {
+.cardSel,
+.cardSel:hover {
+  background: var(--rowsel);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.name {
+  flex: 0 1 auto;
   min-width: 0;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: none;
-  color: inherit;
-  font: inherit;
   font-weight: 600;
-  text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: default;
 }
 
-.nameButton:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
+/* Connect shows on the card or row under the pointer, the selected one, and one whose host needs the user. */
+.connect {
+  flex: none;
+  margin-left: auto;
+  opacity: 0;
+}
+
+.card:hover .connect,
+.cardSel .connect,
+.row:hover .connect,
+.rowSel .connect,
+.connectShown {
+  opacity: 1;
+}
+
+.cardLast {
+  color: var(--fg2);
 }
 
 .cardLeftOut {
@@ -134,17 +71,30 @@
   text-overflow: ellipsis;
 }
 
+/* One line of tags, kept when a host has none but another listed one has; the ones that don't fit fade out at the
+   edge, and all show on hover. */
 .tags {
   display: flex;
-  flex-wrap: wrap;
   gap: var(--space-4);
+  height: 20px;
   min-width: 0;
+  overflow: hidden;
+  mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
 }
 
-.readings {
+.tags > * {
+  flex: none;
+}
+
+/* The readings' place: three meters and two lines tall in every state, so the cards of a row line up and a
+   host keeps its card's size as its state changes. */
+.body {
+  --meter-line: calc(var(--text-sm) * 1.5);
+  --body-line: calc(var(--text-xs) * 1.5);
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
+  height: calc(3 * var(--meter-line) + 2 * var(--body-line) + 4 * var(--space-6));
   margin-top: 4px;
 }
 
@@ -153,15 +103,20 @@
   opacity: 0.45;
 }
 
-.meterRow {
+/* A grid of label, meter, and value, a row each, the labels as wide as the longest. */
+.meters {
   display: grid;
-  grid-template-columns: 62px minmax(0, 1fr) 46px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-auto-rows: var(--meter-line);
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--space-6) var(--space-8);
   font-size: var(--text-sm);
+  line-height: 1.5;
 }
 
 .meterLabel {
+  min-width: 40px;
+  max-width: 120px;
   color: var(--fg2);
   white-space: nowrap;
   overflow: hidden;
@@ -196,6 +151,7 @@
 }
 
 .meterValue {
+  min-width: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
@@ -213,30 +169,82 @@
   color: var(--red);
 }
 
-.alert .meter {
+.alert .meter,
+.meter.alert {
   --meter: var(--red);
 }
 
-.detail {
+/* A line under the meters. */
+.line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: var(--body-line);
+  min-width: 0;
   font-size: var(--text-xs);
+  line-height: 1.5;
   color: var(--fg2);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.line i {
+  flex: none;
+  font-size: var(--icon-12);
+}
+
+.lineText {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.detail.alertText {
-  color: var(--red);
+.cardLink {
+  flex: none;
+  margin-left: auto;
+  font-size: var(--text-xs);
 }
 
-.status {
+/* In place of readings: the state centered in the readings' place, its reason in at most two lines. */
+.state {
   display: flex;
+  flex: 1;
+  flex-direction: column;
   align-items: center;
-  gap: var(--space-6);
-  min-height: 24px;
-  margin-top: 2px;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 0;
+  text-align: center;
   font-size: var(--text-sm);
+  color: var(--fg2);
+}
+
+.stateIcon {
+  margin-bottom: 4px;
+  font-size: var(--icon-20);
+}
+
+.stateTitle {
+  max-width: 100%;
+  overflow: hidden;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.stateDetail {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.state .cardLink {
+  margin: 4px 0 0;
 }
 
 .statusText {
@@ -269,15 +277,6 @@
   flex: none;
 }
 
-.leftOutNote {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-  margin: 18px 24px 0;
-  font-size: var(--text-sm);
-  color: var(--fg2);
-}
-
 /* ───────── Table ───────── */
 
 .grid {
@@ -290,9 +289,9 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  height: 28px;
+  height: 26px;
   margin: 0 24px;
-  padding: 0 10px;
+  padding: 0;
   background: var(--win);
   border-bottom: 0.5px solid var(--line);
   font-size: var(--text-xs);
@@ -305,14 +304,9 @@
   padding-left: 24px;
 }
 
-.rows {
-  display: flex;
-  flex-direction: column;
-}
-
 .row {
   height: var(--row);
-  padding: 0 10px;
+  padding: 0 12px;
   border-radius: var(--radius-sm);
   box-shadow: inset 0 -0.5px 0 var(--line);
   font-size: var(--text-sm);
@@ -321,6 +315,16 @@
 
 .row:hover {
   background: var(--fill);
+}
+
+.rowSel,
+.rowSel:hover {
+  background: var(--rowsel);
+}
+
+.action {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .staleRow > .valueCell {

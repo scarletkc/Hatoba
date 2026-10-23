@@ -10,7 +10,7 @@ Forwards belong to a host. They are saved in the vault and sync like other items
 
 ## Create or edit a rule
 
-**Port Forwarding** in the sidebar opens a page with every host's rules, a section per host with its name and `user@address:port`; with none yet it says "No port forwards yet". **Add Forward…** opens **Add Port Forward**, whose **Host** is the saved host to forward through ("Choose a host." until one is chosen), and whose **Type** is **Local**, **Remote** or **Dynamic (SOCKS)**; the fields below follow the type. Rules are saved the moment you add, change or delete them.
+**Forwards** in the navigation rail opens the **Port Forwarding** page with every host's rules, a section per host with its name and `user@address:port`; with none yet it says "No port forwards yet". **Add Forward…** opens **Add Port Forward**, whose **Host** is the saved host to forward through ("Choose a host." until one is chosen), and whose **Type** is **Local**, **Remote** or **Dynamic (SOCKS)**; the fields below follow the type. Rules are saved the moment you add, change or delete them.
 
 Other labels: **Edit Port Forward**, **Add**, **Delete**.
 

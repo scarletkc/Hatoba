@@ -4,12 +4,12 @@ import { toggleAiPanel } from "@/features/ai/actions";
 import { AiPanel } from "@/features/ai/AiPanel";
 import { EditFilesHost } from "@/features/ai/EditFiles";
 import { useAiLifecycle } from "@/features/ai/lifecycle";
-import { DashboardPage } from "@/features/dashboard/DashboardPage";
 import { clearReadouts } from "@/features/dashboard/readings";
 import { ForwardsPage } from "@/features/hosts/ForwardsPage";
 import { HostEditPage } from "@/features/hosts/HostEditPage";
 import { HostsPage } from "@/features/hosts/HostsPage";
 import { startForwardListeners } from "@/features/hosts/forwards";
+import { useHostsUi } from "@/features/hosts/ui";
 import { KeysPage } from "@/features/keys/KeysPage";
 import { Onboarding } from "@/features/onboarding/Onboarding";
 import { SettingsWindow } from "@/features/settings/SettingsWindow";
@@ -18,9 +18,9 @@ import { SessionDialogs } from "@/features/terminal/SessionDialogs";
 import { TerminalView } from "@/features/terminal/TerminalView";
 import { closeSessionTab, openLocalTerminal } from "@/features/terminal/connect";
 import { UnlockScreen } from "@/features/unlock/UnlockScreen";
-import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { SyncState } from "@/ipc/types";
+import { cx } from "@/lib/cx";
 import { applyZoom } from "@/lib/zoom";
 import { ClosePrompt, useTrayMenu } from "./ClosePrompt";
 import { ContextMenuHost } from "./ContextMenu";
@@ -31,7 +31,9 @@ import { useShortcuts, type ShortcutAction } from "./shortcuts";
 import { useZoomKeys } from "./zoomKeys";
 import { ZoomHud } from "./ZoomHud";
 import { Sidebar } from "./Sidebar";
-import { useApp, type HostFilter, type Page } from "./store";
+import { StarPrompt } from "./StarPrompt";
+import { TrafficLights } from "./TrafficLights";
+import { useApp, type Page } from "./store";
 import { useTabs } from "./tabs";
 import { TabBar } from "./TitleBar";
 import { useAutoUpdateCheck } from "./update";
@@ -70,6 +72,7 @@ export function App() {
         <ZoomHud />
         <ContextMenuHost platform={platform} />
         <ResizeHandles platform={platform} />
+        <TrafficLights platform={platform} />
       </>
     );
 
@@ -92,22 +95,20 @@ export function App() {
       <ZoomHud />
       <ContextMenuHost platform={platform} />
       <ResizeHandles platform={platform} />
+      <TrafficLights platform={platform} />
     </>
   );
 }
 
 function Main() {
-  const t = useT();
   const page = useApp((st) => st.page);
-  const collapsed = useApp((st) => st.sidebarCollapsed);
   const platform = useApp((st) => st.info.platform);
   const aiOpen = useApp((st) => st.prefs.ai_panel_open);
   const { tabs, active } = useTabs();
-  const groups = useVaultData((st) => st.groups);
   // Only the terminals stay mounted behind the lock screen; the home page and its dialogs go.
   const locked = useApp((st) => st.phase === "locked");
-
-  const home = homeTab(page, (k) => t(k), (id) => groups.find((g) => g.id === id)?.name);
+  // The navigation rail, on the home tab only (§9).
+  const rail = active === "home" && !locked;
 
   const onShortcut = useCallback((action: ShortcutAction) => {
     const app = useApp.getState();
@@ -117,7 +118,10 @@ function Main() {
     switch (action) {
       case "search":
       case "newTab":
-        if (app.page.kind !== "hosts") app.navigate({ kind: "hosts", filter: { kind: "all" } });
+        if (app.page.kind !== "hosts") {
+          app.navigate({ kind: "hosts", group: null });
+          useHostsUi.getState().clearFilters();
+        }
         tabsState.activate("home");
         app.focusSearch();
         break;
@@ -148,17 +152,16 @@ function Main() {
 
   return (
     <div className={s.window}>
-      {!collapsed && <Sidebar />}
-      <div className={s.content}>
-        <TabBar
-          homeLabel={home.label}
-          homeIcon={home.icon}
-          onNewTab={() => onShortcut("newTab")}
-          onCloseTab={(id) => void closeSessionTab(id)}
-        />
-        <div className={s.workspace}>
+      <TabBar
+        onNewTab={() => onShortcut("newTab")}
+        onCloseTab={(id) => void closeSessionTab(id)}
+      />
+      <div className={s.workspace}>
+        {/* The rail navigates the home tab, so a session's tab has the window's whole width. */}
+        {rail && <Sidebar />}
+        <div className={cx(s.content, rail && s.contentBeside)}>
           <div className={s.body}>
-            {active === "home" && !locked && (
+            {rail && (
               // A new page fades in, keyed so that going from one to another plays it again.
               <div key={page.kind} className={s.page}>
                 <HomePage page={page} />
@@ -167,6 +170,7 @@ function Main() {
             {tabs.map((tab) => (
               <TerminalView key={tab.id} tab={tab} active={active === tab.id} />
             ))}
+            {rail && <StarPrompt />}
           </div>
           {/* §9: the AI panel shows the active tab's conversation (AI-07). */}
           {aiOpen && <AiPanel slotId={active} />}
@@ -179,7 +183,7 @@ function Main() {
 function HomePage({ page }: { page: Page }) {
   switch (page.kind) {
     case "hosts":
-      return <HostsPage filter={page.filter} />;
+      return <HostsPage group={page.group} />;
     case "host-edit":
       return (
         <HostEditPage
@@ -187,7 +191,6 @@ function HomePage({ page }: { page: Page }) {
           hostId={page.hostId}
           groupId={page.groupId}
           back={page.back}
-          fromDashboard={page.fromDashboard}
           prefill={page.prefill}
         />
       );
@@ -197,40 +200,6 @@ function HomePage({ page }: { page: Page }) {
       return <SyncPage />;
     case "forwards":
       return <ForwardsPage hostId={page.hostId} />;
-    case "dashboard":
-      return <DashboardPage filter={page.filter} />;
-  }
-}
-
-function filterLabel(f: HostFilter, t: (k: MessageKey) => string, groupName: (id: string) => string | undefined) {
-  switch (f.kind) {
-    case "all":
-      return { label: t("sidebar.all"), icon: "hard-drives" };
-    case "favorites":
-      return { label: t("sidebar.favorites"), icon: "star" };
-    case "recent":
-      return { label: t("sidebar.recent"), icon: "clock-counter-clockwise" };
-    case "group":
-      return { label: groupName(f.id) ?? t("sidebar.groups"), icon: "folder-simple" };
-    case "tag":
-      return { label: f.name, icon: "tag" };
-  }
-}
-
-function homeTab(page: Page, t: (k: MessageKey) => string, groupName: (id: string) => string | undefined) {
-  switch (page.kind) {
-    case "hosts":
-      return filterLabel(page.filter, t, groupName);
-    case "host-edit":
-      return { label: t(page.hostId ? "hosts.editHost" : "hosts.newHost"), icon: "pencil-simple" };
-    case "keys":
-      return { label: t("sidebar.keys"), icon: "key" };
-    case "sync":
-      return { label: t("sidebar.sync"), icon: "cloud" };
-    case "forwards":
-      return { label: t("sidebar.forwards"), icon: "arrows-left-right" };
-    case "dashboard":
-      return { label: t("dashboard.title"), icon: "gauge" };
   }
 }
 

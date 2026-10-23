@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
-import { useApp, type HostFilter } from "@/app/store";
+import { useApp } from "@/app/store";
 import { Button, Icon, IconButton, LinkButton, Segmented, StatusDot, TextArea, TextField } from "@/components/controls";
 import { EmptyState, FormRow, Group, Section, TagInput } from "@/components/layout";
 import { PopupSelect, confirm, toast, type SelectOption } from "@/components/overlay";
@@ -95,14 +95,12 @@ export function HostEditPage({
   hostId,
   groupId,
   back,
-  fromDashboard,
   prefill,
 }: {
   hostId: string | null;
   groupId: string | null;
-  back: HostFilter;
-  /** Back and Save return to the dashboard (HOST-14) rather than the host list. */
-  fromDashboard?: boolean;
+  /** The group whose hosts Back and Save return to, or null for every host. */
+  back: string | null;
   /** A quick-connect target the new host starts from (HOST-12). */
   prefill?: QuickTarget;
 }) {
@@ -139,7 +137,7 @@ export function HostEditPage({
       setTest({ state: "idle" });
   };
 
-  const goBack = () => navigate(fromDashboard ? { kind: "dashboard", filter: back } : { kind: "hosts", filter: back });
+  const goBack = () => navigate({ kind: "hosts", group: back });
 
   const validate = (): Errors => {
     const e: Errors = {};
@@ -326,7 +324,7 @@ export function HostEditPage({
     );
   }
 
-  const groupName = groups.find((g) => g.id === form.groupId)?.name ?? t("sidebar.all");
+  const groupName = groups.find((g) => g.id === form.groupId)?.name ?? t("hosts.title");
   const methodOptions = [
     { value: "password" as const, label: t("hosts.auth.password"), icon: "password" },
     { value: "key" as const, label: t("hosts.auth.key"), icon: "key" },

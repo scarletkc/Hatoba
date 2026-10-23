@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { messages, type Locale, type MessageKey } from "./locales";
 
 export type { Locale, MessageKey };
@@ -55,10 +55,13 @@ function subscribe(cb: () => void) {
   return () => listeners.delete(cb);
 }
 
-/** React hook: re-renders on language change (switching takes effect immediately, design §07). */
+/**
+ * React hook: re-renders on language change (switching takes effect immediately, design §07). The function stays the
+ * same until then, so the memoized values and components that take it keep their identity.
+ */
 export function useT() {
   const locale = useSyncExternalStore(subscribe, getLocale);
-  return Object.assign((key: MessageKey, params?: Params) => translate(locale, key, params), { locale });
+  return useMemo(() => Object.assign((key: MessageKey, params?: Params) => translate(locale, key, params), { locale }), [locale]);
 }
 
 let zone = { id: "", offset: NaN, at: NaN };

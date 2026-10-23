@@ -9,16 +9,19 @@ use crate::dto::ZoomView;
 
 pub const MAIN: &str = "main";
 
-/// macOS traffic lights: x is the close button's left edge, y the extra height the title bar
-/// container gets below the buttons (tao). The buttons are 14 x 16 pt, so their vertical center
-/// sits y + 2 pt below the window top; y = 20 centers them in the 44 px title bar (center at 22).
-/// x = 18 matches the sidebar's left padding; the three buttons end at x = 72, inside the 78 pt the
-/// sidebar reserves (18 padding + 60 `.traffic`) and the 70 pt the collapsed tab bar reserves.
-/// tao re-applies the position on every redraw and after leaving fullscreen.
+/// macOS traffic lights: x is the close button's left edge, y the extra height tao gives the title
+/// bar container below the buttons, so a larger y moves them down by as much. As measured on macOS
+/// 26, the buttons are 14 pt across and 23 pt apart, at x = 18, 41 and 64, and their center is
+/// 2 pt above y: y = 24 centers them at 22, on the row of the 44 pt title bar, where the tab bar
+/// centers its tabs. They stand on the home tab's navigation rail, 96 pt wide on macOS, 18 pt from
+/// both its edges at 100% interface zoom and below. They stay put as the interface zooms in: the
+/// rail grows with what it holds above 100%, and the title bar with its tabs from 150%, so the
+/// lights keep to their left and top, as by a wider Finder sidebar. The tab bar starts past the
+/// rail. tao re-applies the position on every redraw and after leaving fullscreen.
 #[cfg(target_os = "macos")]
 const TRAFFIC_LIGHT_X: f64 = 18.0;
 #[cfg(target_os = "macos")]
-const TRAFFIC_LIGHT_Y: f64 = 20.0;
+const TRAFFIC_LIGHT_Y: f64 = 24.0;
 
 /// The initial and minimum size of the visible window surface.
 const INITIAL_SIZE: (f64, f64) = (1200.0, 760.0);

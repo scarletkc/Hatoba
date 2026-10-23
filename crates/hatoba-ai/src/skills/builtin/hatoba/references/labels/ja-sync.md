@@ -6,8 +6,8 @@ The labels that these files name in English, as the interface shows them in Japa
 
 | en | ja |
 |---|---|
+| Sync | 同期 |
 | Cloud Sync | クラウド同期 |
-| Vault | 保管庫 |
 | Sync is off | クラウド同期はオフ |
 | Stored on this device only | このデバイスにのみ保存 |
 | Synced | 同期済み |

@@ -4,9 +4,9 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding-left: 10px;
-  border-bottom: 0.5px solid var(--line);
-  background: var(--win);
+  /* The home tab (36 px) stands over the rail's items, centred on them. */
+  padding-left: calc((var(--rail-width) - 36px) / 2);
+  background: var(--side);
   color: var(--fg);
   min-width: 0;
 }
@@ -35,6 +35,18 @@
   flex-shrink: 1;
 }
 
+/* The home tab is a button back to the pages, an icon only, as Termius's Vaults: the rail and the page header name
+   the page it shows. */
+.homeTab {
+  flex: none;
+  justify-content: center;
+}
+
+/* Past the rail and the traffic lights on it on macOS, on every tab. */
+:root[data-platform="macos"] .tabbar {
+  padding-left: calc(var(--rail-width) + 8px);
+}
+
 /* A new session's tab opens out from nothing (TabBar), so its content stays inside it meanwhile. */
 .tab[data-tab-id] {
   overflow: hidden;
@@ -55,7 +67,7 @@
 .tab[data-dragging] {
   position: relative;
   z-index: 1;
-  background: linear-gradient(var(--fill2), var(--fill2)), var(--win);
+  background: linear-gradient(var(--fill2), var(--fill2)), var(--side-solid);
 }
 
 .tabIcon {
@@ -153,6 +165,36 @@
 }
 
 /* AI panel toggle (§9) and the per-tab assistant state (AI-07) */
+.barButton {
+  position: relative;
+  width: 30px;
+  height: 28px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg2);
+}
+
+.barButton:hover {
+  background: var(--fill);
+}
+
+/* A newer release was found; the button opens Settings → About. */
+.updateDot {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--side);
+}
+
 .aiButton {
   position: relative;
   width: 30px;
@@ -186,7 +228,7 @@
   height: 6px;
   border-radius: 50%;
   background: var(--orange);
-  box-shadow: 0 0 0 1.5px var(--win);
+  box-shadow: 0 0 0 1.5px var(--side);
 }
 
 .tabAi {

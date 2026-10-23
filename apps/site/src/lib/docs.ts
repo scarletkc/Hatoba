@@ -10,7 +10,7 @@ export const OVERVIEW = "overview";
 /** The sidebar. A reference file missing here goes under "More"; docs.test.ts requires each to be listed. */
 export const DOC_GROUPS: { title: string; slugs: string[] }[] = [
   { title: "Get started", slugs: [OVERVIEW, "hosts-and-connecting", "command-line", "settings", "shortcuts"] },
-  { title: "Terminal and files", slugs: ["terminal", "sftp", "port-forwarding", "dashboard"] },
+  { title: "Terminal and files", slugs: ["terminal", "sftp", "port-forwarding", "resource-usage"] },
   { title: "Keys and vault", slugs: ["keys-vault-and-lock"] },
   { title: "Sync", slugs: ["sync", "sync-worker"] },
   {

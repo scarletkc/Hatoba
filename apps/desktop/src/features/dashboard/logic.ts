@@ -2,9 +2,8 @@ import { percentOf, type StatsReading } from "@/features/terminal/stats";
 import type { GroupView, HostView, MountView } from "@/ipc/types";
 import type { HostPhase, HostReadout } from "./readings";
 
-/** How the dashboard orders hosts within a group (HOST-14). `list` keeps the host list's order. */
+/** How the hosts page orders hosts by their readings (HOST-14). `list` keeps the host list's order. */
 export type DashboardSort = "list" | "name" | "status" | "cpu" | "memory" | "disk" | "network" | "uptime";
-export const DASHBOARD_SORTS: DashboardSort[] = ["list", "name", "status", "cpu", "memory", "disk", "network", "uptime"];
 
 /** The table's columns that can be turned off; the name always shows. */
 export type DashboardColumn = "status" | "cpu" | "memory" | "disk" | "network" | "load" | "uptime";
@@ -50,23 +49,6 @@ export function leftOutBy(host: HostView, groups: ReadonlyMap<string, GroupView>
 /** Whether the dashboard shows a host: neither it nor its group was left out on this device. */
 export function shownOnDashboard(host: HostView, groups: ReadonlyMap<string, GroupView>): boolean {
   return leftOutBy(host, groups) === null;
-}
-
-export interface DashboardSection {
-  /** null for the hosts without a group. */
-  group: GroupView | null;
-  hosts: HostView[];
-}
-
-/** A section per group, in the sidebar's order, then the hosts without a group (or in a group that is gone). */
-export function groupSections(hosts: HostView[], groups: GroupView[]): DashboardSection[] {
-  const known = new Set(groups.map((g) => g.id));
-  const sections: DashboardSection[] = groups
-    .map((group) => ({ group, hosts: hosts.filter((h) => h.group_id === group.id) }))
-    .filter((s) => s.hosts.length > 0);
-  const rest = hosts.filter((h) => h.group_id === null || !known.has(h.group_id));
-  if (rest.length > 0) sections.push({ group: null, hosts: rest });
-  return sections;
 }
 
 export function latestReading(readout: HostReadout | undefined): StatsReading | undefined {

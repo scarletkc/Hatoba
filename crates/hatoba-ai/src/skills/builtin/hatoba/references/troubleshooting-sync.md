@@ -4,7 +4,7 @@ Local use never depends on sync: hosts, keys and sessions keep working when sync
 
 ## Sync states
 
-The sidebar's sync button and the Cloud Sync page show one of these. Changes made meanwhile stay on the device and upload later.
+The navigation rail's **Sync** (its icon, and the text when pointing at it) and the Cloud Sync page show one of these. Changes made meanwhile stay on the device and upload later.
 
 Other labels: **Will retry automatically**, **Enter your master password again**, **Stored on this device only**.
 

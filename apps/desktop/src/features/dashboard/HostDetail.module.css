@@ -132,7 +132,7 @@
   transition: background-color var(--motion-slow) var(--ease-out);
 }
 
-/* Each new reading glides to its value (DashboardPage.module.css). */
+/* Each new reading glides to its value (views.module.css). */
 .meterFill {
   height: 100%;
   border-radius: var(--radius-full);
