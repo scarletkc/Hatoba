@@ -98,8 +98,9 @@ if [ "$system" = Darwin ]; then
           if (i >= NF) next
           m = $(i + 1); for (k = i + 2; k <= NF; k++) m = m " " $k
           if (m != "/" && hidden[m]) next
-          if (type[m] == "apfs") $(i - 2) = $(i - 3) - $(i - 1)
-          print ((m in type) ? type[m] : "-"), $0
+          t = (m in type) ? type[m] : "-"
+          if (t == "apfs") $(i - 2) = $(i - 3) - $(i - 1)
+          print t, $0
         }
       '
     fi
