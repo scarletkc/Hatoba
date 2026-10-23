@@ -17,8 +17,8 @@ The labels that these files name in English, as the interface shows them in Simp
 | Key | 密钥 |
 | Ask Each Time | 每次询问 |
 | Save Your Recovery Code | 保存你的恢复码 |
-| Save as Text | 存储为文本 |
-| Print | 打印 |
+| Save as Text… | 存储为文本… |
+| Print… | 打印… |
 | Finish Setup | 完成设置 |
 | Recovery Code | 恢复码 |
 | Generate New Code… | 生成新的恢复码… |
@@ -66,7 +66,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Clear Clipboard | 清除剪贴板 |
 | Master Password | 主密码 |
 | Change… | 更改主密码… |
-| Change Master Password | 更改主密码 |
+| Change Master Password… | 更改主密码… |
 | Export Encrypted Backup | 导出加密备份 |
 | Export… | 导出… |
 | General | 通用 |
@@ -79,7 +79,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Keys | 密钥库 |
 | Search keys | 搜索密钥 |
 | Import… | 导入… |
-| Generate Key | 生成新密钥 |
+| Generate Key… | 生成新密钥… |
 | Name | 名称 |
 | Type | 类型 |
 | Fingerprint | 指纹 |
@@ -92,7 +92,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Last used | 上次使用 |
 | Copy public key | 复制公钥 |
 | Copy | 复制 |
-| Rename | 重命名 |
+| Rename… | 重命名… |
 | Deploy to Host… | 部署到主机… |
 | Delete… | 删除… |
 | Import Private Key | 导入私钥 |
@@ -174,7 +174,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Default proxy on this device | 这台设备的默认代理 |
 | No proxy | 不使用代理 |
 | Saved Proxies | 已保存的代理 |
-| Add Proxy | 添加代理 |
+| Add Proxy… | 添加代理… |
 | Edit Proxy | 编辑代理 |
 | Type | 类型 |
 | Default | 默认 |

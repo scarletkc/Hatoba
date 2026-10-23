@@ -47,7 +47,7 @@ The header shows the state ("Synced", "Syncing…", "Offline", "Signed out", "Sy
 - **Signed out**: the session expired or was revoked. A master password field with **Sign In Again** appears on the page.
 - A paused state (**Worker update required** or **Hatoba update required**) means the Worker and the app versions no longer match; see `references/sync-worker.md`.
 - A notice that a host or the settings are too large to sync means that item can't upload until it is shortened; see `references/troubleshooting-sync.md`.
-- **Devices** lists the signed-in devices (**This PC** marks this one) with the platform and the last seen time. A device not seen for 14 days or more is flagged "Not seen in 14+ days". **Remove** next to another device (then **Remove Device**) revokes its sign-in. It needs the master password again to sync, and no data is deleted.
+- **Devices** lists the signed-in devices (**This PC** marks this one) with the platform and the last seen time. A device not seen for 14 days or more is flagged "Not seen in 14+ days". **Remove…** next to another device (then **Remove Device**) revokes its sign-in. It needs the master password again to sync, and no data is deleted.
 
 ## Conflicts
 
@@ -64,5 +64,5 @@ The review page lists each item with **This PC** and **Cloud** versions. **Keep 
 
 At the bottom of the status page:
 
-- **Generate New Recovery Code** and **Change Master Password** work like their Settings → Security counterparts. After a password change, the other devices are signed out and must sign in with the new one.
+- **Generate New Recovery Code…** and **Change Master Password…** work like their Settings → Security counterparts. After a password change, the other devices are signed out and must sign in with the new one.
 - **Disconnect…** stops syncing on this device, after a confirmation ("Disconnect Cloud Sync?"). Data stays on the device and nothing is deleted from the cloud. You can reconnect through the wizard later.

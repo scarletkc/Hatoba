@@ -75,7 +75,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Devices | 设备 |
 | This PC | 本机 |
 | Not seen in 14+ days | 超过 14 天未同步 |
-| Remove | 移除 |
+| Remove… | 移除… |
 | Sign In Again | 重新登录 |
 | Remove Device | 移除设备 |
 
@@ -95,8 +95,8 @@ The labels that these files name in English, as the interface shows them in Simp
 | en | zh-CN |
 |---|---|
 | Always ask | 始终询问 |
-| Generate New Recovery Code | 生成新的恢复码 |
-| Change Master Password | 更改主密码 |
+| Generate New Recovery Code… | 生成新的恢复码… |
+| Change Master Password… | 更改主密码… |
 | Disconnect… | 断开云同步… |
 | Disconnect Cloud Sync? | 断开云同步？ |
 | Disconnect | 断开 |
@@ -166,7 +166,7 @@ The labels that these files name in English, as the interface shows them in Simp
 
 | en | zh-CN |
 |---|---|
-| Update Worker | 更新 Worker |
+| Update Worker… | 更新 Worker… |
 | Dismiss | 忽略 |
 | Check for updates | 检查更新 |
 | Update the Sync Worker | 更新同步 Worker |
@@ -199,7 +199,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Sign In Again | 重新登录 |
 | Sync Now | 立即同步 |
 | Endpoint | 端点 |
-| Update Worker | 更新 Worker |
+| Update Worker… | 更新 Worker… |
 | Check for Updates | 检查更新 |
 
 ### Messages
@@ -278,4 +278,4 @@ The labels that these files name in English, as the interface shows them in Simp
 | Report a Problem | 反馈问题 |
 | Review | 查看 |
 | Devices | 设备 |
-| Remove | 移除 |
+| Remove… | 移除… |

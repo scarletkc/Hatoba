@@ -29,7 +29,7 @@ SOCKS5 and HTTP proxies that hosts connect through. Choosing one for a host is i
 
 - **Default proxy on this device**: **No proxy** or a saved proxy. Hosts whose proxy is **Device default**, and quick connections, use it. The choice stays on this device and does not sync, so a proxy that runs on this computer (such as Clash on 127.0.0.1) can be the default here and not on the others.
 - **Saved Proxies** lists each proxy with its type, address and the number of hosts that name it; the device's default has a **Default** badge. Click a row to edit it; the trash icon deletes it after showing which hosts switch to the device default. Proxies sync with their usernames and passwords, encrypted like the rest of the vault.
-- **Add Proxy** asks for **Name**, **Type** (SOCKS5 or HTTP; an HTTP proxy must support CONNECT), **Address** and **Port**, and a **Username** and **Password** when the proxy needs a sign-in. Pasting a proxy URL such as `socks5://127.0.0.1:7890` or `http://user:pass@proxy.example.com:3128` into **Address** fills in the other fields. A saved password shows **Saved** and can be replaced but not viewed. SOCKS5 and HTTP send the proxy's username and password to the proxy in the clear.
+- **Add Proxy…** asks for **Name**, **Type** (SOCKS5 or HTTP; an HTTP proxy must support CONNECT), **Address** and **Port**, and a **Username** and **Password** when the proxy needs a sign-in. Pasting a proxy URL such as `socks5://127.0.0.1:7890` or `http://user:pass@proxy.example.com:3128` into **Address** fills in the other fields. A saved password shows **Saved** and can be replaced but not viewed. SOCKS5 and HTTP send the proxy's username and password to the proxy in the clear.
 
 Other labels: **Edit Proxy**.
 

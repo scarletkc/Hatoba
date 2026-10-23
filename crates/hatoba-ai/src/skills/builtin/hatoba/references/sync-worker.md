@@ -57,12 +57,12 @@ Other labels: **Choose a database**.
 
 The app compares the Worker's version with the one it carries whenever the Cloud Sync page opens and at sync time. The status page then shows one of:
 
-- "A sync Worker update is available": sync keeps working. **Update Worker** starts the upgrade; **Dismiss** hides the notice until the next Worker version.
+- "A sync Worker update is available": sync keeps working. **Update Worker…** starts the upgrade; **Dismiss** hides the notice until the next Worker version.
 - **Worker update required**: this version of Hatoba cannot sync with the old Worker. Sync pauses (local changes stay on the device and upload after the update) until the Worker is updated.
 - **Hatoba update required**: the Worker is newer than this app supports. Update Hatoba (**Check for updates** opens Settings → About). Hatoba never replaces a newer Worker with an older one.
 
 Other labels: **Updating the Sync Worker**, **Sync Worker Updated**, **Update Stopped**, **Check the Worker and its database**, **Update the tables**.
 
-**Update Worker** opens **Update the Sync Worker**. Enter an API token with the same two permissions, an Account ID if asked, and the Worker name if the Worker uses a custom domain (otherwise it is the first part of its workers.dev URL). **Continue**, check **Review the Update** (it shows the table changes and the version change), then **Update**. Progress rows follow; **Retry** continues after a failure, and the Worker keeps working meanwhile. The cloud vault and its data are not touched.
+**Update Worker…** opens **Update the Sync Worker**. Enter an API token with the same two permissions, an Account ID if asked, and the Worker name if the Worker uses a custom domain (otherwise it is the first part of its workers.dev URL). **Continue**, check **Review the Update** (it shows the table changes and the version change), then **Update**. Progress rows follow; **Retry** continues after a failure, and the Worker keeps working meanwhile. The cloud vault and its data are not touched.
 
 If the Worker was deployed with the Deploy to Cloudflare button, Cloudflare redeploys it from the user's repository on its next push, which undoes an in-app update. In that case update `workers/sync` in the repository by the **Upgrade steps** in the deployment guide.

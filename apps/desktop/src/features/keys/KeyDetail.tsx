@@ -139,7 +139,7 @@ export function KeyDetail({
       </div>
       <div className={s.panelFoot}>
         <Button size="sm" onClick={onRename}>
-          {t("btn.rename")}
+          {t("keys.action.rename")}
         </Button>
         <Button size="sm" onClick={onDeploy}>
           {t("keys.action.deploy")}

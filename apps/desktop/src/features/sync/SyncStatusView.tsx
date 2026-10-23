@@ -333,7 +333,7 @@ function Devices({ status }: { status: SyncStatus }) {
                       aria-label={t("sync.device.removeAria", { name: d.name })}
                       onClick={() => void revoke(d)}
                     >
-                      {t("btn.remove")}
+                      {t("sync.device.remove")}
                     </LinkButton>
                   )}
                 </>

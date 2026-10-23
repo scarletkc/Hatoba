@@ -248,7 +248,7 @@ export const AREAS: Area[] = [
           "sidebar.keys", "keys.search", "keys.import", "keys.generate", "keys.col.name",
           "keys.col.type", "keys.col.fingerprint", "keys.col.created", "keys.col.usedBy", "keys.unused",
           "keys.detail.publicKey", "keys.detail.privateKey", "keys.detail.usedHosts", "keys.detail.lastUsed",
-          "keys.detail.copyPublic", "btn.copy", "btn.rename", "keys.action.deploy", "keys.action.delete",
+          "keys.detail.copyPublic", "btn.copy", "keys.action.rename", "keys.action.deploy", "keys.action.delete",
           "keys.import.title", "keys.import.file", "keys.import.paste", "keys.import.chooseFile",
           "keys.field.passphraseOpt", "keys.generate.typeEd25519", "keys.generate.typeRsa", "keys.generate.comment",
           "keys.generate.confirmPassphrase", "keys.rename.title", "keys.deploy.title", "keys.deploy.host",
@@ -339,7 +339,7 @@ export const AREAS: Area[] = [
         ],
         "The status page": [
           "sync.syncNow", "sync.sec.connection", "sync.row.endpoint", "sync.database", "sync.row.auto",
-          "sync.sec.devices", "sync.device.thisPc", "sync.device.stale", "btn.remove", "sync.auth.login",
+          "sync.sec.devices", "sync.device.thisPc", "sync.device.stale", "sync.device.remove", "sync.auth.login",
           "sync.device.remove.confirm",
         ],
         "Conflicts": [
@@ -404,7 +404,7 @@ export const AREAS: Area[] = [
           "sync.conflictBanner",
         ],
         "Still not solved": [
-          "sidebar.star.report", "sync.conflictBanner.view", "sync.sec.devices", "btn.remove",
+          "sidebar.star.report", "sync.conflictBanner.view", "sync.sec.devices", "sync.device.remove",
         ],
       },
     },

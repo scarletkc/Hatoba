@@ -11,9 +11,9 @@ Other labels: **Will retry automatically**, **Enter your master password again**
 | State | What it means | What to do |
 |---|---|---|
 | Offline | The Worker (or Cloudflare) can't be reached | Check the network and the Worker URL (**Endpoint** on the status page). It retries by itself; **Sync Now** retries at once |
-| Signed out | The session expired or was revoked (another device pressed **Remove** on this one, or the master password changed) | Enter the master password under **Sign In Again** on the status page |
+| Signed out | The session expired or was revoked (another device pressed **Remove…** on this one, or the master password changed) | Enter the master password under **Sign In Again** on the status page |
 | Sync error | A sync round failed; the page shows the message | Read the message below; it retries automatically |
-| Worker update required | The Worker is too old for this Hatoba | **Update Worker**; see `references/sync-worker.md` |
+| Worker update required | The Worker is too old for this Hatoba | **Update Worker…**; see `references/sync-worker.md` |
 | Hatoba update required | The Worker is newer than this Hatoba supports | Update Hatoba: Settings → About → **Check for Updates** |
 | Sync is off | No sync configured on this device | Set it up under **Cloud Sync** |
 
@@ -78,7 +78,7 @@ Other labels: **Restore from Cloud**, **Check the token and account**, **Look fo
 
 ## Devices and conflicts
 
-- A device that should not sync any more: **Remove** it on the status page (**Devices**). It then needs the master password to sync again; no data is deleted.
+- A device that should not sync any more: **Remove…** it on the status page (**Devices**). It then needs the master password to sync again; no data is deleted.
 - "N conflicts were resolved automatically" is not an error. The newer edit wins; for SSH keys the loser is kept as a copy. Open **Review** to keep the result or restore the other version.
 - Two devices that show different data: press **Sync Now** on both; a device that is offline or signed out has not uploaded yet.
 

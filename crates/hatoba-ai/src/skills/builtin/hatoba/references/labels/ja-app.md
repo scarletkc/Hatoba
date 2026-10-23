@@ -65,7 +65,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Search hosts or ssh user@host | ホストを検索、または ssh user@host |
 | Import | インポート |
 | New Host | 新規ホスト |
-| New Group | 新規グループ |
+| New Group… | 新規グループ… |
 | Favorites | お気に入り |
 | Tags | タグ |
 | Resource Usage | リソース使用状況 |
@@ -86,8 +86,8 @@ The labels that these files name in English, as the interface shows them in Japa
 | Copy Address | アドレスをコピー |
 | Copy Password | パスワードをコピー |
 | Delete… | 削除… |
-| Rename Group | グループ名を変更 |
-| Delete Group | グループを削除 |
+| Rename Group… | グループ名を変更… |
+| Delete Group… | グループを削除… |
 | Clear Filters | 絞り込みを解除 |
 | General | 一般 |
 | Show host reachability | ホストの接続状態を表示 |
@@ -138,7 +138,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | AI Notes | AI 向けメモ |
 | Test Connection | 接続テスト |
 | Port Forwarding | ポートフォワーディング |
-| Delete Host | ホストを削除 |
+| Delete Host… | ホストを削除… |
 | Save | 保存 |
 | Cancel | キャンセル |
 

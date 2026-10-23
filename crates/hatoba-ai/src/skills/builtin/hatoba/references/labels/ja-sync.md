@@ -75,7 +75,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Devices | デバイス |
 | This PC | このPC |
 | Not seen in 14+ days | 14 日以上同期されていません |
-| Remove | 削除 |
+| Remove… | 削除… |
 | Sign In Again | 再ログイン |
 | Remove Device | デバイスを削除 |
 
@@ -95,8 +95,8 @@ The labels that these files name in English, as the interface shows them in Japa
 | en | ja |
 |---|---|
 | Always ask | 常に確認 |
-| Generate New Recovery Code | 新しいリカバリーコードを作成 |
-| Change Master Password | マスターパスワードを変更 |
+| Generate New Recovery Code… | 新しいリカバリーコードを作成… |
+| Change Master Password… | マスターパスワードを変更… |
 | Disconnect… | クラウド同期を解除… |
 | Disconnect Cloud Sync? | クラウド同期を解除しますか？ |
 | Disconnect | 解除 |
@@ -166,7 +166,7 @@ The labels that these files name in English, as the interface shows them in Japa
 
 | en | ja |
 |---|---|
-| Update Worker | Worker を更新 |
+| Update Worker… | Worker を更新… |
 | Dismiss | 閉じる |
 | Check for updates | アップデートを確認 |
 | Update the Sync Worker | 同期 Worker の更新 |
@@ -199,7 +199,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Sign In Again | 再ログイン |
 | Sync Now | 今すぐ同期 |
 | Endpoint | エンドポイント |
-| Update Worker | Worker を更新 |
+| Update Worker… | Worker を更新… |
 | Check for Updates | アップデートを確認 |
 
 ### Messages
@@ -278,4 +278,4 @@ The labels that these files name in English, as the interface shows them in Japa
 | Report a Problem | 問題を報告 |
 | Review | 確認 |
 | Devices | デバイス |
-| Remove | 削除 |
+| Remove… | 削除… |

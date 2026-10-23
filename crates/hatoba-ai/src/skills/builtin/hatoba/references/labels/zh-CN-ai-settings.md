@@ -10,8 +10,8 @@ The labels that these files name in English, as the interface shows them in Simp
 | AI Notes | AI 备注 |
 | Memory | 记忆 |
 | Remember across conversations | 跨对话记忆 |
-| Add Memory | 添加记忆 |
-| Delete All | 全部删除 |
+| Add Memory… | 添加记忆… |
+| Delete All… | 全部删除… |
 | Global | 全局 |
 | This Computer | 本机 |
 | Applies To | 适用于 |
@@ -39,7 +39,7 @@ The labels that these files name in English, as the interface shows them in Simp
 
 | en | zh-CN |
 |---|---|
-| Add Provider | 添加服务商 |
+| Add Provider… | 添加服务商… |
 | Name | 名称 |
 | Protocol | 协议 |
 | OpenAI Chat Completions | OpenAI Chat Completions |
@@ -77,7 +77,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Tavily | Tavily |
 | SearXNG | SearXNG |
 | Instance URL | 实例地址 |
-| Remove Configuration | 移除配置 |
+| Remove Configuration… | 移除配置… |
 
 ### Terminal Screen
 
@@ -90,7 +90,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | en | zh-CN |
 |---|---|
 | Read skill | 读取技能 |
-| New Skill | 新建技能 |
+| New Skill… | 新建技能… |
 | Import | 导入 |
 | Import Folder… | 导入文件夹… |
 | Import .zip… | 导入 .zip… |
@@ -165,9 +165,9 @@ The labels that these files name in English, as the interface shows them in Simp
 
 | en | zh-CN |
 |---|---|
-| Add Server | 添加服务器 |
+| Add Server… | 添加服务器… |
 | Add from Template | 从模板添加 |
-| Export | 导出 |
+| Export… | 导出… |
 | Add MCP Server | 添加 MCP 服务器 |
 | Type | 类型 |
 | Command | 命令 |
