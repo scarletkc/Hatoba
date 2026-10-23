@@ -83,10 +83,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {icon && <Icon name={busy ? "circle-notch" : icon} className={cx(s.icon, busy && s.spinner)} />}
       {/* Without an icon to swap, the label stays (hidden) to hold the width
           and the spinner sits over it. */}
-      <span className={cx(s.buttonLabel, busy && !icon && s.buttonLabelHidden)}>
-        {children}
-        {trailingIcon && <Icon name={trailingIcon} className={s.icon} style={{ fontSize: 12 }} />}
-      </span>
+      {/* None for an icon alone, whose gap would push the icon off center. */}
+      {(children != null || trailingIcon) && (
+        <span className={cx(s.buttonLabel, busy && !icon && s.buttonLabelHidden)}>
+          {children}
+          {trailingIcon && <Icon name={trailingIcon} className={s.icon} style={{ fontSize: 12 }} />}
+        </span>
+      )}
       {busy && !icon && (
         <span className={s.buttonBusy}>
           <Icon name="circle-notch" className={cx(s.icon, s.spinner)} />
