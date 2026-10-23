@@ -50,6 +50,8 @@ export default defineMessages({
     "hosts.deleteTitle": "删除主机“{name}”？",
     "hosts.deleteBody": "此操作无法撤销。",
     "hosts.deleted": "已删除 {name}",
+    "hosts.deleteManyTitle": "删除 {n} 台主机？",
+    "hosts.deletedMany": "已删除 {n} 台主机",
 
     "hosts.empty.title": "还没有主机",
     "hosts.empty.body": "添加第一台服务器，或从 ~/.ssh/config 或其他 SSH 客户端导入。",
@@ -272,6 +274,8 @@ export default defineMessages({
     "hosts.deleteTitle": "Delete “{name}”?",
     "hosts.deleteBody": "This can’t be undone.",
     "hosts.deleted": "Deleted {name}",
+    "hosts.deleteManyTitle": "Delete {n} hosts?",
+    "hosts.deletedMany": "Deleted {n} hosts",
 
     "hosts.empty.title": "No hosts yet",
     "hosts.empty.body": "Add your first server, or import from ~/.ssh/config or another SSH client.",
@@ -497,6 +501,8 @@ export default defineMessages({
     "hosts.deleteTitle": "「{name}」を削除しますか？",
     "hosts.deleteBody": "この操作は取り消せません。",
     "hosts.deleted": "{name} を削除しました",
+    "hosts.deleteManyTitle": "{n} 台のホストを削除しますか？",
+    "hosts.deletedMany": "{n} 台のホストを削除しました",
 
     "hosts.empty.title": "ホストがありません",
     "hosts.empty.body": "最初のサーバーを追加するか、~/.ssh/config やほかの SSH クライアントからインポートしましょう。",

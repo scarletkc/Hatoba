@@ -15,12 +15,13 @@ export const isListSort = (sort: HostSort): sort is ListSort => (LIST_SORTS as H
  * device-local prefs (`hosts_view`, `hosts_stats`).
  */
 interface HostsUi {
-  selectedId: string | null;
+  /** The selected rows in the order they were picked; the arrow keys move on from the last. */
+  selection: string[];
   /** A resource order applies while resource usage shows; otherwise the latest connection comes first. */
   sort: HostSort;
   favorites: boolean;
   tags: string[];
-  select(id: string | null): void;
+  select(selection: string[]): void;
   setSort(sort: HostSort): void;
   setFavorites(favorites: boolean): void;
   setTags(tags: string[]): void;
@@ -29,11 +30,11 @@ interface HostsUi {
 }
 
 export const useHostsUi = create<HostsUi>((set) => ({
-  selectedId: null,
+  selection: [],
   sort: "recent",
   favorites: false,
   tags: [],
-  select: (selectedId) => set({ selectedId }),
+  select: (selection) => set({ selection }),
   setSort: (sort) => set({ sort }),
   setFavorites: (favorites) => set({ favorites }),
   setTags: (tags) => set({ tags }),

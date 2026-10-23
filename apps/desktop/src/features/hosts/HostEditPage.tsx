@@ -201,7 +201,7 @@ export function HostEditPage({
     try {
       const saved = await api.host_save(toInput());
       await useVaultData.getState().reload();
-      useHostsUi.getState().select(saved.id);
+      useHostsUi.getState().select([saved.id]);
       goBack();
     } catch (err) {
       const ae = toAppError(err);

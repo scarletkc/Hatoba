@@ -383,6 +383,11 @@
   opacity: 1;
 }
 
+/* With several hosts selected, Connect shows only under the pointer. */
+.scroll[data-several] .rowSel:not(:hover) .connect {
+  opacity: 0;
+}
+
 /* Quick connect (HOST-12): the search field's recent targets, and Connect rows for unsaved targets. */
 /* Takes the search field's place in the header, so it shrinks the way the field does on its own. */
 .searchWrap {
