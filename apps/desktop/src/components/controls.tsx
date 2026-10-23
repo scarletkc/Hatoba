@@ -293,7 +293,7 @@ export function Segmented<V extends string>({
   );
 }
 
-/** A number with − and + buttons, one step each (Settings → Terminal → Font Size, Settings → AI → Text Size). */
+/** A number with − and + buttons, one step each (Settings → Terminal → Font Size, Settings → Appearance → AI Panel → Text Size). */
 export function Stepper({
   value,
   min,

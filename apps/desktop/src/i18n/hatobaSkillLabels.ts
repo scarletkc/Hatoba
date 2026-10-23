@@ -116,7 +116,7 @@ export const AREAS: Area[] = [
           "tabs.newTab", "tabs.close", "tray.lock", "sidebar.settings", "ai.show", "ai.hide", "hosts.search",
           "settings.rightClick",
         ],
-        "Zoom": ["settings.term.size", "aiSettings.textSize", "settings.zoom"],
+        "Zoom": ["settings.term.size", "settings.tab.appearance", "settings.aiPanel", "settings.aiText", "settings.zoom"],
       },
     },
   },
@@ -146,15 +146,16 @@ export const AREAS: Area[] = [
         ],
         "Copy, paste, search and links": [
           "terminal.paste.title", "terminal.find.placeholder", "terminal.find.none", "terminal.find.prev",
-          "terminal.find.next", "terminal.find.close", "settings.confirmPaste", "settings.tab.general",
+          "terminal.find.next", "terminal.find.close", "settings.confirmPaste", "settings.tab.terminal",
           "settings.rightClick", "settings.rightClick.copyPaste", "settings.rightClick.menu",
         ],
         "Terminal settings": [
           "settings.tab.terminal", "sync.field.font_family", "settings.term.size", "settings.term.sizeDown",
           "settings.term.sizeUp", "settings.term.cursor", "settings.term.cursor.block", "settings.term.cursor.bar",
-          "settings.term.cursor.underline", "settings.term.scrollback", "settings.tab.appearance",
-          "settings.termColors", "settings.termColors.dark", "settings.termColors.light", "settings.termColors.follow",
-          "settings.termColors.forDark", "settings.termColors.forLight",
+          "settings.term.cursor.underline", "settings.termColors", "settings.termColors.dark", "settings.termColors.light",
+          "settings.termColors.follow", "settings.termColors.forDark", "settings.termColors.forLight",
+          "settings.rightClick", "settings.rightClick.copyPaste", "settings.rightClick.menu", "settings.confirmPaste",
+          "settings.term.scrollback", "settings.term.localShell", "settings.tab.general", "settings.tab.appearance",
         ],
       },
       "references/sftp.md": {
@@ -258,16 +259,15 @@ export const AREAS: Area[] = [
           "settings.tab.proxies", "settings.tab.security", "aiSettings.tab", "settings.tab.about",
         ],
         "General": [
-          "settings.rightClick", "settings.rightClick.copyPaste", "settings.rightClick.menu", "settings.confirmPaste",
-          "settings.probe", "settings.closeAction", "settings.closeAction.ask", "settings.closeAction.tray",
+          "settings.language", "settings.language.system", "settings.language.zh", "settings.language.en",
+          "settings.language.ja", "settings.probe", "settings.closeAction", "settings.closeAction.ask", "settings.closeAction.tray",
           "settings.closeAction.quit", "settings.aiNotifications", "settings.cli", "settings.cliAccess",
           "settings.cliAccess.activity", "settings.cliAccess.activity.details", "dashboard.settings.interval", "settings.backup", "settings.backup.button",
         ],
         "Appearance": [
-          "settings.appearance.light", "settings.appearance.dark", "settings.appearance.auto", "settings.termColors",
-          "settings.termColors.dark", "settings.termColors.light", "settings.termColors.follow", "settings.density",
-          "settings.density.regular", "settings.density.compact", "settings.zoom", "settings.language",
-          "settings.language.system", "settings.language.zh", "settings.language.en", "settings.language.ja",
+          "settings.appearance.light", "settings.appearance.dark", "settings.appearance.auto", "settings.density",
+          "settings.density.regular", "settings.density.compact", "settings.zoom", "settings.aiPanel", "settings.aiText",
+          "settings.tab.terminal",
         ],
         "Proxies": [
           "settings.proxy.default", "settings.proxy.none", "settings.proxy.saved", "settings.proxy.add",
@@ -532,8 +532,8 @@ export const AREAS: Area[] = [
       "references/ai-settings.md": {
         "": [
           "settings.title", "aiSettings.tab", "aiSettings.providers", "aiSettings.default", "aiSettings.search",
-          "aiSettings.instructions", "aiSettings.screen", "aiSettings.panel", "ai.tool.memory", "ai.add.skills",
-          "aiSettings.mcp", "aiSettings.judge", "aiSettings.device",
+          "aiSettings.instructions", "aiSettings.screen", "ai.tool.memory", "ai.add.skills",
+          "aiSettings.mcp", "aiSettings.judge", "aiSettings.device", "settings.aiText", "settings.tab.appearance",
         ],
         "Providers": [
           "aiSettings.providers.add", "settings.proxy.f.name", "aiSettings.f.protocol",
@@ -552,9 +552,6 @@ export const AREAS: Area[] = [
         ],
         "Terminal Screen": [
           "aiSettings.screen.row",
-        ],
-        "AI Panel": [
-          "aiSettings.textSize",
         ],
         "Skills": [
           "ai.tool.read_skill", "aiSettings.skills.add", "aiSettings.skills.import", "aiSettings.skills.import.folder",

@@ -79,16 +79,20 @@ function zoomTerminal(action: ZoomAction, el: Element | null, platform: Platform
   showZoomHud(`${font_size} px`, term?.getBoundingClientRect() ?? null);
 }
 
-/** The panel's conversation and input take the new size, which is the synced Settings → AI → Text Size. */
-function zoomAiText(action: ZoomAction, el: Element | null) {
+/** The synced Settings → Appearance → AI Panel → Text Size; the panel's conversation and input take it at once. */
+export function setAiTextSize(text_size: number) {
   const { catalog } = useAi.getState();
   const settings = catalog.settings;
+  if (!settings || text_size === settings.text_size) return;
+  useAi.setState({ catalog: { ...catalog, settings: { ...settings, text_size } } });
+  saveAiTextSize(text_size);
+}
+
+function zoomAiText(action: ZoomAction, el: Element | null) {
+  const settings = useAi.getState().catalog.settings;
   if (!settings) return;
   const text_size = nextSize(settings.text_size, action, { min: AI_TEXT_SIZE_MIN, max: AI_TEXT_SIZE_MAX, reset: AI_TEXT_SIZE_DEFAULT });
-  if (text_size !== settings.text_size) {
-    useAi.setState({ catalog: { ...catalog, settings: { ...settings, text_size } } });
-    saveAiTextSize(text_size);
-  }
+  setAiTextSize(text_size);
   showZoomHud(`${text_size} px`, el?.closest("[data-zoom='ai']")?.getBoundingClientRect() ?? null);
 }
 

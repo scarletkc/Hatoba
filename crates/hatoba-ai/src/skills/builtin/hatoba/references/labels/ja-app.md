@@ -289,5 +289,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | en | ja |
 |---|---|
 | Font Size | フォントサイズ |
+| Appearance | 外観 |
+| AI Panel | AI パネル |
 | Text Size | 文字サイズ |
 | Zoom | ズーム |

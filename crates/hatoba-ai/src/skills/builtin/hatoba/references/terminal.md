@@ -58,7 +58,7 @@ Plain Ctrl+letter always reaches the remote shell (Ctrl+L, Ctrl+W, Ctrl+K and so
 | Paste | Ctrl+V, Ctrl+Shift+V, or Shift+Insert | ⌘V |
 | Find in the terminal | Ctrl+Shift+F | ⌘F |
 
-- Pasting a single line drops its trailing line breaks, so a copied command waits for Enter instead of running. Text with line breaks inside is pasted unchanged, after **Paste multiple lines?** with a preview; **Paste** confirms. The check can be turned off in Settings → General (**Confirm before pasting multiple lines**). Pasting needs a connected tab.
+- Pasting a single line drops its trailing line breaks, so a copied command waits for Enter instead of running. Text with line breaks inside is pasted unchanged, after **Paste multiple lines?** with a preview; **Paste** confirms. The check can be turned off in Settings → Terminal (**Confirm before pasting multiple lines**). Pasting needs a connected tab.
 - The find bar searches the visible screen and the scrollback. Enter goes to the next match, Shift+Enter to the previous one, Esc closes the bar. It shows "No results" or the position as i/n.
 - HTTP and HTTPS links in the output open in the default browser with Ctrl+click (⌘+click on macOS), including local HTTP services. Other schemes are not opened. A plain click only selects text.
 
@@ -66,25 +66,24 @@ Other labels: **Previous (Shift+Enter)**, **Next (Enter)**, **Close find (Esc)**
 
 ## Terminal settings
 
-The terminal settings sync with the vault. They are in three places:
-
-- Settings → Terminal: font, size, cursor and scrollback, with a live preview, and **Local Terminal Shell**, the shell new local tabs run, which is kept on this device only (not synced).
-- Settings → Appearance: **Terminal Colors**.
-- Settings → General: **Right-Click in Terminal** and **Confirm before pasting multiple lines**.
+All of them are in Settings → Terminal and sync with the vault, except **Local Terminal Shell**. A preview under the font rows shows the font, size, cursor and color scheme.
 
 Other labels: **Decrease font size**, **Increase font size**.
 
 - **Font**: the name of an installed font family (default Cascadia Mono, or Menlo on macOS). A font that is not installed falls back to the system monospace font.
 - **Font Size**: 10 to 24 (default 13), changed with the minus and plus buttons, or in any terminal with Ctrl+= / Ctrl+- / Ctrl+0 (⌘ on macOS) and Ctrl+wheel, which change every terminal tab; see `references/shortcuts.md`.
 - **Cursor Style**: Block (default), Bar or Underline.
-- **Scrollback**: 1,000, 5,000, 10,000 (default), or 50,000 lines.
 - **Terminal Colors**: **Always Dark** (default), **Always Light**, or **Match Appearance**, which follows the app's light or dark theme. Below it, the built-in color schemes show as small terminal previews; click one to use it:
   - Dark: Hatoba Dark (default), Dracula, Tokyo Night, Catppuccin Mocha, One Half Dark, Nord, Gruvbox Dark, Solarized Dark, Rosé Pine, Kanagawa, GitHub Dark.
   - Light: Hatoba Light (default), GitHub Light, One Half Light, Catppuccin Latte, Solarized Light, Gruvbox Light, Rosé Pine Dawn.
   - With **Match Appearance** both lists show, under **In Dark Appearance** and **In Light Appearance**, and the terminal switches between the two picks with the theme. Open terminals take a new pick when the Settings window closes.
   - Light schemes darken colors that would be hard to read on a light background, such as white or yellow text from programs written for dark terminals.
   - There are no custom schemes and no import from other terminals.
-- Language, theme and list density are device-local settings in Settings → Appearance; see `references/settings.md`.
+- **Right-Click in Terminal**: **Copy if selected, otherwise paste** (default, except on macOS) or **Show context menu** (default on macOS).
+- **Confirm before pasting multiple lines**: on by default. Pasting text that contains line breaks shows a preview first.
+- **Scrollback**: 1,000, 5,000, 10,000 (default), or 50,000 lines.
+- **Local Terminal Shell**: the shell new local tabs run, kept on this device only (not synced); see "Local terminal tabs" above.
+- The language is in Settings → General, and the theme, list density and window zoom in Settings → Appearance; see `references/settings.md`.
 
 ## Tab states
 

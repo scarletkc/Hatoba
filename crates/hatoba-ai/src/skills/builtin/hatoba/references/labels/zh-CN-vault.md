@@ -130,10 +130,11 @@ The labels that these files name in English, as the interface shows them in Simp
 
 | en | zh-CN |
 |---|---|
-| Right-Click in Terminal | 终端中的右键 |
-| Copy if selected, otherwise paste | 有选中则复制，否则粘贴 |
-| Show context menu | 弹出菜单 |
-| Confirm before pasting multiple lines | 粘贴多行文本前确认 |
+| Language | 语言 |
+| System Default | 跟随系统 |
+| 简体中文 | 简体中文 |
+| English | English |
+| 日本語 | 日本語 |
 | Show host reachability | 显示主机在线状态 |
 | Close Button | 关闭窗口时 |
 | Ask every time | 每次询问 |
@@ -155,19 +156,13 @@ The labels that these files name in English, as the interface shows them in Simp
 | Light | 浅色 |
 | Dark | 深色 |
 | Auto | 跟随系统 |
-| Terminal Colors | 终端配色 |
-| Always Dark | 始终深色 |
-| Always Light | 始终浅色 |
-| Match Appearance | 跟随外观 |
 | List Density | 列表密度 |
 | Regular | 标准 |
 | Compact | 紧凑 |
 | Zoom | 缩放 |
-| Language | 语言 |
-| System Default | 跟随系统 |
-| 简体中文 | 简体中文 |
-| English | English |
-| 日本語 | 日本語 |
+| AI Panel | AI 面板 |
+| Text Size | 文字大小 |
+| Terminal | 终端 |
 
 ### Proxies
 

@@ -1,15 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
-import { Button, Icon, Switch } from "@/components/controls";
+import { Button, Icon, Switch, controlStyles } from "@/components/controls";
 import { Group } from "@/components/layout";
-import { PopupSelect, toast } from "@/components/overlay";
+import { Menu, PopupSelect, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { formatDateTime, formatRelative, useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
-import type { CliActivity, CliCommandView, CloseAction, TerminalSettings } from "@/ipc/types";
+import type { CliActivity, CliCommandView, CloseAction, Language } from "@/ipc/types";
+import { cx } from "@/lib/cx";
 import { pickSavePath } from "@/lib/native";
-import { defaultRightClick } from "@/lib/platform";
-import { Pane, SettingRow, usePrefs, type PaneProps } from "./shared";
+import { Pane, SettingRow, usePrefs } from "./shared";
 import s from "./shared.module.css";
 
 /** Seconds between the dashboard's readings (HOST-14). */
@@ -28,11 +28,11 @@ function withCurrent(choices: number[], current: number): number[] {
 }
 
 /**
- * Settings → General: terminal mouse behaviour (WIN-05), reachability dots (HOST-10), the close
- * button (WIN-10), AI notifications (AI-07), the `hatoba` command (HOST-13) and other programs'
- * use of the saved hosts through it (HOST-15), the dashboard (HOST-14), backup (VAULT-07).
+ * Settings → General: the language, reachability dots (HOST-10), the close button (WIN-10), AI
+ * notifications (AI-07), the `hatoba` command (HOST-13) and other programs' use of the saved hosts
+ * through it (HOST-15), the dashboard (HOST-14), backup (VAULT-07).
  */
-export function GeneralPane({ settings, updateTerminal }: PaneProps) {
+export function GeneralPane() {
   const t = useT();
   const [prefs, setPrefs] = usePrefs();
   const platform = useApp((a) => a.info.platform);
@@ -58,25 +58,10 @@ export function GeneralPane({ settings, updateTerminal }: PaneProps) {
   return (
     <Pane>
       <Group>
-        <SettingRow label={t("settings.rightClick")}>
-          <PopupSelect<TerminalSettings["right_click"]>
-            ariaLabel={t("settings.rightClick")}
-            value={settings?.terminal.right_click ?? defaultRightClick(platform)}
-            minWidth={230}
-            options={[
-              { value: "copy_paste", label: t("settings.rightClick.copyPaste") },
-              { value: "menu", label: t("settings.rightClick.menu") },
-            ]}
-            onChange={(right_click) => updateTerminal({ right_click })}
-          />
-        </SettingRow>
-        <SettingRow label={t("settings.confirmPaste")}>
-          <Switch
-            label={t("settings.confirmPaste")}
-            checked={settings?.terminal.confirm_multiline_paste ?? true}
-            onChange={(confirm_multiline_paste) => updateTerminal({ confirm_multiline_paste })}
-          />
-        </SettingRow>
+        <LanguageRow />
+      </Group>
+
+      <Group>
         <SettingRow label={t("settings.probe")} hint={t("settings.probe.hint")}>
           <Switch label={t("settings.probe")} checked={prefs.host_probe} onChange={(host_probe) => setPrefs({ host_probe })} />
         </SettingRow>
@@ -136,6 +121,42 @@ export function GeneralPane({ settings, updateTerminal }: PaneProps) {
         </SettingRow>
       </Group>
     </Pane>
+  );
+}
+
+/** The interface language, a device-local preference. */
+function LanguageRow() {
+  const t = useT();
+  const [prefs, setPrefs] = usePrefs();
+  const menu = useMenu();
+  const button = useRef<HTMLButtonElement>(null);
+  const languages: { value: Language; label: string }[] = [
+    { value: "system", label: t("settings.language.system") },
+    { value: "zh-CN", label: t("settings.language.zh") },
+    { value: "en", label: t("settings.language.en") },
+    { value: "ja", label: t("settings.language.ja") },
+  ];
+  const entries: MenuEntry[] = languages.flatMap((l, i): MenuEntry[] => [
+    { label: l.label, checked: prefs.language === l.value, onSelect: () => setPrefs({ language: l.value }) },
+    ...(i === 0 ? [{ kind: "separator" } as const] : []),
+  ]);
+  return (
+    <SettingRow label={t("settings.language")}>
+      <button
+        ref={button}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={!!menu.anchor}
+        aria-label={t("settings.language")}
+        className={cx(controlStyles.popup, s.langButton)}
+        onClick={() => button.current && menu.openBelow(button.current, true)}
+      >
+        <Icon name="translate" className={controlStyles.popupIcon} style={{ fontSize: 14 }} />
+        <span className={controlStyles.popupLabel}>{languages.find((l) => l.value === prefs.language)?.label}</span>
+        <Icon name="caret-up-down" className={controlStyles.popupCaret} />
+      </button>
+      {menu.anchor && <Menu anchor={menu.anchor} onClose={menu.close} minWidth={200} entries={entries} />}
+    </SettingRow>
   );
 }
 

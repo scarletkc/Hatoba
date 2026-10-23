@@ -289,5 +289,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | en | zh-CN |
 |---|---|
 | Font Size | 字号 |
+| Appearance | 外观 |
+| AI Panel | AI 面板 |
 | Text Size | 文字大小 |
 | Zoom | 缩放 |

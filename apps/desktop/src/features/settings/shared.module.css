@@ -33,6 +33,10 @@
   color: var(--orange);
 }
 
+.langButton {
+  width: 200px;
+}
+
 .control {
   flex: none;
   display: flex;

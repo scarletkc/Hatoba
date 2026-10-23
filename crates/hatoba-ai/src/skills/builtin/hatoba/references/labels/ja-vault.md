@@ -130,10 +130,11 @@ The labels that these files name in English, as the interface shows them in Japa
 
 | en | ja |
 |---|---|
-| Right-Click in Terminal | ターミナルでの右クリック |
-| Copy if selected, otherwise paste | 選択があればコピー、なければ貼り付け |
-| Show context menu | コンテキストメニューを表示 |
-| Confirm before pasting multiple lines | 複数行を貼り付ける前に確認 |
+| Language | 言語 |
+| System Default | システムの設定 |
+| 简体中文 | 简体中文 |
+| English | English |
+| 日本語 | 日本語 |
 | Show host reachability | ホストの接続状態を表示 |
 | Close Button | ウィンドウを閉じるとき |
 | Ask every time | 毎回確認する |
@@ -155,19 +156,13 @@ The labels that these files name in English, as the interface shows them in Japa
 | Light | ライト |
 | Dark | ダーク |
 | Auto | システムに合わせる |
-| Terminal Colors | ターミナルの配色 |
-| Always Dark | 常にダーク |
-| Always Light | 常にライト |
-| Match Appearance | 外観に合わせる |
 | List Density | リストの密度 |
 | Regular | 標準 |
 | Compact | コンパクト |
 | Zoom | ズーム |
-| Language | 言語 |
-| System Default | システムの設定 |
-| 简体中文 | 简体中文 |
-| English | English |
-| 日本語 | 日本語 |
+| AI Panel | AI パネル |
+| Text Size | 文字サイズ |
+| Terminal | ターミナル |
 
 ### Proxies
 

@@ -4,8 +4,7 @@ Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS)
 
 ## General
 
-- **Right-Click in Terminal**: **Copy if selected, otherwise paste** (default, except on macOS) or **Show context menu** (default on macOS).
-- **Confirm before pasting multiple lines**: on by default. Pasting text that contains line breaks shows a preview first.
+- **Language**: **System Default** (the system language if it is Chinese, Japanese or English, otherwise English), **简体中文**, **English** or **日本語**. It takes effect immediately. Host names, commands and terminal output are never translated.
 - **Show host reachability**: on by default. Every 60 seconds Hatoba tries a TCP connection to the hosts in the list (no login) and colors the dot. A host with a proxy is tried through it, and counts as reachable once its SSH server answers.
 - **Close Button** (Windows and Linux only): what the window's close button, Alt+F4 and the taskbar's Close do. **Ask every time** (default) asks whether to minimize Hatoba to the system tray or quit, and the question's **Remember my choice** sets this row. **Minimize to tray** hides the window while SSH sessions, port forwards and sync keep running; the tray icon brings it back. **Quit Hatoba** quits. Without a tray, on a Linux desktop with no StatusNotifier host such as GNOME without an extension, closing always quits. macOS has no such row: its red button hides the window, the Dock icon brings it back, and ⌘Q quits.
 - **Notify when the AI assistant finishes or needs approval**: on by default. While Hatoba is not the active window, also while it is minimized or in the tray, a conversation that finishes a turn, stops on an error, or waits for approval of a tool call shows a system notification, also one in a tab's background. Its title is the tab's name (**AI Assistant** for the home tab), and its text says what happened and names the conversation. Clicking it brings the window back and shows the conversation with the AI panel open. The system's own notification settings for Hatoba, and Do Not Disturb, can still hide them.
@@ -16,10 +15,11 @@ Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS)
 ## Appearance
 
 - **Appearance**: **Light**, **Dark**, or **Auto** (follows the system and changes live).
-- **Terminal Colors**: **Always Dark** (default), **Always Light** or **Match Appearance**, and a color scheme for a dark and a light terminal (Dracula, Nord, Solarized and others); see `references/terminal.md`.
 - **List Density**: **Regular** or **Compact** rows in lists.
 - **Zoom**: the size of the whole window, 67% to 200% (default 100%), kept on this device because the right size depends on the screen. Zooming in stops at the largest size whose smallest window still fits the screen, and a note under **Zoom** says which. Ctrl+= / Ctrl+- / Ctrl+0 (⌘ on macOS) change it too while neither a terminal nor the AI panel has focus; see `references/shortcuts.md`.
-- **Language**: **System Default** (the system language if it is Chinese, Japanese or English, otherwise English), **简体中文**, **English** or **日本語**. It takes effect immediately. Host names, commands and terminal output are never translated.
+- **AI Panel** → **Text Size** (11 to 24, default 13, synced): the size of the conversation, the input and the approval cards in the AI panel; the panel's header keeps the window's size. Ctrl+= / Ctrl+- / Ctrl+0 (⌘ on macOS) change it too while the panel has focus.
+
+The terminal's colors, font and size are in Settings → Terminal; see `references/terminal.md`.
 
 ## Proxies
 

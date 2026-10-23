@@ -27,12 +27,13 @@ The labels that these files name in English, as the interface shows them in Simp
 | Web Search | 网页搜索 |
 | Custom Instructions | 自定义指令 |
 | Terminal Screen | 终端屏幕 |
-| AI Panel | AI 面板 |
 | Memory | 记忆 |
 | Skills | 技能 |
 | MCP Servers | MCP 服务器 |
 | Auto Mode | 自动批准模式 |
 | This Device | 此设备 |
+| Text Size | 文字大小 |
+| Appearance | 外观 |
 
 ### Providers
 
@@ -83,12 +84,6 @@ The labels that these files name in English, as the interface shows them in Simp
 | en | zh-CN |
 |---|---|
 | Send with Each Message by Default | 默认随每条消息发送 |
-
-### AI Panel
-
-| en | zh-CN |
-|---|---|
-| Text Size | 文字大小 |
 
 ### Skills
 

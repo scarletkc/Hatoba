@@ -30,7 +30,7 @@ In the find bar, Enter goes to the next match, Shift+Enter to the previous one, 
 
 ## Zoom
 
-The same keys change the size of what has focus: in a terminal the font size of every terminal tab (Settings → Terminal → **Font Size**), in the AI panel the size of its conversation and input (Settings → AI → **Text Size**), and anywhere else the zoom of the whole window (Settings → Appearance → **Zoom**). Ctrl+wheel over a terminal changes its font size, also while a program there reads the mouse; it changes nothing else. A short label in the middle of what changed shows the new size.
+The same keys change the size of what has focus: in a terminal the font size of every terminal tab (Settings → Terminal → **Font Size**), in the AI panel the size of its conversation and input (Settings → Appearance → AI Panel → **Text Size**), and anywhere else the zoom of the whole window (Settings → Appearance → **Zoom**). Ctrl+wheel over a terminal changes its font size, also while a program there reads the mouse; it changes nothing else. A short label in the middle of what changed shows the new size.
 
 | Action | Windows / Linux | macOS |
 |---|---|---|
