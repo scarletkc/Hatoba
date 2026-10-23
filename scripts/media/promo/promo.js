@@ -984,14 +984,17 @@ const app = (() => {
     /* dashboard */
     {
       const doc = S.dash.doc;
-      H.dash = all(doc, 'card').map((card) => ({
-        card,
-        meters: all(card, 'meterRow').map((row) => {
-          const fill = one(row, 'meterFill');
-          const value = one(row, 'meterValue');
-          return { fill, value, w: fill ? parseFloat(fill.style.width) || 0 : 0, text: value ? value.textContent : '' };
-        }),
-      }));
+      // A card's meters are a grid of label, bar, and value; the value's text follows its icon, if any.
+      H.dash = all(doc, 'card').map((card) => {
+        const values = all(card, 'meterValue');
+        return {
+          card,
+          meters: all(card, 'meterFill').map((fill, k) => {
+            const value = values[k] && [...values[k].childNodes].find((n) => n.nodeType === Node.TEXT_NODE);
+            return { fill, value, w: parseFloat(fill.style.width) || 0, text: value ? value.textContent : '' };
+          }),
+        };
+      });
     }
 
     /* cursor */
