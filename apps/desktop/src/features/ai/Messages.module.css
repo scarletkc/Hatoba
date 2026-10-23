@@ -879,12 +879,19 @@
   }
 }
 
-/* The shimmer and the pending dot stand in for the spinner and keep moving with reduced motion, as it
-   does (base.css): they change only color and opacity. */
+@keyframes shimmer-fade {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* The shimmer and the pending dot stand in for the spinner and keep going with reduced motion, as it
+   does (base.css), but only as fades: the shimmer's sweep becomes a pulse of the plain text. */
 @media (prefers-reduced-motion: reduce) {
   .shimmer {
-    animation-duration: 1.6s !important;
-    animation-iteration-count: infinite !important;
+    background: none;
+    color: var(--fg2);
+    animation: shimmer-fade 1.6s var(--ease-in-out) infinite !important;
   }
 
   .pendingDot::before {
