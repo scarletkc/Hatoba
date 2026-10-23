@@ -10,6 +10,7 @@ import {
   Segmented,
   Spinner,
   StatusDot,
+  Stepper,
   Switch,
   TextArea,
   TextField,
@@ -218,6 +219,7 @@ function Choices() {
   const [on, setOn] = useState(true);
   const [checked, setChecked] = useState(true);
   const [pick, setPick] = useState("ed25519");
+  const [size, setSize] = useState(13);
   return (
     <Block title="Choices">
       <Line label="Segmented">
@@ -236,6 +238,10 @@ function Choices() {
         <Switch checked={!on} onChange={(v) => setOn(!v)} label="Off" />
         <Switch checked disabled onChange={() => {}} label="Disabled on" />
         <Switch checked={false} disabled onChange={() => {}} label="Disabled off" />
+      </Line>
+      <Line label="Stepper">
+        <Stepper value={size} min={10} max={24} downLabel="Smaller" upLabel="Larger" onChange={setSize} />
+        <Stepper value={24} min={10} max={24} downLabel="Smaller" upLabel="Larger" onChange={() => {}} />
       </Line>
       <Line label="Checkbox">
         <Checkbox checked={checked} onChange={setChecked}>
