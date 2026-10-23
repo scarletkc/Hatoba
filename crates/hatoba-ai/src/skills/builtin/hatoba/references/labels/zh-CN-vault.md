@@ -130,6 +130,9 @@ The labels that these files name in English, as the interface shows them in Simp
 
 | en | zh-CN |
 |---|---|
+| Window and Notifications | 窗口与通知 |
+| Command Line | 命令行 |
+| Host Monitoring | 主机监控 |
 | Language | 语言 |
 | System Default | 跟随系统 |
 | 简体中文 | 简体中文 |
@@ -180,6 +183,9 @@ The labels that these files name in English, as the interface shows them in Simp
 
 | en | zh-CN |
 |---|---|
+| Protection | 保护 |
+| Unlock | 解锁 |
+| Password and Recovery | 密码与恢复码 |
 | Auto-Lock | 自动锁定 |
 | Lock when the computer sleeps | 电脑睡眠时锁定 |
 | Disconnect all sessions when locked | 锁定时断开所有会话 |

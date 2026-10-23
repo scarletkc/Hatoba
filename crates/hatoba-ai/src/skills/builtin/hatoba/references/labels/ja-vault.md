@@ -130,6 +130,9 @@ The labels that these files name in English, as the interface shows them in Japa
 
 | en | ja |
 |---|---|
+| Window and Notifications | ウィンドウと通知 |
+| Command Line | コマンドライン |
+| Host Monitoring | ホストの監視 |
 | Language | 言語 |
 | System Default | システムの設定 |
 | 简体中文 | 简体中文 |
@@ -180,6 +183,9 @@ The labels that these files name in English, as the interface shows them in Japa
 
 | en | ja |
 |---|---|
+| Protection | 保護 |
+| Unlock | ロック解除 |
+| Password and Recovery | パスワードとリカバリー |
 | Auto-Lock | 自動ロック |
 | Lock when the computer sleeps | コンピュータのスリープ時にロック |
 | Disconnect all sessions when locked | ロック時にすべてのセッションを切断 |

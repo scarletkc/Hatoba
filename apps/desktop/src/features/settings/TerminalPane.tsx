@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useApp } from "@/app/store";
 import { Segmented, Stepper, Switch, TextField } from "@/components/controls";
-import { Group } from "@/components/layout";
 import { PopupSelect } from "@/components/overlay";
 import { loadLocalShells, shellName } from "@/features/terminal/localShells";
 import { FONT_SIZE_MAX, FONT_SIZE_MIN, resolveScheme, terminalTheme, useTermSettings } from "@/features/terminal/theme";
@@ -11,7 +10,7 @@ import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { defaultTerminalFont } from "@/lib/platform";
 import { SchemePicker } from "./SchemePicker";
-import { Pane, SettingRow, usePrefs, type PaneProps } from "./shared";
+import { Pane, Section, SettingRow, usePrefs, type PaneProps } from "./shared";
 import s from "./TerminalPane.module.css";
 
 const SCROLLBACK = [1000, 5000, 10000, 50000];
@@ -68,7 +67,7 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
 
   return (
     <Pane>
-      <Group>
+      <Section title={t("settings.section.text")}>
         <SettingRow label={t("settings.term.font")}>
           <div className={s.fontField}>
             <TextField
@@ -107,7 +106,7 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
             onChange={(cursor_style) => updateTerminal({ cursor_style })}
           />
         </SettingRow>
-      </Group>
+      </Section>
 
       <div
         className={cx(s.preview, s[scheme.mode])}
@@ -132,10 +131,10 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
         </div>
       </div>
 
-      <Group>
-        <SettingRow label={t("settings.termColors")}>
+      <Section title={t("settings.section.colors")}>
+        <SettingRow label={t("settings.termColors.mode")}>
           <Segmented
-            ariaLabel={t("settings.termColors")}
+            ariaLabel={t("settings.termColors.mode")}
             value={term.theme}
             options={[
               { value: "dark", label: t("settings.termColors.dark") },
@@ -163,9 +162,9 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
             onChange={(light_scheme) => updateTerminal({ light_scheme })}
           />
         )}
-      </Group>
+      </Section>
 
-      <Group>
+      <Section title={t("settings.section.behavior")}>
         <SettingRow label={t("settings.rightClick")}>
           <PopupSelect<TerminalSettings["right_click"]>
             ariaLabel={t("settings.rightClick")}
@@ -195,7 +194,7 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
           />
         </SettingRow>
         {shells && shells.length > 0 && <LocalShellRow shells={shells} value={prefs.local_shell} onChange={(local_shell) => setPrefs({ local_shell })} />}
-      </Group>
+      </Section>
     </Pane>
   );
 }

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
+import { Group, layoutStyles } from "@/components/layout";
 import { toast } from "@/components/overlay";
 import { HintText } from "@/components/patterns";
 import { useT } from "@/i18n";
@@ -47,6 +48,16 @@ export function SettingRow({
       </div>
       {children && <div className={s.control}>{children}</div>}
     </div>
+  );
+}
+
+/** A titled group of rows; a pane's lone rows stay in an untitled `Group`. */
+export function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className={layoutStyles.section}>
+      <div className={layoutStyles.sectionTitle}>{title}</div>
+      <Group>{children}</Group>
+    </section>
   );
 }
 

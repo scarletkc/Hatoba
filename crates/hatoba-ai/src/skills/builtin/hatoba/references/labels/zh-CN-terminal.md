@@ -94,7 +94,10 @@ The labels that these files name in English, as the interface shows them in Simp
 | Block | 方块 |
 | Bar | 竖线 |
 | Underline | 下划线 |
-| Terminal Colors | 终端配色 |
+| Text and Cursor | 文字与光标 |
+| Colors | 配色 |
+| Behavior | 行为 |
+| Mode | 模式 |
 | Always Dark | 始终深色 |
 | Always Light | 始终浅色 |
 | Match Appearance | 跟随外观 |

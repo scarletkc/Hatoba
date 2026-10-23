@@ -66,14 +66,14 @@ Other labels: **Previous (Shift+Enter)**, **Next (Enter)**, **Close find (Esc)**
 
 ## Terminal settings
 
-All of them are in Settings → Terminal and sync with the vault, except **Local Terminal Shell**. A preview under the font rows shows the font, size, cursor and color scheme.
+All of them are in Settings → Terminal and sync with the vault, except **Local Terminal Shell**. The page has three sections: **Text and Cursor**, with a preview under it of the font, size, cursor and color scheme, then **Colors** and **Behavior**.
 
 Other labels: **Decrease font size**, **Increase font size**.
 
 - **Font**: the name of an installed font family (default Cascadia Mono, or Menlo on macOS). A font that is not installed falls back to the system monospace font.
 - **Font Size**: 10 to 24 (default 13), changed with the minus and plus buttons, or in any terminal with Ctrl+= / Ctrl+- / Ctrl+0 (⌘ on macOS) and Ctrl+wheel, which change every terminal tab; see `references/shortcuts.md`.
 - **Cursor Style**: Block (default), Bar or Underline.
-- **Terminal Colors**: **Always Dark** (default), **Always Light**, or **Match Appearance**, which follows the app's light or dark theme. Below it, the built-in color schemes show as small terminal previews; click one to use it:
+- **Colors** → **Mode**: **Always Dark** (default), **Always Light**, or **Match Appearance**, which follows the app's light or dark theme. Below it, the built-in color schemes show as small terminal previews; click one to use it:
   - Dark: Hatoba Dark (default), Dracula, Tokyo Night, Catppuccin Mocha, One Half Dark, Nord, Gruvbox Dark, Solarized Dark, Rosé Pine, Kanagawa, GitHub Dark.
   - Light: Hatoba Light (default), GitHub Light, One Half Light, Catppuccin Latte, Solarized Light, Gruvbox Light, Rosé Pine Dawn.
   - With **Match Appearance** both lists show, under **In Dark Appearance** and **In Light Appearance**, and the terminal switches between the two picks with the theme. Open terminals take a new pick when the Settings window closes.

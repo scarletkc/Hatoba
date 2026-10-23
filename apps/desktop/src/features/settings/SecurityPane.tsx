@@ -9,7 +9,7 @@ import { api } from "@/ipc/api";
 import { shortcutLabel } from "@/lib/platform";
 import { ChangePasswordDialog, NewRecoveryDialog, SetPinDialog, VerifyPasswordDialog } from "./dialogs";
 import { durationLabel } from "./durations";
-import { Pane, SettingRow, usePrefs } from "./shared";
+import { Pane, Section, SettingRow, usePrefs } from "./shared";
 import s from "./SecurityPane.module.css";
 
 const AUTO_LOCK_MINUTES = [1, 5, 15, 30, 60, 240, 480, 0];
@@ -66,7 +66,7 @@ export function SecurityPane() {
 
   return (
     <Pane>
-      <Group>
+      <Section title={t("settings.section.protection")}>
         <SettingRow label={t("settings.sec.autoLock")}>
           <PopupSelect
             ariaLabel={t("settings.sec.autoLock")}
@@ -95,6 +95,9 @@ export function SecurityPane() {
             onChange={(clipboard_clear_secs) => setPrefs({ clipboard_clear_secs })}
           />
         </SettingRow>
+      </Section>
+
+      <Section title={t("settings.section.unlock")}>
         {vault?.biometric_available && (
           <SettingRow label={biometricLabel}>
             <Switch label={biometricLabel} checked={vault.biometric_enabled} onChange={(on) => void setBiometric(on)} />
@@ -112,9 +115,9 @@ export function SecurityPane() {
             />
           </SettingRow>
         )}
-      </Group>
+      </Section>
 
-      <Group>
+      <Section title={t("settings.section.recovery")}>
         <SettingRow label={t("settings.sec.password")}>
           <Button icon="lock-key" onClick={() => setDialog("password")}>
             {t("settings.sec.password.button")}
@@ -125,7 +128,7 @@ export function SecurityPane() {
             {t("settings.sec.recovery.button")}
           </Button>
         </SettingRow>
-      </Group>
+      </Section>
 
       <Group>
         <SettingRow label={t("settings.sec.lockNow")}>

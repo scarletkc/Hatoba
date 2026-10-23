@@ -94,7 +94,10 @@ The labels that these files name in English, as the interface shows them in Japa
 | Block | ブロック |
 | Bar | バー |
 | Underline | アンダーライン |
-| Terminal Colors | ターミナルの配色 |
+| Text and Cursor | 文字とカーソル |
+| Colors | 配色 |
+| Behavior | 動作 |
+| Mode | モード |
 | Always Dark | 常にダーク |
 | Always Light | 常にライト |
 | Match Appearance | 外観に合わせる |

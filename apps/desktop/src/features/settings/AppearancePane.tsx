@@ -2,7 +2,7 @@ import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { setAiTextSize } from "@/app/zoomKeys";
 import { Segmented, Stepper } from "@/components/controls";
-import { Group, layoutStyles } from "@/components/layout";
+import { Group } from "@/components/layout";
 import { PopupSelect, toast } from "@/components/overlay";
 import { useAi } from "@/features/ai/store";
 import { AI_TEXT_SIZE_MAX, AI_TEXT_SIZE_MIN } from "@/features/ai/textSize";
@@ -10,7 +10,7 @@ import { useT } from "@/i18n";
 import type { LocalPrefs } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { ZOOM_STEPS } from "@/lib/zoom";
-import { Pane, SettingRow, usePrefs } from "./shared";
+import { Pane, Section, SettingRow, usePrefs } from "./shared";
 import s from "./AppearancePane.module.css";
 
 type Appearance = LocalPrefs["appearance"];
@@ -55,21 +55,18 @@ export function AppearancePane() {
       </Group>
 
       {aiTextSize !== undefined && (
-        <section className={layoutStyles.section}>
-          <div className={layoutStyles.sectionTitle}>{t("settings.aiPanel")}</div>
-          <Group>
-            <SettingRow label={t("settings.aiText")} hint={t("settings.aiText.hint")}>
-              <Stepper
-                value={aiTextSize}
-                min={AI_TEXT_SIZE_MIN}
-                max={AI_TEXT_SIZE_MAX}
-                downLabel={t("settings.aiText.down")}
-                upLabel={t("settings.aiText.up")}
-                onChange={setAiTextSize}
-              />
-            </SettingRow>
-          </Group>
-        </section>
+        <Section title={t("settings.aiPanel")}>
+          <SettingRow label={t("settings.aiText")} hint={t("settings.aiText.hint")}>
+            <Stepper
+              value={aiTextSize}
+              min={AI_TEXT_SIZE_MIN}
+              max={AI_TEXT_SIZE_MAX}
+              downLabel={t("settings.aiText.down")}
+              upLabel={t("settings.aiText.up")}
+              onChange={setAiTextSize}
+            />
+          </SettingRow>
+        </Section>
       )}
     </Pane>
   );

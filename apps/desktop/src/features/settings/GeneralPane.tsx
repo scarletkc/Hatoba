@@ -9,7 +9,7 @@ import { api, toAppError } from "@/ipc/api";
 import type { CliActivity, CliCommandView, CloseAction, Language } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { pickSavePath } from "@/lib/native";
-import { Pane, SettingRow, usePrefs } from "./shared";
+import { Pane, Section, SettingRow, usePrefs } from "./shared";
 import s from "./shared.module.css";
 
 /** Seconds between the dashboard's readings (HOST-14). */
@@ -61,10 +61,7 @@ export function GeneralPane() {
         <LanguageRow />
       </Group>
 
-      <Group>
-        <SettingRow label={t("settings.probe")} hint={t("settings.probe.hint")}>
-          <Switch label={t("settings.probe")} checked={prefs.host_probe} onChange={(host_probe) => setPrefs({ host_probe })} />
-        </SettingRow>
+      <Section title={t("settings.section.window")}>
         {/* WIN-10: macOS's close button hides the window (MAC-06). */}
         {platform !== "macos" && (
           <SettingRow label={t("settings.closeAction")} hint={t("settings.closeAction.hint")}>
@@ -84,13 +81,16 @@ export function GeneralPane() {
         <SettingRow label={t("settings.aiNotifications")} hint={t("settings.aiNotifications.hint")}>
           <Switch label={t("settings.aiNotifications")} checked={prefs.ai_notifications} onChange={(ai_notifications) => setPrefs({ ai_notifications })} />
         </SettingRow>
-      </Group>
+      </Section>
 
-      <Group>
+      <Section title={t("settings.section.cli")}>
         <CliCommandRows />
-      </Group>
+      </Section>
 
-      <Group>
+      <Section title={t("settings.section.monitoring")}>
+        <SettingRow label={t("settings.probe")} hint={t("settings.probe.hint")}>
+          <Switch label={t("settings.probe")} checked={prefs.host_probe} onChange={(host_probe) => setPrefs({ host_probe })} />
+        </SettingRow>
         <SettingRow label={t("dashboard.settings.interval")} hint={t("dashboard.settings.interval.hint")}>
           <PopupSelect<number>
             ariaLabel={t("dashboard.settings.interval")}
@@ -111,7 +111,7 @@ export function GeneralPane() {
             />
           </SettingRow>
         ))}
-      </Group>
+      </Section>
 
       <Group>
         <SettingRow label={t("settings.backup")} hint={t("settings.backup.hint")}>
