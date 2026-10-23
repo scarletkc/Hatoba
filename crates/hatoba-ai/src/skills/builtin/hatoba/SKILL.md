@@ -60,7 +60,7 @@ These files name labels in English. The label files give them in the other langu
 
 | Files | Simplified Chinese | Japanese |
 |---|---|---|
-| This file, hosts and connecting, the hatoba command, the dashboard, shortcuts | `references/labels/zh-CN-app.md` | `references/labels/ja-app.md` |
+| This file, hosts and connecting, the hatoba command, resource usage, shortcuts | `references/labels/zh-CN-app.md` | `references/labels/ja-app.md` |
 | Terminal, SFTP, port forwarding, connection errors | `references/labels/zh-CN-terminal.md` | `references/labels/ja-terminal.md` |
 | Keys, vault and lock, settings, other errors | `references/labels/zh-CN-vault.md` | `references/labels/ja-vault.md` |
 | Sync, the sync Worker, sync errors | `references/labels/zh-CN-sync.md` | `references/labels/ja-sync.md` |
