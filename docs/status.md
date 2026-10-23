@@ -37,7 +37,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | TERM-01…06 | Tabs, colors, wide characters, PTY, paste, scrollback, appearance | ✅ / 🟡 | The candidate window position for Microsoft Pinyin tried on Windows 11; for the Japanese IME it needs verification on a real Windows machine. Dragging a tab to move it (TERM-01) tried in the browser with the mock backend; needs a try in the app on Windows, Linux, and macOS |
 | TERM-07, 08 | Terminal search, links | ✅ | |
 | TERM-09…11 | Split panes, session logs, Snippets | ⬜ | P2 |
-| TERM-12 | Resource usage in the status bar | ✅ | Integration tests run the sampling against OpenSSH on Linux, and it was tried in the app against real servers. On macOS ([#273](https://github.com/scarletkc/Hatoba/issues/273)), unit tests parse output the script printed on macOS 26, and a test runs the script on the macOS CI runner; not yet tried in the app against a Mac |
+| TERM-12 | Resource usage in the status bar | ✅ | Integration tests run the sampling against OpenSSH on Linux, and it was tried in the app against real servers. On macOS ([#273](https://github.com/scarletkc/Hatoba/issues/273)), unit tests parse output the script printed on macOS 26, a test runs the script on the machine itself (also on the macOS CI runner), and the sampling integration tests passed against OpenSSH 10.3 on macOS 26; not yet tried in the app against a Mac |
 | SFTP-01…04 | File panel, transfers, file operations, attributes | ✅ | |
 | SFTP-05 | Edit remote files | ⬜ | P2 |
 | FWD-01, 02 | Local forwarding, start with the connection | ✅ | |
