@@ -79,6 +79,7 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  * it is unlocked, e.g. `?launch=root@db` or `?launch=ssh -p 2222 deploy@10.0.0.5`. The `hatoba`
  * command starts off; with `?cli=offpath`, its folder is not on the PATH, as on Linux before the
  * next sign-in.
+ * With `?platform=macos`, the page draws the traffic lights where the native window has them.
  * With `?star=due`, the star prompt's day has passed, so it shows after the first connection.
  * With `?close=prompt`, the window's close button asks whether to minimize to the tray (WIN-10),
  * once the window listens for it.
