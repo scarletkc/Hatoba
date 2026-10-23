@@ -44,6 +44,14 @@
   background: var(--win);
 }
 
+/* Beside the rail the content is a panel with its top left corner rounded, as in Microsoft Store and the other
+   Windows 11 apps, so where the tab bar meets the rail reads as one shape rather than two lines crossing. */
+.contentBeside {
+  border-left: 0.5px solid var(--line2);
+  border-top-left-radius: var(--radius-md);
+  overflow: hidden;
+}
+
 .body {
   flex: 1;
   min-height: 0;

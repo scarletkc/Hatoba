@@ -18,9 +18,9 @@ import { SessionDialogs } from "@/features/terminal/SessionDialogs";
 import { TerminalView } from "@/features/terminal/TerminalView";
 import { closeSessionTab, openLocalTerminal } from "@/features/terminal/connect";
 import { UnlockScreen } from "@/features/unlock/UnlockScreen";
-import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { SyncState } from "@/ipc/types";
+import { cx } from "@/lib/cx";
 import { applyZoom } from "@/lib/zoom";
 import { ClosePrompt, useTrayMenu } from "./ClosePrompt";
 import { ContextMenuHost } from "./ContextMenu";
@@ -98,16 +98,14 @@ export function App() {
 }
 
 function Main() {
-  const t = useT();
   const page = useApp((st) => st.page);
   const platform = useApp((st) => st.info.platform);
   const aiOpen = useApp((st) => st.prefs.ai_panel_open);
   const { tabs, active } = useTabs();
-  const groups = useVaultData((st) => st.groups);
   // Only the terminals stay mounted behind the lock screen; the home page and its dialogs go.
   const locked = useApp((st) => st.phase === "locked");
-
-  const home = homeTab(page, (k) => t(k), (id) => groups.find((g) => g.id === id)?.name);
+  // The navigation rail, on the home tab only (§9).
+  const rail = active === "home" && !locked;
 
   const onShortcut = useCallback((action: ShortcutAction) => {
     const app = useApp.getState();
@@ -152,17 +150,15 @@ function Main() {
   return (
     <div className={s.window}>
       <TabBar
-        homeLabel={home.label}
-        homeIcon={home.icon}
         onNewTab={() => onShortcut("newTab")}
         onCloseTab={(id) => void closeSessionTab(id)}
       />
       <div className={s.workspace}>
         {/* The sidebar navigates the home tab, so a session's tab has the window's whole width. */}
-        {active === "home" && !locked && <Sidebar />}
-        <div className={s.content}>
+        {rail && <Sidebar />}
+        <div className={cx(s.content, rail && s.contentBeside)}>
           <div className={s.body}>
-            {active === "home" && !locked && (
+            {rail && (
               // A new page fades in, keyed so that going from one to another plays it again.
               <div key={page.kind} className={s.page}>
                 <HomePage page={page} />
@@ -171,7 +167,7 @@ function Main() {
             {tabs.map((tab) => (
               <TerminalView key={tab.id} tab={tab} active={active === tab.id} />
             ))}
-            {active === "home" && !locked && <StarPrompt />}
+            {rail && <StarPrompt />}
           </div>
           {/* §9: the AI panel shows the active tab's conversation (AI-07). */}
           {aiOpen && <AiPanel slotId={active} />}
@@ -201,23 +197,6 @@ function HomePage({ page }: { page: Page }) {
       return <SyncPage />;
     case "forwards":
       return <ForwardsPage hostId={page.hostId} />;
-  }
-}
-
-function homeTab(page: Page, t: (k: MessageKey) => string, groupName: (id: string) => string | undefined) {
-  switch (page.kind) {
-    case "hosts":
-      return page.group
-        ? { label: groupName(page.group) ?? t("hosts.title"), icon: "folder-simple" }
-        : { label: t("hosts.title"), icon: "hard-drives" };
-    case "host-edit":
-      return { label: t(page.hostId ? "hosts.editHost" : "hosts.newHost"), icon: "pencil-simple" };
-    case "keys":
-      return { label: t("sidebar.keys"), icon: "key" };
-    case "sync":
-      return { label: t("sidebar.sync"), icon: "cloud" };
-    case "forwards":
-      return { label: t("sidebar.forwards"), icon: "arrows-left-right" };
   }
 }
 

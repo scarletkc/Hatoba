@@ -71,7 +71,8 @@
   text-overflow: ellipsis;
 }
 
-/* One line of tags, kept when there are none; the ones that don't fit fade out at the edge, and all show on hover. */
+/* One line of tags, kept when a host has none but another listed one has; the ones that don't fit fade out at the
+   edge, and all show on hover. */
 .tags {
   display: flex;
   gap: var(--space-4);

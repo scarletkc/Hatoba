@@ -339,6 +339,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
     return states;
   }, [stats, visible, tabStatus, probe, t, now]);
 
+  const tagRow = useMemo(() => visible.some((h) => h.tags.length > 0), [visible]);
   const itemView: View = useMemo(
     () => ({
       t,
@@ -347,12 +348,13 @@ export function HostsPage({ group: requested }: { group: string | null }) {
       alerts,
       groups: groupMap,
       stats,
+      tagRow,
       connectLabel: t("hosts.connect"),
       onSelect: pick,
       onConnect: connect,
       onContext,
     }),
-    [t, now, interval, alerts, groupMap, stats, pick, connect, onContext],
+    [t, now, interval, alerts, groupMap, stats, tagRow, pick, connect, onContext],
   );
 
   const openGroupMenu = (e: MouseEvent, g: GroupView) => {

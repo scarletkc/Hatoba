@@ -44,6 +44,8 @@ export interface View {
   groups: ReadonlyMap<string, GroupView>;
   /** Resource usage shows (HOST-14); without it a card shows the last connection. */
   stats: boolean;
+  /** Some listed host has tags, so every card keeps a line for them and the cards line up. */
+  tagRow: boolean;
   connectLabel: string;
   onSelect(id: string): void;
   onConnect(id: string): void;
@@ -319,11 +321,13 @@ export const HostCard = memo(function HostCard({ host, selected, readout, leftOu
         <ConnectButton id={host.id} view={view} shown={read && readout?.phase === "held"} className={s.connect} />
       </div>
       <div className={s.target}>{target}</div>
-      <div className={s.tags} title={host.tags.join(", ") || undefined}>
-        {host.tags.map((tag) => (
-          <Tag key={tag} name={tag} />
-        ))}
-      </div>
+      {view.tagRow && (
+        <div className={s.tags} title={host.tags.join(", ") || undefined}>
+          {host.tags.map((tag) => (
+            <Tag key={tag} name={tag} />
+          ))}
+        </div>
+      )}
       {stats ? <div className={s.body}>{body()}</div> : <div className={cx(s.cardLast, list.failed && s.error)}>{list.last}</div>}
     </Card>
   );
