@@ -958,7 +958,7 @@ export interface NotificationTarget {
   host_id: string | null;
 }
 
-/** Device-local state of the sidebar's GitHub star prompt (spec §9). */
+/** Device-local state of the home tab's GitHub star prompt (spec §9). */
 export interface StarPrompt {
   /** When this device first read the state, Unix ms. The prompt waits a day from then. */
   first_seen_at: number;

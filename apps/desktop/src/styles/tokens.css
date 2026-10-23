@@ -202,7 +202,7 @@
   --row: 32px;
 }
 
-/* Mica on Windows 11 (WIN-07): let the native material show through the sidebar */
+/* Mica on Windows 11 (WIN-07): let the native material show through the tab bar and the rail */
 :root[data-material="mica"] {
   --side: var(--side-translucent);
 }

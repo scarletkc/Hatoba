@@ -192,7 +192,7 @@
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 0 1.5px var(--win);
+  box-shadow: 0 0 0 1.5px var(--side);
 }
 
 .aiButton {
@@ -228,7 +228,7 @@
   height: 6px;
   border-radius: 50%;
   background: var(--orange);
-  box-shadow: 0 0 0 1.5px var(--win);
+  box-shadow: 0 0 0 1.5px var(--side);
 }
 
 .tabAi {

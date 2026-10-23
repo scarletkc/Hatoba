@@ -1154,7 +1154,7 @@ impl LocalPrefs {
     }
 }
 
-/// Device-local state of the sidebar's GitHub star prompt (spec §9; never synced).
+/// Device-local state of the home tab's GitHub star prompt (spec §9; never synced).
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct StarPrompt {
     /// When this device first read the state, Unix ms. The prompt waits a day from then.

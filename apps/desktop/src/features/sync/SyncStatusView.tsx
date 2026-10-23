@@ -16,7 +16,7 @@ import { countsLine, deviceIcon, isStale, refreshSyncStatus, type T } from "./sy
 import { UpgradeDialog } from "./UpgradeDialog";
 import s from "./Sync.module.css";
 
-/** Icon, tint and copy for each sync state; titles reuse the sidebar footer strings. */
+/** Icon, tint and copy for each sync state; titles reuse the rail's Sync strings. */
 function present(t: T, st: SyncStatus) {
   if (st.state === "syncing")
     return {

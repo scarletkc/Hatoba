@@ -157,7 +157,7 @@ function Main() {
         onCloseTab={(id) => void closeSessionTab(id)}
       />
       <div className={s.workspace}>
-        {/* The sidebar navigates the home tab, so a session's tab has the window's whole width. */}
+        {/* The rail navigates the home tab, so a session's tab has the window's whole width. */}
         {rail && <Sidebar />}
         <div className={cx(s.content, rail && s.contentBeside)}>
           <div className={s.body}>

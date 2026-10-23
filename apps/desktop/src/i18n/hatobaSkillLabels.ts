@@ -32,7 +32,8 @@ export const AREAS: Area[] = [
           "rail.sync", "sidebar.sync", "tabs.newMenu", "terminal.local.thisComputer", "tabs.newTab", "tabs.close",
           "ai.show", "ai.hide", "window.minimize", "window.maximize", "window.restore", "btn.close", "tray.open",
           "close.tray", "close.quit", "terminal.status.connected", "dashboard.state.connecting",
-          "terminal.status.failed", "terminal.status.disconnected", "terminal.find", "terminal.sftp", "terminal.more", "settings.tab.general", "settings.tab.appearance", "settings.tab.terminal",
+          "terminal.status.failed", "terminal.status.disconnected", "terminal.find", "terminal.sftp", "terminal.more",
+          "settings.tab.general", "settings.tab.appearance", "settings.tab.terminal",
           "settings.tab.proxies", "settings.tab.security", "aiSettings.tab", "settings.tab.about",
         ],
         "Project, feedback and newer information": [

@@ -2,12 +2,12 @@
 
 ## The hosts page
 
-**Hosts** in the navigation rail opens it. A host is one saved SSH destination, in at most one group (groups have one level), with any number of free-text tags.
+**Hosts** in the rail opens it. A host is one saved SSH destination, in at most one group (groups have one level), with any number of free-text tags.
 
 - The header has a search box (fuzzy match on name, address, user name and tags; Ctrl+Shift+K or ⌘⇧K), **Import**, and **New Host**, with **New Group** under the arrow beside it. It also takes unsaved targets (Quick connect below).
 - Under it: **Favorites**, **Tags** (hosts with every tag picked; × removes a tag), the sort order, **Resource Usage** (`references/resource-usage.md`) and **List** or **Cards**, which this device keeps.
 - Group buttons above the hosts open a group; **Hosts** before its name goes back. Its **…** (or a right-click on its button) has **Rename Group** and **Delete Group**, which keeps the hosts.
-- A row or card shows the name, `user@address:port`, the jump host, tags, and the last connection. The dot is green when the host is connected or answers a TCP probe, grey otherwise; **Failed** (red): the last attempt this launch failed.
+- A row or card shows the name, `user@address:port`, tags, and the last connection; a row also the jump host. The dot is green when the host is connected or answers a TCP probe, grey otherwise; **Failed** (red): the last attempt this launch failed.
 - To connect: double-click, select and press Enter, or click **Connect**. Arrow keys move the selection; typing searches. A host can be open in several tabs. Right-click for its menu.
 
 Other labels: **Search hosts or ssh user@host**, **Sort by**, **Recent**, **Name**, **Address**, **Last Connected**, **Duplicate**, **Add to Favorites**, **Remove from Favorites**, **Copy Address**, **Clear Filters**.

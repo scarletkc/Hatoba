@@ -7,7 +7,7 @@ import { useVaultData } from "./data";
 import { useApp } from "./store";
 import { useTabs } from "./tabs";
 
-/** Connects what a command line names, or shows it in the search box of All Hosts. */
+/** Connects what a command line names, or shows it in the hosts page's search box. */
 function runLaunch(args: string[]) {
   const action = launchAction(args, useVaultData.getState().hosts);
   switch (action?.kind) {

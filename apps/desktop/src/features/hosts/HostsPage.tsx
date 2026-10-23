@@ -87,7 +87,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   const tagList = useVaultData((st) => st.tags);
   const tabs = useTabs((st) => st.tabs);
   const recents = useRecentTargets((st) => st.targets);
-  const { selectedId, sort, favorites, tags: pickedTags, select, setSort, setFavorites, setTags } = useHostsUi();
+  const { selectedId, sort, favorites, tags: pickedTags, select, setSort, setFavorites, setTags, clearFilters } = useHostsUi();
   const view = prefs.hosts_view;
   const stats = prefs.hosts_stats;
   const readouts = useReadoutMap();
@@ -166,6 +166,12 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   const notice = parsed?.ok ? parsed.notice : undefined;
 
   const hostName = useMemo(() => new Map(hosts.map((h) => [h.id, h.name])), [hosts]);
+  // Each group button's count, worked out once per reload rather than on every batch of readings.
+  const groupCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const h of hosts) if (h.group_id) counts.set(h.group_id, (counts.get(h.group_id) ?? 0) + 1);
+    return counts;
+  }, [hosts]);
 
   // The latest tab per host tells us whether the last attempt failed (design: red "连接失败").
   const tabStatus = useMemo(() => {
@@ -676,7 +682,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
           >
             <Icon name="folder-simple" className={s.groupIcon} />
             <span className={s.groupName}>{g.name}</span>
-            <span className={s.groupCount}>{hosts.filter((h) => h.group_id === g.id).length}</span>
+            <span className={s.groupCount}>{groupCounts.get(g.id) ?? 0}</span>
           </button>
         </div>
       ))}
@@ -806,13 +812,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
         title={t("hosts.emptyFilter.title")}
         body={t("hosts.emptyFilter.body")}
         actions={
-          <Button
-            onClick={() => {
-              setFavorites(false);
-              setTags([]);
-            }}
-          >
-            {t("hosts.emptyFilter.clear")}
+          <Button onClick={clearFilters}>{t("hosts.emptyFilter.clear")}
           </Button>
         }
       />
