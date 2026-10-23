@@ -60,6 +60,8 @@ let handledSearchTick = 0;
 /** Row id of the typed quick-connect target (HOST-12); saved hosts use their item ids. */
 const TYPED_ROW = "quick:typed";
 const SUGGESTIONS_ID = "recent-targets";
+/** A card's list state while resource usage shows, which then has no use for it. */
+const NO_LIST: ListState = { dot: "var(--fg3)", last: "", failed: false };
 
 /** A Connect row for a target that is not a saved host: the one typed, or a recent one. */
 interface QuickRowItem {
@@ -318,6 +320,39 @@ export function HostsPage({ group: requested }: { group: string | null }) {
       openRowMenu({ x: e.clientX, y: e.clientY });
     },
     [select, openRowMenu],
+  );
+
+  // Each card's last connection, made only without resource usage, so a batch of readings leaves every card's
+  // props as they were and only the hosts that changed render again.
+  const listStates = useMemo(() => {
+    if (stats) return null;
+    const states = new Map<string, ListState>();
+    for (const h of visible) {
+      const status = tabStatus.get(h.id);
+      const failed = status === "failed";
+      states.set(h.id, {
+        dot: status === "connected" ? "var(--green)" : failed ? "var(--red)" : probe[h.id] ? "var(--green)" : "var(--fg3)",
+        last: failed ? t("hosts.failed") : h.last_connected_at ? formatRelative(t.locale, h.last_connected_at, now) : t("hosts.neverConnected"),
+        failed,
+      });
+    }
+    return states;
+  }, [stats, visible, tabStatus, probe, t, now]);
+
+  const itemView: View = useMemo(
+    () => ({
+      t,
+      now,
+      interval,
+      alerts,
+      groups: groupMap,
+      stats,
+      connectLabel: t("hosts.connect"),
+      onSelect: pick,
+      onConnect: connect,
+      onContext,
+    }),
+    [t, now, interval, alerts, groupMap, stats, pick, connect, onContext],
   );
 
   const openGroupMenu = (e: MouseEvent, g: GroupView) => {
@@ -741,29 +776,6 @@ export function HostsPage({ group: requested }: { group: string | null }) {
     </div>
   );
 
-  const listState = (h: HostView): ListState => {
-    const status = tabStatus.get(h.id);
-    const failed = status === "failed";
-    return {
-      dot: status === "connected" ? "var(--green)" : failed ? "var(--red)" : probe[h.id] ? "var(--green)" : "var(--fg3)",
-      last: failed ? t("hosts.failed") : h.last_connected_at ? formatRelative(t.locale, h.last_connected_at, now) : t("hosts.neverConnected"),
-      failed,
-    };
-  };
-
-  const itemView: View = {
-    t,
-    now,
-    interval,
-    alerts,
-    groups: groupMap,
-    stats,
-    connectLabel: t("hosts.connect"),
-    onSelect: pick,
-    onConnect: connect,
-    onContext,
-  };
-
   const quickList = (
     <>
       {problem && <ProblemRow problem={problem} />}
@@ -891,7 +903,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
                   selected={h.id === effectiveId}
                   readout={stats ? readouts[h.id] : undefined}
                   leftOut={stats ? leftOutBy(h, groupMap) : null}
-                  list={listState(h)}
+                  list={listStates?.get(h.id) ?? NO_LIST}
                   view={itemView}
                 />
               ))}
