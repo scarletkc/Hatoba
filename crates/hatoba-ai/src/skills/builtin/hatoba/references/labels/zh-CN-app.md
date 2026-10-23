@@ -85,7 +85,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Remove from Favorites | 取消收藏 |
 | Copy Address | 复制地址 |
 | Copy Password | 复制密码 |
-| Delete… | 删除… |
+| Delete | 删除 |
 | Rename Group | 重命名分组 |
 | Delete Group | 删除分组 |
 | Clear Filters | 清除筛选 |
@@ -101,7 +101,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Recent | 最近 |
 | Recent Quick Connections | 快速连接记录 |
 | Remove from Recent | 从记录中移除 |
-| Save as Host… | 保存为主机… |
+| Save as Host | 保存为主机 |
 | Username | 用户名 |
 
 ### Import hosts
@@ -116,8 +116,8 @@ The labels that these files name in English, as the interface shows them in Simp
 | ProxyCommand not imported | 不导入 ProxyCommand |
 | Proxy not imported | 不导入代理 |
 | Key stays in {app} | 密钥留在 {app} 中 |
-| Choose File… | 选择文件… |
-| Choose Folder… | 选择文件夹… |
+| Choose File | 选择文件 |
+| Choose Folder | 选择文件夹 |
 
 ### The host editor
 

@@ -45,7 +45,7 @@ Other labels: **Memory**, **Swap**, **No swap**, **Network**, **Disk**, **Readin
 The tab menu (**More actions**) and the right-click menu share most entries. Right-click shows the menu when **Right-Click in Terminal** is set to **Show context menu** (see Settings below), the default on macOS; elsewhere right-click by default copies the selection, or pastes when nothing is selected. A program that tracks the mouse (vim, tmux) gets the right click itself unless Shift is held.
 
 - Right-click menu: Copy, Paste, Select All, Ask AI, Clear Scrollback, Find…
-- **More actions** menu: Reconnect, Disconnect, Copy, Paste, Clear Scrollback, Select All, Find…, Ask AI, Edit Host. A quick connection (see `references/hosts-and-connecting.md`) has **Save as Host…** instead of Edit Host.
+- **More actions** menu: Reconnect, Disconnect, Copy, Paste, Clear Scrollback, Select All, Find…, Ask AI, Edit Host. A quick connection (see `references/hosts-and-connecting.md`) has **Save as Host** instead of Edit Host.
 - **Ask AI** is enabled when text is selected. It opens the AI panel with the selection attached; see `references/ai-attachments.md`.
 
 ## Copy, paste, search and links

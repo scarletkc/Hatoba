@@ -85,7 +85,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Remove from Favorites | お気に入りから削除 |
 | Copy Address | アドレスをコピー |
 | Copy Password | パスワードをコピー |
-| Delete… | 削除… |
+| Delete | 削除 |
 | Rename Group | グループ名を変更 |
 | Delete Group | グループを削除 |
 | Clear Filters | 絞り込みを解除 |
@@ -101,7 +101,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Recent | 最近 |
 | Recent Quick Connections | 最近のクイック接続 |
 | Remove from Recent | 履歴から削除 |
-| Save as Host… | ホストとして保存… |
+| Save as Host | ホストとして保存 |
 | Username | ユーザー名 |
 
 ### Import hosts
@@ -116,8 +116,8 @@ The labels that these files name in English, as the interface shows them in Japa
 | ProxyCommand not imported | ProxyCommand は取り込みません |
 | Proxy not imported | プロキシは取り込みません |
 | Key stays in {app} | 鍵は {app} に残ります |
-| Choose File… | ファイルを選択… |
-| Choose Folder… | フォルダーを選択… |
+| Choose File | ファイルを選択 |
+| Choose Folder | フォルダーを選択 |
 
 ### The host editor
 

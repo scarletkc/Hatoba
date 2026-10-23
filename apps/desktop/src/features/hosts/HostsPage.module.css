@@ -147,32 +147,8 @@
   color: var(--accent);
 }
 
-.toggleCount {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
 .toggle .toggleCaret {
   font-size: var(--icon-12);
-}
-
-.tagChip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 4px 0 0;
-  border: 0;
-  border-radius: var(--radius-full);
-  background: none;
-}
-
-.tagChip:hover {
-  background: var(--fill);
-}
-
-.tagChipX {
-  font-size: var(--icon-12);
-  color: var(--fg2);
 }
 
 .statsSwitch {

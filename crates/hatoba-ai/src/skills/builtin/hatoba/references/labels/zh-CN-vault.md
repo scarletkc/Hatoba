@@ -21,7 +21,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Print | 打印 |
 | Finish Setup | 完成设置 |
 | Recovery Code | 恢复码 |
-| Generate New Code… | 生成新的恢复码… |
+| Generate New Code | 生成新的恢复码 |
 | Weak | 弱 |
 | Fair | 一般 |
 | Strong | 强 |
@@ -65,10 +65,10 @@ The labels that these files name in English, as the interface shows them in Simp
 |---|---|
 | Clear Clipboard | 清除剪贴板 |
 | Master Password | 主密码 |
-| Change… | 更改主密码… |
+| Change | 更改主密码 |
 | Change Master Password | 更改主密码 |
 | Export Encrypted Backup | 导出加密备份 |
-| Export… | 导出… |
+| Export | 导出 |
 | General | 通用 |
 | Copy Password | 复制密码 |
 
@@ -78,7 +78,7 @@ The labels that these files name in English, as the interface shows them in Simp
 |---|---|
 | Keys | 密钥库 |
 | Search keys | 搜索密钥 |
-| Import… | 导入… |
+| Import | 导入 |
 | Generate Key | 生成新密钥 |
 | Name | 名称 |
 | Type | 类型 |
@@ -93,12 +93,12 @@ The labels that these files name in English, as the interface shows them in Simp
 | Copy public key | 复制公钥 |
 | Copy | 复制 |
 | Rename | 重命名 |
-| Deploy to Host… | 部署到主机… |
-| Delete… | 删除… |
+| Deploy to Host | 部署到主机 |
+| Delete | 删除 |
 | Import Private Key | 导入私钥 |
 | Choose File | 选择文件 |
 | Paste Text | 粘贴文本 |
-| Choose File… | 选择文件… |
+| Choose File | 选择文件 |
 | Passphrase (optional) | 口令（可选） |
 | Ed25519 | Ed25519 |
 | RSA 4096 | RSA 4096 |
@@ -150,7 +150,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Details | 详情 |
 | Refresh interval | 刷新间隔 |
 | Export Encrypted Backup | 导出加密备份 |
-| Export… | 导出… |
+| Export | 导出 |
 
 ### Appearance
 
@@ -195,9 +195,9 @@ The labels that these files name in English, as the interface shows them in Simp
 | Unlock with PIN | 使用 PIN 解锁 |
 | Require the master password after a restart | 重启后需要输入主密码 |
 | Master Password | 主密码 |
-| Change… | 更改主密码… |
+| Change | 更改主密码 |
 | Recovery Code | 恢复码 |
-| Generate New Code… | 生成新的恢复码… |
+| Generate New Code | 生成新的恢复码 |
 | Lock Now | 立即锁定 |
 | Lock | 锁定 |
 
@@ -254,7 +254,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | No vault has been created yet. | 尚未创建保险库。 |
 | A vault already exists. | 保险库已存在。 |
 | Forgot it? Use your recovery code | 忘记主密码？使用恢复码 |
-| Generate New Code… | 生成新的恢复码… |
+| Generate New Code | 生成新的恢复码 |
 | Too many attempts. Try again in {s} s. | 尝试次数过多，请在 {s} 秒后重试。 |
 
 ### Files, forwards and other messages

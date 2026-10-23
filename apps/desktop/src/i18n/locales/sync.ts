@@ -197,7 +197,7 @@ export default defineMessages({
     "sync.security.title": "所有数据在本地加密后上传。",
     "sync.link.recovery": "生成新的恢复码",
     "sync.link.password": "更改主密码",
-    "sync.link.disconnect": "断开云同步…",
+    "sync.link.disconnect": "断开云同步",
 
     // Dialogs
     "sync.password.body": "更改后，其他设备会被登出，需要用新的主密码重新登录。",
@@ -489,7 +489,7 @@ export default defineMessages({
     "sync.security.title": "Everything is encrypted on your device before upload.",
     "sync.link.recovery": "Generate New Recovery Code",
     "sync.link.password": "Change Master Password",
-    "sync.link.disconnect": "Disconnect…",
+    "sync.link.disconnect": "Disconnect",
 
     "sync.password.body": "Your other devices will be signed out and need the new password to sign in again.",
     "sync.disconnect.title": "Disconnect Cloud Sync?",
@@ -778,7 +778,7 @@ export default defineMessages({
     "sync.security.title": "すべてのデータは端末で暗号化されてからアップロードされます。",
     "sync.link.recovery": "新しいリカバリーコードを作成",
     "sync.link.password": "マスターパスワードを変更",
-    "sync.link.disconnect": "クラウド同期を解除…",
+    "sync.link.disconnect": "クラウド同期を解除",
 
     "sync.password.body": "変更すると他のデバイスはログアウトされ、新しいパスワードで再ログインする必要があります。",
     "sync.disconnect.title": "クラウド同期を解除しますか？",

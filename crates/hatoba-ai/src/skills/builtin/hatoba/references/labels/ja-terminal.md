@@ -59,11 +59,11 @@ The labels that these files name in English, as the interface shows them in Japa
 | Copy | コピー |
 | Paste | 貼り付け |
 | Select All | すべて選択 |
-| Find… | 検索… |
+| Find | 検索 |
 | Ask AI | AI に質問 |
 | Clear Scrollback | スクロールバックを消去 |
 | Edit Host | ホストを編集 |
-| Save as Host… | ホストとして保存… |
+| Save as Host | ホストとして保存 |
 
 ### Copy, paste, search and links
 
@@ -142,12 +142,12 @@ The labels that these files name in English, as the interface shows them in Japa
 | en | ja |
 |---|---|
 | Open | 開く |
-| Download… | ダウンロード… |
+| Download | ダウンロード |
 | Rename | 名前を変更 |
-| Delete… | 削除… |
+| Delete | 削除 |
 | Copy Path | パスをコピー |
 | New Folder | 新規フォルダ |
-| Upload Files… | ファイルをアップロード… |
+| Upload Files | ファイルをアップロード |
 | The name can’t be empty or contain /. | 名前を空にしたり、/ を含めたりすることはできません。 |
 | This file will be permanently deleted from the server. This can’t be undone. | このファイルはサーバーから完全に削除されます。元に戻せません。 |
 | This folder and everything in it will be permanently deleted from the server. This can’t be undone. | このフォルダとその中身はすべてサーバーから完全に削除されます。元に戻せません。 |
@@ -172,7 +172,7 @@ The labels that these files name in English, as the interface shows them in Japa
 |---|---|
 | Port Forwarding | ポートフォワーディング |
 | No port forwards yet | ポートフォワーディングがまだありません |
-| Add Forward… | 転送を追加… |
+| Add Forward | 転送を追加 |
 | Add Port Forward | ポートフォワーディングを追加 |
 | Host | ホスト |
 | Choose a host. | ホストを選択してください。 |
@@ -205,7 +205,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Starting… | 開始中… |
 | Stop | 停止 |
 | Retry | 再試行 |
-| Manage Port Forwarding… | ポートフォワーディングを管理… |
+| Manage Port Forwarding | ポートフォワーディングを管理 |
 | Can’t read the port forwards. | ポートフォワーディングを読み込めません。 |
 
 ### Keep running in the background
@@ -261,7 +261,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Key | 鍵 |
 | Ask Each Time | 毎回入力 |
 | SSH Agent | SSH Agent |
-| Deploy to Host… | ホストに配置… |
+| Deploy to Host | ホストに配置 |
 
 ### Jump hosts (ProxyJump)
 

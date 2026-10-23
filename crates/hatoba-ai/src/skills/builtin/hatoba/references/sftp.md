@@ -21,10 +21,10 @@ Other labels: **Upload files**, **New folder**, **Refresh**, **Parent folder**, 
 
 Right-click a file or folder, or the empty area of the list, for the menu. Keyboard: Enter opens, F2 renames, Delete deletes.
 
-- **Download…** is for files: it asks where to save the file locally. Folders cannot be downloaded.
-- **Upload Files…** (or the upload button) picks local files, and dropping files from the desktop onto the panel uploads them to the folder that is open ("Drop to upload to …"). Only files are uploaded, not folders. An upload to an existing name replaces the file.
+- **Download** is for files: it asks where to save the file locally. Folders cannot be downloaded.
+- **Upload Files** (or the upload button) picks local files, and dropping files from the desktop onto the panel uploads them to the folder that is open ("Drop to upload to …"). Only files are uploaded, not folders. An upload to an existing name replaces the file.
 - **New Folder** adds a row where you type the name. **Rename** edits the name in place; Enter or leaving the field commits and Esc cancels. A name cannot be empty or contain `/`.
-- **Delete…** asks first. A file is deleted for good; a folder is deleted with everything in it ("permanently deleted from the server. This can’t be undone"). The root directory cannot be deleted.
+- **Delete** asks first. A file is deleted for good; a folder is deleted with everything in it ("permanently deleted from the server. This can’t be undone"). The root directory cannot be deleted.
 - **Copy Path** copies the full remote path to the clipboard.
 
 Other labels: **Path copied**.

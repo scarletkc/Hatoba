@@ -9,11 +9,11 @@
 - Group buttons above the hosts open a group; **Hosts** before its name goes back. Its **…** (or a right-click on its button) has **Rename Group** and **Delete Group**, which keeps the hosts.
 - A row or card shows the name, `user@address:port`, tags, and the last connection; a row also the jump host. The dot is green when the host is connected or answers a TCP probe, grey otherwise; **Failed** (red): the last attempt this launch failed.
 - To connect: double-click, select and press Enter, or click **Connect**. Arrow keys move the selection; typing searches. A host can be open in several tabs. Right-click for its menu.
-- Ctrl+click (⌘-click on macOS) or Shift+click selects several hosts; a click beside the rows selects none. The right-click menu of several has **Connect** (a tab each), **Add to Favorites** or **Remove from Favorites**, and **Delete…**, for all of them.
+- Ctrl+click (⌘-click on macOS) or Shift+click selects several hosts; a click beside the rows selects none. The right-click menu of several has **Connect** (a tab each), **Add to Favorites** or **Remove from Favorites**, and **Delete**, for all of them.
 
 Other labels: **Search hosts or ssh user@host**, **Sort by**, **Recent**, **Name**, **Address**, **Last Connected**, **Duplicate**, **Copy Address**, **Clear Filters**.
 
-- **Copy Password** (hosts with a saved password) clears the clipboard after the delay in Settings → Security. **Delete…** asks first; with Cloud Sync on, the host goes from the other devices too.
+- **Copy Password** (hosts with a saved password) clears the clipboard after the delay in Settings → Security. **Delete** asks first; with Cloud Sync on, the host goes from the other devices too.
 - **Show host reachability** in Settings → General turns the dots off. When on, Hatoba tries a TCP connection to the listed hosts every 60 seconds, without signing in.
 
 ## Quick connect
@@ -24,14 +24,14 @@ Typing `user@host[:port]` or an ssh command such as `ssh -p 2222 deploy@203.0.11
 - Without a user name, this computer's user name is used, as with `ssh`.
 - It connects through this device's default proxy, if Settings → Proxies has one.
 - Sign-in works like the `ssh` command: the SSH agent first, then the server's own prompts, or a password dialog (also when those fail) whose password is never saved. Saved keys are not tried. A server that hangs up after rejecting too many agent keys is connected to again without the agent. The host key is checked as for any host (trust it on first use; it syncs).
-- The tab is titled `user@host`. Port forwarding is not offered, and **More actions** has **Save as Host…**, which opens the host editor filled in with the address, port and user. Once the host is saved, **Reconnect** connects the tab as that host.
+- The tab is titled `user@host`. Port forwarding is not offered, and **More actions** has **Save as Host**, which opens the host editor filled in with the address, port and user. Once the host is saved, **Reconnect** connects the tab as that host.
 - Nothing is saved as a host by itself. Targets that connected are kept as **Recent** on this device only (at most 8, no passwords, never synced). With the search box empty and focused, they show under it (**Recent Quick Connections**); while typing, matching ones show as extra **Connect** rows. The × button removes one.
 
 Other labels: **Not saved**, **Remove from Recent**, **Username**.
 
 ## Import hosts
 
-**Import**, in the header of the host list and in the empty list, opens a menu: **SSH Config** reads `~/.ssh/config` (on Windows `%USERPROFILE%\.ssh\config`), and Xshell, FinalShell, MobaXterm, PuTTY, SecureCRT and Tabby read that client's saved sessions where it keeps them on this device. The dialog lists the SSH hosts and imports the ones you tick. Entries whose name already exists are unticked and marked **Already exists**. For sessions kept elsewhere or brought from another computer, **Choose File…** or **Choose Folder…** reads them from there:
+**Import**, in the header of the host list and in the empty list, opens a menu: **SSH Config** reads `~/.ssh/config` (on Windows `%USERPROFILE%\.ssh\config`), and Xshell, FinalShell, MobaXterm, PuTTY, SecureCRT and Tabby read that client's saved sessions where it keeps them on this device. The dialog lists the SSH hosts and imports the ones you tick. Entries whose name already exists are unticked and marked **Already exists**. For sessions kept elsewhere or brought from another computer, **Choose File** or **Choose Folder** reads them from there:
 
 - Xshell: the sessions folder in `Documents\NetSarang Computer\<version>\Xshell\Sessions`, a sessions folder kept elsewhere, or an `.xts` file from Xshell's **File → Export**.
 - FinalShell: its data folder (`%LOCALAPPDATA%\finalshell` on Windows, `~/Library/FinalShell` on macOS, `~/.finalshell` on Linux), or a copy of it.

@@ -82,7 +82,7 @@ export async function openLocalTerminal(shell?: LocalShellView): Promise<void> {
 export async function reconnectSession(tabId: string): Promise<void> {
   const session = getSession(tabId);
   if (!session || session.status === "connecting") return;
-  // A quick connection saved as a host since (Save as Host…) reconnects as that host.
+  // A quick connection saved as a host since (Save as Host) reconnects as that host.
   if (session.local) {
     await session.reconnect(async () => NONE);
     return;
@@ -108,7 +108,7 @@ export function editSessionHost(hostId: string | null) {
   useTabs.getState().activate("home");
 }
 
-/** "Save as Host…" for a quick connection: a new host, filled in with its target (HOST-12). */
+/** "Save as Host" for a quick connection: a new host, filled in with its target (HOST-12). */
 export function saveTargetAsHost(target: QuickTarget) {
   useApp.getState().navigate({ kind: "host-edit", hostId: null, groupId: null, back: null, prefill: target });
   useTabs.getState().activate("home");

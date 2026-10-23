@@ -21,7 +21,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Print | 印刷 |
 | Finish Setup | セットアップを完了 |
 | Recovery Code | リカバリーコード |
-| Generate New Code… | 新しいコードを生成… |
+| Generate New Code | 新しいコードを生成 |
 | Weak | 弱い |
 | Fair | 普通 |
 | Strong | 強い |
@@ -65,10 +65,10 @@ The labels that these files name in English, as the interface shows them in Japa
 |---|---|
 | Clear Clipboard | クリップボードの消去 |
 | Master Password | マスターパスワード |
-| Change… | 変更… |
+| Change | 変更 |
 | Change Master Password | マスターパスワードを変更 |
 | Export Encrypted Backup | 暗号化バックアップをエクスポート |
-| Export… | エクスポート… |
+| Export | エクスポート |
 | General | 一般 |
 | Copy Password | パスワードをコピー |
 
@@ -78,7 +78,7 @@ The labels that these files name in English, as the interface shows them in Japa
 |---|---|
 | Keys | 鍵 |
 | Search keys | 鍵を検索 |
-| Import… | 読み込み… |
+| Import | 読み込み |
 | Generate Key | 新しい鍵を生成 |
 | Name | 名前 |
 | Type | 種類 |
@@ -93,12 +93,12 @@ The labels that these files name in English, as the interface shows them in Japa
 | Copy public key | 公開鍵をコピー |
 | Copy | コピー |
 | Rename | 名前を変更 |
-| Deploy to Host… | ホストに配置… |
-| Delete… | 削除… |
+| Deploy to Host | ホストに配置 |
+| Delete | 削除 |
 | Import Private Key | 秘密鍵を読み込む |
 | Choose File | ファイルを選択 |
 | Paste Text | テキストを貼り付け |
-| Choose File… | ファイルを選択… |
+| Choose File | ファイルを選択 |
 | Passphrase (optional) | パスフレーズ（任意） |
 | Ed25519 | Ed25519 |
 | RSA 4096 | RSA 4096 |
@@ -150,7 +150,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Details | 詳細 |
 | Refresh interval | 更新間隔 |
 | Export Encrypted Backup | 暗号化バックアップをエクスポート |
-| Export… | エクスポート… |
+| Export | エクスポート |
 
 ### Appearance
 
@@ -195,9 +195,9 @@ The labels that these files name in English, as the interface shows them in Japa
 | Unlock with PIN | PIN でロック解除 |
 | Require the master password after a restart | 再起動後はマスターパスワードを要求 |
 | Master Password | マスターパスワード |
-| Change… | 変更… |
+| Change | 変更 |
 | Recovery Code | リカバリーコード |
-| Generate New Code… | 新しいコードを生成… |
+| Generate New Code | 新しいコードを生成 |
 | Lock Now | 今すぐロック |
 | Lock | ロック |
 
@@ -254,7 +254,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | No vault has been created yet. | 保管庫がまだ作成されていません。 |
 | A vault already exists. | 保管庫はすでに存在します。 |
 | Forgot it? Use your recovery code | マスターパスワードをお忘れですか？ リカバリーコードを使う |
-| Generate New Code… | 新しいコードを生成… |
+| Generate New Code | 新しいコードを生成 |
 | Too many attempts. Try again in {s} s. | 試行回数が多すぎます。{s} 秒後にもう一度お試しください。 |
 
 ### Files, forwards and other messages

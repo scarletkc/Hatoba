@@ -82,7 +82,7 @@ export default defineMessages({
     "settings.cliAccess.copied": "已复制",
     "settings.backup": "导出加密备份",
     "settings.backup.hint": "只有主密码能打开它。",
-    "settings.backup.button": "导出…",
+    "settings.backup.button": "导出",
     "settings.backup.done": "备份已导出",
 
     "settings.term.font": "字体",
@@ -115,9 +115,9 @@ export default defineMessages({
     "settings.sec.pinRestart": "重启后需要输入主密码",
     "settings.sec.pinRestart.hint": "关闭时，Hatoba 重启后也可以用 PIN 解锁。",
     "settings.sec.password": "主密码",
-    "settings.sec.password.button": "更改主密码…",
+    "settings.sec.password.button": "更改主密码",
     "settings.sec.recovery": "恢复码",
-    "settings.sec.recovery.button": "生成新的恢复码…",
+    "settings.sec.recovery.button": "生成新的恢复码",
     "settings.sec.lockNow": "立即锁定",
     "settings.sec.lockNow.button": "锁定",
 
@@ -297,7 +297,7 @@ export default defineMessages({
     "settings.cliAccess.copied": "Copied",
     "settings.backup": "Export Encrypted Backup",
     "settings.backup.hint": "Opens only with your master password.",
-    "settings.backup.button": "Export…",
+    "settings.backup.button": "Export",
     "settings.backup.done": "Backup exported",
 
     "settings.term.font": "Font",
@@ -331,9 +331,9 @@ export default defineMessages({
     "settings.sec.pinRestart": "Require the master password after a restart",
     "settings.sec.pinRestart.hint": "When off, the PIN also unlocks after Hatoba restarts.",
     "settings.sec.password": "Master Password",
-    "settings.sec.password.button": "Change…",
+    "settings.sec.password.button": "Change",
     "settings.sec.recovery": "Recovery Code",
-    "settings.sec.recovery.button": "Generate New Code…",
+    "settings.sec.recovery.button": "Generate New Code",
     "settings.sec.lockNow": "Lock Now",
     "settings.sec.lockNow.button": "Lock",
 
@@ -519,7 +519,7 @@ export default defineMessages({
     "settings.cliAccess.copied": "コピー済み",
     "settings.backup": "暗号化バックアップをエクスポート",
     "settings.backup.hint": "マスターパスワードでのみ開けます。",
-    "settings.backup.button": "エクスポート…",
+    "settings.backup.button": "エクスポート",
     "settings.backup.done": "バックアップをエクスポートしました",
 
     "settings.term.font": "フォント",
@@ -552,9 +552,9 @@ export default defineMessages({
     "settings.sec.pinRestart": "再起動後はマスターパスワードを要求",
     "settings.sec.pinRestart.hint": "オフの場合、Hatoba の再起動後も PIN でロックを解除できます。",
     "settings.sec.password": "マスターパスワード",
-    "settings.sec.password.button": "変更…",
+    "settings.sec.password.button": "変更",
     "settings.sec.recovery": "リカバリーコード",
-    "settings.sec.recovery.button": "新しいコードを生成…",
+    "settings.sec.recovery.button": "新しいコードを生成",
     "settings.sec.lockNow": "今すぐロック",
     "settings.sec.lockNow.button": "ロック",
 

@@ -65,4 +65,4 @@ The review page lists each item with **This PC** and **Cloud** versions. **Keep 
 At the bottom of the status page:
 
 - **Generate New Recovery Code** and **Change Master Password** work like their Settings → Security counterparts. After a password change, the other devices are signed out and must sign in with the new one.
-- **Disconnect…** stops syncing on this device, after a confirmation ("Disconnect Cloud Sync?"). Data stays on the device and nothing is deleted from the cloud. You can reconnect through the wizard later.
+- **Disconnect** stops syncing on this device, after a confirmation ("Disconnect Cloud Sync?"). Data stays on the device and nothing is deleted from the cloud. You can reconnect through the wizard later.

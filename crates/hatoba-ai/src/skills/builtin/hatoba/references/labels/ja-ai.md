@@ -50,7 +50,7 @@ The labels that these files name in English, as the interface shows them in Japa
 |---|---|
 | Commands | コマンド |
 | Add context | コンテキストを追加 |
-| Text Files from This Computer… | このコンピューターのテキストファイル… |
+| Text Files from This Computer | このコンピューターのテキストファイル |
 
 ### MCP servers: **MCP Tools** and `/mcp`
 
@@ -143,8 +143,8 @@ The labels that these files name in English, as the interface shows them in Japa
 | Rename | 名前を変更 |
 | Pin | ピン留め |
 | Unpin | ピン留めを外す |
-| Export as Markdown… | Markdown として書き出す… |
-| Delete… | 削除… |
+| Export as Markdown | Markdown として書き出す |
+| Delete | 削除 |
 | More | その他の操作 |
 
 ### Edit and Resend
@@ -255,7 +255,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | en | ja |
 |---|---|
 | Add Files and More | ファイルなどを追加 |
-| Add Text Files… | テキストファイルを追加… |
+| Add Text Files | テキストファイルを追加 |
 | Drop text files to attach them | ドロップしてテキストファイルを添付 |
 | Preview the file | ファイルの内容をプレビュー |
 | {name} is larger than {size}, so it can’t be attached. | {name} は {size} を超えるため、添付できません。 |
@@ -284,7 +284,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | en | ja |
 |---|---|
 | Edit and Resend | 編集して再送信 |
-| Export as Markdown… | Markdown として書き出す… |
+| Export as Markdown | Markdown として書き出す |
 
 ## `references/ai-side-questions.md`
 
