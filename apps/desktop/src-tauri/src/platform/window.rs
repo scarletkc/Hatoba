@@ -149,11 +149,13 @@ pub fn apply_zoom(window: &WebviewWindow, percent: u32) -> tauri::Result<ZoomVie
     Ok(ZoomView { zoom, max })
 }
 
-/// The screen the zoom limit was last worked out for: its work area and scale.
-static ZOOM_SCREEN: std::sync::Mutex<Option<(i32, i32, u32, u32, u64)>> =
-    std::sync::Mutex::new(None);
+/// A screen as the zoom limit sees it: its work area's position and size, and its scale's bits.
+type ScreenKey = (i32, i32, u32, u32, u64);
 
-fn screen_key(m: &Monitor) -> (i32, i32, u32, u32, u64) {
+/// The screen the zoom limit was last worked out for.
+static ZOOM_SCREEN: std::sync::Mutex<Option<ScreenKey>> = std::sync::Mutex::new(None);
+
+fn screen_key(m: &Monitor) -> ScreenKey {
     let area = m.work_area();
     (
         area.position.x,
