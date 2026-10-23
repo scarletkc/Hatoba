@@ -213,6 +213,19 @@ export function Tag({ name }: { name: string }) {
   );
 }
 
+/** A tag with its remove button inside, in the tag field and the hosts tag filter. */
+export function TagChip({ name, removeLabel, onRemove }: { name: string; removeLabel: string; onRemove: () => void }) {
+  return (
+    <span className={l.tagChip}>
+      <span className={controlStyles.tagDot} style={{ background: tagColor(name) }} />
+      {name}
+      <button type="button" aria-label={removeLabel} title={removeLabel} onClick={onRemove}>
+        <Icon name="x" />
+      </button>
+    </span>
+  );
+}
+
 /** Chips + free text input. Enter / comma adds, Backspace on empty input removes the last tag. */
 export function TagInput({
   value,
@@ -236,17 +249,12 @@ export function TagInput({
   return (
     <div className={l.tagInput}>
       {value.map((tag) => (
-        <span key={tag} className={l.tagChip}>
-          <span className={controlStyles.tagDot} style={{ background: tagColor(tag) }} />
-          {tag}
-          <button
-            type="button"
-            aria-label={t("field.removeTag", { name: tag })}
-            onClick={() => onChange(value.filter((x) => x !== tag))}
-          >
-            <Icon name="x" />
-          </button>
-        </span>
+        <TagChip
+          key={tag}
+          name={tag}
+          removeLabel={t("field.removeTag", { name: tag })}
+          onRemove={() => onChange(value.filter((x) => x !== tag))}
+        />
       ))}
       <input
         value={draft}

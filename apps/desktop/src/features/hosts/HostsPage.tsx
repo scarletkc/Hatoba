@@ -15,7 +15,7 @@ import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { useTabs, type TabStatus } from "@/app/tabs";
 import { Button, Icon, IconButton, LinkButton, Segmented, Switch } from "@/components/controls";
-import { EmptyState, PageHeader, SearchField, Tag, layoutStyles } from "@/components/layout";
+import { EmptyState, PageHeader, SearchField, Tag, TagChip, layoutStyles } from "@/components/layout";
 import { Menu, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { dashboardSwitch, retryHost, setShownOnDashboard } from "@/features/dashboard/actions";
 import { HostDetail } from "@/features/dashboard/HostDetail";
@@ -835,14 +835,10 @@ export function HostsPage({ group: requested }: { group: string | null }) {
       >
         <Icon name="tag" />
         {t("sidebar.tags")}
-        {activeTags.length > 0 && <span className={s.toggleCount}>{activeTags.length}</span>}
         <Icon name="caret-down" className={s.toggleCaret} />
       </button>
       {activeTags.map((tag) => (
-        <button key={tag} type="button" className={s.tagChip} title={t("hosts.tags.remove", { tag })} onClick={() => setTags(activeTags.filter((x) => x !== tag))}>
-          <Tag name={tag} />
-          <Icon name="x" className={s.tagChipX} />
-        </button>
+        <TagChip key={tag} name={tag} removeLabel={t("hosts.tags.remove", { tag })} onRemove={() => setTags(activeTags.filter((x) => x !== tag))} />
       ))}
       <span className={s.toolbarGap} />
       <Button
