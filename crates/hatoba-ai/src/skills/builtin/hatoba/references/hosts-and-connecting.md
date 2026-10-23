@@ -9,7 +9,7 @@
 - Group buttons above the hosts open a group; **Hosts** before its name goes back. Its **…** (or a right-click on its button) has **Rename Group** and **Delete Group**, which keeps the hosts.
 - A row or card shows the name, `user@address:port`, tags, and the last connection; a row also the jump host. The dot is green when the host is connected or answers a TCP probe, grey otherwise; **Failed** (red): the last attempt this launch failed.
 - To connect: double-click, select and press Enter, or click **Connect**. Arrow keys move the selection; typing searches. A host can be open in several tabs. Right-click for its menu.
-- Ctrl+click (⌘-click on macOS) or Shift+click selects several hosts, and a click beside the rows none. The right-click menu of several has **Connect** (a tab each), **Add to Favorites** or **Remove from Favorites**, and **Delete…**, for all of them.
+- Ctrl+click (⌘-click on macOS) or Shift+click selects several hosts; a click beside the rows selects none. The right-click menu of several has **Connect** (a tab each), **Add to Favorites** or **Remove from Favorites**, and **Delete…**, for all of them.
 
 Other labels: **Search hosts or ssh user@host**, **Sort by**, **Recent**, **Name**, **Address**, **Last Connected**, **Duplicate**, **Copy Address**, **Clear Filters**.
 
