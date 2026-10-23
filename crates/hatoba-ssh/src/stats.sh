@@ -17,6 +17,10 @@ n=0
 
 # macOS has no /proc: its own tools give the same readings, printed as the Linux files read.
 if [ "$system" = Darwin ]; then
+  # A stock Mac has no `timeout`; perl's alarm, which outlives exec, bounds `df` there.
+  if [ "$2" = mounts ] && [ -z "$dft" ] && perl -e 1 2>/dev/null; then
+    dft="perl -e alarm(5);exec(@ARGV)"
+  fi
   echo "@cpus $(sysctl -n hw.ncpu)"
   # iostat prints the CPU shares and the load averages each interval, the first line since
   # boot. Added up, the shares stand in for the tick counters of /proc/stat.
