@@ -71,6 +71,21 @@
   font-weight: 500;
 }
 
+/* As wide as its pressed weight, so pressing the button never resizes it. */
+.sftpLabel {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sftpLabel::after {
+  content: attr(data-label);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 500;
+}
+
 /* Port forwarding button: an icon button with a count of running forwards. */
 .fwd {
   position: relative;

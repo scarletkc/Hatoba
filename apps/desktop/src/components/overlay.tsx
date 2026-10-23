@@ -261,7 +261,7 @@ export function Menu({
                     className={cx(o.menuChoiceOption, opt.value === e.value && o.menuChoiceOn)}
                     onClick={() => e.onChange(opt.value)}
                   >
-                    {opt.label}
+                    <span data-label={opt.label}>{opt.label}</span>
                   </button>
                 ))}
               </div>
