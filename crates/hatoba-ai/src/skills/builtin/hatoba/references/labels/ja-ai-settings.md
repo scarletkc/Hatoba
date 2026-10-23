@@ -27,6 +27,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Web Search | Web 検索 |
 | Custom Instructions | カスタム指示 |
 | Terminal Screen | ターミナル画面 |
+| AI Panel | AI パネル |
 | Memory | メモリ |
 | Skills | スキル |
 | MCP Servers | MCP サーバー |
@@ -82,6 +83,12 @@ The labels that these files name in English, as the interface shows them in Japa
 | en | ja |
 |---|---|
 | Send with Each Message by Default | 既定でメッセージごとに送信 |
+
+### AI Panel
+
+| en | ja |
+|---|---|
+| Text Size | 文字サイズ |
 
 ### Skills
 

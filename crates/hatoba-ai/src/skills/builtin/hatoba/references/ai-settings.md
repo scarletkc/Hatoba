@@ -1,6 +1,6 @@
 # Settings → AI
 
-Open Settings (the gear in the sidebar, or Ctrl+, / ⌘,) and choose the **AI** tab. It has these sections in order: Providers, Default Model, Web Search, Custom Instructions (`references/ai-instructions.md`), Terminal Screen, Memory (`references/ai-instructions.md`), Skills, MCP Servers, Auto Mode and This Device. Using the assistant is covered in `references/ai-panel.md`.
+Open Settings (the gear in the sidebar, or Ctrl+, / ⌘,) and choose the **AI** tab. It has these sections in order: Providers, Default Model, Web Search, Custom Instructions (`references/ai-instructions.md`), Terminal Screen, AI Panel, Memory (`references/ai-instructions.md`), Skills, MCP Servers, Auto Mode and This Device. Using the assistant is covered in `references/ai-panel.md`.
 
 ## Providers
 
@@ -26,6 +26,10 @@ Other labels: **Name**, **Clear**, **Model ID**, **Display Name**.
 ## Terminal Screen
 
 **Send with Each Message by Default** (on by default, synced) shows the assistant the attached terminal's screen with every message, in each conversation where **Send Terminal Screen** in the input area's + menu was not changed; see `references/ai-attachments.md`.
+
+## AI Panel
+
+**Text Size** (11 to 24, default 13, synced) is the size of the conversation, the input and the approval cards in the AI panel; the panel's header keeps the window's size. Ctrl+= / Ctrl+- / Ctrl+0 (⌘ on macOS) and Ctrl+wheel in the panel change it too; see `references/shortcuts.md`.
 
 ## Skills
 

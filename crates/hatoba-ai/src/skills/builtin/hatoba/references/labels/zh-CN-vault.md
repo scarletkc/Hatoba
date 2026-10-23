@@ -162,6 +162,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | List Density | 列表密度 |
 | Regular | 标准 |
 | Compact | 紧凑 |
+| Zoom | 缩放 |
 | Language | 语言 |
 | System Default | 跟随系统 |
 | 简体中文 | 简体中文 |

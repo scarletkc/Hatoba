@@ -162,6 +162,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | List Density | リストの密度 |
 | Regular | 標準 |
 | Compact | コンパクト |
+| Zoom | ズーム |
 | Language | 言語 |
 | System Default | システムの設定 |
 | 简体中文 | 简体中文 |

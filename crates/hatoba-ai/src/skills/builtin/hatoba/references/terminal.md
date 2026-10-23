@@ -75,7 +75,7 @@ The terminal settings sync with the vault. They are in three places:
 Other labels: **Decrease font size**, **Increase font size**.
 
 - **Font**: the name of an installed font family (default Cascadia Mono, or Menlo on macOS). A font that is not installed falls back to the system monospace font.
-- **Font Size**: 10 to 24 (default 13), changed with the minus and plus buttons.
+- **Font Size**: 10 to 24 (default 13), changed with the minus and plus buttons, or in any terminal with Ctrl+= / Ctrl+- / Ctrl+0 (⌘ on macOS) and Ctrl+wheel, which change every terminal tab; see `references/shortcuts.md`.
 - **Cursor Style**: Block (default), Bar or Underline.
 - **Scrollback**: 1,000, 5,000, 10,000 (default), or 50,000 lines.
 - **Terminal Colors**: **Always Dark** (default), **Always Light**, or **Match Appearance**, which follows the app's light or dark theme. Below it, the built-in color schemes show as small terminal previews; click one to use it:

@@ -116,6 +116,7 @@ export const AREAS: Area[] = [
           "tabs.newTab", "tabs.close", "tray.lock", "sidebar.settings", "ai.show", "ai.hide", "hosts.search",
           "settings.rightClick",
         ],
+        "Zoom": ["settings.term.size", "aiSettings.textSize", "settings.zoom"],
       },
     },
   },
@@ -265,8 +266,8 @@ export const AREAS: Area[] = [
         "Appearance": [
           "settings.appearance.light", "settings.appearance.dark", "settings.appearance.auto", "settings.termColors",
           "settings.termColors.dark", "settings.termColors.light", "settings.termColors.follow", "settings.density",
-          "settings.density.regular", "settings.density.compact", "settings.language", "settings.language.system",
-          "settings.language.zh", "settings.language.en", "settings.language.ja",
+          "settings.density.regular", "settings.density.compact", "settings.zoom", "settings.language",
+          "settings.language.system", "settings.language.zh", "settings.language.en", "settings.language.ja",
         ],
         "Proxies": [
           "settings.proxy.default", "settings.proxy.none", "settings.proxy.saved", "settings.proxy.add",
@@ -531,8 +532,8 @@ export const AREAS: Area[] = [
       "references/ai-settings.md": {
         "": [
           "settings.title", "aiSettings.tab", "aiSettings.providers", "aiSettings.default", "aiSettings.search",
-          "aiSettings.instructions", "aiSettings.screen", "ai.tool.memory", "ai.add.skills", "aiSettings.mcp",
-          "aiSettings.judge", "aiSettings.device",
+          "aiSettings.instructions", "aiSettings.screen", "aiSettings.panel", "ai.tool.memory", "ai.add.skills",
+          "aiSettings.mcp", "aiSettings.judge", "aiSettings.device",
         ],
         "Providers": [
           "aiSettings.providers.add", "settings.proxy.f.name", "aiSettings.f.protocol",
@@ -551,6 +552,9 @@ export const AREAS: Area[] = [
         ],
         "Terminal Screen": [
           "aiSettings.screen.row",
+        ],
+        "AI Panel": [
+          "aiSettings.textSize",
         ],
         "Skills": [
           "ai.tool.read_skill", "aiSettings.skills.add", "aiSettings.skills.import", "aiSettings.skills.import.folder",

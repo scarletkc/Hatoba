@@ -283,3 +283,11 @@ The labels that these files name in English, as the interface shows them in Simp
 | Hide AI Panel | 隐藏 AI 面板 |
 | Search hosts or ssh user@host | 搜索主机或 ssh user@host |
 | Right-Click in Terminal | 终端中的右键 |
+
+### Zoom
+
+| en | zh-CN |
+|---|---|
+| Font Size | 字号 |
+| Text Size | 文字大小 |
+| Zoom | 缩放 |
