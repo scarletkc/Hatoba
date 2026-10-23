@@ -87,6 +87,7 @@ export default defineMessages({
     "sync.footer.none": "未开启云同步",
     "sync.footer.none_sub": "数据仅保存在本机",
 
+    "tabs.home": "首页",
     "tabs.newTab": "新建标签",
     "tabs.close": "关闭标签",
     "tabs.newMenu": "新建本地终端",
@@ -255,6 +256,7 @@ export default defineMessages({
     "sync.footer.none": "Sync is off",
     "sync.footer.none_sub": "Stored on this device only",
 
+    "tabs.home": "Home",
     "tabs.newTab": "New Tab",
     "tabs.close": "Close Tab",
     "tabs.newMenu": "New Local Terminal",
@@ -421,6 +423,7 @@ export default defineMessages({
     "sync.footer.none": "クラウド同期はオフ",
     "sync.footer.none_sub": "このデバイスにのみ保存",
 
+    "tabs.home": "ホーム",
     "tabs.newTab": "新しいタブ",
     "tabs.close": "タブを閉じる",
     "tabs.newMenu": "新しいローカル ターミナル",

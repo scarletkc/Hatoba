@@ -4,9 +4,9 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding-left: 10px;
-  border-bottom: 0.5px solid var(--line);
-  background: var(--win);
+  /* The home tab (36 px) stands over the rail's items, centred on them. */
+  padding-left: calc((var(--rail-width) - 36px) / 2);
+  background: var(--side);
   color: var(--fg);
   min-width: 0;
 }
@@ -35,6 +35,18 @@
   flex-shrink: 1;
 }
 
+/* The home tab is a button back to the pages, an icon only, as Termius's Vaults: the rail and the page header name
+   the page it shows. */
+.homeTab {
+  flex: none;
+  justify-content: center;
+}
+
+/* After the traffic lights on macOS. */
+:root[data-platform="macos"] .tabbar {
+  padding-left: 10px;
+}
+
 /* A new session's tab opens out from nothing (TabBar), so its content stays inside it meanwhile. */
 .tab[data-tab-id] {
   overflow: hidden;
@@ -55,7 +67,7 @@
 .tab[data-dragging] {
   position: relative;
   z-index: 1;
-  background: linear-gradient(var(--fill2), var(--fill2)), var(--win);
+  background: linear-gradient(var(--fill2), var(--fill2)), var(--side-solid);
 }
 
 .tabIcon {

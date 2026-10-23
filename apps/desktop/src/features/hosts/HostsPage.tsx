@@ -60,6 +60,8 @@ let handledSearchTick = 0;
 /** Row id of the typed quick-connect target (HOST-12); saved hosts use their item ids. */
 const TYPED_ROW = "quick:typed";
 const SUGGESTIONS_ID = "recent-targets";
+/** A card's list state while resource usage shows, which then has no use for it. */
+const NO_LIST: ListState = { dot: "var(--fg3)", last: "", failed: false };
 
 /** A Connect row for a target that is not a saved host: the one typed, or a recent one. */
 interface QuickRowItem {
@@ -73,7 +75,7 @@ interface QuickRowItem {
  * Every saved host, or a group's (HOST-03), narrowed to favorites and tags, as a list or cards. With resource usage
  * on, the listed hosts are read in the background as the dashboard did (HOST-14).
  */
-export function HostsPage({ group }: { group: string | null }) {
+export function HostsPage({ group: requested }: { group: string | null }) {
   const t = useT();
   const platform = useApp((st) => st.info.platform);
   const hostProbe = useApp((st) => st.prefs.host_probe);
@@ -116,14 +118,15 @@ export function HostsPage({ group }: { group: string | null }) {
   const tagsMenu = useMenu();
   const tagsButton = useRef<HTMLButtonElement>(null);
   const columnsMenu = useMenu();
-  const columnsButton = useRef<HTMLButtonElement>(null);
   const importMenu = useMenu();
   const importButton = useRef<HTMLButtonElement>(null);
   const newMenu = useMenu();
   const newMenuButton = useRef<HTMLButtonElement>(null);
 
   const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
-  const scope = group ? groupMap.get(group) : undefined;
+  const scope = requested ? groupMap.get(requested) : undefined;
+  // A group that sync or another window deleted leaves every host.
+  const group = scope ? requested : null;
   const title = scope?.name ?? t("hosts.title");
   // Tags no host has any more drop out of the filter.
   const activeTags = useMemo(() => pickedTags.filter((tag) => tagList.some((x) => x.name === tag)), [pickedTags, tagList]);
@@ -317,6 +320,41 @@ export function HostsPage({ group }: { group: string | null }) {
       openRowMenu({ x: e.clientX, y: e.clientY });
     },
     [select, openRowMenu],
+  );
+
+  // Each card's last connection, made only without resource usage, so a batch of readings leaves every card's
+  // props as they were and only the hosts that changed render again.
+  const listStates = useMemo(() => {
+    if (stats) return null;
+    const states = new Map<string, ListState>();
+    for (const h of visible) {
+      const status = tabStatus.get(h.id);
+      const failed = status === "failed";
+      states.set(h.id, {
+        dot: status === "connected" ? "var(--green)" : failed ? "var(--red)" : probe[h.id] ? "var(--green)" : "var(--fg3)",
+        last: failed ? t("hosts.failed") : h.last_connected_at ? formatRelative(t.locale, h.last_connected_at, now) : t("hosts.neverConnected"),
+        failed,
+      });
+    }
+    return states;
+  }, [stats, visible, tabStatus, probe, t, now]);
+
+  const tagRow = useMemo(() => visible.some((h) => h.tags.length > 0), [visible]);
+  const itemView: View = useMemo(
+    () => ({
+      t,
+      now,
+      interval,
+      alerts,
+      groups: groupMap,
+      stats,
+      tagRow,
+      connectLabel: t("hosts.connect"),
+      onSelect: pick,
+      onConnect: connect,
+      onContext,
+    }),
+    [t, now, interval, alerts, groupMap, stats, tagRow, pick, connect, onContext],
   );
 
   const openGroupMenu = (e: MouseEvent, g: GroupView) => {
@@ -576,6 +614,7 @@ export function HostsPage({ group }: { group: string | null }) {
     <>
       {importing && <ImportDialog source={importing} onClose={() => setImporting(null)} />}
       {editingGroup && <GroupDialog group={editingGroup === "new" ? null : editingGroup} count={groups.length} onClose={() => setEditingGroup(null)} />}
+      {groupMenu.anchor && ctxGroup && <Menu anchor={groupMenu.anchor} onClose={groupMenu.close} entries={groupEntries(ctxGroup)} />}
     </>
   );
 
@@ -610,13 +649,48 @@ export function HostsPage({ group }: { group: string | null }) {
     </div>
   );
 
-  // The vault has no hosts at all: design §01b. Quick connect still works from the search field.
+  // A group's page is a step down from every host, with the group's menu beside its name.
+  const titleNode = scope ? (
+    <span className={s.crumbs}>
+      <button type="button" className={s.crumb} onClick={() => navigate({ kind: "hosts", group: null })}>
+        {t("hosts.title")}
+      </button>
+      <Icon name="caret-right" className={s.crumbSep} />
+      <span className={s.crumbHere}>{scope.name}</span>
+      <IconButton icon="dots-three" label={t("dashboard.groupMenu")} onClick={(e) => openGroupMenu(e, scope)} />
+    </span>
+  ) : (
+    title
+  );
+
+  // At the top level, the groups to step into, as in Termius; every host is listed below them.
+  const groupBar = group === null && groups.length > 0 && (
+    <div className={s.groupBar} role="list" aria-label={t("sidebar.groups")}>
+      {groups.map((g) => (
+        <div key={g.id} role="listitem" className={s.groupItem}>
+          <button
+            type="button"
+            className={s.groupTile}
+            onClick={() => navigate({ kind: "hosts", group: g.id })}
+            onContextMenu={(e) => openGroupMenu(e, g)}
+          >
+            <Icon name="folder-simple" className={s.groupIcon} />
+            <span className={s.groupName}>{g.name}</span>
+            <span className={s.groupCount}>{hosts.filter((h) => h.group_id === g.id).length}</span>
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+
+  // No hosts at all (design §01b), though groups made meanwhile stay reachable. Quick connect still works from the search field.
   if (hosts.length === 0 && !query.trim()) {
     return (
       <div className={s.page} onKeyDown={onKeyDown}>
-        <PageHeader title={title} search={searchField}>
+        <PageHeader title={titleNode} search={searchField}>
           {newControls}
         </PageHeader>
+        {groupBar}
         <EmptyState
           icon="hard-drives"
           title={t("hosts.empty.title")}
@@ -649,20 +723,6 @@ export function HostsPage({ group }: { group: string | null }) {
     if (base.length > 0 || hosts.length === 0 || hasQuick || exact) return null;
     return filtering ? ("filter" as const) : ("group" as const);
   })();
-
-  // A group's page is a step down from every host, with the group's menu beside its name.
-  const titleNode = scope ? (
-    <span className={s.crumbs}>
-      <button type="button" className={s.crumb} onClick={() => navigate({ kind: "hosts", group: null })}>
-        {t("hosts.title")}
-      </button>
-      <Icon name="caret-right" className={s.crumbSep} />
-      <span className={s.crumbHere}>{scope.name}</span>
-      <IconButton icon="dots-three" label={t("dashboard.groupMenu")} onClick={(e) => openGroupMenu(e, scope)} />
-    </span>
-  ) : (
-    title
-  );
 
   const toolbar = (
     <div className={s.toolbar}>
@@ -701,20 +761,6 @@ export function HostsPage({ group }: { group: string | null }) {
       >
         {sortLabel(shownSort)}
       </Button>
-      {stats && view === "list" && (
-        <Button
-          ref={columnsButton}
-          size="sm"
-          icon="columns"
-          title={t("dashboard.columns")}
-          aria-label={t("dashboard.columns")}
-          aria-haspopup="menu"
-          aria-expanded={!!columnsMenu.anchor}
-          onClick={() => columnsButton.current && columnsMenu.openBelow(columnsButton.current, true)}
-        >
-          {t("dashboard.columns")}
-        </Button>
-      )}
       <label className={s.statsSwitch} title={t("hosts.stats.hint")}>
         <Switch checked={stats} label={t("hosts.stats")} onChange={(hosts_stats) => savePrefs({ hosts_stats })} />
         <span>{t("hosts.stats")}</span>
@@ -731,49 +777,6 @@ export function HostsPage({ group }: { group: string | null }) {
       />
     </div>
   );
-
-  // At the top level, the groups to step into, as in Termius; every host is listed below them.
-  const groupBar = group === null && groups.length > 0 && (
-    <div className={s.groupBar} role="list" aria-label={t("sidebar.groups")}>
-      {groups.map((g) => (
-        <button
-          key={g.id}
-          type="button"
-          role="listitem"
-          className={s.groupTile}
-          onClick={() => navigate({ kind: "hosts", group: g.id })}
-          onContextMenu={(e) => openGroupMenu(e, g)}
-        >
-          <Icon name="folder-simple" className={s.groupIcon} />
-          <span className={s.groupName}>{g.name}</span>
-          <span className={s.groupCount}>{hosts.filter((h) => h.group_id === g.id).length}</span>
-        </button>
-      ))}
-    </div>
-  );
-
-  const listState = (h: HostView): ListState => {
-    const status = tabStatus.get(h.id);
-    const failed = status === "failed";
-    return {
-      dot: status === "connected" ? "var(--green)" : failed ? "var(--red)" : probe[h.id] ? "var(--green)" : "var(--fg3)",
-      last: failed ? t("hosts.failed") : h.last_connected_at ? formatRelative(t.locale, h.last_connected_at, now) : t("hosts.neverConnected"),
-      failed,
-    };
-  };
-
-  const itemView: View = {
-    t,
-    now,
-    interval,
-    alerts,
-    groups: groupMap,
-    stats,
-    connectLabel: t("hosts.connect"),
-    onSelect: pick,
-    onConnect: connect,
-    onContext,
-  };
 
   const quickList = (
     <>
@@ -841,7 +844,13 @@ export function HostsPage({ group }: { group: string | null }) {
       <div ref={listRef} className={s.scroll} tabIndex={0} role="listbox" aria-label={title}>
         {view === "list" &&
           (stats ? (
-            <StatsHead columns={columns} t={t} measure={measureTable} />
+            <StatsHead
+              columns={columns}
+              t={t}
+              measure={measureTable}
+              columnsOpen={!!columnsMenu.anchor}
+              onColumns={(anchor) => columnsMenu.openBelow(anchor, true)}
+            />
           ) : (
             <div className={cx(layoutStyles.tableHead, s.cols, s.head)}>
               <span className={s.headName}>{t("hosts.col.name")}</span>
@@ -896,7 +905,7 @@ export function HostsPage({ group }: { group: string | null }) {
                   selected={h.id === effectiveId}
                   readout={stats ? readouts[h.id] : undefined}
                   leftOut={stats ? leftOutBy(h, groupMap) : null}
-                  list={listState(h)}
+                  list={listStates?.get(h.id) ?? NO_LIST}
                   view={itemView}
                 />
               ))}
@@ -960,7 +969,6 @@ export function HostsPage({ group }: { group: string | null }) {
         />
       )}
       {rowMenu.anchor && ctxHost && <Menu anchor={rowMenu.anchor} onClose={rowMenu.close} entries={menuEntries(ctxHost)} />}
-      {groupMenu.anchor && ctxGroup && <Menu anchor={groupMenu.anchor} onClose={groupMenu.close} entries={groupEntries(ctxGroup)} />}
       {detailHost && (
         <HostDetail
           host={detailHost}

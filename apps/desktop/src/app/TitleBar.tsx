@@ -222,9 +222,7 @@ function AppButtons() {
 }
 
 /** Tab bar merged with the title bar (design TabBar + WIN-01). */
-export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
-  homeLabel: string;
-  homeIcon: string;
+export function TabBar({ onNewTab, onCloseTab }: {
   onNewTab: () => void;
   onCloseTab: (id: string) => void;
 }) {
@@ -244,11 +242,12 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
           type="button"
           role="tab"
           aria-selected={active === "home"}
-          className={cx(s.tab, active === "home" && s.tabActive)}
+          aria-label={t("tabs.home")}
+          title={t("tabs.home")}
+          className={cx(s.tab, s.homeTab, active === "home" && s.tabActive)}
           onClick={() => activate("home")}
         >
-          <Icon name={homeIcon} className={s.tabIcon} />
-          <TabLabel text={homeLabel} />
+          <Icon name="house" className={s.tabIcon} />
           <AiActivity slotId="home" />
         </button>
         {tabs.length > 0 && <span className={s.sep} />}

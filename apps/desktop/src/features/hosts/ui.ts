@@ -24,6 +24,8 @@ interface HostsUi {
   setSort(sort: HostSort): void;
   setFavorites(favorites: boolean): void;
   setTags(tags: string[]): void;
+  /** Shows every host again, for a search that comes from outside the page. */
+  clearFilters(): void;
 }
 
 export const useHostsUi = create<HostsUi>((set) => ({
@@ -35,4 +37,5 @@ export const useHostsUi = create<HostsUi>((set) => ({
   setSort: (sort) => set({ sort }),
   setFavorites: (favorites) => set({ favorites }),
   setTags: (tags) => set({ tags }),
+  clearFilters: () => set({ favorites: false, tags: [] }),
 }));

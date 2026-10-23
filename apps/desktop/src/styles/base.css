@@ -35,6 +35,7 @@ body {
   color: var(--fg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-user-select: none;
   user-select: none;
   cursor: default;
   overflow: hidden;
@@ -104,6 +105,7 @@ input,
 textarea,
 [contenteditable="true"],
 .selectable {
+  -webkit-user-select: text;
   user-select: text;
 }
 

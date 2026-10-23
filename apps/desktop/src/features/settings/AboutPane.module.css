@@ -27,6 +27,7 @@
   color: var(--fg2);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
+  -webkit-user-select: text;
   user-select: text;
 }
 

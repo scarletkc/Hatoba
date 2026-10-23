@@ -27,19 +27,29 @@
   height: 100%;
 }
 
-/* The home tab's sidebar, then the content. The sidebar stands on the window itself, so Mica shows through. */
+/* The home tab's rail, then the content. The rail stands on the window itself, so Mica shows through. */
 .workspace {
   flex: 1;
   min-height: 0;
   display: flex;
 }
 
-/* The page or terminal, with the AI panel at its right (§9). */
+/* The page or terminal, with the AI panel at its right (§9). The tab bar and the home tab's rail are one surface
+   around it, as in Teams or Windows Terminal, so the line between them is the content's own. */
 .content {
   flex: 1;
   min-width: 0;
   display: flex;
+  border-top: 0.5px solid var(--line2);
   background: var(--win);
+}
+
+/* Beside the rail the content is a panel with its top left corner rounded, as in Microsoft Store and the other
+   Windows 11 apps, so where the tab bar meets the rail reads as one shape rather than two lines crossing. */
+.contentBeside {
+  border-left: 0.5px solid var(--line2);
+  border-top-left-radius: var(--radius-md);
+  overflow: hidden;
 }
 
 .body {
