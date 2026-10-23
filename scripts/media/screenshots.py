@@ -4,7 +4,9 @@ usage: python scripts/media/screenshots.py [--locale en|zh-CN|ja] [--out DIR] [-
 
 Needs `pnpm dev` running; --url defaults to http://localhost:1420. The English screenshots go to
 docs/media and the Chinese and Japanese ones to apps/site/src/assets/screenshots/<locale>, where
-the website's pages in each language use them.
+the website's pages in each language use them. The home page shows only a region of ai-approval and
+sync-deploy, AI_PANEL and DEPLOY_DIALOG in apps/site/src/pages/[...lang]/index.astro, in screenshot
+pixels: when the layout moves the AI panel or the dialog, measure them again.
 """
 import argparse
 import re
