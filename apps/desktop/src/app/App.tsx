@@ -31,6 +31,7 @@ import { useZoomKeys } from "./zoomKeys";
 import { ZoomHud } from "./ZoomHud";
 import { Sidebar } from "./Sidebar";
 import { StarPrompt } from "./StarPrompt";
+import { TrafficLights } from "./TrafficLights";
 import { useApp, type Page } from "./store";
 import { useTabs } from "./tabs";
 import { TabBar } from "./TitleBar";
@@ -70,6 +71,7 @@ export function App() {
         <ZoomHud />
         <ContextMenuHost platform={platform} />
         <ResizeHandles platform={platform} />
+        <TrafficLights platform={platform} />
       </>
     );
 
@@ -92,6 +94,7 @@ export function App() {
       <ZoomHud />
       <ContextMenuHost platform={platform} />
       <ResizeHandles platform={platform} />
+      <TrafficLights platform={platform} />
     </>
   );
 }
