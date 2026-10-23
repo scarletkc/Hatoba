@@ -1,5 +1,6 @@
-.sidebar {
-  width: var(--sidebar-width);
+/* The home tab's navigation rail: an icon over each name, Cloud Sync at the bottom. */
+.rail {
+  width: var(--rail-width);
   height: 100%;
   flex: none;
   display: flex;
@@ -7,10 +8,9 @@
   background: var(--side);
   border-right: 0.5px solid var(--line2);
   color: var(--fg);
-  font-size: var(--text-md);
 }
 
-:root[data-platform="macos"] .sidebar {
+:root[data-platform="macos"] .rail {
   backdrop-filter: blur(36px) saturate(1.7);
 }
 
@@ -20,174 +20,69 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 0;
-  padding: 10px 0 8px;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 8px 0;
+}
+
+.foot {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 10px;
 }
 
 .item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  height: 28px;
-  padding: 0 8px;
-  margin: 0 10px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  text-align: left;
-  color: var(--fg);
+  width: calc(var(--rail-width) - 12px);
+  min-height: 56px;
   flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: 6px 2px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--fg2);
 }
 
 .item:hover {
   background: var(--fill);
+  color: var(--fg);
 }
 
 .itemActive,
 .itemActive:hover {
   background: var(--sel);
+  color: var(--fg);
 }
 
 .itemIcon {
-  font-size: var(--icon-16);
-  width: 18px;
-  text-align: center;
+  font-size: var(--icon-20);
   color: var(--fg2);
-  flex: none;
 }
 
 .itemActive .itemIcon {
   color: var(--accent);
 }
 
+/* Two lines at most, for the longer names in some languages. */
 .itemLabel {
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.itemCount {
-  font-size: var(--text-sm);
-  color: var(--fg2);
-  font-variant-numeric: tabular-nums;
-}
-
-/* The star prompt (spec §9), above the footer. */
-.star {
-  flex: none;
-  margin: 0 10px 10px;
-  padding: 9px 10px 10px 12px;
-  border-radius: var(--radius-lg);
-  background: var(--fill);
-  font-size: var(--text-sm);
-}
-
-.starHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-}
-
-.starIcon {
-  font-size: var(--icon-14);
-  color: var(--orange);
-}
-
-.starClose {
-  border: 0;
-  padding: 0;
-  background: none;
-  color: var(--fg2);
-  font-size: var(--text-sm);
-  display: inline-flex;
-  border-radius: var(--radius-xs);
-}
-
-.starClose:hover {
-  color: var(--fg);
-}
-
-.starTitle {
-  flex: 1;
-  min-width: 0;
-  font-weight: 600;
-}
-
-.starBody {
-  margin: 4px 0 10px;
-  color: var(--fg2);
-  line-height: 1.4;
-}
-
-.starActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-6);
-}
-
-.starActions > * {
-  flex: 1 1 auto;
-}
-
-.footer {
-  flex: none;
-  display: flex;
-  align-items: center;
-  height: 52px;
-  padding: 0 10px;
-  border-top: 0.5px solid var(--line);
-}
-
-.syncButton {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  height: 38px;
-  border: 0;
-  padding: 0 8px;
-  border-radius: var(--radius-sm);
-  background: none;
-  text-align: left;
-}
-
-.syncButton:hover {
-  background: var(--fill);
-}
-
-.syncButtonActive,
-.syncButtonActive:hover {
-  background: var(--sel);
-}
-
-.syncIcon {
-  font-size: var(--icon-16);
-  flex: none;
-}
-
-.syncText {
-  flex: 1;
-  min-width: 0;
-  line-height: 1.3;
-}
-
-.syncTitle,
-.syncSub {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.syncTitle {
-  font-size: var(--text-sm);
-}
-
-.syncSub {
+  max-width: 100%;
   font-size: var(--text-xs);
-  color: var(--fg2);
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.itemActive .itemLabel {
+  font-weight: 600;
 }
 
 .spin {
@@ -199,7 +94,6 @@
     animation-duration: 1.2s !important;
     animation-iteration-count: infinite !important;
   }
-
 }
 
 @keyframes spin {

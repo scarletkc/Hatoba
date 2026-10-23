@@ -27,6 +27,7 @@ import { useVaultData } from "./data";
 import { useLaunches } from "./launch";
 import { useShortcuts, type ShortcutAction } from "./shortcuts";
 import { Sidebar } from "./Sidebar";
+import { StarPrompt } from "./StarPrompt";
 import { useApp, type Page } from "./store";
 import { useTabs } from "./tabs";
 import { TabBar } from "./TitleBar";
@@ -160,6 +161,7 @@ function Main() {
             {tabs.map((tab) => (
               <TerminalView key={tab.id} tab={tab} active={active === tab.id} />
             ))}
+            {active === "home" && !locked && <StarPrompt />}
           </div>
           {/* §9: the AI panel shows the active tab's conversation (AI-07). */}
           {aiOpen && <AiPanel slotId={active} />}

@@ -1,20 +1,13 @@
-import { useEffect } from "react";
-import { Button, Icon } from "@/components/controls";
-import { openExternal } from "@/features/sync/external";
+import { Icon } from "@/components/controls";
 import { formatRelative, useT } from "@/i18n";
 import type { SyncStatus } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { REPO_URL, bugReportUrl } from "@/lib/github";
-import { useVaultData } from "./data";
-import { useStarPrompt, useStarPromptDue } from "./star";
 import { useApp, type Page } from "./store";
-import { useTabs } from "./tabs";
-import { useOfferedUpdate } from "./update";
 import st from "./Sidebar.module.css";
 
-type Key = "hosts" | "forwards" | "keys";
+type Key = "hosts" | "forwards" | "keys" | "sync";
 
-function pageKey(page: Page): Key | null {
+function pageKey(page: Page): Key {
   switch (page.kind) {
     case "hosts":
     case "host-edit":
@@ -24,101 +17,47 @@ function pageKey(page: Page): Key | null {
     case "forwards":
       return "forwards";
     case "sync":
-      return null;
+      return "sync";
   }
 }
 
 /**
- * The home tab's navigation: the places that hold data, and the sync status, which opens Cloud Sync. Groups, tags
- * and favorites narrow the hosts page itself; Lock and Settings are in the title bar.
+ * The home tab's navigation rail, as in Microsoft Store and Teams: the places that hold data, each an icon over its
+ * name, and Cloud Sync at the bottom, whose icon is the sync status. Groups, tags and favorites narrow the hosts page
+ * itself; Lock and Settings are in the title bar.
  */
 export function Sidebar() {
   const t = useT();
   const { page, navigate, sync } = useApp();
-  const hosts = useVaultData((s) => s.hosts);
-  const keys = useVaultData((s) => s.keys);
   const active = pageKey(page);
+  const status = syncFooterView(t, sync);
 
-  const item = (key: Key, icon: string, label: string, count: number | null, target: Page) => (
+  const item = (key: Key, icon: string, label: string, target: Page, extra?: { color?: string; spin?: boolean; title?: string }) => (
     <button
       key={key}
       type="button"
       className={cx(st.item, active === key && st.itemActive)}
       aria-current={active === key ? "page" : undefined}
+      title={extra?.title ?? label}
       onClick={() => navigate(target)}
     >
-      <Icon name={icon} className={st.itemIcon} />
+      <Icon name={icon} className={cx(st.itemIcon, extra?.spin && st.spin)} color={extra?.color} />
       <span className={st.itemLabel}>{label}</span>
-      {count !== null && <span className={st.itemCount}>{count}</span>}
     </button>
   );
 
   return (
-    <nav className={st.sidebar} aria-label="Hatoba">
+    <nav className={st.rail} aria-label="Hatoba">
       <div className={st.list}>
-        {item("hosts", "hard-drives", t("hosts.title"), hosts.length, { kind: "hosts", group: null })}
-        {item("forwards", "arrows-left-right", t("sidebar.forwards"), null, { kind: "forwards", hostId: null })}
-        {item("keys", "key", t("sidebar.keys"), keys.length, { kind: "keys" })}
+        {item("hosts", "hard-drives", t("hosts.title"), { kind: "hosts", group: null })}
+        {item("forwards", "arrows-left-right", t("rail.forwards"), { kind: "forwards", hostId: null })}
+        {item("keys", "key", t("sidebar.keys"), { kind: "keys" })}
       </div>
-
-      <StarPrompt />
-      <div className={st.footer}>
-        <SyncFooter status={sync} active={page.kind === "sync"} onClick={() => navigate({ kind: "sync" })} />
+      <div className={st.foot}>
+        {item("sync", status.icon, t("rail.sync"), { kind: "sync" }, { color: status.color, spin: status.spin, title: `${status.title}
+${status.sub}` })}
       </div>
     </nav>
-  );
-}
-
-/** Asks for a GitHub star once it is due, on the home tab, and not while the update dot shows (spec §9). */
-function StarPrompt() {
-  const t = useT();
-  const info = useApp((st) => st.info);
-  const due = useStarPromptDue(useTabs((s) => s.connectedOnce));
-  const home = useTabs((s) => s.active === "home");
-  const updateAvailable = useOfferedUpdate() !== null;
-  useEffect(() => {
-    void useStarPrompt.getState().load();
-  }, []);
-
-  if (!home || updateAvailable || !due) return null;
-  const { finish } = useStarPrompt.getState();
-  const open = (url: string) => {
-    finish();
-    void openExternal(url);
-  };
-  return (
-    <section className={st.star} aria-label={t("sidebar.star.title")}>
-      <div className={st.starHead}>
-        <Icon name="star" fill className={st.starIcon} />
-        <span className={st.starTitle}>{t("sidebar.star.title")}</span>
-        <button type="button" className={st.starClose} title={t("btn.close")} aria-label={t("btn.close")} onClick={finish}>
-          <Icon name="x" />
-        </button>
-      </div>
-      <p className={st.starBody}>{t("sidebar.star.body")}</p>
-      <div className={st.starActions}>
-        <Button size="sm" variant="primary" onClick={() => open(REPO_URL)}>
-          {t("sidebar.star.star")}
-        </Button>
-        <Button size="sm" onClick={() => open(bugReportUrl(info))}>
-          {t("sidebar.star.report")}
-        </Button>
-      </div>
-    </section>
-  );
-}
-
-function SyncFooter({ status, active, onClick }: { status: SyncStatus | null; active: boolean; onClick: () => void }) {
-  const t = useT();
-  const view = syncFooterView(t, status);
-  return (
-    <button type="button" className={cx(st.syncButton, active && st.syncButtonActive)} aria-current={active ? "page" : undefined} onClick={onClick}>
-      <Icon name={view.icon} className={cx(st.syncIcon, view.spin && st.spin)} color={view.color} />
-      <span className={st.syncText}>
-        <div className={st.syncTitle}>{view.title}</div>
-        <div className={st.syncSub}>{view.sub}</div>
-      </span>
-    </button>
   );
 }
 
