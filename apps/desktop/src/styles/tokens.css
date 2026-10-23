@@ -239,6 +239,9 @@
    the title bar keeps its 44 window pixels as the interface zooms, while it can hold the 28 px tabs. */
 :root[data-platform="macos"] {
   --titlebar-height: max(calc(44 * var(--window-px)), 34px);
+  /* The traffic lights stand on the rail, 18 pt in from both its edges (they end at 72 pt, 78 pt on macOS 26), at
+     every interface zoom. */
+  --rail-width: max(96px, calc(96 * var(--window-px)));
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue",
     Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "PingFang SC", "Hiragino Sans GB",

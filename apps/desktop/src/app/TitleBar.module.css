@@ -42,9 +42,9 @@
   justify-content: center;
 }
 
-/* After the traffic lights on macOS. */
+/* Past the rail and the traffic lights on it on macOS, on every tab. */
 :root[data-platform="macos"] .tabbar {
-  padding-left: 10px;
+  padding-left: calc(var(--rail-width) + 8px);
 }
 
 /* A new session's tab opens out from nothing (TabBar), so its content stays inside it meanwhile. */

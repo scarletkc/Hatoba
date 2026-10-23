@@ -12,8 +12,8 @@ pub const MAIN: &str = "main";
 /// macOS traffic lights: x is the close button's left edge, y the extra height the title bar
 /// container gets below the buttons (tao). The buttons are 14 x 16 pt, so their vertical center
 /// sits y + 2 pt below the window top; y = 20 centers them in the 44 px title bar (center at 22).
-/// x = 18 puts the three buttons over the home tab's 76 pt navigation rail; they end at x = 72,
-/// inside the 80 pt the tab bar reserves (10 padding + a 70 pt spacer).
+/// x = 18 puts the three buttons over the home tab's navigation rail, 96 pt wide on macOS, so they
+/// keep 18 pt from both its edges (they end at x = 72, or 78 on macOS 26); the tab bar starts past it.
 /// tao re-applies the position on every redraw and after leaving fullscreen.
 #[cfg(target_os = "macos")]
 const TRAFFIC_LIGHT_X: f64 = 18.0;

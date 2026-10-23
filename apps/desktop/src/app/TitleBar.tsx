@@ -228,7 +228,6 @@ export function TabBar({ onNewTab, onCloseTab }: {
 }) {
   const t = useT();
   const { tabs, active, activate } = useTabs();
-  const platform = useApp((st) => st.info.platform);
   const local = useLocalMenu(onNewTab);
   const drag = useTabDrag(tabs);
   const list = useRef<HTMLDivElement>(null);
@@ -236,7 +235,6 @@ export function TabBar({ onNewTab, onCloseTab }: {
 
   return (
     <div className={s.tabbar} data-tauri-drag-region>
-      {platform === "macos" && <span style={{ width: "calc(70 * var(--window-px))", flex: "none" }} data-tauri-drag-region />}
       <div ref={list} className={s.tabs} role="tablist">
         <button
           type="button"

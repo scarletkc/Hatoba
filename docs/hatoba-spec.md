@@ -1017,7 +1017,7 @@ The macOS version (P1, §11) keeps the design's macOS elements: the traffic-ligh
 
 | ID | Requirement | Priority |
 |---|---|---|
-| MAC-01 | Title bar: the native traffic-light buttons over the window content (Tauri `TitleBarStyle::Overlay`, no title), centered vertically in the 44 px title bar. The tab bar leaves room for them | P1 |
+| MAC-01 | Title bar: the native traffic-light buttons over the window content (Tauri `TitleBarStyle::Overlay`, no title), centered vertically in the 44 px title bar, over the home tab's navigation rail, which is 96 pt wide on macOS so they keep the same margin on both sides. The tab bar starts past the rail on every tab | P1 |
 | MAC-02 | Fonts: the UI uses the system font, falling back to `PingFang SC` for Chinese and `Hiragino Sans` for Japanese. A vault created on macOS starts with the terminal font `Menlo`, because WebKit cannot use SF Mono by name, and the terminal falls back to the same CJK fonts | P1 |
 | MAC-03 | Shortcuts: the macOS column of the table in §9.1. App shortcuts use ⌘, so Ctrl+letter always reaches the remote side unchanged. The zoom keys (TERM-13) have no wheel zoom on macOS | P1 |
 | MAC-04 | Secondary click in the terminal opens the menu by default, and **Right-Click in Terminal** can switch it to copy and paste (WIN-05). The default applies only while the setting is unset, so an explicit choice still syncs between devices (§5.1) | P1 |
