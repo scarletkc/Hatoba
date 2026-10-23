@@ -142,7 +142,7 @@ export function MemorySection({ enabled, settled }: { enabled: MemorySwitch | nu
     const ok = await confirm({
       title: t("aiSettings.memory.deleteAllTitle", { n: list.length }),
       body: t("aiSettings.memory.deleteBody"),
-      confirmLabel: t("aiSettings.memory.deleteAll.confirm"),
+      confirmLabel: t("aiSettings.memory.deleteAll"),
       danger: true,
     });
     if (!ok) return;

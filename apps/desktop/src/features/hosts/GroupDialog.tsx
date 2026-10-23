@@ -26,7 +26,7 @@ export function GroupDialog({ group, count, onClose }: { group: GroupView | null
   };
   return (
     <Dialog
-      title={group ? t("sidebar.renameGroup.title") : t("sidebar.newGroup.title")}
+      title={group ? t("sidebar.renameGroup") : t("sidebar.newGroup")}
       icon="folder-simple"
       onClose={onClose}
       actions={
@@ -53,7 +53,7 @@ export function GroupDialog({ group, count, onClose }: { group: GroupView | null
 
 /** Deletes `group` after asking; its hosts stay, without a group. Resolves to whether it was deleted. */
 export async function deleteGroup(t: ReturnType<typeof useT>, group: GroupView): Promise<boolean> {
-  if (!(await confirm({ title: t("sidebar.deleteGroup.title"), body: t("sidebar.deleteGroupConfirm", { name: group.name }), confirmLabel: t("btn.delete"), danger: true })))
+  if (!(await confirm({ title: t("sidebar.deleteGroup"), body: t("sidebar.deleteGroupConfirm", { name: group.name }), confirmLabel: t("btn.delete"), danger: true })))
     return false;
   try {
     await api.group_delete(group.id);

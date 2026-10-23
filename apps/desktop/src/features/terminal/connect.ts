@@ -108,7 +108,7 @@ export function editSessionHost(hostId: string | null) {
   useTabs.getState().activate("home");
 }
 
-/** "Save as Host…" for a quick connection: a new host, filled in with its target (HOST-12). */
+/** "Save as Host" for a quick connection: a new host, filled in with its target (HOST-12). */
 export function saveTargetAsHost(target: QuickTarget) {
   useApp.getState().navigate({ kind: "host-edit", hostId: null, groupId: null, back: null, prefill: target });
   useTabs.getState().activate("home");

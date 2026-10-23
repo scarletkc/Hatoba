@@ -12,7 +12,7 @@ Language comes first, then three sections: **Window and Notifications** (**Notif
 - **Use the hatoba command in terminals**: off by default. Adds the `hatoba` command, which opens hosts in Hatoba from a terminal. **Let other programs use saved hosts**, shown while it is on and off by default, lets coding agents and scripts run commands and copy files on the saved hosts through it, and **Recent use** counts what they ran until Hatoba locks, with each one under **Details**. See `references/command-line.md`.
 - **Show host reachability**: on by default. Every 60 seconds Hatoba tries a TCP connection to the hosts in the list (no login) and colors the dot. A host with a proxy is tried through it, and counts as reachable once its SSH server answers.
 - **Refresh interval** (3 s by default) and the three thresholds below it (CPU, memory and disk use, 90% by default, or **Off**) belong to resource usage on the hosts page; see `references/resource-usage.md`.
-- **Export Encrypted Backup** → **Export…**: saves the vault as one file that only the master password opens. There is no import in the app.
+- **Export Encrypted Backup** → **Export**: saves the vault as one file that only the master password opens. There is no import in the app.
 
 ## Appearance
 
@@ -29,7 +29,7 @@ SOCKS5 and HTTP proxies that hosts connect through. Choosing one for a host is i
 
 - **Default proxy on this device**: **No proxy** or a saved proxy. Hosts whose proxy is **Device default**, and quick connections, use it. The choice stays on this device and does not sync, so a proxy that runs on this computer (such as Clash on 127.0.0.1) can be the default here and not on the others.
 - **Saved Proxies** lists each proxy with its type, address and the number of hosts that name it; the device's default has a **Default** badge. Click a row to edit it; the trash icon deletes it after showing which hosts switch to the device default. Proxies sync with their usernames and passwords, encrypted like the rest of the vault.
-- **Add Proxy…** asks for **Name**, **Type** (SOCKS5 or HTTP; an HTTP proxy must support CONNECT), **Address** and **Port**, and a **Username** and **Password** when the proxy needs a sign-in. Pasting a proxy URL such as `socks5://127.0.0.1:7890` or `http://user:pass@proxy.example.com:3128` into **Address** fills in the other fields. A saved password shows **Saved** and can be replaced but not viewed. SOCKS5 and HTTP send the proxy's username and password to the proxy in the clear.
+- **Add Proxy** asks for **Name**, **Type** (SOCKS5 or HTTP; an HTTP proxy must support CONNECT), **Address** and **Port**, and a **Username** and **Password** when the proxy needs a sign-in. Pasting a proxy URL such as `socks5://127.0.0.1:7890` or `http://user:pass@proxy.example.com:3128` into **Address** fills in the other fields. A saved password shows **Saved** and can be replaced but not viewed. SOCKS5 and HTTP send the proxy's username and password to the proxy in the clear.
 
 Other labels: **Edit Proxy**.
 
@@ -37,7 +37,7 @@ Other labels: **Edit Proxy**.
 
 Its sections are **Protection**, **Unlock** and **Password and Recovery**, with **Lock Now** last. They hold Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer sleeps** (on by default), **Disconnect all sessions when locked** (off by default), **Clear Clipboard** for copied host passwords (default 90 seconds), **Unlock with Windows Hello** (Windows) or **Unlock with Touch ID** (macOS), **Unlock with PIN** with **Require the master password after a restart** (on by default), the master password, the recovery code, and **Lock Now**. Details are in `references/keys-vault-and-lock.md`.
 
-Other labels: **Master Password**, **Change…**, **Recovery Code**, **Generate New Code…**.
+Other labels: **Master Password**, **Change**, **Recovery Code**, **Generate New Code**.
 
 ## About
 

@@ -31,7 +31,7 @@ When importing a key, or connecting with one:
 
 - After wrong master passwords, "Too many attempts. Try again in N s." appears and the password field is disabled until the countdown ends. Wait; each further miss lengthens the delay, up to a minute.
 - A forgotten master password can be reset only with the recovery code (**Forgot it? Use your recovery code**). With neither, the data cannot be recovered, and Hatoba cannot reset it.
-- The recovery code ignores case, dashes and spaces. A new code can be generated in Settings → Security (**Generate New Code…**), after which the old one stops working.
+- The recovery code ignores case, dashes and spaces. A new code can be generated in Settings → Security (**Generate New Code**), after which the old one stops working.
 
 ## Files, forwards and other messages
 

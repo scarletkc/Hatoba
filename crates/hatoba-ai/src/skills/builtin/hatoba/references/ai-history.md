@@ -4,12 +4,12 @@ Conversations with the assistant are kept in **History**. They are encrypted and
 
 ## History, search, export
 
-**History** (the clock button in the panel header) lists conversations, pinned first and then by last activity, each with its title, host and time. The title starts as the first line of the first message. The search box (**Search conversations**) searches titles and message text. The menu of a conversation (**More**, or right-click the row) has **Open**, **Fork**, **Rename**, **Pin** or **Unpin**, **Export as Markdown…** and **Delete…**:
+**History** (the clock button in the panel header) lists conversations, pinned first and then by last activity, each with its title, host and time. The title starts as the first line of the first message. The search box (**Search conversations**) searches titles and message text. The menu of a conversation (**More**, or right-click the row) has **Open**, **Fork**, **Rename**, **Pin** or **Unpin**, **Export as Markdown** and **Delete**:
 
 - **Open** attaches the conversation to the active tab. On a tab of another host, the next message moves the whole conversation there (`references/ai-panel.md`). To keep it where it is, use **Fork** instead. A conversation the tab showed that is still working goes on in the tab's background.
 - A sparkle beside a title marks a conversation that is working, in a tab or in a tab's background, and a hand one that waits for your approval. Opening one that works in another tab brings that tab to the front and shows it there.
-- **Delete…** removes the conversation on every synced device for good, after a confirmation.
-- **Export as Markdown…** saves the conversation as a Markdown file, with each divider as a line.
+- **Delete** removes the conversation on every synced device for good, after a confirmation.
+- **Export as Markdown** saves the conversation as a Markdown file, with each divider as a line.
 
 ## Edit and Resend
 

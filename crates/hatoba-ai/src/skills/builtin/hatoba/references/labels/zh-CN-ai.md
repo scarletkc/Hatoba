@@ -50,7 +50,7 @@ The labels that these files name in English, as the interface shows them in Simp
 |---|---|
 | Commands | 命令 |
 | Add context | 添加上下文 |
-| Text Files from This Computer… | 这台电脑上的文本文件… |
+| Text Files from This Computer | 这台电脑上的文本文件 |
 
 ### MCP servers: **MCP Tools** and `/mcp`
 
@@ -143,8 +143,8 @@ The labels that these files name in English, as the interface shows them in Simp
 | Rename | 重命名 |
 | Pin | 置顶 |
 | Unpin | 取消置顶 |
-| Export as Markdown… | 导出为 Markdown… |
-| Delete… | 删除… |
+| Export as Markdown | 导出为 Markdown |
+| Delete | 删除 |
 | More | 更多操作 |
 
 ### Edit and Resend
@@ -255,7 +255,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | en | zh-CN |
 |---|---|
 | Add Files and More | 添加文件等 |
-| Add Text Files… | 添加文本文件… |
+| Add Text Files | 添加文本文件 |
 | Drop text files to attach them | 松开以附加文本文件 |
 | Preview the file | 预览文件内容 |
 | {name} is larger than {size}, so it can’t be attached. | {name} 超过 {size}，无法附加。 |
@@ -284,7 +284,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | en | zh-CN |
 |---|---|
 | Edit and Resend | 编辑并重新发送 |
-| Export as Markdown… | 导出为 Markdown… |
+| Export as Markdown | 导出为 Markdown |
 
 ## `references/ai-side-questions.md`
 

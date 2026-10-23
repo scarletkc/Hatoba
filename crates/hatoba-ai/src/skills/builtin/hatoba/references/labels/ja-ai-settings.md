@@ -10,8 +10,8 @@ The labels that these files name in English, as the interface shows them in Japa
 | AI Notes | AI 向けメモ |
 | Memory | メモリ |
 | Remember across conversations | 会話をまたいで覚える |
-| Add Memory… | メモリを追加… |
-| Delete All… | すべて削除… |
+| Add Memory | メモリを追加 |
+| Delete All | すべて削除 |
 | Global | グローバル |
 | This Computer | このコンピューター |
 | Applies To | 適用先 |
@@ -39,7 +39,7 @@ The labels that these files name in English, as the interface shows them in Japa
 
 | en | ja |
 |---|---|
-| Add Provider… | プロバイダーを追加… |
+| Add Provider | プロバイダーを追加 |
 | Name | 名前 |
 | Protocol | プロトコル |
 | OpenAI Chat Completions | OpenAI Chat Completions |
@@ -77,7 +77,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Tavily | Tavily |
 | SearXNG | SearXNG |
 | Instance URL | インスタンスの URL |
-| Remove Configuration… | 設定を削除… |
+| Remove Configuration | 設定を削除 |
 
 ### Terminal Screen
 
@@ -90,10 +90,10 @@ The labels that these files name in English, as the interface shows them in Japa
 | en | ja |
 |---|---|
 | Read skill | スキルを読む |
-| New Skill… | スキルを作成… |
+| New Skill | スキルを作成 |
 | Import | インポート |
-| Import Folder… | フォルダーをインポート… |
-| Import .zip… | .zip をインポート… |
+| Import Folder | フォルダーをインポート |
+| Import .zip | .zip をインポート |
 | Description | 説明 |
 | Instructions | 指示 |
 | Files | ファイル |
@@ -165,9 +165,9 @@ The labels that these files name in English, as the interface shows them in Japa
 
 | en | ja |
 |---|---|
-| Add Server… | サーバーを追加… |
+| Add Server | サーバーを追加 |
 | Add from Template | テンプレートから追加 |
-| Export… | エクスポート… |
+| Export | エクスポート |
 | Add MCP Server | MCP サーバーを追加 |
 | Type | 種類 |
 | Command | コマンド |

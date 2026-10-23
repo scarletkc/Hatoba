@@ -10,7 +10,7 @@ Forwards belong to a host. They are saved in the vault and sync like other items
 
 ## Create or edit a rule
 
-**Forwards** in the navigation rail opens the **Port Forwarding** page with every host's rules, a section per host with its name and `user@address:port`; with none yet it says "No port forwards yet". **Add Forward…** opens **Add Port Forward**, whose **Host** is the saved host to forward through ("Choose a host." until one is chosen), and whose **Type** is **Local**, **Remote** or **Dynamic (SOCKS)**; the fields below follow the type. Rules are saved the moment you add, change or delete them.
+**Forwards** in the navigation rail opens the **Port Forwarding** page with every host's rules, a section per host with its name and `user@address:port`; with none yet it says "No port forwards yet". **Add Forward** opens **Add Port Forward**, whose **Host** is the saved host to forward through ("Choose a host." until one is chosen), and whose **Type** is **Local**, **Remote** or **Dynamic (SOCKS)**; the fields below follow the type. Rules are saved the moment you add, change or delete them.
 
 Other labels: **Edit Port Forward**, **Add**, **Delete**.
 
@@ -28,7 +28,7 @@ Other labels: **Edit Port Forward**, **Add**, **Delete**.
 - With nothing open on the host, starting a rule connects to it without opening a terminal. Hatoba signs in as a terminal tab does and asks the same questions: an "ask every time" password, a key passphrase that is not saved, a new host key, or the server's two-factor prompts. With a tab or another forward already on the host, it asks nothing.
 - A running local or SOCKS rule shows its address, `localhost:<port>` (or the address it listens on when that is one network interface's); click it to copy it, for a browser or client on this computer, or as an app's SOCKS proxy. A running remote rule shows its address "on the server", with nothing to copy: programs on the server connect to it.
 - A rule that could not start shows why, for example that the local port is already in use, or that the server did not listen on a remote rule's port (in use there, a port that needs root, or a server that does not allow remote forwarding, `AllowTcpForwarding`). Stopping a remote rule asks the server to stop listening.
-- In a terminal tab on a host that has rules, **Port Forwarding** in the status bar opens a popover with them; a badge on the button shows how many are running. The rows have the same **Start**, **Stop** and **Retry**, and **Manage Port Forwarding…** opens the page at this host's rules. The page can also say "Can’t read the port forwards."
+- In a terminal tab on a host that has rules, **Port Forwarding** in the status bar opens a popover with them; a badge on the button shows how many are running. The rows have the same **Start**, **Stop** and **Retry**, and **Manage Port Forwarding** opens the page at this host's rules. The page can also say "Can’t read the port forwards."
 - Closing a terminal tab or disconnecting it closes only its shell. The forwards keep running, and the host's connection closes once no tab and no forward is left on it.
 
 ## Keep running in the background

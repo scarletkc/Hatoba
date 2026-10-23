@@ -11,9 +11,9 @@ Other labels: **Will retry automatically**, **Enter your master password again**
 | State | What it means | What to do |
 |---|---|---|
 | Offline | The Worker (or Cloudflare) can't be reached | Check the network and the Worker URL (**Endpoint** on the status page). It retries by itself; **Sync Now** retries at once |
-| Signed out | The session expired or was revoked (another device pressed **Remove…** on this one, or the master password changed) | Enter the master password under **Sign In Again** on the status page |
+| Signed out | The session expired or was revoked (another device pressed **Remove** on this one, or the master password changed) | Enter the master password under **Sign In Again** on the status page |
 | Sync error | A sync round failed; the page shows the message | Read the message below; it retries automatically |
-| Worker update required | The Worker is too old for this Hatoba | **Update Worker…**; see `references/sync-worker.md` |
+| Worker update required | The Worker is too old for this Hatoba | **Update Worker**; see `references/sync-worker.md` |
 | Hatoba update required | The Worker is newer than this Hatoba supports | Update Hatoba: Settings → About → **Check for Updates** |
 | Sync is off | No sync configured on this device | Set it up under **Cloud Sync** |
 
@@ -34,7 +34,7 @@ Other labels: **Will retry automatically**, **Enter your master password again**
 - "The cloud already holds a vault…" appears when the Worker or database got a vault after step 2 checked it (for example another device set it up at the same moment). Go back to step 2 and connect again: it then offers to join that vault (`references/sync.md`, "Join a cloud vault").
 - "The cloud has no vault yet…" appears when restoring from a Worker or database that was never set up. Set sync up first on the device that has the data.
 - "Another Cloud Sync setup is still running…" appears when a setup or join started earlier has not finished, for example one left running in the background by closing the wizard. Only one runs at a time. Wait for it; the status page then shows the result.
-- "Cloud Sync is already on for this device…" appears when joining a cloud vault while this device already syncs, for example because an earlier setup finished in the meantime. To move the device to another cloud vault, use **Disconnect…** on the status page first, then join.
+- "Cloud Sync is already on for this device…" appears when joining a cloud vault while this device already syncs, for example because an earlier setup finished in the meantime. To move the device to another cloud vault, use **Disconnect** on the status page first, then join.
 - "Incorrect master password." during setup or restore: enter the master password of the vault that was uploaded, not a new one. If it changed on another device, use the new one. When joining a cloud vault, it is the cloud vault's master password, not this device's.
 - For a Worker URL, use the full address including `https://`. A quick check is opening `<Worker URL>/v1/health` in a browser: it should return JSON with `"service": "hatoba-sync"`, a `version`, and `initialized`.
 
@@ -78,7 +78,7 @@ Other labels: **Restore from Cloud**, **Check the token and account**, **Look fo
 
 ## Devices and conflicts
 
-- A device that should not sync any more: **Remove…** it on the status page (**Devices**). It then needs the master password to sync again; no data is deleted.
+- A device that should not sync any more: **Remove** it on the status page (**Devices**). It then needs the master password to sync again; no data is deleted.
 - "N conflicts were resolved automatically" is not an error. The newer edit wins; for SSH keys the loser is kept as a copy. Open **Review** to keep the result or restore the other version.
 - Two devices that show different data: press **Sync Now** on both; a device that is offline or signed out has not uploaded yet.
 

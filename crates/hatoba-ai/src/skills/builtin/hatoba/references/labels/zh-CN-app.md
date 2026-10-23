@@ -65,7 +65,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Search hosts or ssh user@host | 搜索主机或 ssh user@host |
 | Import | 导入 |
 | New Host | 新建主机 |
-| New Group… | 新建分组… |
+| New Group | 新建分组 |
 | Favorites | 收藏 |
 | Tags | 标签 |
 | Resource Usage | 资源占用 |
@@ -85,9 +85,9 @@ The labels that these files name in English, as the interface shows them in Simp
 | Remove from Favorites | 取消收藏 |
 | Copy Address | 复制地址 |
 | Copy Password | 复制密码 |
-| Delete… | 删除… |
-| Rename Group… | 重命名分组… |
-| Delete Group… | 删除分组… |
+| Delete | 删除 |
+| Rename Group | 重命名分组 |
+| Delete Group | 删除分组 |
 | Clear Filters | 清除筛选 |
 | General | 通用 |
 | Show host reachability | 显示主机在线状态 |
@@ -101,7 +101,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Recent | 最近 |
 | Recent Quick Connections | 快速连接记录 |
 | Remove from Recent | 从记录中移除 |
-| Save as Host… | 保存为主机… |
+| Save as Host | 保存为主机 |
 | Username | 用户名 |
 
 ### Import hosts
@@ -116,8 +116,8 @@ The labels that these files name in English, as the interface shows them in Simp
 | ProxyCommand not imported | 不导入 ProxyCommand |
 | Proxy not imported | 不导入代理 |
 | Key stays in {app} | 密钥留在 {app} 中 |
-| Choose File… | 选择文件… |
-| Choose Folder… | 选择文件夹… |
+| Choose File | 选择文件 |
+| Choose Folder | 选择文件夹 |
 
 ### The host editor
 
@@ -138,7 +138,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | AI Notes | AI 备注 |
 | Test Connection | 测试连接 |
 | Port Forwarding | 端口转发 |
-| Delete Host… | 删除主机… |
+| Delete Host | 删除主机 |
 | Save | 保存 |
 | Cancel | 取消 |
 

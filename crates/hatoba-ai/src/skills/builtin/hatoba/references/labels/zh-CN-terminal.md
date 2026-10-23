@@ -59,11 +59,11 @@ The labels that these files name in English, as the interface shows them in Simp
 | Copy | 复制 |
 | Paste | 粘贴 |
 | Select All | 全选 |
-| Find… | 查找… |
+| Find | 查找 |
 | Ask AI | 询问 AI |
 | Clear Scrollback | 清除回滚缓冲 |
 | Edit Host | 编辑主机 |
-| Save as Host… | 保存为主机… |
+| Save as Host | 保存为主机 |
 
 ### Copy, paste, search and links
 
@@ -142,12 +142,12 @@ The labels that these files name in English, as the interface shows them in Simp
 | en | zh-CN |
 |---|---|
 | Open | 打开 |
-| Download… | 下载… |
+| Download | 下载 |
 | Rename | 重命名 |
-| Delete… | 删除… |
+| Delete | 删除 |
 | Copy Path | 复制路径 |
 | New Folder | 新建文件夹 |
-| Upload Files… | 上传文件… |
+| Upload Files | 上传文件 |
 | The name can’t be empty or contain /. | 名称不能为空，也不能包含 /。 |
 | This file will be permanently deleted from the server. This can’t be undone. | 这个文件会从服务器上永久删除，无法撤销。 |
 | This folder and everything in it will be permanently deleted from the server. This can’t be undone. | 这个文件夹及其中的所有内容会从服务器上永久删除，无法撤销。 |
@@ -172,7 +172,7 @@ The labels that these files name in English, as the interface shows them in Simp
 |---|---|
 | Port Forwarding | 端口转发 |
 | No port forwards yet | 还没有端口转发 |
-| Add Forward… | 添加转发… |
+| Add Forward | 添加转发 |
 | Add Port Forward | 添加端口转发 |
 | Host | 主机 |
 | Choose a host. | 请选择主机。 |
@@ -205,7 +205,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Starting… | 启动中… |
 | Stop | 停止 |
 | Retry | 重试 |
-| Manage Port Forwarding… | 管理端口转发… |
+| Manage Port Forwarding | 管理端口转发 |
 | Can’t read the port forwards. | 无法读取端口转发。 |
 
 ### Keep running in the background
@@ -261,7 +261,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Key | 密钥 |
 | Ask Each Time | 每次询问 |
 | SSH Agent | SSH Agent |
-| Deploy to Host… | 部署到主机… |
+| Deploy to Host | 部署到主机 |
 
 ### Jump hosts (ProxyJump)
 
