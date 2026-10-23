@@ -33,8 +33,9 @@
 }
 
 .traffic {
-  /* macOS: room for the native traffic lights (titleBarStyle overlay) */
-  width: 60px;
+  /* macOS: room for the native traffic lights (titleBarStyle overlay), which end 78 window pixels
+     from the left edge at every interface zoom; the header's padding is the first 18 px. */
+  width: calc(78 * var(--window-px) - 18px);
 }
 
 .list {

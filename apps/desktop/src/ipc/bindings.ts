@@ -12,6 +12,11 @@ export const commands = {
 	/**  Opens the Windows 11 Snap Layouts flyout (hovering the custom maximize button, WIN-01). */
 	windowSnapOverlay: () => __TAURI_INVOKE<void>("window_snap_overlay"),
 	/**
+	 *  Zooms the interface (TERM-13) to the step nearest `percent`, no more than the screen the window
+	 *  is on allows, and says what applies. The device-local preference is saved by `prefs_save`.
+	 */
+	windowZoom: (percent: number) => __TAURI_INVOKE<ZoomView>("window_zoom", { percent }),
+	/**
 	 *  Whether the Linux main window shows its painted chrome: false while maximized, fullscreen
 	 *  or tiled, false without a compositor, and false on other platforms.
 	 */
@@ -1933,6 +1938,11 @@ export type LocalPrefs = {
 	language: Language,
 	appearance: Appearance,
 	density: Density,
+	/**
+	 *  TERM-13: the interface zoom in percent, one of [`crate::platform::window::ZOOM_STEPS`]. Kept
+	 *  per device, since the right size depends on the screen.
+	 */
+	ui_zoom: number,
 	host_probe: boolean,
 	/**
 	 *  Check GitHub for a newer release once after the first unlock of each launch (spec §11).
@@ -2685,6 +2695,14 @@ export type WorkerUpdateKind =
 "required" | 
 /**  A newer `api` than this app speaks: sync is paused until Hatoba is updated. */
 "app_required";
+
+/**  The interface zoom in effect (TERM-13). */
+export type ZoomView = {
+	/**  The zoom applied, in percent. */
+	zoom: number,
+	/**  The largest step the screen the window is on allows. */
+	max: number,
+};
 
 /* Tauri Specta runtime */
 type EventEmit<T> = [T] extends [null] ? () => Promise<void> : (payload: T) => Promise<void>;

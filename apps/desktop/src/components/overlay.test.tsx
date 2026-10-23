@@ -222,14 +222,14 @@ describe("Menu", () => {
       act(() => unmount?.());
 
       root.dataset.floating = "";
-      root.style.setProperty("--win-pad", "22px");
+      root.style.setProperty("--win-pad-px", "22");
       render(<Menu anchor={anchor} onClose={() => {}} entries={[{ label: "Item", onSelect: () => {} }]} />);
       // 8px inside the surface's right edge, and flipped up since the bottom would land in the margin.
       expect(pos()).toEqual({ left: `${window.innerWidth - 230}px`, top: `${window.innerHeight - 268}px` });
     } finally {
       rect.mockRestore();
       delete root.dataset.floating;
-      root.style.removeProperty("--win-pad");
+      root.style.removeProperty("--win-pad-px");
     }
   });
 

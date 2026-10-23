@@ -123,11 +123,14 @@ export interface MenuAnchor {
 /**
  * The part of the viewport that menus and popovers stay inside. While Linux paints its own window
  * chrome (`:root[data-floating]`), the viewport also covers the transparent margin around the window
- * surface (`--win-pad`), where clicks pass through to the desktop or start a resize.
+ * surface (`--win-pad`), where clicks pass through to the desktop or start a resize. The margin is in
+ * window pixels, which the interface zoom divides into CSS pixels.
  */
 export function windowSurface(): { left: number; top: number; right: number; bottom: number } {
   const root = document.documentElement;
-  const pad = root.hasAttribute("data-floating") ? parseFloat(getComputedStyle(root).getPropertyValue("--win-pad")) || 0 : 0;
+  const css = getComputedStyle(root);
+  const zoom = parseFloat(css.getPropertyValue("--ui-zoom")) || 1;
+  const pad = root.hasAttribute("data-floating") ? (parseFloat(css.getPropertyValue("--win-pad-px")) || 0) / zoom : 0;
   return { left: pad, top: pad, right: window.innerWidth - pad, bottom: window.innerHeight - pad };
 }
 

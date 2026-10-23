@@ -20,8 +20,10 @@ export function useFileDrop(panel: RefObject<HTMLElement | null>, enabled: boole
     let cancelled = false;
     let unlisten: (() => void) | undefined;
 
-    const inside = (pos: { x: number; y: number }) =>
-      isDropInside(panel.current?.getBoundingClientRect(), pos, useApp.getState().info.platform, window.devicePixelRatio);
+    const inside = (pos: { x: number; y: number }) => {
+      const { info, zoom } = useApp.getState();
+      return isDropInside(panel.current?.getBoundingClientRect(), pos, info.platform, window.devicePixelRatio, zoom.zoom / 100);
+    };
 
     void import("@tauri-apps/api/webview")
       .then(({ getCurrentWebview }) =>

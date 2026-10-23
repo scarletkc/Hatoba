@@ -274,6 +274,7 @@ export function createTauriApi(): HatobaApi {
 
     window_snap_overlay: () => commands.windowSnapOverlay(),
     window_floating: () => commands.windowFloating(),
+    window_zoom: (percent) => commands.windowZoom(percent),
     window_hide_to_tray: () => commands.windowHideToTray(),
     app_quit: () => commands.appQuit(),
     tray_set_menu: (menu) => commands.traySetMenu(menu),

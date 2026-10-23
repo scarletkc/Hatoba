@@ -1,20 +1,24 @@
 import { useRef } from "react";
+import { errorMessage } from "@/app/errors";
+import { useApp } from "@/app/store";
 import { Icon, Segmented, controlStyles } from "@/components/controls";
 import { Group } from "@/components/layout";
-import { Menu, useMenu, type MenuEntry } from "@/components/overlay";
+import { Menu, PopupSelect, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { useT } from "@/i18n";
 import type { Language, LocalPrefs } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { ZOOM_STEPS } from "@/lib/zoom";
 import { SchemePicker } from "./SchemePicker";
 import { Pane, SettingRow, usePrefs, type PaneProps } from "./shared";
 import s from "./AppearancePane.module.css";
 
 type Appearance = LocalPrefs["appearance"];
 
-/** Settings → Appearance (design §07): theme thumbnails, density, terminal color schemes, language. */
+/** Settings → Appearance (design §07): theme thumbnails, density, zoom, terminal color schemes, language. */
 export function AppearancePane({ settings, updateTerminal }: PaneProps) {
   const t = useT();
   const [prefs, setPrefs] = usePrefs();
+  const zoom = useApp((st) => st.zoom);
   const langMenu = useMenu();
   const langButton = useRef<HTMLButtonElement>(null);
   const term = settings?.terminal;
@@ -51,6 +55,15 @@ export function AppearancePane({ settings, updateTerminal }: PaneProps) {
               { value: "compact", label: t("settings.density.compact") },
             ]}
             onChange={(density) => setPrefs({ density })}
+          />
+        </SettingRow>
+        <SettingRow label={t("settings.zoom")} hint={zoom.max < ZOOM_STEPS[ZOOM_STEPS.length - 1] ? t("settings.zoom.max", { n: zoom.max }) : undefined}>
+          <PopupSelect
+            ariaLabel={t("settings.zoom")}
+            value={zoom.zoom}
+            minWidth={100}
+            options={ZOOM_STEPS.filter((z) => z <= zoom.max).map((z) => ({ value: z, label: `${z}%` }))}
+            onChange={(z) => void useApp.getState().setZoom(z).catch((e) => toast(errorMessage(t, e), "error"))}
           />
         </SettingRow>
       </Group>

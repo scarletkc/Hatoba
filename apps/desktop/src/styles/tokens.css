@@ -66,6 +66,12 @@
   --motion-rise: 6px;
   --motion-pop: 0.97;
 
+  /* The interface zoom (TERM-13), set by lib/zoom.ts. The WebView scales every CSS pixel by it; a
+     length in --window-px stays the same in window pixels, for chrome that lines up with the native
+     window (Linux's painted margin, the macOS traffic lights). */
+  --ui-zoom: 1;
+  --window-px: calc(1px / var(--ui-zoom));
+
   /* Sizes */
   --sidebar-width: 228px;
   --titlebar-height: 44px;
@@ -196,17 +202,21 @@
 
 /* Linux gets no shadow or rounding from the compositor on an undecorated window, so the app
    paints its own chrome: --win-pad leaves room for the shadow in the transparent margin and
-   --win-resize is the resize band just outside the painted edge. Keep --win-pad and
-   --win-resize in step with WIN_PAD and RESIZE_BAND in src-tauri/src/platform/linux_chrome.rs.
-   The shadow's offset + blur must stay within --win-pad or the window edge clips it. */
+   --win-resize is the resize band just outside the painted edge. Both are in window pixels: keep
+   --win-pad-px and --win-resize in step with WIN_PAD and RESIZE_BAND in
+   src-tauri/src/platform/linux_chrome.rs. The shadow's offset + blur must stay within --win-pad or
+   the window edge clips it, so it is in window pixels too. */
 :root[data-platform="linux"] {
-  --win-pad: 22px;
-  --win-resize: 8px;
-  --shadow-window: 0 6px 16px rgba(0, 0, 0, 0.24), 0 1px 4px rgba(0, 0, 0, 0.16);
+  --win-pad-px: 22;
+  --win-pad: calc(var(--win-pad-px) * var(--window-px));
+  --win-resize: calc(8 * var(--window-px));
+  --shadow-window: 0 calc(6 * var(--window-px)) calc(16 * var(--window-px)) rgba(0, 0, 0, 0.24),
+    0 var(--window-px) calc(4 * var(--window-px)) rgba(0, 0, 0, 0.16);
 }
 
 :root[data-platform="linux"][data-theme="dark"] {
-  --shadow-window: 0 6px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.36);
+  --shadow-window: 0 calc(6 * var(--window-px)) calc(16 * var(--window-px)) rgba(0, 0, 0, 0.5),
+    0 var(--window-px) calc(4 * var(--window-px)) rgba(0, 0, 0, 0.36);
 }
 
 /* CJK font order: Japanese UI should prefer Yu Gothic over YaHei for unified Han glyphs */
@@ -217,8 +227,11 @@
     monospace;
 }
 
-/* macOS keeps the design's native look (P1). The mono stack keeps CJK fallbacks for wide characters (TERM-02). */
+/* macOS keeps the design's native look (P1). The mono stack keeps CJK fallbacks for wide characters (TERM-02).
+   The native traffic lights stay where the window was made (tao puts them back on every redraw), so
+   the title bar keeps its 44 window pixels as the interface zooms, while it can hold the 28 px tabs. */
 :root[data-platform="macos"] {
+  --titlebar-height: max(calc(44 * var(--window-px)), 34px);
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue",
     Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "PingFang SC", "Hiragino Sans GB",

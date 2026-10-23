@@ -284,6 +284,7 @@ export const PREFS: LocalPrefs = {
   language: "system",
   appearance: "system",
   density: "regular",
+  ui_zoom: 100,
   host_probe: true,
   auto_update_check: true,
   ai_permission_mode: "manual",

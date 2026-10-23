@@ -22,6 +22,7 @@ import { ENV_MAX_VARS, envRows, envTooLarge, validateEnvRows } from "@/features/
 import { formatTarget, sameTarget } from "@/features/hosts/quickConnect";
 import { hostPort, reachableAddress } from "@/features/hosts/address";
 import { defaultRightClick, defaultTerminalFont } from "@/lib/platform";
+import { ZOOM_STEPS, zoomStep } from "@/lib/zoom";
 import { FRAME_CLOSED, FRAME_DATA, FRAME_SESSION } from "../types";
 import { createAiMock } from "./ai";
 import { createAiExtensionsMock } from "./aiExtensions";
@@ -1288,6 +1289,7 @@ export function createMockApi(): HatobaApi {
 
     window_snap_overlay: async () => {},
     window_floating: async () => false,
+    window_zoom: async (percent) => ({ zoom: zoomStep(percent), max: ZOOM_STEPS[ZOOM_STEPS.length - 1] }),
     window_hide_to_tray: async () => {},
     app_quit: async () => {},
     tray_set_menu: async () => {},

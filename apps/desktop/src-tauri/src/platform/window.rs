@@ -1,6 +1,11 @@
 //! Main window creation (WIN-01 frameless title bar, WIN-07 Mica) and Snap Layouts helper.
 
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, LogicalSize, Manager, Monitor, PhysicalPosition, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder,
+};
+
+use crate::dto::ZoomView;
 
 pub const MAIN: &str = "main";
 
@@ -25,6 +30,9 @@ const MIN_SIZE: (f64, f64) = (860.0, 540.0);
 const MARGIN: f64 = 2.0 * super::linux_chrome::WIN_PAD as f64;
 #[cfg(not(target_os = "linux"))]
 const MARGIN: f64 = 0.0;
+
+/// TERM-13: the interface zoom levels in percent, a subset of the browsers' steps.
+pub const ZOOM_STEPS: [u32; 10] = [67, 75, 80, 90, 100, 110, 125, 150, 175, 200];
 
 #[cfg(target_os = "linux")]
 pub use super::linux_chrome::floating;
@@ -89,6 +97,96 @@ fn apply_material(window: &WebviewWindow) -> bool {
 #[cfg(not(target_os = "windows"))]
 fn apply_material(_window: &WebviewWindow) -> bool {
     false
+}
+
+/// The zoom step nearest to `percent`.
+pub fn zoom_step(percent: u32) -> u32 {
+    ZOOM_STEPS
+        .into_iter()
+        .min_by_key(|s| s.abs_diff(percent))
+        .unwrap_or(100)
+}
+
+/// The smallest window at `percent`, margin included. Zooming in shrinks the page the window
+/// holds, so the minimum grows with the zoom and the layout keeps its own minimum of `MIN_SIZE`.
+fn zoom_min_size(percent: u32) -> (f64, f64) {
+    let zoom = f64::from(percent) / 100.0;
+    (MIN_SIZE.0 * zoom + MARGIN, MIN_SIZE.1 * zoom + MARGIN)
+}
+
+/// The largest zoom step whose minimum window fits a work area of `width` x `height` logical
+/// pixels. 100% always does, as the window allowed it before there was a zoom.
+fn zoom_limit(width: f64, height: f64) -> u32 {
+    ZOOM_STEPS
+        .into_iter()
+        .filter(|&s| {
+            let (w, h) = zoom_min_size(s);
+            s <= 100 || (w <= width && h <= height)
+        })
+        .max()
+        .unwrap_or(100)
+}
+
+/// Zooms the main window's page to the step nearest `percent` (TERM-13), at most the largest one
+/// whose minimum window fits the screen the window is on. Grows the window to the new minimum when
+/// it is smaller, keeping it inside that screen's work area.
+pub fn apply_zoom(window: &WebviewWindow, percent: u32) -> tauri::Result<ZoomView> {
+    let monitor = window.current_monitor()?;
+    let max = monitor
+        .as_ref()
+        .map_or(ZOOM_STEPS[ZOOM_STEPS.len() - 1], |m| {
+            let area = m.work_area().size.to_logical::<f64>(m.scale_factor());
+            zoom_limit(area.width, area.height)
+        });
+    let zoom = zoom_step(percent).min(max);
+    window.set_zoom(f64::from(zoom) / 100.0)?;
+    let (min_w, min_h) = zoom_min_size(zoom);
+    window.set_min_size(Some(LogicalSize::new(min_w, min_h)))?;
+    if !window.is_maximized()? && !window.is_fullscreen()? {
+        grow_to(window, monitor.as_ref(), (min_w, min_h))?;
+    }
+    Ok(ZoomView { zoom, max })
+}
+
+fn grow_to(
+    window: &WebviewWindow,
+    monitor: Option<&Monitor>,
+    (min_w, min_h): (f64, f64),
+) -> tauri::Result<()> {
+    let scale = window.scale_factor()?;
+    let inner = window.inner_size()?;
+    let size = inner.to_logical::<f64>(scale);
+    if size.width >= min_w && size.height >= min_h {
+        return Ok(());
+    }
+    let grown =
+        LogicalSize::new(size.width.max(min_w), size.height.max(min_h)).to_physical::<i32>(scale);
+    // The frame around the inner size, which the new outer size keeps. Read before the resize:
+    // `set_size` may apply after it returns.
+    let outer = window.outer_size()?;
+    let frame = (
+        outer.width.saturating_sub(inner.width) as i32,
+        outer.height.saturating_sub(inner.height) as i32,
+    );
+    window.set_size(grown)?;
+    let Some(area) = monitor.map(Monitor::work_area) else {
+        return Ok(());
+    };
+    let pos = window.outer_position()?;
+    let right = area.position.x + area.size.width as i32;
+    let bottom = area.position.y + area.size.height as i32;
+    let x = pos
+        .x
+        .min(right - grown.width - frame.0)
+        .max(area.position.x);
+    let y = pos
+        .y
+        .min(bottom - grown.height - frame.1)
+        .max(area.position.y);
+    if (x, y) != (pos.x, pos.y) {
+        window.set_position(PhysicalPosition::new(x, y))?;
+    }
+    Ok(())
 }
 
 /// Shows the main window once the WebView has painted, avoiding a white flash at startup.
@@ -182,3 +280,29 @@ pub fn snap_overlay() {
 
 #[cfg(not(target_os = "windows"))]
 pub fn snap_overlay() {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zoom_snaps_to_the_nearest_step() {
+        assert_eq!(zoom_step(100), 100);
+        assert_eq!(zoom_step(130), 125);
+        assert_eq!(zoom_step(10), 67);
+        assert_eq!(zoom_step(500), 200);
+    }
+
+    /// TERM-13: zooming in stops at the largest step whose minimum window fits the work area.
+    #[test]
+    fn zoom_stops_where_the_minimum_window_no_longer_fits() {
+        // 4K at 100% scaling, less the taskbar.
+        assert_eq!(zoom_limit(3840.0, 2112.0), 200);
+        // 1366 x 768 at 100%.
+        assert_eq!(zoom_limit(1366.0, 728.0), 125);
+        // 1920 x 1080 at 150%.
+        assert_eq!(zoom_limit(1280.0, 672.0), 110);
+        // Smaller than the minimum window: 100% stays.
+        assert_eq!(zoom_limit(800.0, 500.0), 100);
+    }
+}

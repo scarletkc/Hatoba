@@ -200,7 +200,7 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
 
   return (
     <div className={s.tabbar} data-tauri-drag-region>
-      {collapsed && platform === "macos" && <span style={{ width: 70, flex: "none" }} data-tauri-drag-region />}
+      {collapsed && platform === "macos" && <span style={{ width: "calc(70 * var(--window-px))", flex: "none" }} data-tauri-drag-region />}
       {collapsed && (
         <button type="button" className={s.newTab} title={t("window.toggleSidebar")} aria-label={t("window.toggleSidebar")} onClick={() => useApp.getState().toggleSidebar()}>
           <Icon name="sidebar-simple" size={16} />
