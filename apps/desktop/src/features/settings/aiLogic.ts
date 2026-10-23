@@ -328,6 +328,7 @@ export function sanitizeSettings(
     builtin_skill_enabled: settings.builtin_skill_enabled,
     custom_instructions: settings.custom_instructions,
     send_terminal_screen: settings.send_terminal_screen,
+    text_size: settings.text_size,
     judge_model: judgeModel,
     memory: settings.memory,
   };
@@ -363,6 +364,7 @@ export function changedSettings(prev: AiSettingsView, next: AiSettingsView): AiS
   if (prev.send_terminal_screen !== next.send_terminal_screen) patch.send_terminal_screen = next.send_terminal_screen;
   if (!sameRef(prev.judge_model, next.judge_model)) patch.judge_model = next.judge_model;
   if (prev.memory !== next.memory) patch.memory = next.memory;
+  if (prev.text_size !== next.text_size) patch.text_size = next.text_size;
   return Object.keys(patch).length > 0 ? patch : null;
 }
 

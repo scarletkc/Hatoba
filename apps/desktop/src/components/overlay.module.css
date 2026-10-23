@@ -170,6 +170,21 @@
   white-space: nowrap;
 }
 
+/* As wide as its selected weight, so choosing an option never moves the ones after it. */
+.menuChoiceOption span {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.menuChoiceOption span::after {
+  content: attr(data-label);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 500;
+}
+
 .menuChoiceOption:hover {
   color: var(--fg);
 }

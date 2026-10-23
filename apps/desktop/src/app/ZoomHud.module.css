@@ -1,0 +1,24 @@
+/* TERM-13: the size a zoom key set, at the center of the part that changed. */
+.hud {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1100;
+  padding: 10px 18px;
+  border-radius: var(--radius-md);
+  background: var(--sheet);
+  box-shadow: var(--shadow-popover);
+  color: var(--fg);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  animation: hudIn var(--motion-fade) var(--ease-out);
+}
+
+@keyframes hudIn {
+  from {
+    opacity: 0;
+  }
+}

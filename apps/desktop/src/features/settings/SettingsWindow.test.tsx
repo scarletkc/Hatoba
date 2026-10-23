@@ -19,8 +19,8 @@ afterEach(() => {
   unmount = null;
 });
 
-function open(tab: "terminal" | "appearance" = "terminal") {
-  useApp.setState({ settingsTab: tab });
+function open() {
+  useApp.setState({ settingsTab: "terminal" });
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -136,7 +136,7 @@ describe("SettingsWindow", () => {
 
   it("picks a colour scheme for each terminal mode", async () => {
     await syncIn({ theme: "dark" });
-    open("appearance");
+    open();
     // A card reads as its name; the miniature terminal above it is hidden from assistive tech.
     const card = (name: string) =>
       [...document.querySelectorAll<HTMLElement>("[role=radio]")].find((el) => el.querySelector(":scope > :not([aria-hidden])")?.textContent === name);

@@ -76,7 +76,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Next (Enter) | 次へ（Enter） |
 | Close find (Esc) | 検索を閉じる（Esc） |
 | Confirm before pasting multiple lines | 複数行を貼り付ける前に確認 |
-| General | 一般 |
+| Terminal | ターミナル |
 | Right-Click in Terminal | ターミナルでの右クリック |
 | Copy if selected, otherwise paste | 選択があればコピー、なければ貼り付け |
 | Show context menu | コンテキストメニューを表示 |
@@ -94,14 +94,23 @@ The labels that these files name in English, as the interface shows them in Japa
 | Block | ブロック |
 | Bar | バー |
 | Underline | アンダーライン |
-| Scrollback | スクロールバック |
-| Appearance | 外観 |
-| Terminal Colors | ターミナルの配色 |
+| Text and Cursor | 文字とカーソル |
+| Colors | 配色 |
+| Behavior | 動作 |
+| Mode | モード |
 | Always Dark | 常にダーク |
 | Always Light | 常にライト |
 | Match Appearance | 外観に合わせる |
 | In Dark Appearance | ダーク外観のとき |
 | In Light Appearance | ライト外観のとき |
+| Right-Click in Terminal | ターミナルでの右クリック |
+| Copy if selected, otherwise paste | 選択があればコピー、なければ貼り付け |
+| Show context menu | コンテキストメニューを表示 |
+| Confirm before pasting multiple lines | 複数行を貼り付ける前に確認 |
+| Scrollback | スクロールバック |
+| Local Terminal Shell | ローカル ターミナルのシェル |
+| General | 一般 |
+| Appearance | 外観 |
 
 ## `references/sftp.md`
 

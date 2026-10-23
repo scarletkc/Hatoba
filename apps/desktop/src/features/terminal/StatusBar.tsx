@@ -117,7 +117,7 @@ export function StatusBar({
           onClick={onToggleSftp}
         >
           <Icon name="folder-simple" size={14} />
-          <span className={s.sftpLabel}>{t("terminal.sftp")}</span>
+          <span className={s.sftpLabel} data-label={t("terminal.sftp")}>{t("terminal.sftp")}</span>
         </button>
       )}
       <IconButton

@@ -862,11 +862,21 @@ export interface SettingsPatch {
 
 export type Language = "system" | "zh-CN" | "en" | "ja";
 
+/** The interface zoom in effect (TERM-13). */
+export interface ZoomView {
+  /** The zoom applied, in percent. */
+  zoom: number;
+  /** The largest step the screen the window is on allows. */
+  max: number;
+}
+
 /** Device-local preferences: readable while locked (the unlock screen needs the language). */
 export interface LocalPrefs {
   language: Language;
   appearance: "system" | "light" | "dark";
   density: "regular" | "compact";
+  /** TERM-13: the interface zoom in percent, one of `ZOOM_STEPS`. Kept per device, since the right size depends on the screen. */
+  ui_zoom: number;
   /** HOST-10 TCP reachability dots. */
   host_probe: boolean;
   /** Check GitHub Releases once after the first unlock of each launch. On by default (spec §11). */
@@ -1142,6 +1152,8 @@ export interface AiSettingsView {
   judge_model: AiModelRef | null;
   /** Conversations start with the memories, and the assistant saves them (AI-53). */
   memory: boolean;
+  /** The AI panel's conversation and input text size in px, 11 to 24 (TERM-13). */
+  text_size: number;
 }
 
 /** What `ai_settings_save` changes, like {@link SettingsPatch}; null clears a field that can be empty. */
@@ -1762,6 +1774,8 @@ export interface EventMap {
   /** An MCP server started, stopped, failed or relisted its tools (AI-32). */
   "ai://mcp-status": McpServerStatus;
   "window://chrome": WindowChromeEvent;
+  /** TERM-13: the window moved to a screen that changes the interface zoom. */
+  "window://zoom": ZoomView;
   /** Another launch handed its command line to this window (HOST-13); `launch_take` returns it. */
   "app://launch": null;
   /** WIN-10: the close button asks whether to hide the window to the tray or quit. */

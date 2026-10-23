@@ -290,3 +290,13 @@ The labels that these files name in English, as the interface shows them in Japa
 | Hide AI Panel | AI パネルを隠す |
 | Search hosts or ssh user@host | ホストを検索、または ssh user@host |
 | Right-Click in Terminal | ターミナルでの右クリック |
+
+### Zoom
+
+| en | ja |
+|---|---|
+| Font Size | フォントサイズ |
+| Appearance | 外観 |
+| AI Panel | AI パネル |
+| Text Size | 文字サイズ |
+| Zoom | ズーム |

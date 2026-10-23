@@ -1,4 +1,5 @@
 import { api } from "@/ipc/api";
+import { applyZoom } from "@/lib/zoom";
 import { applyPrefs, DEFAULT_PREFS, useApp } from "./store";
 import { useVaultData } from "./data";
 
@@ -15,6 +16,13 @@ export async function boot() {
     const prefs = { ...DEFAULT_PREFS, ...(await api.prefs_get()) };
     useApp.setState({ prefs });
     applyPrefs(prefs);
+    // The window opened at this zoom already; this learns what the screen allowed, and keeps the
+    // preference as it is for a larger screen.
+    const zoom = await api.window_zoom(prefs.ui_zoom).catch(() => null);
+    if (zoom) {
+      useApp.setState({ zoom });
+      applyZoom(zoom.zoom);
+    }
 
     const vault = await useApp.getState().refreshVault();
     if (vault.state === "unlocked") await enterUnlocked();

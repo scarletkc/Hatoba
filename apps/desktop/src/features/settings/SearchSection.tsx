@@ -193,7 +193,7 @@ export function SearchSection({
   ];
 
   return (
-    <div className={layoutStyles.section}>
+    <section className={layoutStyles.section}>
       <div className={layoutStyles.sectionTitle}>{t("aiSettings.search")}</div>
       <Group>
         <SettingRow label={t("aiSettings.search.row")} hint={t("aiSettings.search.hint")}>
@@ -250,6 +250,6 @@ export function SearchSection({
           </>
         )}
       </Group>
-    </div>
+    </section>
   );
 }

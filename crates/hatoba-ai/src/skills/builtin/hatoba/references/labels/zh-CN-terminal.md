@@ -76,7 +76,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Next (Enter) | 下一个（Enter） |
 | Close find (Esc) | 关闭查找（Esc） |
 | Confirm before pasting multiple lines | 粘贴多行文本前确认 |
-| General | 通用 |
+| Terminal | 终端 |
 | Right-Click in Terminal | 终端中的右键 |
 | Copy if selected, otherwise paste | 有选中则复制，否则粘贴 |
 | Show context menu | 弹出菜单 |
@@ -94,14 +94,23 @@ The labels that these files name in English, as the interface shows them in Simp
 | Block | 方块 |
 | Bar | 竖线 |
 | Underline | 下划线 |
-| Scrollback | 回滚缓冲区 |
-| Appearance | 外观 |
-| Terminal Colors | 终端配色 |
+| Text and Cursor | 文字与光标 |
+| Colors | 配色 |
+| Behavior | 行为 |
+| Mode | 模式 |
 | Always Dark | 始终深色 |
 | Always Light | 始终浅色 |
 | Match Appearance | 跟随外观 |
 | In Dark Appearance | 深色外观时 |
 | In Light Appearance | 浅色外观时 |
+| Right-Click in Terminal | 终端中的右键 |
+| Copy if selected, otherwise paste | 有选中则复制，否则粘贴 |
+| Show context menu | 弹出菜单 |
+| Confirm before pasting multiple lines | 粘贴多行文本前确认 |
+| Scrollback | 回滚缓冲区 |
+| Local Terminal Shell | 本地终端的 shell |
+| General | 通用 |
+| Appearance | 外观 |
 
 ## `references/sftp.md`
 

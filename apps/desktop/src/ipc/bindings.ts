@@ -12,6 +12,11 @@ export const commands = {
 	/**  Opens the Windows 11 Snap Layouts flyout (hovering the custom maximize button, WIN-01). */
 	windowSnapOverlay: () => __TAURI_INVOKE<void>("window_snap_overlay"),
 	/**
+	 *  Zooms the interface (TERM-13) to the step nearest `percent`, no more than the screen the window
+	 *  is on allows, and says what applies. The device-local preference is saved by `prefs_save`.
+	 */
+	windowZoom: (percent: number) => __TAURI_INVOKE<ZoomView>("window_zoom", { percent }),
+	/**
 	 *  Whether the Linux main window shows its painted chrome: false while maximized, fullscreen
 	 *  or tiled, false without a compositor, and false on other platforms.
 	 */
@@ -589,6 +594,7 @@ export const events = {
 	vaultLocked: makeEvent<VaultLockedEvent>("vault://locked"),
 	windowChrome: makeEvent<WindowChromeEvent>("window://chrome"),
 	windowClosePrompt: makeEvent<ClosePromptEvent>("window://close-prompt"),
+	windowZoom: makeEvent<ZoomView>("window://zoom"),
 };
 
 /* Types */
@@ -1065,6 +1071,8 @@ export type AiSettingsPatch = {
 	send_terminal_screen?: boolean | null,
 	judge_model?: AiModelRef | null,
 	memory?: boolean | null,
+	/**  Kept within 11 to 24. */
+	text_size?: number | null,
 };
 
 /**  The synced `Settings.ai` (§5.1). */
@@ -1094,6 +1102,8 @@ export type AiSettingsView = {
 	judge_model: AiModelRef | null,
 	/**  Conversations start with the memories, and the assistant saves them (AI-53). */
 	memory: boolean,
+	/**  The AI panel's conversation and input text size in px, 11 to 24 (TERM-13). */
+	text_size: number,
 };
 
 /**  The answer to a side question (AI-42), which nothing stores. */
@@ -1933,6 +1943,11 @@ export type LocalPrefs = {
 	language: Language,
 	appearance: Appearance,
 	density: Density,
+	/**
+	 *  TERM-13: the interface zoom in percent, one of [`crate::platform::window::ZOOM_STEPS`]. Kept
+	 *  per device, since the right size depends on the screen.
+	 */
+	ui_zoom: number,
 	host_probe: boolean,
 	/**
 	 *  Check GitHub for a newer release once after the first unlock of each launch (spec §11).
@@ -2690,6 +2705,17 @@ export type WorkerUpdateKind =
 "required" | 
 /**  A newer `api` than this app speaks: sync is paused until Hatoba is updated. */
 "app_required";
+
+/**
+ *  The interface zoom in effect (TERM-13). Also sent as `window://zoom` when the window moves to a
+ *  screen that changes it.
+ */
+export type ZoomView = {
+	/**  The zoom applied, in percent. */
+	zoom: number,
+	/**  The largest step the screen the window is on allows. */
+	max: number,
+};
 
 /* Tauri Specta runtime */
 type EventEmit<T> = [T] extends [null] ? () => Promise<void> : (payload: T) => Promise<void>;

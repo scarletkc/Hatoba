@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { api } from "@/ipc/api";
-import type { AppInfo, LocalPrefs, QuickTarget, SyncStatus, VaultLockedEvent, VaultStatus } from "@/ipc/types";
+import type { AppInfo, LocalPrefs, QuickTarget, SyncStatus, VaultLockedEvent, VaultStatus, ZoomView } from "@/ipc/types";
 import { detectLocale, setLocale, type Locale } from "@/i18n";
+import { applyZoom } from "@/lib/zoom";
 
 /** What the "home" tab shows. Session tabs are tracked in `tabs.ts`. */
 export type Page =
@@ -31,6 +32,7 @@ export const DEFAULT_PREFS: LocalPrefs = {
   language: "system",
   appearance: "system",
   density: "regular",
+  ui_zoom: 100,
   host_probe: true,
   auto_update_check: true,
   ai_permission_mode: "manual",
@@ -60,6 +62,8 @@ interface AppState {
   /** Whether the Linux window shows its painted chrome right now (`:root[data-floating]`). */
   floating: boolean;
   prefs: LocalPrefs;
+  /** The interface zoom in effect, which the screen may hold below `prefs.ui_zoom` (TERM-13). */
+  zoom: ZoomView;
   vault: VaultStatus | null;
   /** Why the vault last locked while the app ran; null when it started locked. */
   lockReason: VaultLockedEvent["reason"] | null;
@@ -78,6 +82,8 @@ interface AppState {
 
   navigate(page: Page): void;
   setPrefs(prefs: LocalPrefs): Promise<void>;
+  /** Zooms the interface to the step nearest `percent` that the screen allows, and keeps it as this device's preference. */
+  setZoom(percent: number): Promise<ZoomView>;
   refreshVault(): Promise<VaultStatus>;
   setSync(status: SyncStatus): void;
   setPhase(phase: Phase): void;
@@ -93,6 +99,7 @@ export const useApp = create<AppState>((set) => ({
   info: { version: "0.0.0", platform: "web", mica: false, local_user: "", device_name: "", package_manager: null },
   floating: false,
   prefs: DEFAULT_PREFS,
+  zoom: { zoom: 100, max: 200 },
   vault: null,
   lockReason: null,
   sync: null,
@@ -109,6 +116,13 @@ export const useApp = create<AppState>((set) => ({
     set({ prefs });
     applyPrefs(prefs);
     await api.prefs_save(prefs);
+  },
+  setZoom: async (percent) => {
+    const zoom = await api.window_zoom(percent);
+    set({ zoom });
+    applyZoom(zoom.zoom);
+    if (zoom.zoom !== get().prefs.ui_zoom) await get().setPrefs({ ...get().prefs, ui_zoom: zoom.zoom });
+    return zoom;
   },
   refreshVault: async () => {
     const vault = await api.vault_status();

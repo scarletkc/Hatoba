@@ -51,6 +51,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .commands(collect_commands![
             app::app_info,
             app::window_snap_overlay,
+            app::window_zoom,
             app::window_floating,
             app::window_hide_to_tray,
             app::app_quit,
@@ -261,6 +262,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             dto::ForwardsLostEvent,
             dto::McpServerStatus,
             dto::WindowChromeEvent,
+            dto::ZoomView,
             dto::LaunchEvent,
             dto::CliActivityEvent,
             dto::ClosePromptEvent,
@@ -310,8 +312,17 @@ pub fn run() {
             }
 
             let vault = hatoba_core::vault::Vault::open(&data_dir.join("vault.db"))?;
-            let (_window, mica) = platform::window::create_main_window(&handle)?;
+            let (window, mica) = platform::window::create_main_window(&handle)?;
             app.manage(state::AppState::new(vault, mica));
+            // TERM-13: the page opens at this device's zoom, before the window shows.
+            let prefs = app.state::<state::AppState>().vault().local_prefs();
+            let zoom = prefs
+                .ok()
+                .flatten()
+                .map_or(100, |j| dto::LocalPrefs::from_stored(&j).ui_zoom);
+            if let Err(e) = platform::window::apply_zoom(&window, zoom) {
+                tracing::warn!("could not apply the interface zoom: {e}");
+            }
             app.state::<state::AppState>()
                 .mcp
                 .set_events(std::sync::Arc::new(mcp_cmd::AppMcpEvents(handle.clone())));
@@ -338,6 +349,23 @@ pub fn run() {
                 // WIN-10: whether a tray shows when the close button is clicked.
                 #[cfg(target_os = "linux")]
                 tray::refresh_host();
+            }
+            // TERM-13: another screen may allow less zoom, or more of the device's preference.
+            tauri::WindowEvent::Moved(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
+                if window.label() == platform::window::MAIN =>
+            {
+                let app = window.app_handle();
+                let Some(webview) = app.get_webview_window(platform::window::MAIN) else {
+                    return;
+                };
+                let percent = || {
+                    let state = app.state::<state::AppState>();
+                    let prefs = state.vault().local_prefs().ok().flatten();
+                    prefs.map_or(100, |j| dto::LocalPrefs::from_stored(&j).ui_zoom)
+                };
+                if let Some(zoom) = platform::window::follow_screen(&webview, percent) {
+                    let _ = tauri_specta::Event::emit(&zoom, app);
+                }
             }
             // AI-35: the AI panel may read the files of the last drop, and no others.
             tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {

@@ -99,6 +99,7 @@ import type {
   VaultStatus,
   LocalOpenOptions,
   LocalShellView,
+  ZoomView,
 } from "./types";
 
 /** Receives raw terminal frames (see FRAME_* in types.ts). */
@@ -526,6 +527,8 @@ export interface HatobaApi {
    * or tiled, without a compositor, and on other platforms.
    */
   window_floating(): Promise<boolean>;
+  /** TERM-13: zooms the page to the step nearest `percent`, no more than the screen allows. `prefs_save` keeps the preference. */
+  window_zoom(percent: number): Promise<ZoomView>;
   /** WIN-10: the close prompt's choices, and the tray menu in the app's language. */
   window_hide_to_tray(): Promise<void>;
   app_quit(): Promise<void>;

@@ -20,12 +20,15 @@ import { UnlockScreen } from "@/features/unlock/UnlockScreen";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { SyncState } from "@/ipc/types";
+import { applyZoom } from "@/lib/zoom";
 import { ClosePrompt, useTrayMenu } from "./ClosePrompt";
 import { ContextMenuHost } from "./ContextMenu";
 import { ResizeHandles } from "./ResizeHandles";
 import { useVaultData } from "./data";
 import { useLaunches } from "./launch";
 import { useShortcuts, type ShortcutAction } from "./shortcuts";
+import { useZoomKeys } from "./zoomKeys";
+import { ZoomHud } from "./ZoomHud";
 import { Sidebar } from "./Sidebar";
 import { StarPrompt } from "./StarPrompt";
 import { useApp, type Page } from "./store";
@@ -45,6 +48,7 @@ export function App() {
 
   useGlobalEvents();
   useWindowChrome();
+  useZoomKeys(platform);
   useAiLifecycle();
   useActivityPing(phase === "unlocked");
   useAutoUpdateCheck(phase === "unlocked");
@@ -63,6 +67,7 @@ export function App() {
         <ConfirmHost />
         <ClosePrompt />
         <ToastHost />
+        <ZoomHud />
         <ContextMenuHost platform={platform} />
         <ResizeHandles platform={platform} />
       </>
@@ -84,6 +89,7 @@ export function App() {
       <ConfirmHost />
       <ClosePrompt />
       <ToastHost />
+      <ZoomHud />
       <ContextMenuHost platform={platform} />
       <ResizeHandles platform={platform} />
     </>
@@ -235,6 +241,10 @@ function useGlobalEvents() {
           void useVaultData.getState().reload();
           useApp.getState().refreshSynced();
         }
+      }),
+      api.listen("window://zoom", (zoom) => {
+        useApp.setState({ zoom });
+        applyZoom(zoom.zoom);
       }),
       api
         .listen("window://chrome", ({ floating }) => useApp.setState({ floating }))

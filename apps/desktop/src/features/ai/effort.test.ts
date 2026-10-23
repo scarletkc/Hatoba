@@ -35,7 +35,7 @@ const settings = (default_effort: AiSettingsView["default_effort"]): AiSettingsV
   builtin_skill_enabled: true,
   custom_instructions: "",
   send_terminal_screen: true,
-  memory: true,
+  memory: true, text_size: 13,
   judge_model: null,
 });
 

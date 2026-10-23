@@ -36,7 +36,7 @@ const settings = (judge_model: AiSettingsView["judge_model"]): AiSettingsView =>
   builtin_skill_enabled: true,
   custom_instructions: "",
   send_terminal_screen: true,
-  memory: true,
+  memory: true, text_size: 13,
   judge_model,
 });
 

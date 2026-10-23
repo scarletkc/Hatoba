@@ -38,6 +38,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | TERM-07, 08 | Terminal search, links | ✅ | |
 | TERM-09…11 | Split panes, session logs, Snippets | ⬜ | P2 |
 | TERM-12 | Resource usage in the status bar | ✅ | Integration tests run the sampling against OpenSSH on Linux, and it was tried in the app against real servers. On macOS ([#273](https://github.com/scarletkc/Hatoba/issues/273)), unit tests parse output the script printed on macOS 26, a test runs the script on the machine itself (also on the macOS CI runner), and the sampling integration tests passed against OpenSSH 10.3 on macOS 26; not yet tried in the app against a Mac |
+| TERM-13 | Interface zoom, AI text size, and terminal font keys | 🟡 | Tried in the app on Windows 11: the keys and Ctrl+wheel in a terminal, the minimum window growing with the zoom and the screen's limit, the terminal's sharpness and PTY size, and the zoom kept across a restart and on the lock screen; dropping a file at a zoom other than 100% was not tried. On macOS and Linux a CI check found that WebKit's page zoom folds into `devicePixelRatio` as Chromium's does and divides the viewport by the zoom, which the terminal's sharpness and the drop position rely on; not yet tried in the app there |
 | SFTP-01…04 | File panel, transfers, file operations, attributes | ✅ | |
 | SFTP-05 | Edit remote files | ⬜ | P2 |
 | FWD-01, 02 | Local forwarding, start with the connection | ✅ | |

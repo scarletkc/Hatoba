@@ -63,10 +63,25 @@
   flex: none;
 }
 
+/* Each label is as wide as its selected weight, so selecting a tab never resizes it or moves the ones after it. */
 .tabLabel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   white-space: nowrap;
+}
+
+.tabLabel > span {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.tabLabel::after {
+  content: attr(data-label);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 500;
 }
 
 .tabClose {

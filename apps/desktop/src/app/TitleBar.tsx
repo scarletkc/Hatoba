@@ -160,6 +160,15 @@ function AiActivity({ slotId }: { slotId: string }) {
   );
 }
 
+/** The label, with a hidden copy at the selected weight that keeps the tab's width. */
+function TabLabel({ text }: { text: string }) {
+  return (
+    <span className={s.tabLabel} data-label={text}>
+      <span>{text}</span>
+    </span>
+  );
+}
+
 /**
  * A session's tab opens out from nothing as it is added, pushing the buttons after it along. Played
  * from script, not a CSS animation: React moves a tab's element when the tabs are reordered, and
@@ -229,7 +238,7 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
 
   return (
     <div className={s.tabbar} data-tauri-drag-region>
-      {platform === "macos" && <span style={{ width: 70, flex: "none" }} data-tauri-drag-region />}
+      {platform === "macos" && <span style={{ width: "calc(70 * var(--window-px))", flex: "none" }} data-tauri-drag-region />}
       <div ref={list} className={s.tabs} role="tablist">
         <button
           type="button"
@@ -239,7 +248,7 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
           onClick={() => activate("home")}
         >
           <Icon name={homeIcon} className={s.tabIcon} />
-          <span className={s.tabLabel}>{homeLabel}</span>
+          <TabLabel text={homeLabel} />
           <AiActivity slotId="home" />
         </button>
         {tabs.length > 0 && <span className={s.sep} />}
@@ -259,7 +268,7 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
             title={tab.title}
           >
             <TabOsIcon hostId={tab.hostId} local={!!tab.local} status={tab.status} />
-            <span className={s.tabLabel}>{tab.title}</span>
+            <TabLabel text={tab.title} />
             <AiActivity slotId={tab.id} />
             <span
               role="button"

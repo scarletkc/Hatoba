@@ -1021,6 +1021,9 @@ pub struct LocalPrefs {
     pub language: Language,
     pub appearance: Appearance,
     pub density: Density,
+    /// TERM-13: the interface zoom in percent, one of [`crate::platform::window::ZOOM_STEPS`]. Kept
+    /// per device, since the right size depends on the screen.
+    pub ui_zoom: u32,
     pub host_probe: bool,
     /// Check GitHub for a newer release once after the first unlock of each launch (spec §11).
     /// On by default; the request carries no identifier.
@@ -1073,6 +1076,7 @@ impl Default for LocalPrefs {
             language: Language::System,
             appearance: Appearance::System,
             density: Density::Regular,
+            ui_zoom: 100,
             host_probe: true,
             auto_update_check: true,
             ai_permission_mode: AiPermissionMode::Manual,
@@ -1096,6 +1100,17 @@ impl Default for LocalPrefs {
             local_shell: None,
         }
     }
+}
+
+/// The interface zoom in effect (TERM-13). Also sent as `window://zoom` when the window moves to a
+/// screen that changes it.
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq, tauri_specta::Event)]
+#[tauri_specta(event_name = "window://zoom")]
+pub struct ZoomView {
+    /// The zoom applied, in percent.
+    pub zoom: u32,
+    /// The largest step the screen the window is on allows.
+    pub max: u32,
 }
 
 /// WIN-10: the window's close button asks, hides the window to the system tray, or quits.
@@ -1716,6 +1731,8 @@ pub struct AiSettingsView {
     pub judge_model: Option<AiModelRef>,
     /// Conversations start with the memories, and the assistant saves them (AI-53).
     pub memory: bool,
+    /// The AI panel's conversation and input text size in px, 11 to 24 (TERM-13).
+    pub text_size: u32,
 }
 
 /// What `ai_settings_save` changes in `Settings.ai`, like [`SettingsPatch`]: a field left out keeps
@@ -1737,6 +1754,8 @@ pub struct AiSettingsPatch {
     #[specta(type = Option<AiModelRef>)]
     pub judge_model: Clearable<AiModelRef>,
     pub memory: Option<bool>,
+    /// Kept within 11 to 24.
+    pub text_size: Option<u32>,
 }
 
 /// A patch field that `null` clears.

@@ -1,6 +1,6 @@
 # Keyboard shortcuts
 
-On Windows and Linux every app shortcut uses Ctrl+Shift, so that plain Ctrl+letter always reaches the remote shell (Ctrl+L, Ctrl+W, Ctrl+K, Ctrl+C and so on). The few exceptions are Ctrl+Tab, Ctrl+, and Ctrl+K while focus is outside the terminal. On macOS the shortcuts use ⌘. If the user's platform is unknown, give both columns.
+On Windows and Linux every app shortcut uses Ctrl+Shift, so that plain Ctrl+letter always reaches the remote shell (Ctrl+L, Ctrl+W, Ctrl+K, Ctrl+C and so on). The few exceptions are Ctrl+Tab, Ctrl+,, the zoom keys (below) and Ctrl+K while focus is outside the terminal. On macOS the shortcuts use ⌘. If the user's platform is unknown, give both columns.
 
 ## App shortcuts
 
@@ -27,6 +27,18 @@ Other labels: **New Tab**, **Close Tab**, **Show AI Panel**, **Hide AI Panel**, 
 | Open a link in the output | Ctrl+click | ⌘+click |
 
 In the find bar, Enter goes to the next match, Shift+Enter to the previous one, and Esc closes the bar. Right-click either copies or pastes, or opens a menu, depending on **Right-Click in Terminal** (see `references/terminal.md`).
+
+## Zoom
+
+The same keys change the size of what has focus: in a terminal the font size of every terminal tab (Settings → Terminal → **Font Size**), in the AI panel the size of its conversation and input (Settings → Appearance → AI Panel → **Text Size**), and anywhere else the zoom of the whole window (Settings → Appearance → **Zoom**). Ctrl+wheel over a terminal changes its font size, also while a program there reads the mouse; it changes nothing else. A short label in the middle of what changed shows the new size.
+
+| Action | Windows / Linux | macOS |
+|---|---|---|
+| Larger | Ctrl+= or Ctrl++ (also on the number pad); over a terminal also Ctrl+wheel up | ⌘= or ⌘+ |
+| Smaller | Ctrl+- (also on the number pad); over a terminal also Ctrl+wheel down | ⌘- |
+| Default size | Ctrl+0 (also on the number pad) | ⌘0 |
+
+The default sizes are 100% for the window and 13 px for the terminal and the AI text. macOS has no wheel zoom. Ctrl+Shift+- still sends `^_` (readline's undo) to the terminal.
 
 ## In pages and panels
 
