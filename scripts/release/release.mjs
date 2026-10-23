@@ -4,7 +4,7 @@
 // Usage: node scripts/release/release.mjs <command> [options]
 //   commit                           Print the release commit, where the release pull request set
 //                                    the version
-//   check                          Check the version files, the release tag, the release note, and
+//   check                            Check the version files, the release tag, the release note, and
 //                                    the updater's public key
 //   gate                             Require a CI pass, an approval-gated release environment, and a
 //                                    signing environment limited to selected branches
