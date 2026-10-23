@@ -103,14 +103,17 @@ function zoom(action: ZoomAction, el: Element | null, platform: Platform) {
   }
 }
 
-/** Wheel pixels per zoom step: a mouse notch is about 100, a touchpad pinch many small deltas. */
+/** Wheel pixels per font step: a mouse notch is about 100, a touchpad pinch many small deltas. */
 const WHEEL_STEP = 50;
 /** A pause this long starts the count again. */
 const WHEEL_IDLE_MS = 300;
 
 /**
- * TERM-13: the zoom keys change what has focus, and Ctrl+wheel what is under the pointer, also in a
- * terminal that a program reads the mouse in. macOS has the keys only.
+ * TERM-13: the zoom keys change what has focus. Ctrl+wheel changes only the font of the terminal
+ * under the pointer, as in Windows Terminal, and also while a program reads the mouse there.
+ * Elsewhere a stray Ctrl+wheel or touchpad pinch would zoom the whole window, which editors leave to
+ * the keys.
+ * macOS has the keys only.
  */
 export function useZoomKeys(platform: Platform) {
   useEffect(() => {
@@ -125,6 +128,8 @@ export function useZoomKeys(platform: Platform) {
     let lastWheel = 0;
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey || e.metaKey || e.altKey || platform === "macos") return;
+      const target = e.target instanceof Element ? e.target : null;
+      if (zoomTarget(target) !== "terminal") return;
       // Before xterm, which would scroll or report it to the program.
       e.preventDefault();
       e.stopPropagation();
@@ -135,7 +140,7 @@ export function useZoomKeys(platform: Platform) {
       if (Math.abs(wheel) < WHEEL_STEP) return;
       const action = wheel < 0 ? "in" : "out";
       wheel = 0;
-      zoom(action, e.target instanceof Element ? e.target : null, platform);
+      zoomTerminal(action, target, platform);
     };
     window.addEventListener("keydown", onKey, true);
     window.addEventListener("wheel", onWheel, { capture: true, passive: false });

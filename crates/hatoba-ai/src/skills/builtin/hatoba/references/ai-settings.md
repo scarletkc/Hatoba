@@ -29,7 +29,7 @@ Other labels: **Name**, **Clear**, **Model ID**, **Display Name**.
 
 ## AI Panel
 
-**Text Size** (11 to 24, default 13, synced) is the size of the conversation, the input and the approval cards in the AI panel; the panel's header keeps the window's size. Ctrl+= / Ctrl+- / Ctrl+0 (⌘ on macOS) and Ctrl+wheel in the panel change it too; see `references/shortcuts.md`.
+**Text Size** (11 to 24, default 13, synced) is the size of the conversation, the input and the approval cards in the AI panel; the panel's header keeps the window's size. Ctrl+= / Ctrl+- / Ctrl+0 (⌘ on macOS) change it too while the panel has focus; see `references/shortcuts.md`.
 
 ## Skills
 
