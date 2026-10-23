@@ -59,7 +59,7 @@ Commit the changes, open a pull request titled `chore(release): prepare vX.Y.Z`,
 
 ## Publish
 
-1. In **Actions → Release → Run workflow**, choose `main`. The workflow releases the latest commit on `main`, or the commit you enter under **Commit to release**, which must be on `main`: for example the release pull request's, while CI is still running on the commits merged after it. The installers are built from that commit, and the release tags it.
+1. In **Actions → Release → Run workflow**, choose `main`. The workflow releases the release pull request's commit, where `main` got the version it records (`releaseCommit` in `release.mjs`), not the latest commit: what is merged after the release pull request goes into the next release. The installers are built from that commit, and the release tags it.
 2. **Preflight** runs the script tests and checks that:
    - the version files agree, and `vX.Y.Z` does not point to another commit
    - the release note is valid, or an earlier release exists to list changes from
@@ -137,3 +137,5 @@ On the page of the failed run, choose **Re-run failed jobs**. The rerun uses the
 - `vX.Y.Z` already points to another commit. Bump to a new version instead of moving the tag.
 - A draft release uses the tag. Review the draft on GitHub, delete or publish it, and rerun the job.
 - The release's pre-release mark does not match the version. Correct it on GitHub and rerun the job.
+
+When the release commit itself needs a fix, for example because a build fails on it, merge the fix and prepare the next version: the workflow releases only the commit that set the version.

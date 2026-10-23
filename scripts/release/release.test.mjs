@@ -14,6 +14,7 @@ import {
   collectDist,
   composeNotes,
   git,
+  releaseCommit,
   releaseOutputs,
   releaseTarget,
   signatureName,
@@ -129,6 +130,27 @@ test("refuses a release tag that points to another commit", (t) => {
   assert.throws(() => releaseTarget("0.2.0", repo.root), /v0\.2\.0 already points to/);
   repo.run("tag", "--force", "v0.2.0");
   assert.deepEqual(releaseTarget("0.2.0", repo.root), { tag: "v0.2.0", sha: head });
+});
+
+test("releases the commit that set the version, not those merged after it", (t) => {
+  const repo = repository(t);
+  const commit = (subject, version, members = "[]") => {
+    writeFileSync(join(repo.root, "Cargo.toml"), `[workspace]
+members = ${members}
+
+[workspace.package]
+version = "${version}"
+`);
+    repo.run("add", "--all");
+    repo.run("commit", "--quiet", "-m", subject);
+    return repo.run("rev-parse", "HEAD");
+  };
+  commit("Initial commit", "0.1.0");
+  const prepared = commit("chore(release): prepare v0.2.0 (#3)", "0.2.0");
+  repo.commit("fix: later (#4)");
+  commit("build: add a crate (#5)", "0.2.0", '["app"]');
+  assert.equal(releaseCommit("0.2.0", repo.root), prepared);
+  assert.throws(() => releaseCommit("0.3.0", repo.root), /No commit on HEAD's history sets version 0\.3\.0/);
 });
 
 test("counts a CI pass on an ancestor only when the later commits change files CI skips", (t) => {
