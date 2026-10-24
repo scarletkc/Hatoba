@@ -158,6 +158,11 @@
   margin-left: -2px;
 }
 
+.newTabMenu[aria-expanded="true"] {
+  background: var(--fill);
+  color: var(--fg);
+}
+
 .drag {
   flex: 1;
   align-self: stretch;
