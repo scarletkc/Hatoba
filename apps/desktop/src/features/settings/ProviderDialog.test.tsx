@@ -11,6 +11,8 @@ history.replaceState(null, "", "/?ai=chatgptelsewhere");
 
 const { t } = await import("@/i18n");
 const { ProviderDialog } = await import("./ProviderDialog");
+// The dialog's first call loads the mock backend, which a busy test run can take seconds to transform.
+await import("@/ipc/mock");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -51,6 +53,12 @@ function pickProtocol(label: string) {
 const button = (label: string) =>
   [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label);
 const shown = (text: string) => document.body.textContent?.includes(text) ?? false;
+
+/** Lets the dialog's async work and React run until `done`, for up to ten seconds, as a busy test run needs. */
+async function until(done: () => boolean) {
+  const end = Date.now() + 10_000;
+  while (!done() && Date.now() < end) await act(() => new Promise((r) => setTimeout(r, 10)));
+}
 
 describe("ProviderDialog", () => {
   it("preselects System One from the base URL until a protocol is chosen (AI-47)", () => {
@@ -115,7 +123,7 @@ describe("ProviderDialog", () => {
     expect(byLabel(t("aiSettings.models.col.id"))).not.toBeNull();
 
     act(() => button(t("btn.save"))?.click());
-    for (let i = 0; i < 100 && !saved; i++) await act(() => new Promise((r) => setTimeout(r, 10)));
+    await until(() => saved !== null);
     const view = saved as AiProviderView | null;
     expect(view?.protocol).toBe("system_one");
     expect(view?.models).toEqual([
@@ -128,7 +136,7 @@ describe("ProviderDialog", () => {
         adaptive_thinking: null,
       },
     ]);
-  });
+  }, 30_000);
 
   it("shows a ChatGPT provider's account and signs it in and out on this device (AI-52)", async () => {
     const views: AiProviderView[] = [];
@@ -156,13 +164,11 @@ describe("ProviderDialog", () => {
     act(() => button(t("aiSettings.chatgpt.continue"))?.click());
     expect(shown(t("aiSettings.chatgpt.waiting.inline"))).toBe(true);
     act(() => button(t("btn.cancel"))?.click());
-    for (let i = 0; i < 100 && shown(t("aiSettings.chatgpt.waiting.inline")); i++)
-      await act(() => new Promise((r) => setTimeout(r, 10)));
+    await until(() => !shown(t("aiSettings.chatgpt.waiting.inline")));
     expect(button(t("aiSettings.chatgpt.continue"))).toBeDefined();
 
     act(() => button(t("aiSettings.chatgpt.continue"))?.click());
-    for (let i = 0; i < 400 && !shown(t("aiSettings.chatgpt.status.signed_in")); i++)
-      await act(() => new Promise((r) => setTimeout(r, 10)));
+    await until(() => shown(t("aiSettings.chatgpt.status.signed_in")));
     expect(shown(t("aiSettings.chatgpt.status.signed_in"))).toBe(true);
     expect(views.at(-1)?.id).toBe("p-chatgpt");
     expect(views.at(-1)?.chatgpt?.status).toBe("signed_in");
@@ -171,9 +177,8 @@ describe("ProviderDialog", () => {
     expect([...document.querySelectorAll("input")].some((i) => i.value === "gpt-6-astra")).toBe(true);
 
     act(() => button(t("aiSettings.chatgpt.signOut"))?.click());
-    for (let i = 0; i < 100 && !shown(t("aiSettings.chatgpt.status.signed_out")); i++)
-      await act(() => new Promise((r) => setTimeout(r, 10)));
+    await until(() => shown(t("aiSettings.chatgpt.status.signed_out")));
     expect(shown(t("aiSettings.chatgpt.status.signed_out"))).toBe(true);
     expect(views.at(-1)?.chatgpt?.status).toBe("signed_out");
-  });
+  }, 30_000);
 });
