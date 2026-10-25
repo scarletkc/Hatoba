@@ -27,6 +27,10 @@
     "vitest": "^4.1.12",
     "wrangler": "^4.149.0"
   },
+  "overrides": {
+    "undici": "^7.30.1",
+    "zod": "^4.6.7"
+  },
   "cloudflare": {
     "bindings": {
       "SETUP_TOKEN": {
