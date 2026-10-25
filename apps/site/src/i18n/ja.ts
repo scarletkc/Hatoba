@@ -98,6 +98,7 @@ export const ja: Messages = {
     releases: "リリース",
     report: "問題を報告",
     security: "セキュリティポリシー",
+    privacy: "プライバシーポリシー",
     contributing: "コントリビュート",
     license: "Hatoba は MIT ライセンスで公開しています。",
   },

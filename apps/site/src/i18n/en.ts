@@ -101,6 +101,7 @@ export const en = {
     releases: "Releases",
     report: "Report a problem",
     security: "Security policy",
+    privacy: "Privacy policy",
     contributing: "Contributing",
     license: "Hatoba is released under the MIT license.",
   },
