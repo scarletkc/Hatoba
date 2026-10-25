@@ -76,7 +76,7 @@ def fix_urls(html):
         if "Phosphor" in url and k >= 0:
             tail = url[k:].split("?")[0]
             tail = re.sub(r"node_modules/\.pnpm/[^/]+/node_modules/", "node_modules/", tail)
-            return f"url({m.group(1)}/apps/desktop/{tail}{m.group(1)})"
+            return f"url({m.group(1)}/packages/ui/{tail}{m.group(1)})"
         return m.group(0)
 
     return re.sub(r"""url\((['"]?)([^'")]+)\1\)""", repl, html)
