@@ -18,7 +18,7 @@ import s from "./SftpPanel.module.css";
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
-/** Folders first, then names (dot-files sort before letters, like the design's list). */
+/** Folders first, then names (dot-files sort before letters). */
 function sortEntries(list: FileEntry[]): FileEntry[] {
   return [...list].sort((a, b) => Number(b.is_dir) - Number(a.is_dir) || collator.compare(a.name, b.name));
 }
@@ -60,7 +60,7 @@ interface Props {
   active: boolean;
 }
 
-/** Remote file browser to the right of a terminal (design §03, SFTP-01..04). */
+/** Remote file browser to the right of a terminal (SFTP-01..04). */
 export function SftpPanel({ sessionId, hostName, active }: Props) {
   const t = useT();
   const rootRef = useRef<HTMLDivElement>(null);

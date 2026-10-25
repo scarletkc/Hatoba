@@ -122,7 +122,7 @@ export function Group({ children, style }: { children: ReactNode; style?: CSSPro
   );
 }
 
-/** 104px label column + control, the design's form row. In a narrow Group the label goes above the control. */
+/** A form row: 104px label column + control. In a narrow Group the label goes above the control. */
 export function FormRow({
   label,
   children,

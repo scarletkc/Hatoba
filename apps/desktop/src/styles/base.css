@@ -163,7 +163,7 @@ input::-ms-reveal {
   background: var(--accenttint);
 }
 
-/* Thin overlay-style scrollbars that match the design's quiet chrome */
+/* Thin overlay-style scrollbars that match the quiet chrome */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;

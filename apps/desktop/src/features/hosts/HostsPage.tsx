@@ -868,7 +868,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
     </div>
   );
 
-  // No hosts at all (design §01b), though groups made meanwhile stay reachable. Quick connect still works from the search field.
+  // No hosts at all, though groups made meanwhile stay reachable. Quick connect still works from the search field.
   if (hosts.length === 0 && !query.trim()) {
     return (
       <div className={s.page} onKeyDown={onKeyDown}>

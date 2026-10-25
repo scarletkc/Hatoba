@@ -54,7 +54,7 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
 
 /**
  * In-browser stand-in for the Rust backend so the UI can be developed and reviewed with the
- * design's sample data (`pnpm dev`). URL parameters select demo states:
+ * sample data (`pnpm dev`). URL parameters select demo states:
  *   ?state=onboarding | locked | empty      ?sync=none | syncing | offline | conflict | auth | too_large
  *   ?platform=windows | macos | linux       ?update=available | badsig | dropped | offline | error
  *   ?manager=scoop | aur | other            (the package manager that installed Hatoba)

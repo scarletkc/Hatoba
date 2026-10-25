@@ -3,7 +3,7 @@ import { Icon } from "@/components/controls";
 import { cx } from "@/lib/cx";
 import s from "./WizardCard.module.css";
 
-/** Step indicator from the design's sync wizard: ✓ done · filled current · outlined upcoming. */
+/** Step indicator: ✓ done · filled current · outlined upcoming. */
 export function Steps({ labels, current }: { labels: string[]; current: number }) {
   return (
     <ol className={s.steps}>
@@ -28,7 +28,7 @@ export function Steps({ labels, current }: { labels: string[]; current: number }
   );
 }
 
-/** The 540px card used by every first-launch step (mirrors the design's wizard sheets). */
+/** The 540px card used by every first-launch step. */
 export function WizardCard({
   steps,
   current,

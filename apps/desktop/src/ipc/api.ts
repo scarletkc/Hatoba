@@ -599,7 +599,7 @@ function load(): Promise<HatobaApi> {
 
 /**
  * The backend. Calls are forwarded lazily so the Tauri or mock implementation is chosen at runtime
- * (the mock lets the UI run in a plain browser with the design's sample data).
+ * (the mock lets the UI run in a plain browser with sample data).
  */
 export const api: HatobaApi = new Proxy({} as HatobaApi, {
   get(_target, prop: string) {

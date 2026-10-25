@@ -30,7 +30,7 @@ const TABS: { id: SettingsTab; icon: string; label: MessageKey }[] = [
 let lastTab: SettingsTab = "general";
 
 /**
- * Settings (design §07): a 700×620 preferences window with General / Appearance / Terminal / Security, plus
+ * Settings: a 700×620 preferences window with General / Appearance / Terminal / Security, plus
  * Proxies for SSH connections (SSH-13), AI for the assistant (spec §13) and About for the version and the
  * update check.
  */

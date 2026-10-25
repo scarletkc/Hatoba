@@ -129,7 +129,7 @@ export function windowSurface(): { left: number; top: number; right: number; bot
   return { left: pad, top: pad, right: window.innerWidth - pad, bottom: window.innerHeight - pad };
 }
 
-/** Floating menu (the design's language picker look). Closes on outside click / Escape. */
+/** Floating menu. Closes on outside click / Escape. */
 export function Menu({
   anchor,
   entries,
@@ -325,7 +325,7 @@ export interface SelectOption<V> {
   icon?: string;
 }
 
-/** The design's popup button (label + caret-up-down) with a menu of options. */
+/** A popup button (label + caret-up-down) with a menu of options. */
 export function PopupSelect<V>({
   value,
   options,
@@ -456,7 +456,7 @@ export function Modal({
   );
 }
 
-/** Wizard-style sheet: 540px card with a footer of actions (design §05). */
+/** Wizard-style sheet: 540px card with a footer of actions. */
 export function Sheet({
   children,
   footer,

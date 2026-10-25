@@ -27,7 +27,7 @@ import { StatusBar } from "./StatusBar";
 import { useTermSettings, useTerminalChrome } from "./theme";
 import s from "./TerminalView.module.css";
 
-/** One terminal session (design §03 / §03b). Inactive tabs stay mounted so their sessions keep running. */
+/** One terminal session. Inactive tabs stay mounted so their sessions keep running. */
 export function TerminalView({ tab, active }: { tab: SessionTab; active: boolean }) {
   const session = ensureSession(tab.id);
   if (!session) return null;

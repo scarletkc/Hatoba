@@ -126,7 +126,7 @@ test("components, styles and copy of the desktop app are UI, tests and logic are
     "apps/desktop/src/app/store.ts",
     "apps/desktop/src-tauri/src/lib.rs",
     "apps/site/src/pages/index.astro",
-    "docs/design/README.md",
+    "docs/hatoba-spec.md",
   ]) {
     assert.ok(!isUiFile(path), path);
   }

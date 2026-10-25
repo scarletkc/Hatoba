@@ -19,7 +19,7 @@ import type {
   SyncStatus,
 } from "../types";
 
-/** Sample data from the design file (`Hatoba.dc.html`), used when running in a plain browser. */
+/** Sample data used when running in a plain browser. */
 
 const zh = mockLocale() === "zh-CN";
 const MIN = 60_000;
@@ -221,7 +221,7 @@ export const PROBE: Record<string, boolean> = {
   "h-staging-web": false,
 };
 
-/** Hosts whose connection attempt fails in the mock (design §03b). */
+/** Hosts whose connection attempt fails in the mock. */
 export const FAILING_HOSTS = new Set(["h-staging-web"]);
 
 /** Quick-connect targets (HOST-12) this "device" connected to before. */

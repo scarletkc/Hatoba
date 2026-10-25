@@ -15,7 +15,7 @@ import s from "./AppearancePane.module.css";
 
 type Appearance = LocalPrefs["appearance"];
 
-/** Settings → Appearance (design §07): theme thumbnails, density and zoom, and the AI panel's text size (TERM-13). */
+/** Settings → Appearance: theme thumbnails, density and zoom, and the AI panel's text size (TERM-13). */
 export function AppearancePane() {
   const t = useT();
   const [prefs, setPrefs] = usePrefs();

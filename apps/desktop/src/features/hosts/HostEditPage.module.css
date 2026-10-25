@@ -5,7 +5,7 @@
   flex-direction: column;
 }
 
-/* Back · breadcrumb · actions (design §02 top row) */
+/* Back · breadcrumb · actions */
 .bar {
   display: flex;
   align-items: center;

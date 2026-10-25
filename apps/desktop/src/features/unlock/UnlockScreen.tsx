@@ -11,7 +11,7 @@ import { cx } from "@/lib/cx";
 import { RecoverSheet } from "./RecoverSheet";
 import s from "./UnlockScreen.module.css";
 
-/** Full-window lock screen (design §06, VAULT-03, SEC-06, SEC-07, SEC-10, SEC-11). */
+/** Full-window lock screen (VAULT-03, SEC-06, SEC-07, SEC-10, SEC-11). */
 export function UnlockScreen() {
   const t = useT();
   const vault = useApp((st) => st.vault);

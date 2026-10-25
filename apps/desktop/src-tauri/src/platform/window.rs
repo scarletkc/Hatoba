@@ -56,7 +56,7 @@ pub fn create_main_window(app: &AppHandle) -> tauri::Result<(WebviewWindow, bool
         .visible(false);
 
     // Windows / Linux: our own title bar merged with the tab bar (WIN-01).
-    // macOS (P1): keep the native traffic lights over a transparent title bar, like the design.
+    // macOS (P1): keep the native traffic lights over a transparent title bar.
     #[cfg(not(target_os = "macos"))]
     let builder = builder.decorations(false);
     #[cfg(target_os = "macos")]

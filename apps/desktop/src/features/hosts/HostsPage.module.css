@@ -6,7 +6,7 @@
   container-type: inline-size;
 }
 
-/* Shared by the column header and every row (design §01: name · address · tags · last connected · action). */
+/* Shared by the column header and every row (name · address · tags · last connected · action). */
 .cols {
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 1.1fr) 104px 64px;
 }

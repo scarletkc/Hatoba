@@ -17,7 +17,7 @@ type Remote =
   | { kind: "deployed"; handle: string }
   | { kind: "existing"; handle: string; target: DeployTarget };
 
-/** Cloud Sync setup (design §05): 接入方式 → 连接 → 主密码. Mounted by the sync page while sync is off. */
+/** Cloud Sync setup: 接入方式 → 连接 → 主密码. Mounted by the sync page while sync is off. */
 export function SyncWizard() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [method, setMethod] = useState<Method>("deploy");

@@ -39,7 +39,7 @@
   font-size: var(--text-sm);
 }
 
-/* The error card and banner are dark in both app themes, like the design's terminal: they take the dark
+/* The error card and banner are dark in both app themes, like the terminal: they take the dark
    theme's text and button colors (tokens.css), so the shared controls in them look as they do there. */
 .card,
 .banner {

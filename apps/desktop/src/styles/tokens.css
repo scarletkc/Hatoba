@@ -1,7 +1,5 @@
 /*
- * Design tokens extracted from the Claude Design file `Hatoba.dc.html`
- * (light values from the canvas root, dark values from its `DARK` table).
- * Components only reference these variables, never raw colors.
+ * Design tokens, light and dark. Components only reference these variables, never raw colors.
  */
 
 /* Text sizes. Feature styles use these, never raw px (styles.test.ts). An element marked
@@ -124,13 +122,13 @@
   --error-ring: 0 0 0 1px var(--red), 0 0 0 3.5px color-mix(in srgb, var(--red) 16%, transparent);
   --scrim: rgba(0, 0, 0, 0.18);
 
-  /* Terminal (always dark in the design; "match appearance" switches to the light set) */
+  /* Terminal (dark by default; "match appearance" switches to the light set) */
   --term: #121316;
   --term-fg: #d5d8de;
   --term-dim: #6b717c;
   --term-dialog: #1c1d21;
 
-  /* Tag palette (oklch, from the design's TAGC table) */
+  /* Tag palette (oklch) */
   --tag-1: oklch(0.66 0.15 30);
   --tag-2: oklch(0.76 0.13 80);
   --tag-3: oklch(0.6 0.13 300);
@@ -240,7 +238,7 @@
     "Cascadia Mono", Consolas, ui-monospace, "SF Mono", Menlo, "Yu Gothic UI", "Microsoft YaHei UI", monospace;
 }
 
-/* macOS keeps the design's native look (P1). The mono stack keeps CJK fallbacks for wide characters (TERM-02).
+/* macOS keeps its native look (P1). The mono stack keeps CJK fallbacks for wide characters (TERM-02).
    The native traffic lights stay where the window was made (tao puts them back on every redraw), so
    the title bar keeps its 44 window pixels as the interface zooms, while it can hold the 28 px tabs. */
 :root[data-platform="macos"] {

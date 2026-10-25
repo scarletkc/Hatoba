@@ -54,7 +54,7 @@ describe("locale helpers", () => {
     expect(detectLocale(["fr-FR"])).toBe("en");
   });
 
-  it("formats relative times like the design", () => {
+  it("formats relative times", () => {
     const now = new Date(2026, 9, 8, 9, 43).getTime();
     expect(formatRelative("zh-CN", now - 2 * 60_000, now)).toBe("2 分钟前");
     expect(formatRelative("en", now - 30_000, now)).toBe("Just now");

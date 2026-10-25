@@ -20,7 +20,7 @@ pnpm dev                  # Start only the frontend, with a mock backend in the 
 
 A release build runs one Hatoba at a time and hands the arguments of a second launch to it ([HOST-13](hatoba-spec.md#82-hosts)). A development build skips this, so it can run beside the installed app, unless `HATOBA_SINGLE_INSTANCE` is set.
 
-In the browser, `pnpm dev` uses the mock backend in `apps/desktop/src/ipc/mock` with the design's sample data. URL parameters switch demo states, such as `?state=locked` and `?sync=conflict`. The comment on `createMockApi` in `apps/desktop/src/ipc/mock/index.ts` lists every parameter.
+In the browser, `pnpm dev` uses the mock backend in `apps/desktop/src/ipc/mock` with sample data. URL parameters switch demo states, such as `?state=locked` and `?sync=conflict`. The comment on `createMockApi` in `apps/desktop/src/ipc/mock/index.ts` lists every parameter.
 
 `/?gallery` opens the component gallery instead of the app: every control and pattern in `apps/desktop/src/components` in each state, in light, dark or side by side, at either density. Check it after changing a shared component. Only development builds include it.
 

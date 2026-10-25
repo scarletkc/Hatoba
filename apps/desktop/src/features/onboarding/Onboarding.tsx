@@ -94,7 +94,7 @@ export function Onboarding() {
   );
 }
 
-/** Radio card styled like the design's sync-wizard method picker. */
+/** Radio card styled like the sync wizard's method picker. */
 function OptionCard({
   selected,
   icon,

@@ -6,7 +6,7 @@ import s from "./Wizard.module.css";
 
 export type WizardStep = 1 | 2 | 3;
 
-/** The 540px card with the 3-step progress header, shown inline in the page (design §05). */
+/** The 540px card with the 3-step progress header, shown inline in the page. */
 export function WizardFrame({
   step,
   footer,

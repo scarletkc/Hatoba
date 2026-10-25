@@ -56,7 +56,7 @@ function subscribe(cb: () => void) {
 }
 
 /**
- * React hook: re-renders on language change (switching takes effect immediately, design §07). The function stays the
+ * React hook: re-renders on language change (switching takes effect immediately). The function stays the
  * same until then, so the memoized values and components that take it keep their identity.
  */
 export function useT() {
@@ -127,7 +127,7 @@ export function useToday(): number {
   return useSyncExternalStore(subscribeDay, clockNow).today;
 }
 
-/** "2 min ago", "Today 09:12", "Yesterday", "Oct 5" — the design's last-connected style. */
+/** "2 min ago", "Today 09:12", "Yesterday", "Oct 5" — the hosts list's last-connected style. */
 export function formatRelative(locale: Locale, ms: number, now = Date.now()): string {
   const diff = Math.max(0, now - ms);
   const min = Math.floor(diff / 60_000);

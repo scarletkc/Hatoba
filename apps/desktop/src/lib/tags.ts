@@ -1,4 +1,4 @@
-/** Tag dot colors. The design's sample tags keep their exact colors; others hash onto the palette. */
+/** Tag dot colors. Common tags keep fixed colors; others hash onto the palette. */
 const FIXED: Record<string, number> = {
   production: 1,
   prod: 1,

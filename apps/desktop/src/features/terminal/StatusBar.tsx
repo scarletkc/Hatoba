@@ -43,7 +43,7 @@ interface Props {
   onMore(button: HTMLElement): void;
 }
 
-/** The 36px bar above a terminal (design §03 / §03b). */
+/** The 36px bar above a terminal. */
 export function StatusBar({
   local,
   status,

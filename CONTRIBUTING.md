@@ -170,7 +170,9 @@ Before requesting review:
 
 - Run the tests and checks in the [development guide](docs/development.md).
   CI runs on every update to the pull request, and every job must pass.
-- Follow the [design notes](docs/design/README.md) for UI changes.
+- Build UI from the shared components in `apps/desktop/src/components` and the
+  design tokens in `apps/desktop/src/styles/tokens.css`, and put copy in
+  `apps/desktop/src/i18n/locales/`.
 - When behavior changes, update the
   [architecture and requirements](docs/hatoba-spec.md) and any other affected
   docs in the same pull request; the
@@ -223,8 +225,8 @@ to layout, styling, components, visible text, and interaction states.
 - Show sample data only. Screenshots must not contain real host names,
   addresses, user names, key fingerprints, or anything else from your vault.
 
-`pnpm dev` runs the frontend in a browser with the mock backend and the
-design's sample data, and URL parameters select states and platforms, as the
+`pnpm dev` runs the frontend in a browser with the mock backend and its sample
+data, and URL parameters select states and platforms, as the
 [development guide](docs/development.md#run) describes. Capture changes that
 depend on the native window or the operating system, such as the title bar,
 Mica, or input methods, in the desktop app from `pnpm tauri dev` on the

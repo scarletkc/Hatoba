@@ -38,7 +38,7 @@ const COMMANDS = [
   "whoami",
 ];
 
-/** A tiny line-editing fake shell that replays the design's terminal screen (mock only). */
+/** A tiny line-editing fake shell that replays a sample terminal screen (mock only). */
 export class FakeShell {
   onExit: (() => void) | null = null;
   private line = "";

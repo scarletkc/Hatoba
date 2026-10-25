@@ -28,7 +28,7 @@
   container-type: inline-size;
 }
 
-/* Table: 名称 | 类型 | 指纹 | 创建 | 使用中 (design §04) */
+/* Table: 名称 | 类型 | 指纹 | 创建 | 使用中 */
 .head,
 .row {
   display: grid;
@@ -169,7 +169,7 @@
   color: var(--fg2);
 }
 
-/* Detail panel (design §04, 300px) */
+/* Detail panel (300px) */
 .panel {
   width: 300px;
   flex: none;

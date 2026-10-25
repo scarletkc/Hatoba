@@ -16,7 +16,7 @@ export function codeGroups(code: string): string[] {
 }
 
 /**
- * The recovery code as 8 groups with copy / save-as-text / print actions (design §05 step 3), plus the
+ * The recovery code as 8 groups with copy / save-as-text / print actions, plus the
  * VAULT-02 confirmation: tick "I've saved it". `onConfirmedChange` reports whether it is ticked.
  */
 export function RecoveryCodeSection({

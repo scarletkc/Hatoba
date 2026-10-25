@@ -125,7 +125,7 @@
   }
 }
 
-/* Grouped form (design §02 / §05b) */
+/* Grouped form */
 .section {
   display: flex;
   flex-direction: column;
@@ -232,7 +232,7 @@
   text-overflow: ellipsis;
 }
 
-/* Empty state (design §01b) */
+/* Empty state */
 .empty {
   flex: 1;
   display: flex;
@@ -367,7 +367,7 @@
   color: var(--fg3);
 }
 
-/* Callout (design §05 step 3 info box) */
+/* Callout */
 .callout {
   display: flex;
   gap: var(--space-8);

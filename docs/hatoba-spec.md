@@ -4,9 +4,9 @@
 
 This document defines Hatoba's feature scope, architecture, data formats, sync protocol, and security model, and the implementation follows it. Progress on each requirement is tracked in [Implementation status](status.md).
 
-Visuals and interaction follow the Claude Design files, which the [design notes](design/README.md) describe along with the porting conventions. When the design and this document disagree, the design wins on visuals, layout, and copy, and this document wins on behavior, data, and security. When the design lacks an element this document requires (for example the setup token field, the sync conflict states, or the settings pages), add it in the design's visual style.
+The visuals come from the design tokens in `apps/desktop/src/styles/tokens.css` and the shared components in `apps/desktop/src/components`, which the component gallery shows in each state ([development guide](development.md#run)). New pages and elements are built from them in the same style.
 
-**Windows is the first platform.** The design has a macOS look. The Windows version adapts it as described in §9.1 (title bar, fonts, shortcuts, and so on) and keeps the overall style. The macOS version (P1) follows the design as is.
+**Windows is the first platform.** §9.1 covers its title bar, fonts, shortcuts, and so on, and §9.2 what the macOS version (P1) does differently.
 
 Priorities: **P0** is required for the MVP, **P1** for the first public release, and **P2** for later releases.
 
@@ -99,7 +99,7 @@ hatoba/
 │   ├── src/                  # Frontend
 │   │   ├── app/              # Layout, routing
 │   │   ├── features/         # onboarding, unlock, hosts, terminal, sftp, keys, sync, settings, ai
-│   │   ├── components/       # Shared components ported from the design
+│   │   ├── components/       # Shared components
 │   │   ├── styles/           # Design tokens (CSS variables, light and dark)
 │   │   ├── i18n/             # Message tables
 │   │   └── ipc/              # tauri-specta bindings, frontend contract, browser mock backend
@@ -953,7 +953,7 @@ A local terminal tab runs a shell of this computer, next to the SSH tabs, so loc
 
 ## 9. UI requirements
 
-The design defines the visuals. This section only specifies the behavior and states each page must have.
+The design tokens and shared components define the visuals (§0). This section only specifies the behavior and states each page must have.
 
 | Page | Key behavior | Required states |
 |---|---|---|
@@ -974,23 +974,23 @@ The design defines the visuals. This section only specifies the behavior and sta
 
 - Shortcuts: see WIN-04 in §9.1, and MAC-03 in §9.2 for macOS.
 - Input methods: the Enter that commits an input method candidate never submits, saves, or sends.
-- The theme follows the system by default, and both the light and dark tokens come from the design.
+- The theme follows the system by default, and every token has a light and a dark value.
 - Internationalization: **all copy is externalized from day one, with no hard-coded strings** (P0). Simplified Chinese, Japanese, and English translations are P1, and the default follows the system language. MCP server errors (AI-29) are the exception: their messages stay in English under a translated label.
-- §9.1 covers the Windows replacements for the design's macOS elements (traffic-light buttons, SF fonts, translucent sidebar), and §9.2 what the macOS version adapts.
+- §9.1 covers the Windows title bar, fonts, and backdrop, and §9.2 the macOS ones.
 
 ### 9.1 Windows adaptation
 
-The design has a macOS look, and the first Windows release adapts it as below. It keeps the design's whitespace, hierarchy, corner radii, and colors and replaces only the platform-specific parts.
+Windows has its own title bar, fonts, backdrop, and shortcuts, as below. The rest of the interface, its whitespace, hierarchy, corner radii, and colors, is the same on every platform.
 
 | ID | Requirement | Priority |
 |---|---|---|
-| WIN-01 | Custom title bar (Tauri `decorations: false`): the tab bar and the title bar are one, with Windows-style minimize, maximize, and close buttons at the top right. It supports dragging, double-click to maximize, and Windows 11 Snap Layouts on hovering the maximize button (tauri-plugin-decorum and similar projects are useful references). The design's traffic-light buttons at the top left are not shown on Windows | P0 |
+| WIN-01 | Custom title bar (Tauri `decorations: false`): the tab bar and the title bar are one, with Windows-style minimize, maximize, and close buttons at the top right. It supports dragging, double-click to maximize, and Windows 11 Snap Layouts on hovering the maximize button (tauri-plugin-decorum and similar projects are useful references) | P0 |
 | WIN-02 | Font mapping: the UI font SF Pro becomes `Segoe UI Variable`, falling back to `Segoe UI` on Windows 10. The terminal font SF Mono becomes `Cascadia Mono`, falling back to `Consolas`. Chinese falls back to `Microsoft YaHei UI`, and Japanese to `Yu Gothic UI` | P0 |
 | WIN-03 | High DPI and multiple monitors: sharp at 100%, 125%, 150%, and 200% scaling, with no blur or misplacement when the window moves between monitors with different scaling | P0 |
 | WIN-04 | Shortcuts (see the table below). While the terminal has focus, Ctrl+letter must reach the remote side unchanged (Ctrl+L clears the screen, Ctrl+W deletes a word, Ctrl+K deletes to the end of the line, and so on), so every app-level shortcut adds Shift. The zoom keys (TERM-13) are not Ctrl+letter and need none | P0 |
 | WIN-05 | Terminal copy and paste: Ctrl+C copies when text is selected and sends `^C` otherwise. Ctrl+V and Ctrl+Shift+V both paste. Right-click can be set to copy if text is selected and paste otherwise (the PuTTY habit), or to open a menu. The default is the PuTTY habit (macOS: MAC-04) | P0 |
 | WIN-06 | WebView2 runtime: the installer embeds the bootstrapper and installs the runtime automatically when Windows 10 lacks it | P0 |
-| WIN-07 | Backdrop: the translucent tab bar and the home tab's navigation rail use Mica on Windows 11 and falls back to the design's solid color on Windows 10 | P1 |
+| WIN-07 | Backdrop: the translucent tab bar and the home tab's navigation rail use Mica on Windows 11 and falls back to a solid color on Windows 10 | P1 |
 | WIN-08 | Follow the system light or dark mode and update live when it changes | P0 |
 | WIN-09 | Import PuTTY `.ppk` private keys (v2 and v3). Check whether the chosen key library supports them, and write a parser if it does not | P1 |
 | WIN-10 | System tray and the close button, on Windows and Linux. A tray icon shows while Hatoba runs, with **Open Hatoba**, **Lock** (while the vault is unlocked), **Update to vX.Y.Z** (while an update check has found a newer release, §11), the running forwards (FWD-05), and **Quit Hatoba** in the app's language; a left click opens the window, and Linux panels show the menu instead. The window's close button, Alt+F4, and the taskbar's **Close** ask whether to minimize Hatoba to the tray, where SSH sessions, forwards, and sync keep running, or to quit, with **Remember my choice**. The answer is kept per device in the device-local preferences, and Settings → General changes it: ask every time (the default), minimize to the tray, or quit. Without a tray, on a Linux desktop with no StatusNotifier host such as GNOME without an extension, the close button quits. macOS keeps MAC-06 and has no tray | P1 |
@@ -1013,7 +1013,7 @@ The design has a macOS look, and the first Windows release adapts it as below. I
 
 ### 9.2 macOS
 
-The macOS version (P1, §11) keeps the design's macOS elements: the traffic-light buttons, the system fonts, and the translucent tab bar and navigation rail. It adapts the rest as below.
+The macOS version (P1, §11) keeps the native macOS elements: the traffic-light buttons, the system fonts, and the translucent tab bar and navigation rail. It adapts the rest as below.
 
 | ID | Requirement | Priority |
 |---|---|---|

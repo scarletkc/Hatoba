@@ -6,7 +6,7 @@ import { SyncWizard } from "./SyncWizard";
 import s from "./Sync.module.css";
 
 /**
- * Cloud Sync (design §05): the setup wizard while sync is off, otherwise the status page, with a
+ * Cloud Sync: the setup wizard while sync is off, otherwise the status page, with a
  * review screen for automatically resolved conflicts (spec §6.4).
  */
 export function SyncPage() {

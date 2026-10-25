@@ -23,7 +23,7 @@ export function ConnectingOverlay({ name, local = false }: { name: string; local
   );
 }
 
-/** Connection failed (SSH-05): what happened, in words, plus retry (design §03b). */
+/** Connection failed (SSH-05): what happened, in words, plus retry. */
 export function ErrorCard({
   name,
   host,

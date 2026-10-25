@@ -17,7 +17,7 @@ import s from "./KeysPage.module.css";
 type Dialog =
   { kind: "import" } | { kind: "generate" } | { kind: "rename"; key: KeyView } | { kind: "deploy"; key: KeyView };
 
-/** Key vault (KEY-01..07, design §04): list + detail panel. Private keys never reach the WebView. */
+/** Key vault (KEY-01..07): list + detail panel. Private keys never reach the WebView. */
 export function KeysPage() {
   const t = useT();
   const keys = useVaultData((st) => st.keys);

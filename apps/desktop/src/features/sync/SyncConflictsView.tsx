@@ -30,7 +30,7 @@ const TYPE_ICON: Record<ConflictView["item_type"], string> = {
   mcp_server: "plugs",
 };
 
-/** Fields whose values read better in the monospace face (as in the design). */
+/** Fields whose values read better in the monospace face. */
 const MONO_FIELDS = new Set(["name", "address", "port", "username", "key", "fingerprint", "base_url", "path", "env"]);
 
 /** Fields the backend sends as "true" or "false". */
@@ -57,7 +57,7 @@ function describe(t: T, c: ConflictView): string {
   return t("sync.cf.desc.both", { type });
 }
 
-/** Differing fields, plus a state row when one side deleted the item (design §05c). */
+/** Differing fields, plus a state row when one side deleted the item. */
 function rowsOf(c: ConflictView): Row[] {
   const rows: Row[] = [...c.fields];
   if ((c.local_deleted || c.remote_deleted) && !rows.some((r) => r.field === "state")) {
