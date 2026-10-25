@@ -746,6 +746,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           "space",
           "磁盘",
           "空间",
+          "磁碟",
+          "空間",
           "ディスク",
           "容量",
           "df",
@@ -755,31 +757,35 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           "sleep",
           "workdir",
           "工作目录",
+          "工作目錄",
           "作業フォルダ",
           "screen",
           "屏幕",
+          "螢幕",
           "画面",
           "type",
           "send",
           "输入",
+          "輸入",
           "入力",
         ],
-        ...["read file", "读取文件", "ファイルを読", "edit", "编辑", "編集", "write", "写入", "書き込", "grep", "glob"],
+        ...["read file", "读取文件", "讀取檔案", "ファイルを読", "edit", "编辑", "編輯", "編集"],
+        ...["write", "写入", "寫入", "書き込", "grep", "glob"],
       );
       if (terminal) {
-        if (want("disk", "space", "磁盘", "空间", "ディスク", "容量", "df"))
+        if (want("disk", "space", "磁盘", "空间", "磁碟", "空間", "ディスク", "容量", "df"))
           calls.push(
             call("run_command", { command: DISK_COMMAND[turn.context.local?.kind ?? "unix"], timeout_seconds: 30 }),
           );
         if (review("fail", "失败", "失敗"))
           calls.push(call("run_command", { command: "sudo systemctl restart nonexistent.service" }));
         if (review("sleep")) calls.push(call("run_command", { command: "sleep 8 && echo done", timeout_seconds: 30 }));
-        if (review("workdir", "工作目录", "作業フォルダ"))
+        if (review("workdir", "工作目录", "工作目錄", "作業フォルダ"))
           calls.push(call("run_command", { command: "npm test", workdir: "/srv/app", timeout_seconds: 120 }));
-        if (want("screen", "屏幕", "画面")) calls.push(call("read_terminal", { lines: 50 }));
-        if (want("type", "send", "输入", "入力"))
+        if (want("screen", "屏幕", "螢幕", "画面")) calls.push(call("read_terminal", { lines: 50 }));
+        if (want("type", "send", "输入", "輸入", "入力"))
           calls.push(call("send_input", { text: "uptime", keys: ["enter"], wait_seconds: 5 }));
-        if (review("hidden", "隐藏", "隠し"))
+        if (review("hidden", "隐藏", "隱藏", "隠し"))
           calls.push(
             call("run_command", {
               command: "cd /srv/app\tmake deploy\nprintf '\x1b[2J'\necho ‮/ fr- mr\n",
@@ -793,14 +799,14 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           if (!calls.some((c) => c.name === "read_file" && c.arguments.includes(JSON.stringify(path))))
             calls.push(call("read_file", { path }));
         };
-        if (want("read file", "读取文件", "ファイルを読") || review("cat ")) readFirst(NGINX);
+        if (want("read file", "读取文件", "讀取檔案", "ファイルを読") || review("cat ")) readFirst(NGINX);
         if (review("glob")) calls.push(call("glob", { pattern: "sites-*/*", path: "/etc/nginx" }));
         if (review("grep"))
           calls.push(call("grep", { pattern: "proxy_\\w+", path: "/etc", output_mode: "content", context: 1 }));
         if (review("unread"))
           calls.push(call("edit_file", { path: "/etc/motd", old_string: "Sundays", new_string: "Saturdays" }));
-        if (want("edit", "编辑", "編集")) readFirst(NGINX);
-        if (want("edit", "编辑", "編集"))
+        if (want("edit", "编辑", "編輯", "編集")) readFirst(NGINX);
+        if (want("edit", "编辑", "編輯", "編集"))
           calls.push(
             call("edit_file", {
               path: "/etc/nginx/sites-available/default",
@@ -809,10 +815,10 @@ export function createAiMock(deps: AiMockDeps): AiApi {
                 "        proxy_pass http://127.0.0.1:8080/;\n        proxy_read_timeout 60s;\n        proxy_set_header Host $host;",
             }),
           );
-        if (review("listen", "端口", "ポート", "nomatch", "不匹配", "不一致")) readFirst(NGINX);
+        if (review("listen", "端口", "連接埠", "ポート", "nomatch", "不匹配", "不符", "不一致")) readFirst(NGINX);
         if (review("crlf")) readFirst("/srv/app/web.config");
         if (review("motd")) readFirst("/etc/motd");
-        if (review("listen", "端口", "ポート"))
+        if (review("listen", "端口", "連接埠", "ポート"))
           calls.push(
             call("edit_file", {
               path: "/etc/nginx/sites-available/default",
@@ -821,7 +827,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
               replace_all: true,
             }),
           );
-        if (review("nomatch", "不匹配", "不一致"))
+        if (review("nomatch", "不匹配", "不符", "不一致"))
           calls.push(
             call("edit_file", {
               path: "/etc/nginx/sites-available/default",
@@ -837,7 +843,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
               new_string: '<add key="mode" value="maintenance" />\n    <add key="banner" value="Back soon" />',
             }),
           );
-        if (review("write", "写入", "書き込"))
+        if (review("write", "写入", "寫入", "書き込"))
           calls.push(
             call("write_file", {
               path: MAINTENANCE,
@@ -870,13 +876,13 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         if (review("symlink"))
           calls.push(call("run_command", { command: `ln -sfn /srv/app/shared/maintenance.html ${MAINTENANCE}` }));
       }
-      if (want("search", "搜索", "検索"))
+      if (want("search", "搜索", "搜尋", "検索"))
         calls.push(call("web_search", { query: "nginx 502 bad gateway upstream prematurely closed" }));
-      if (review("fetch", "url", "网页", "ページ"))
+      if (review("fetch", "url", "网页", "網頁", "ページ"))
         calls.push(
           call("fetch_url", {
             url: "https://nginx.org/en/docs/http/ngx_http_upstream_module.html",
-            ...(want("whole", "整页", "全体") ? { full_page: true } : {}),
+            ...(want("whole", "整页", "整頁", "全体") ? { full_page: true } : {}),
           }),
         );
       if (review("mcp")) {
