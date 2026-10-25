@@ -605,6 +605,7 @@ export const AREAS: Area[] = [
           "settings.language",
           "settings.language.system",
           "settings.language.zh",
+          "settings.language.zhTW",
           "settings.language.en",
           "settings.language.ja",
           "settings.probe",

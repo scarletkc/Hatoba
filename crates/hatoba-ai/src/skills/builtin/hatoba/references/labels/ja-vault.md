@@ -136,6 +136,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Language | 言語 |
 | System Default | システムの設定 |
 | 简体中文 | 简体中文 |
+| 繁體中文 | 繁體中文 |
 | English | English |
 | 日本語 | 日本語 |
 | Show host reachability | ホストの接続状態を表示 |

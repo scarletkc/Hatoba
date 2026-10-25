@@ -136,6 +136,7 @@ The labels that these files name in English, as the interface shows them in Trad
 | Language | 語言 |
 | System Default | 跟隨系統 |
 | 简体中文 | 简体中文 |
+| 繁體中文 | 繁體中文 |
 | English | English |
 | 日本語 | 日本語 |
 | Show host reachability | 顯示主機線上狀態 |

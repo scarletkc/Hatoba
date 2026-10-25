@@ -136,6 +136,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Language | 语言 |
 | System Default | 跟随系统 |
 | 简体中文 | 简体中文 |
+| 繁體中文 | 繁體中文 |
 | English | English |
 | 日本語 | 日本語 |
 | Show host reachability | 显示主机在线状态 |
