@@ -9,7 +9,7 @@ const english = import.meta.glob<{ default: ImageMetadata }>("../../../../docs/m
 const translated = import.meta.glob<{ default: ImageMetadata }>("../assets/screenshots/*/*.png", { eager: true });
 
 /** The folder of each locale's screenshots, named after the app's locale. */
-const FOLDER: Record<Exclude<Locale, "en">, string> = { zh: "zh-CN", "zh-tw": "zh-TW", ja: "ja" };
+const FOLDER: Record<Exclude<Locale, "en">, string> = { "zh-cn": "zh-CN", "zh-tw": "zh-TW", ja: "ja" };
 
 export type Screenshot = "ai-assistant" | "ai-approval" | "dashboard" | "sync-deploy";
 

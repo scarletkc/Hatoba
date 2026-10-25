@@ -451,9 +451,24 @@ const DEPLOY_DIALOG = { x: 941, y: 418, w: 1152, h: 1053 };
     width: min(560px, 100%);
   }
 
-  /* Everything else: the screenshot, then the list. */
-  :global(.essentials) :global(.section-header) {
-    max-width: 18em;
+  /* Everything else: the screenshot, then the list. The cap folds the English title into two
+     balanced lines; the Chinese and Japanese titles fit on one. */
+  :global(.essentials h2) {
+    max-width: 12em;
+  }
+
+  :global(:root:is(:lang(zh), :lang(ja)) .essentials h2) {
+    max-width: none;
+  }
+
+  /* When a narrow screen still folds the title, Chinese breaks only after the comma and Japanese
+     between phrases. */
+  :global(:root:lang(zh) .essentials h2) {
+    word-break: keep-all;
+  }
+
+  :global(:root:lang(ja) .essentials h2) {
+    word-break: auto-phrase;
   }
 
   :global(.essentials) > :global(.window) {

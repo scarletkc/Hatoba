@@ -22,7 +22,7 @@ function longestDoc() {
   return `/docs/${slug}/`;
 }
 
-const PAGES = ["/", "/download/", "/docs/", longestDoc(), "/zh/", "/ja/download/", "/404.html"];
+const PAGES = ["/", "/download/", "/docs/", longestDoc(), "/zh-cn/", "/ja/download/", "/404.html"];
 /** The desktop systems the layout detects (data-os), and a phone, which gets none. */
 const VISITORS = [
   { name: "windows", platform: "Win32" },

@@ -9,7 +9,7 @@ type Names = Record<string, string>;
  * English in release.mjs no longer matches it, so that a change there is translated here too.
  */
 export const TRANSLATED_STEPS: { source: Record<Platform, (names: Names) => string> } & Record<
-  "zh" | "zh-tw" | "ja",
+  "zh-cn" | "zh-tw" | "ja",
   Record<Platform, (names: Names) => string>
 > = {
   source: {
@@ -20,7 +20,7 @@ export const TRANSLATED_STEPS: { source: Record<Platform, (names: Names) => stri
     macos: ({ dmg }) =>
       `on macOS 13 or later, download \`${dmg}\`, open it, and drag Hatoba to Applications. The app is not signed with an Apple Developer ID or notarized, so macOS blocks it the first time you open it: close the warning, go to **System Settings → Privacy & Security**, choose **Open Anyway** under **Security**, and enter your login password. After an update, macOS may ask whether Hatoba can use its keychain items: enter your login password and choose **Always Allow**, because sync fails if you deny it.`,
   },
-  zh: {
+  "zh-cn": {
     windows: ({ nsis }) =>
       `下载 \`${nsis}\` 并运行。它为当前用户安装 Hatoba，不需要管理员权限。安装程序没有代码签名，Windows SmartScreen 可能会拦截它：选择**更多信息**，再选择**仍要运行**。`,
     linux: ({ deb, appimage }) =>
