@@ -58,6 +58,8 @@ between your devices, and puts an AI assistant beside each terminal.
   and auto-lock.
 - **Sync**: incremental sync between your devices, with conflicts you can
   review item by item and a device list with revocation.
+- **Languages**: English, Simplified Chinese, Traditional Chinese, and
+  Japanese, following the system language unless you pick one in Settings.
 
 The [documentation](https://hatoba.fog.moe/docs/) covers each one in detail.
 

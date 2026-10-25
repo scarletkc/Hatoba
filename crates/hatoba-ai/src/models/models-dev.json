@@ -1803,6 +1803,40 @@
             ]
           }
         ]
+      },
+      "kimi-k3.1-pro": {
+        "limit": {
+          "context": 1048576,
+          "output": 1048576
+        },
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "kimi-k3.1-pro-highspeed": {
+        "limit": {
+          "context": 1048576,
+          "output": 1048576
+        },
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
       }
     }
   },
