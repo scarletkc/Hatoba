@@ -1,6 +1,6 @@
 # Privacy policy
 
-Hatoba is an open-source desktop SSH client, made by ScarletKc. It has no telemetry, no analytics, no crash reporting, and no ads, and it sends nothing about you to its developer. What leaves your device goes to the servers and services you connect Hatoba to yourself, as described below.
+Hatoba is an open-source desktop SSH client, made by ScarletKc. It has no telemetry, no analytics, no crash reporting, and no ads, and it sends nothing about you to its developer on its own. What leaves your device goes to the servers and services you connect Hatoba to yourself, as described below.
 
 This policy covers the Hatoba desktop app, however you installed it, and the website at [hatoba.fog.moe](https://hatoba.fog.moe).
 
@@ -14,7 +14,7 @@ This policy covers the Hatoba desktop app, however you installed it, and the web
 
 **SSH connections.** Terminals, file transfers, and port forwarding talk to the servers you connect to, over SSH.
 
-**Sync, if you turn it on.** Sync stores your vault in a D1 database in your own Cloudflare account, either through a Worker that you deploy there or, in D1 direct mode, through the Cloudflare API with an API token you give Hatoba. Everything is encrypted on your device before it is uploaded, so the server never sees your passwords, keys, or any other item's contents. It does see the number of items, their IDs, their encrypted sizes and modification times, the number of devices, sign-in and sync times, and the IP addresses that Cloudflare sees for any request. Deploying the Worker calls the Cloudflare API with the API token you give Hatoba.
+**Sync, if you turn it on.** Sync stores your vault in a D1 database in your own Cloudflare account, either through a Worker that you deploy there or, in D1 direct mode, through the Cloudflare API with an API token you give Hatoba. Everything is encrypted on your device before it is uploaded, so the server never sees your passwords, keys, or any other item's contents. It does see the number of items, their IDs, their encrypted sizes and modification times, sync times, and the IP addresses that Cloudflare sees for any request. A Worker also keeps a session for each device, so it sees the number of devices and their sign-in times. Deploying the Worker calls the Cloudflare API with the API token you give Hatoba.
 
 **The AI assistant, if you set it up.** The assistant sends each request to the AI provider you add, or to OpenAI when you sign in with ChatGPT. A request carries:
 
@@ -22,9 +22,9 @@ This policy covers the Hatoba desktop app, however you installed it, and the web
 - The screen of the terminal tab you attached, with each message you send, while **Send Terminal Screen** is on.
 - Context that Hatoba adds: the host's display name and user name and the version its SSH server reports (or, for a local terminal, the computer's name, system, shell, and user name), your custom instructions, the host's AI notes, and the assistant's memories if memory is on.
 
-Addresses, passwords, keys, and other hosts reach the provider only when they appear on the screen or in a tool result, or when you attach them. The provider handles what it receives under its own privacy policy.
+Nothing else comes from the vault. Addresses, passwords, keys, and other hosts reach the provider only when they are part of what is listed above: on the screen, in a tool result, in an attachment, or in something you wrote, such as a message, your custom instructions, a host's AI notes, or a memory. The provider handles what it receives under its own privacy policy.
 
-In auto mode, the judge you choose in Settings, a model of a provider you added or a System One endpoint, also receives requests: your messages, your custom instructions and the host's AI notes, and each tool call it decides on with its arguments, including the terminal's screen lines when the call types into a terminal.
+In auto mode, the judge you choose in Settings, a model of a provider you added or a System One endpoint, also receives requests: the host's display name, your messages, your custom instructions and the host's AI notes, the conversation's earlier tool calls with their arguments, and each tool call it decides on with its arguments, including the terminal's screen lines when the call types into a terminal.
 
 When you set them up, the assistant also sends web searches to the search service you choose (Brave Search, Tavily, or a SearXNG instance) or uses the provider's own search, requests the web pages it reads from their sites, and sends its calls to the MCP servers you add.
 
