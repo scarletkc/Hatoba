@@ -1,10 +1,10 @@
 import "@xterm/xterm/css/xterm.css";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
+import { Menu, toast, useMenu, type MenuEntry } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import type { SessionTab } from "@/app/tabs";
-import { Menu, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { askAi as askAiAbout, askAiAboutConnection } from "@/features/ai/actions";
 import { formatTarget, savedHostFor } from "@/features/hosts/quickConnect";
 import { useHostConnection } from "@/features/hosts/connections";

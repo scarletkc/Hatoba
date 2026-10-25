@@ -1,6 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
-import { Icon, LinkButton, Spinner } from "@/components/controls";
-import { Chip, ErrorText, HintText, StatusLine } from "@/components/patterns";
+import { Chip, ErrorText, HintText, Icon, LinkButton, Spinner, StatusLine } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { diffLines, diffStats, withContext } from "./diff";

@@ -1,12 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Button, DisclosureCaret, Icon, LinkButton, TextField } from "@/components/controls";
-import { StatusLine } from "@/components/patterns";
+import { Button, DisclosureCaret, Icon, LinkButton, StatusLine, TextField, isImeEvent } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { Field } from "@/features/keys/Field";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { SyncConfigInput } from "@/ipc/types";
-import { isImeEvent } from "@/lib/ime";
 import { DEPLOY_GUIDE_URL, DEPLOY_URL, openExternal } from "./external";
 import { normalizeWorkerUrl, type WorkerForm } from "./wizardTypes";
 import { WizardFrame, WizardTitle } from "./WizardFrame";

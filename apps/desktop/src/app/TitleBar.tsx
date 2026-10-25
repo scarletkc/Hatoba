@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { Icon } from "@/components/controls";
-import { Menu, useMenu, type MenuEntry } from "@/components/overlay";
+import { Icon, Menu, useMenu, type MenuEntry } from "@hatoba/ui";
 import { AiPanelButton } from "@/features/ai/AiPanel";
 import { tabActivity, useAi } from "@/features/ai/store";
 import { OsIcon } from "@/features/hosts/OsIcon";

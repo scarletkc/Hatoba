@@ -1,8 +1,19 @@
 import { useId, useRef, useState } from "react";
-import { Button, Segmented, TextArea, TextField } from "@/components/controls";
-import { Dialog, FooterSpacer, PopupSelect, Sheet, SheetHeader, toast } from "@/components/overlay";
+import {
+  Button,
+  Dialog,
+  ErrorText,
+  FooterSpacer,
+  HintText,
+  PopupSelect,
+  Segmented,
+  Sheet,
+  SheetHeader,
+  TextArea,
+  TextField,
+  toast,
+} from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
-import { ErrorText, HintText } from "@/components/patterns";
 import { formatDate, useT } from "@/i18n";
 import { api, isTauri, toAppError } from "@/ipc/api";
 import type { HostView, KeyView } from "@/ipc/types";

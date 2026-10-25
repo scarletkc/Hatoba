@@ -1,14 +1,22 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Button, Icon, LinkButton, TextField } from "@/components/controls";
-import { Callout } from "@/components/layout";
-import { Dialog, PopupSelect } from "@/components/overlay";
-import { ErrorText, HintText, StatusLine } from "@/components/patterns";
+import {
+  Button,
+  Callout,
+  Dialog,
+  ErrorText,
+  HintText,
+  Icon,
+  LinkButton,
+  PopupSelect,
+  StatusLine,
+  TextField,
+  isImeEvent,
+} from "@hatoba/ui";
 import { Field } from "@/features/keys/Field";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AppError, DeployStart, DeployStep, UpgradeDefaults, UpgradePlan } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
 import { deployError, EditTokenLink, LABEL, StepList } from "./DeployStep";
 import { DEPLOY_GUIDE_URL, DEPLOY_TOKEN_URL, openExternal } from "./external";
 import type { T } from "./syncUtils";

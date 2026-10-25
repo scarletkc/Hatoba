@@ -1,6 +1,6 @@
 import type { HTMLAttributes, ReactNode } from "react";
-import { cx } from "@/lib/cx";
 import { Icon, Spinner } from "./controls";
+import { cx } from "./cx";
 import p from "./patterns.module.css";
 
 export { p as patternStyles };

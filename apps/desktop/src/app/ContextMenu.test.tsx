@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
-import { setOverlaysLocked } from "@/components/overlay";
+import { setOverlaysLocked } from "@hatoba/ui";
 import { ContextMenuHost } from "./ContextMenu";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

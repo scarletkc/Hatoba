@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
+import { Button, Chip, Icon, LinkButton, StatusLine, TextField } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
-import { Button, Icon, LinkButton, TextField } from "@/components/controls";
-import { Chip, StatusLine } from "@/components/patterns";
 import { useT, type MessageKey } from "@/i18n";
 import { toAppError } from "@/ipc/api";
 import type { AiTestResult } from "@/ipc/types";

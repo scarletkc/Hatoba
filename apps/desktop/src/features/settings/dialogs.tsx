@@ -1,9 +1,7 @@
 import { useCallback, useState, type FormEvent } from "react";
+import { Button, Dialog, ErrorText, FooterSpacer, Sheet, SheetHeader, TextField, toast } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
-import { Button, TextField } from "@/components/controls";
-import { Dialog, FooterSpacer, Sheet, SheetHeader, toast } from "@/components/overlay";
-import { ErrorText } from "@/components/patterns";
 import { NewPasswordFields, useNewPassword } from "@/features/onboarding/PasswordStrength";
 import { RecoveryCodeSection } from "@/features/onboarding/RecoveryCode";
 import { useT } from "@/i18n";

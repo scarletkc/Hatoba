@@ -1,4 +1,4 @@
-import { Icon } from "@/components/controls";
+import { Icon } from "@hatoba/ui";
 import { cx } from "@/lib/cx";
 import s from "./OsIcon.module.css";
 

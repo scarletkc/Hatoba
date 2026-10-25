@@ -1,9 +1,18 @@
 import { useState } from "react";
+import {
+  Badge,
+  Button,
+  Group,
+  Icon,
+  IconButton,
+  PopupSelect,
+  confirm,
+  layoutStyles,
+  toast,
+  type SelectOption,
+} from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
-import { Badge, Button, Icon, IconButton } from "@/components/controls";
-import { Group, layoutStyles } from "@/components/layout";
-import { PopupSelect, confirm, toast, type SelectOption } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { ProxyView } from "@/ipc/types";

@@ -1,13 +1,10 @@
 import { useEffect, useId, useRef } from "react";
-import { Button, Icon, LinkButton, TextField } from "@/components/controls";
-import { PopupSelect } from "@/components/overlay";
-import { ErrorText, StatusLine } from "@/components/patterns";
+import { Button, ErrorText, Icon, LinkButton, PopupSelect, StatusLine, TextField, isImeEvent } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { Field } from "@/features/keys/Field";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AppError, SyncConfigInput } from "@/ipc/types";
-import { isImeEvent } from "@/lib/ime";
 import { API_TOKENS_URL, openExternal } from "./external";
 import { EMPTY_D1, type D1Form } from "./wizardTypes";
 import { WizardFrame, WizardTitle } from "./WizardFrame";

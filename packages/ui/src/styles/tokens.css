@@ -1,0 +1,213 @@
+/*
+ * Design tokens, light and dark. Components only reference these variables, never raw colors.
+ * `:root[data-theme="dark"]` switches to the dark set, `data-density="compact"` to the dense rows,
+ * and `data-platform="macos"` to the native macOS fonts.
+ */
+
+/* Text sizes. Styles use these, never raw px. An element marked [data-text-scale] works them out
+   again with the --text-scale it inherits, so one part of a window can take its own text size. */
+:root,
+[data-text-scale] {
+  --text-2xs: calc(10px * var(--text-scale, 1)); /* tiny counts and previews only */
+  --text-xs: calc(11px * var(--text-scale, 1));
+  --text-sm: calc(12px * var(--text-scale, 1));
+  --text-md: calc(13px * var(--text-scale, 1));
+  --text-lg: calc(15px * var(--text-scale, 1));
+  --text-xl: calc(17px * var(--text-scale, 1));
+  --text-title: calc(20px * var(--text-scale, 1));
+}
+
+:root {
+  /* Typography: Segoe UI Variable / Cascadia Mono on Windows, SF on macOS */
+  --font-sans:
+    "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Microsoft YaHei UI", "PingFang SC", "Hiragino Sans GB", "Yu Gothic UI", "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
+  --font-mono:
+    "Cascadia Mono", Consolas, ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "Microsoft YaHei UI",
+    "Yu Gothic UI", monospace;
+
+  /* Icon glyph sizes (Phosphor is a font, so these set font-size) */
+  --icon-10: 10px;
+  --icon-12: 12px;
+  --icon-14: 14px;
+  --icon-16: 16px;
+  --icon-20: 20px;
+  --icon-24: 24px;
+  --icon-28: 28px;
+
+  /* Spacing, for gap */
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-6: 6px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-28: 28px;
+
+  /* Radii, one per level: marks, small parts inside controls, controls, popovers and menus,
+     groups and cards, windows and dialogs. */
+  --radius-hair: 1px;
+  --radius-mark: 2px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* Motion. Fades change only color or opacity, and stay with reduced motion. Moves and resizes take
+     the other durations, which reduced motion sets to zero (base.css). */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  /* Into a hover look. Leaving it takes --motion-fade; pressing is instant (base.css). */
+  --motion-hover: 100ms;
+  --motion-fade: 140ms;
+  --motion-fast: 180ms;
+  --motion-base: 260ms;
+  --motion-slow: 520ms;
+  /* How far a popover or dialog travels and grows as it opens: none with reduced motion. */
+  --motion-rise: 6px;
+  --motion-pop: 0.97;
+
+  /* Sizes */
+  --control-height: 28px;
+  --field-height: 26px;
+  --row: 40px;
+
+  /* Light palette */
+  --win: #ffffff;
+  --side-solid: #ececf1;
+  --side: var(--side-solid);
+  --side-translucent: rgba(236, 236, 241, 0.6);
+  --fg: #1d1d1f;
+  --fg2: rgba(60, 60, 67, 0.75);
+  --fg3: rgba(60, 60, 67, 0.4);
+  --line: rgba(0, 0, 0, 0.075);
+  --line2: rgba(0, 0, 0, 0.12);
+  --fill: rgba(0, 0, 0, 0.045);
+  --fill2: rgba(0, 0, 0, 0.08);
+  --group: rgba(0, 0, 0, 0.025);
+  --sel: rgba(0, 0, 0, 0.075);
+  --accent: #007aff;
+  --rowsel: color-mix(in srgb, var(--accent) 10%, transparent);
+  --accenttint: color-mix(in srgb, var(--accent) 12%, transparent);
+  --field: #ffffff;
+  --fieldline: rgba(0, 0, 0, 0.15);
+  --btn: #ffffff;
+  --btnline: rgba(0, 0, 0, 0.13);
+  --segon: #ffffff;
+  --green: #28a745;
+  --orange: #e08600;
+  --red: #e5342b;
+  --sheet: #ffffff;
+  --winline: rgba(0, 0, 0, 0.22);
+  --shadow: 0 30px 80px rgba(20, 24, 40, 0.22), 0 6px 18px rgba(20, 24, 40, 0.1);
+  --shadow-popover:
+    0 0 0 0.5px var(--winline), 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 10px rgba(0, 0, 0, 0.07),
+    0 14px 36px rgba(0, 0, 0, 0.14);
+  --shadow-btn: 0 0 0 0.5px var(--btnline), 0 1px 1.5px rgba(0, 0, 0, 0.05);
+  --shadow-seg: 0 1px 2px rgba(0, 0, 0, 0.12), 0 0 0 0.5px var(--line);
+  --focus-ring: 0 0 0 1px var(--accent), 0 0 0 3.5px var(--accenttint);
+  --error-ring: 0 0 0 1px var(--red), 0 0 0 3.5px color-mix(in srgb, var(--red) 16%, transparent);
+  --scrim: rgba(0, 0, 0, 0.18);
+
+  /* Tag palette (oklch) */
+  --tag-1: oklch(0.66 0.15 30);
+  --tag-2: oklch(0.76 0.13 80);
+  --tag-3: oklch(0.6 0.13 300);
+  --tag-4: oklch(0.68 0.1 190);
+  --tag-5: oklch(0.62 0.14 255);
+  --tag-6: oklch(0.66 0.11 150);
+  --tag-7: oklch(0.66 0.01 260);
+  --tag-8: oklch(0.7 0.12 340);
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --win: #1e1e20;
+  --side-solid: #2a2a2e;
+  --side: var(--side-solid);
+  --side-translucent: rgba(42, 42, 46, 0.58);
+  --fg: #f5f5f7;
+  --fg2: rgba(235, 235, 245, 0.64);
+  --fg3: rgba(235, 235, 245, 0.32);
+  --line: rgba(255, 255, 255, 0.075);
+  --line2: rgba(255, 255, 255, 0.12);
+  --fill: rgba(255, 255, 255, 0.07);
+  --fill2: rgba(255, 255, 255, 0.11);
+  --group: rgba(255, 255, 255, 0.035);
+  --sel: rgba(255, 255, 255, 0.1);
+  --accent: #0a84ff;
+  --rowsel: color-mix(in srgb, var(--accent) 24%, transparent);
+  --accenttint: color-mix(in srgb, var(--accent) 20%, transparent);
+  --field: rgba(255, 255, 255, 0.055);
+  --fieldline: rgba(255, 255, 255, 0.13);
+  --btn: rgba(255, 255, 255, 0.1);
+  --btnline: rgba(255, 255, 255, 0.07);
+  --segon: rgba(255, 255, 255, 0.18);
+  --green: #30d158;
+  --orange: #ff9f0a;
+  --red: #ff453a;
+  --sheet: #28282b;
+  --winline: rgba(255, 255, 255, 0.14);
+  --shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 6px 18px rgba(0, 0, 0, 0.35);
+  --scrim: rgba(0, 0, 0, 0.4);
+
+  color-scheme: dark;
+}
+
+/* Compact list density */
+:root[data-density="compact"] {
+  --row: 32px;
+}
+
+/* CJK font order: Japanese UI should prefer Yu Gothic over YaHei for unified Han glyphs */
+:root:lang(ja) {
+  --font-sans:
+    "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Yu Gothic UI", "Hiragino Sans", "Microsoft YaHei UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    "Cascadia Mono", Consolas, ui-monospace, "SF Mono", Menlo, "Yu Gothic UI", "Microsoft YaHei UI", monospace;
+}
+
+/* Traditional Chinese UI prefers JhengHei and PingFang TC, whose glyphs follow the Taiwan standard */
+:root:lang(zh-TW) {
+  --font-sans:
+    "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Microsoft JhengHei UI", "PingFang TC", "Microsoft YaHei UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono:
+    "Cascadia Mono", Consolas, ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono",
+    "Microsoft JhengHei UI", "Microsoft YaHei UI", monospace;
+}
+
+/* macOS keeps its native look. The mono stack keeps CJK fallbacks for wide characters. */
+:root[data-platform="macos"] {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", Helvetica,
+    Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "PingFang SC", "Hiragino Sans GB",
+    "Hiragino Sans", monospace;
+}
+
+/* The macOS block above has the same specificity as :root:lang(ja) and comes later, so Japanese and
+   Traditional Chinese need their own rules. */
+:root[data-platform="macos"]:lang(ja) {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", "PingFang SC", "Helvetica Neue", Helvetica,
+    Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "Hiragino Sans", "PingFang SC", monospace;
+}
+
+:root[data-platform="macos"]:lang(zh-TW) {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang TC", "PingFang SC", "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "PingFang TC", "PingFang SC", monospace;
+}

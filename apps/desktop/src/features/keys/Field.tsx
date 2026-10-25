@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ErrorText, HintText } from "@/components/patterns";
+import { ErrorText, HintText } from "@hatoba/ui";
 import s from "./Field.module.css";
 
 /** Label above a control with an optional hint / error line (as in the wizards and dialogs). */

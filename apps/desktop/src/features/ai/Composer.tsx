@@ -9,14 +9,12 @@ import {
   type MutableRefObject,
   type RefObject,
 } from "react";
+import { Icon, LinkButton, Menu, confirm, isImeEvent, toast, useMenu, type MenuEntry } from "@hatoba/ui";
 import { useApp } from "@/app/store";
-import { Icon, LinkButton } from "@/components/controls";
-import { confirm, Menu, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { readClipboard } from "@/features/terminal/clipboard";
 import { useT, type MessageKey } from "@/i18n";
 import type { AiEffort, AiModelRef, AiPermissionMode } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
 import { shortcutLabel } from "@/lib/platform";
 import { AddButton, McpPopover } from "./AddMenu";
 import {

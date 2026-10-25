@@ -22,7 +22,7 @@ A release build runs one Hatoba at a time and hands the arguments of a second la
 
 In the browser, `pnpm dev` uses the mock backend in `apps/desktop/src/ipc/mock` with sample data. URL parameters switch demo states, such as `?state=locked` and `?sync=conflict`. The comment on `createMockApi` in `apps/desktop/src/ipc/mock/index.ts` lists every parameter.
 
-`/?gallery` opens the component gallery instead of the app: every control and pattern in `apps/desktop/src/components` in each state, in light, dark or side by side, at either density. Check it after changing a shared component. Only development builds include it.
+`/?gallery` opens the component gallery instead of the app: every control and pattern in `packages/ui` (`@hatoba/ui`) in each state, in light, dark or side by side, at either density. Check it after changing a shared component. Only development builds include it.
 
 ## Build
 

@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
 import { boot } from "./app/boot";
+import { AppUiStrings } from "./app/UiStrings";
 import "./styles/base.css";
 
 void boot().finally(async () => {
@@ -12,7 +13,9 @@ void boot().finally(async () => {
       : App;
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
-      <Root />
+      <AppUiStrings>
+        <Root />
+      </AppUiStrings>
     </StrictMode>,
   );
 });

@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Icon, LinkButton, StatusDot } from "@/components/controls";
-import { toast } from "@/components/overlay";
-import { HintText } from "@/components/patterns";
+import { Button, HintText, Icon, LinkButton, StatusDot, toast } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { formatDate, formatRelative, useT } from "@/i18n";

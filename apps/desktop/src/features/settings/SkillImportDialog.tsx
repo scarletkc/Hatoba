@@ -1,9 +1,20 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  Button,
+  ErrorText,
+  FooterSpacer,
+  Group,
+  HintText,
+  Icon,
+  LinkButton,
+  Section,
+  Sheet,
+  SheetHeader,
+  StatusLine,
+  TextField,
+  toast,
+} from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
-import { Button, Icon, LinkButton, TextField } from "@/components/controls";
-import { Group, Section } from "@/components/layout";
-import { FooterSpacer, Sheet, SheetHeader, toast } from "@/components/overlay";
-import { ErrorText, HintText, StatusLine } from "@/components/patterns";
 import { formatBytes, useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AppError, SkillImportPreview, SkillIssue, SkillView } from "@/ipc/types";

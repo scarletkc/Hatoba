@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
-import { Button, Icon, Spinner } from "@/components/controls";
-import { Dialog, useOverlaysLocked } from "@/components/overlay";
-import { ErrorText, HintText, ListRow } from "@/components/patterns";
+import { Button, Dialog, ErrorText, HintText, Icon, ListRow, Spinner, useOverlaysLocked } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import type { AiFileChange, AiFilePreview, AiFileRevert } from "@/ipc/types";
 import { cx } from "@/lib/cx";

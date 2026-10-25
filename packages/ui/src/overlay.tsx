@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { create } from "zustand";
-import { useT } from "@/i18n";
-import { cx } from "@/lib/cx";
 import { Button, Icon, controlStyles } from "./controls";
+import { cx } from "./cx";
 import o from "./overlay.module.css";
+import { useUiStrings } from "./strings";
 
 export { o as overlayStyles };
 
 // ───────────────────────── Lock ─────────────────────────
 
-// Overlays render into document.body, outside the app that the lock screen hides (SEC-03), so they
-// hide themselves while the vault is locked.
+// Overlays render into document.body, outside the app that a lock screen hides, so they hide
+// themselves while the app is locked (setOverlaysLocked).
 const useLockStore = create<{ locked: boolean }>(() => ({ locked: false }));
 
 export const useOverlaysLocked = () => useLockStore((st) => st.locked);
@@ -25,7 +25,7 @@ const LAYER_ROLES = new Set(["dialog", "alertdialog", "menu", "listbox", "status
  * stops rendering them, so a copy of their last frame takes their place, inert, while the styles for
  * `[data-closing]` play, and goes once those animations end. The copy fades from the opacity the
  * overlay had, so one closed before it finished appearing leaves nothing behind. `shown` is false
- * while the overlay renders nothing. Nothing stays behind while the vault locks, and nothing is
+ * while the overlay renders nothing. Nothing stays behind while the app locks, and nothing is
  * copied where the browser has no animations to play (tests).
  */
 export function useExitAnimation(ref: RefObject<HTMLElement | null>, shown = true) {
@@ -62,7 +62,7 @@ export function useExitAnimation(ref: RefObject<HTMLElement | null>, shown = tru
   }, [ref, shown]);
 }
 
-/** Hides modals and closes menus while the vault is locked, and cancels a pending `confirm()`. */
+/** Hides modals and closes menus while the app is locked, and cancels a pending `confirm()`. */
 export function setOverlaysLocked(locked: boolean) {
   if (useLockStore.getState().locked === locked) return;
   useLockStore.setState({ locked });
@@ -116,10 +116,11 @@ export interface MenuAnchor {
 }
 
 /**
- * The part of the viewport that menus and popovers stay inside. While Linux paints its own window
- * chrome (`:root[data-floating]`), the viewport also covers the transparent margin around the window
- * surface (`--win-pad`), where clicks pass through to the desktop or start a resize. The margin is in
- * window pixels, which the interface zoom divides into CSS pixels.
+ * The part of the viewport that menus and popovers stay inside. While the app paints its own window
+ * chrome (`:root[data-floating]`, as Hatoba does on Linux), the viewport also covers the transparent
+ * margin around the window surface (`--win-pad`), where clicks pass through to the desktop or start a
+ * resize. The margin is `--win-pad-px` window pixels, which the interface zoom (`--ui-zoom`) divides
+ * into CSS pixels.
  */
 export function windowSurface(): { left: number; top: number; right: number; bottom: number } {
   const root = document.documentElement;
@@ -141,7 +142,7 @@ export function Menu({
   entries: MenuEntry[];
   onClose: () => void;
   minWidth?: number;
-  /** Also shows over the lock screen: only for a menu that shows nothing from the vault. */
+  /** Also shows over the lock screen: only for a menu that shows nothing the lock protects. */
   whileLocked?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -402,7 +403,7 @@ export function Modal({
   onClose?: () => void;
   center?: boolean;
   closeOnBackdrop?: boolean;
-  /** Also shows over the lock screen: only for a dialog that shows nothing from the vault. */
+  /** Also shows over the lock screen: only for a dialog that shows nothing the lock protects. */
   whileLocked?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -525,7 +526,7 @@ export function Dialog({
   onClose?: () => void;
   children?: ReactNode;
   width?: number;
-  /** Also shows over the lock screen: only for a dialog that shows nothing from the vault. */
+  /** Also shows over the lock screen: only for a dialog that shows nothing the lock protects. */
   whileLocked?: boolean;
 }) {
   return (
@@ -554,7 +555,7 @@ export function confirm(options: ConfirmOptions): Promise<boolean> {
 }
 
 export function ConfirmHost() {
-  const t = useT();
+  const strings = useUiStrings();
   const pending = useConfirmStore((st) => st.pending);
   if (!pending) return null;
   const done = (ok: boolean) => {
@@ -571,7 +572,7 @@ export function ConfirmHost() {
       onClose={() => done(false)}
       actions={
         <>
-          <Button onClick={() => done(false)}>{pending.cancelLabel ?? t("btn.cancel")}</Button>
+          <Button onClick={() => done(false)}>{pending.cancelLabel ?? strings.cancel}</Button>
           <Button variant={pending.danger ? "danger" : "primary"} onClick={() => done(true)} autoFocus>
             {pending.confirmLabel}
           </Button>

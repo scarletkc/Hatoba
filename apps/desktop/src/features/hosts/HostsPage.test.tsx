@@ -8,7 +8,7 @@ vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, remo
 
 const { t } = await import("@/i18n");
 const { useVaultData } = await import("@/app/data");
-const { ConfirmHost } = await import("@/components/overlay");
+const { ConfirmHost } = await import("@hatoba/ui");
 const { HostsPage } = await import("./HostsPage");
 const { useHostsUi } = await import("./ui");
 

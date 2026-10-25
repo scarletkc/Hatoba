@@ -36,9 +36,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
-      - run: pnpm --filter @hatoba/desktop typecheck
-      - run: pnpm --filter @hatoba/desktop lint
-      - run: pnpm --filter @hatoba/desktop test
+      - run: pnpm --filter @hatoba/ui --filter @hatoba/desktop typecheck
+      - run: pnpm --filter @hatoba/ui --filter @hatoba/desktop lint
+      - run: pnpm --filter @hatoba/ui --filter @hatoba/desktop test
       - run: pnpm --filter @hatoba/desktop build
 
   worker:

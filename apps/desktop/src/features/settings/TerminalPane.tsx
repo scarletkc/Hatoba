@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { PopupSelect, Segmented, Stepper, Switch, TextField, isImeEvent } from "@hatoba/ui";
 import { useApp } from "@/app/store";
-import { Segmented, Stepper, Switch, TextField } from "@/components/controls";
-import { PopupSelect } from "@/components/overlay";
 import { loadLocalShells, shellName } from "@/features/terminal/localShells";
 import { FONT_SIZE_MAX, FONT_SIZE_MIN, resolveScheme, terminalTheme, useTermSettings } from "@/features/terminal/theme";
 import { useT } from "@/i18n";
 import type { LocalShellView, TerminalSettings } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
 import { defaultTerminalFont } from "@/lib/platform";
 import { SchemePicker } from "./SchemePicker";
 import { Pane, Section, SettingRow, usePrefs, type PaneProps } from "./shared";

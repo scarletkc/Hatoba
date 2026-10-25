@@ -272,7 +272,7 @@ describe("Menu", () => {
   });
 });
 
-describe("vault lock", () => {
+describe("app lock", () => {
   it("hides an open modal while locked and shows it again after unlocking", () => {
     render(
       <Modal>
@@ -302,7 +302,7 @@ describe("vault lock", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("cancels a pending confirmation when the vault locks", async () => {
+  it("cancels a pending confirmation when the app locks", async () => {
     render(<ConfirmHost />);
     let answer: Promise<boolean> | undefined;
     act(() => {

@@ -8,11 +8,10 @@ import {
   type PointerEvent,
   type ReactNode,
 } from "react";
+import { Button, EmptyState, Icon, IconButton, LinkButton, Spinner } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { useTabs, type SessionTab } from "@/app/tabs";
-import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
-import { EmptyState } from "@/components/layout";
 import { reconnectSession } from "@/features/terminal/connect";
 import { shellName } from "@/features/terminal/localShells";
 import { useT } from "@/i18n";

@@ -29,8 +29,8 @@ vi.mock("@/ipc/api", async (importActual) => ({
   },
 }));
 const toast = vi.fn();
-vi.mock("@/components/overlay", async (importActual) => ({
-  ...(await importActual<typeof import("@/components/overlay")>()),
+vi.mock("@hatoba/ui", async (importActual) => ({
+  ...(await importActual<typeof import("@hatoba/ui")>()),
   toast: (...args: unknown[]) => toast(...args),
 }));
 // The app store follows the system theme from its first import; jsdom has no matchMedia.

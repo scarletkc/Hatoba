@@ -10,13 +10,30 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
+import {
+  Button,
+  EmptyState,
+  Icon,
+  IconButton,
+  LinkButton,
+  Menu,
+  PageHeader,
+  SearchField,
+  Segmented,
+  Switch,
+  Tag,
+  TagChip,
+  confirm,
+  isImeEvent,
+  layoutStyles,
+  toast,
+  useMenu,
+  type MenuEntry,
+} from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { useTabs, type TabStatus } from "@/app/tabs";
-import { Button, Icon, IconButton, LinkButton, Segmented, Switch } from "@/components/controls";
-import { EmptyState, PageHeader, SearchField, Tag, TagChip, layoutStyles } from "@/components/layout";
-import { Menu, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { dashboardSwitch, retryHost, setShownOnDashboard } from "@/features/dashboard/actions";
 import { HostDetail } from "@/features/dashboard/HostDetail";
 import {
@@ -46,7 +63,6 @@ import { formatRelative, useT, type Locale, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { GroupView, HostView, ImportSource, LocalPrefs, QuickTarget } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
 import { copyText } from "@/lib/native";
 import { isMac, shortcutLabel } from "@/lib/platform";
 import { GroupDialog, deleteGroup } from "./GroupDialog";

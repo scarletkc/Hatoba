@@ -1,9 +1,7 @@
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ErrorText, Icon, LinkButton, Spinner, overlayStyles, type MenuAnchor } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
-import { Icon, LinkButton, Spinner } from "@/components/controls";
-import { overlayStyles, type MenuAnchor } from "@/components/overlay";
-import { ErrorText } from "@/components/patterns";
 import { formatBytes, useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { useStatusPopover } from "./popover";

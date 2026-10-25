@@ -1,9 +1,7 @@
 import type { ReactNode } from "react";
+import { Group, HintText, layoutStyles, toast } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
-import { Group, layoutStyles } from "@/components/layout";
-import { toast } from "@/components/overlay";
-import { HintText } from "@/components/patterns";
 import { useT } from "@/i18n";
 import type { LocalPrefs, SettingsView, TerminalSettings } from "@/ipc/types";
 import s from "./shared.module.css";

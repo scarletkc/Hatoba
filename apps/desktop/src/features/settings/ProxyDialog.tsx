@@ -1,9 +1,6 @@
 import { useId, useState } from "react";
+import { Button, ErrorText, FooterSpacer, FormRow, Group, Segmented, Sheet, SheetHeader, TextField } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
-import { Button, Segmented, TextField } from "@/components/controls";
-import { FormRow, Group } from "@/components/layout";
-import { FooterSpacer, Sheet, SheetHeader } from "@/components/overlay";
-import { ErrorText } from "@/components/patterns";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { ProxyInput, ProxyKind, ProxyView } from "@/ipc/types";

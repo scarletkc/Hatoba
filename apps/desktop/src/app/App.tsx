@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
-import { ConfirmHost, setOverlaysLocked, ToastHost } from "@/components/overlay";
+import { ConfirmHost, ToastHost, setOverlaysLocked } from "@hatoba/ui";
 import { toggleAiPanel } from "@/features/ai/actions";
 import { AiPanel } from "@/features/ai/AiPanel";
 import { EditFilesHost } from "@/features/ai/EditFiles";

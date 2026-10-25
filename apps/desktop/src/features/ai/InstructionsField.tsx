@@ -1,5 +1,4 @@
-import { TextArea } from "@/components/controls";
-import { ErrorText } from "@/components/patterns";
+import { ErrorText, TextArea } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { textSize } from "./instructions";

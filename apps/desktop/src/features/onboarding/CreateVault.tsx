@@ -1,10 +1,7 @@
 import { useCallback, useState } from "react";
+import { Button, Callout, ErrorText, FooterSpacer } from "@hatoba/ui";
 import { enterUnlocked } from "@/app/boot";
 import { errorMessage } from "@/app/errors";
-import { Button } from "@/components/controls";
-import { Callout } from "@/components/layout";
-import { FooterSpacer } from "@/components/overlay";
-import { ErrorText } from "@/components/patterns";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import { NewPasswordFields, useNewPassword } from "./PasswordStrength";

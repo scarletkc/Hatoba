@@ -1,9 +1,21 @@
 import { useEffect, useId, useRef, useState } from "react";
+import {
+  Button,
+  ErrorText,
+  FooterSpacer,
+  FormRow,
+  Group,
+  HintText,
+  IconButton,
+  Section,
+  Sheet,
+  SheetHeader,
+  StatusLine,
+  TextArea,
+  TextField,
+  confirm,
+} from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
-import { Button, IconButton, TextArea, TextField } from "@/components/controls";
-import { FormRow, Group, Section } from "@/components/layout";
-import { FooterSpacer, Sheet, SheetHeader, confirm } from "@/components/overlay";
-import { ErrorText, HintText, StatusLine } from "@/components/patterns";
 import { formatBytes, useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AppError, SkillDetail, SkillView } from "@/ipc/types";

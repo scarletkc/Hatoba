@@ -1,7 +1,5 @@
 import { useState } from "react";
-import { IconButton, LinkButton, TextField } from "@/components/controls";
-import { Group, Section } from "@/components/layout";
-import { ErrorText, HintText } from "@/components/patterns";
+import { ErrorText, Group, HintText, IconButton, LinkButton, Section, TextField } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import {

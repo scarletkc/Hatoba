@@ -1,4 +1,4 @@
-import { confirm } from "@/components/overlay";
+import { confirm } from "@hatoba/ui";
 import { t } from "@/i18n";
 import s from "./paste.module.css";
 

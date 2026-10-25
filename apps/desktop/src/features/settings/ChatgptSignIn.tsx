@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, Spinner } from "@/components/controls";
-import { Dialog, toast } from "@/components/overlay";
+import { Button, Dialog, Spinner, toast } from "@hatoba/ui";
 import { openExternal } from "@/features/sync/external";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";

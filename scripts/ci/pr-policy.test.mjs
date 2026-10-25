@@ -118,11 +118,15 @@ test("components, styles and copy of the desktop app are UI, tests and logic are
     "apps/desktop/src/styles/tokens.css",
     "apps/desktop/src/i18n/locales/settings.ts",
     "apps/desktop/index.html",
+    "packages/ui/src/overlay.tsx",
+    "packages/ui/src/styles/tokens.css",
   ]) {
     assert.ok(isUiFile(path), path);
   }
   for (const path of [
-    "apps/desktop/src/components/overlay.test.tsx",
+    "packages/ui/src/overlay.test.tsx",
+    "packages/ui/src/tags.ts",
+    "packages/ui/package.json",
     "apps/desktop/src/app/store.ts",
     "apps/desktop/src-tauri/src/lib.rs",
     "apps/site/src/pages/index.astro",

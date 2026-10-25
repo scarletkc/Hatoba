@@ -10,15 +10,21 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { create } from "zustand";
+import {
+  Chip,
+  Icon,
+  Spinner,
+  isImeEvent,
+  overlayStyles,
+  useExitAnimation,
+  useOverlaysLocked,
+  windowSurface,
+} from "@hatoba/ui";
 import { useTabs } from "@/app/tabs";
-import { Icon, Spinner } from "@/components/controls";
-import { overlayStyles, useExitAnimation, useOverlaysLocked, windowSurface } from "@/components/overlay";
-import { Chip } from "@/components/patterns";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AiHostListing, AiSkillCommand } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
 import { attachHostFile, attachHostFolder, attachResource, hostRefusal } from "./commandActions";
 import {
   commandItems,

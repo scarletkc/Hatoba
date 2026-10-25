@@ -1,9 +1,7 @@
+import { Group, PopupSelect, Segmented, Stepper, toast } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { setAiTextSize } from "@/app/zoomKeys";
-import { Segmented, Stepper } from "@/components/controls";
-import { Group } from "@/components/layout";
-import { PopupSelect, toast } from "@/components/overlay";
 import { useAi } from "@/features/ai/store";
 import { AI_TEXT_SIZE_MAX, AI_TEXT_SIZE_MIN } from "@/features/ai/textSize";
 import { useT } from "@/i18n";

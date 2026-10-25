@@ -1,12 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Button, Spinner, TextField } from "@/components/controls";
-import { toast } from "@/components/overlay";
+import { Button, Spinner, TextField, isImeEvent, toast } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { errorMessage } from "@/app/errors";
 import { Field } from "@/features/keys/Field";
 import { useT } from "@/i18n";
-import { isImeEvent } from "@/lib/ime";
 import { refreshSyncStatus } from "./syncUtils";
 import { WizardFrame, WizardTitle } from "./WizardFrame";
 

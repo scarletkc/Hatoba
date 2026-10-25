@@ -1,15 +1,25 @@
 import { useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { Button, controlStyles, DisclosureCaret, Icon, LinkButton, Spinner, TextField } from "@/components/controls";
-import { Callout } from "@/components/layout";
-import { PopupSelect } from "@/components/overlay";
-import { ErrorText, HintText, StatusLine } from "@/components/patterns";
+import {
+  Button,
+  Callout,
+  DisclosureCaret,
+  ErrorText,
+  HintText,
+  Icon,
+  LinkButton,
+  PopupSelect,
+  Spinner,
+  StatusLine,
+  TextField,
+  controlStyles,
+  isImeEvent,
+} from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { Field } from "@/features/keys/Field";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AppError, DeployPlan, DeployStep as Step, DeployTarget } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
 import { API_TOKENS_URL, DEPLOY_TOKEN_URL, openExternal } from "./external";
 import type { T } from "./syncUtils";
 import { DEPLOY_STEPS, EMPTY_DEPLOY, type DeployForm, type StepState } from "./wizardTypes";

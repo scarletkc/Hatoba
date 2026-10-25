@@ -1,10 +1,8 @@
+import { Button, Card, Group, LinkButton, StatusLine, Switch, confirm, toast, type StatusTone } from "@hatoba/ui";
+import { AppLogo } from "@/app/AppLogo";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
 import { useUpdate } from "@/app/update";
-import { AppLogo, Button, LinkButton, Switch } from "@/components/controls";
-import { Group } from "@/components/layout";
-import { confirm, toast } from "@/components/overlay";
-import { Card, StatusLine, type StatusTone } from "@/components/patterns";
 import { Markdown } from "@/features/ai/Markdown";
 import { copyText } from "@/features/keys/clipboard";
 import { useTransfers } from "@/features/sftp/transfers";

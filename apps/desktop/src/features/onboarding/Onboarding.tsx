@@ -1,7 +1,7 @@
 import { useState } from "react";
+import { Button, FooterSpacer, Icon } from "@hatoba/ui";
+import { AppLogo } from "@/app/AppLogo";
 import { WindowChrome } from "@/app/TitleBar";
-import { AppLogo, Button, Icon } from "@/components/controls";
-import { FooterSpacer } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { CreatePassword, CreateRecovery } from "./CreateVault";

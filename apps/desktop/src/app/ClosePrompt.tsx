@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Checkbox } from "@/components/controls";
-import { Dialog } from "@/components/overlay";
+import { Button, Checkbox, Dialog } from "@hatoba/ui";
 import { confirmInstall } from "@/features/settings/AboutPane";
 import { translate, useT } from "@/i18n";
 import { api } from "@/ipc/api";

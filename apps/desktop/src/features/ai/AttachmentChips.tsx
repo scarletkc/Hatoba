@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Button, Chip, DisclosureCaret, Icon, controlStyles } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
-import { Button, controlStyles, DisclosureCaret, Icon } from "@/components/controls";
-import { Chip } from "@/components/patterns";
 import { getSession } from "@/features/terminal/session";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";

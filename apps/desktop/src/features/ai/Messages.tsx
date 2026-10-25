@@ -1,8 +1,21 @@
 import { Fragment, memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Button,
+  Card,
+  Chip,
+  DisclosureCaret,
+  ErrorText,
+  HintText,
+  Icon,
+  IconButton,
+  LinkButton,
+  StatusLine,
+  WarningText,
+  controlStyles,
+  isImeEvent,
+  toast,
+} from "@hatoba/ui";
 import { useApp } from "@/app/store";
-import { Button, controlStyles, DisclosureCaret, Icon, IconButton, LinkButton } from "@/components/controls";
-import { toast } from "@/components/overlay";
-import { Card, Chip, ErrorText, HintText, StatusLine, WarningText } from "@/components/patterns";
 import { readClipboard, writeClipboard } from "@/features/terminal/clipboard";
 import { formatDateTime, formatMessageTime, useT, useToday, type MessageKey } from "@/i18n";
 import type {
@@ -17,7 +30,6 @@ import type {
   McpToolInfo,
 } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
 import {
   askSideQuestion,
   decideCall,

@@ -1,8 +1,7 @@
 import { useState } from "react";
+import { Button, Dialog, TextField, confirm, toast } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
-import { Button, TextField } from "@/components/controls";
-import { Dialog, confirm, toast } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { GroupView } from "@/ipc/types";

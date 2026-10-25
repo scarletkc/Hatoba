@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Icon, IconButton, Switch } from "@/components/controls";
-import { layoutStyles } from "@/components/layout";
-import { Menu, confirm, toast, useMenu } from "@/components/overlay";
-import { Chip, HintText, StatusLine } from "@/components/patterns";
+import {
+  Button,
+  Chip,
+  HintText,
+  Icon,
+  IconButton,
+  Menu,
+  StatusLine,
+  Switch,
+  confirm,
+  layoutStyles,
+  toast,
+  useMenu,
+} from "@hatoba/ui";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { McpServerState, McpServerStatus, McpServerView, McpToolView } from "@/ipc/types";

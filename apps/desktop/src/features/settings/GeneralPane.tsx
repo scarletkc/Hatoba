@@ -1,9 +1,18 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  Button,
+  Group,
+  Icon,
+  Menu,
+  PopupSelect,
+  Switch,
+  controlStyles,
+  toast,
+  useMenu,
+  type MenuEntry,
+} from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
-import { Button, Icon, Switch, controlStyles } from "@/components/controls";
-import { Group } from "@/components/layout";
-import { Menu, PopupSelect, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { formatDateTime, formatRelative, useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { CliActivity, CliCommandView, CloseAction, Language } from "@/ipc/types";

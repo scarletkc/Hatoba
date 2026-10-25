@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
-import { Icon, TextField } from "@/components/controls";
-import { ErrorText, HintText, WarningText } from "@/components/patterns";
+import { ErrorText, HintText, Icon, TextField, WarningText, isImeEvent } from "@hatoba/ui";
 import { useT } from "@/i18n";
-import { isImeEvent } from "@/lib/ime";
 import { COMMON_PASSWORDS } from "./commonPasswords";
 import s from "./PasswordStrength.module.css";
 

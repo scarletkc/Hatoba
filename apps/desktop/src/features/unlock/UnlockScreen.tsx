@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Button, Icon, LinkButton, Spinner } from "@hatoba/ui";
+import { AppLogo } from "@/app/AppLogo";
 import { enterUnlocked } from "@/app/boot";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
 import { WindowChrome } from "@/app/TitleBar";
-import { AppLogo, Button, Icon, LinkButton, Spinner } from "@/components/controls";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import { cx } from "@/lib/cx";

@@ -1,10 +1,10 @@
 import { forwardRef, useState, type CSSProperties, type ReactNode } from "react";
-import { useT } from "@/i18n";
-import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
-import { tagColor } from "@/lib/tags";
 import { Icon, IconButton, controlStyles } from "./controls";
+import { cx } from "./cx";
+import { isImeEvent } from "./ime";
 import l from "./layout.module.css";
+import { useUiStrings } from "./strings";
+import { tagColor } from "./tags";
 
 export { l as layoutStyles };
 
@@ -241,7 +241,7 @@ export function TagInput({
   placeholder: string;
   suggestions?: string[];
 }) {
-  const t = useT();
+  const strings = useUiStrings();
   const [draft, setDraft] = useState("");
   const listId = "tag-suggestions";
   const add = (raw: string) => {
@@ -255,7 +255,7 @@ export function TagInput({
         <TagChip
           key={tag}
           name={tag}
-          removeLabel={t("field.removeTag", { name: tag })}
+          removeLabel={strings.removeTag(tag)}
           onRemove={() => onChange(value.filter((x) => x !== tag))}
         />
       ))}

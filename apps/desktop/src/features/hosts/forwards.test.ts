@@ -34,7 +34,10 @@ vi.mock("@/ipc/api", () => ({
   toAppError: (e: unknown) => e as AppError,
 }));
 vi.mock("@/lib/native", () => ({ windowFocused: async () => ui.focused }));
-vi.mock("@/components/overlay", () => ({ toast: ui.toast }));
+vi.mock("@hatoba/ui", async (importActual) => ({
+  ...(await importActual<typeof import("@hatoba/ui")>()),
+  toast: ui.toast,
+}));
 vi.mock("@/app/data", () => ({
   hostById: () => ui.host,
   useVaultData: { getState: () => ({ reloadHosts: async () => {} }), subscribe: () => () => {} },

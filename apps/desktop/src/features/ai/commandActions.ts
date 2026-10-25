@@ -3,7 +3,7 @@
  * built-in commands run in `Composer.tsx`, which has the selector and the menus they open.
  */
 
-import { toast } from "@/components/overlay";
+import { toast } from "@hatoba/ui";
 import { t } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AiHostRefusal } from "@/ipc/types";

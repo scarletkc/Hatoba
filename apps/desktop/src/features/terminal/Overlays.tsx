@@ -1,7 +1,6 @@
 import { useRef } from "react";
+import { Button, Icon, LinkButton, Spinner, toast, useExitAnimation } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
-import { Button, Icon, LinkButton, Spinner } from "@/components/controls";
-import { toast, useExitAnimation } from "@/components/overlay";
 import { useT } from "@/i18n";
 import type { AppError, HostView, QuickTarget } from "@/ipc/types";
 import { writeClipboard } from "./clipboard";

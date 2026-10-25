@@ -1,8 +1,5 @@
 import { useState } from "react";
-import { Button, LinkButton } from "@/components/controls";
-import { Group, Section } from "@/components/layout";
-import { FooterSpacer, Sheet, SheetHeader } from "@/components/overlay";
-import { HintText } from "@/components/patterns";
+import { Button, FooterSpacer, Group, HintText, LinkButton, Section, Sheet, SheetHeader } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import type { BuiltinSkillView } from "@/ipc/types";
 import { cx } from "@/lib/cx";

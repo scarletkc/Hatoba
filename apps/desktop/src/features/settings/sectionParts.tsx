@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
-import { Icon } from "@/components/controls";
-import { ListRow, StatusLine } from "@/components/patterns";
+import { Icon, ListRow, StatusLine } from "@hatoba/ui";
 import s from "./AiPane.module.css";
 
 /** A loading or load-failed row inside a section's group. */

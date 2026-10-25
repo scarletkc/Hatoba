@@ -8,9 +8,9 @@ import {
   type ReactNode,
   type TextareaHTMLAttributes,
 } from "react";
-import { useT } from "@/i18n";
-import { cx } from "@/lib/cx";
+import { cx } from "./cx";
 import s from "./controls.module.css";
+import { useUiStrings } from "./strings";
 
 export { s as controlStyles };
 
@@ -44,11 +44,6 @@ export function DisclosureCaret({ open, size, className }: { open: boolean; size
   return (
     <Icon name="caret-right" size={size} className={cx(s.disclosureCaret, open && s.disclosureCaretOpen, className)} />
   );
-}
-
-/** The app icon (`src-tauri/app-icon.svg`). `className` sets its size. */
-export function AppLogo({ className }: { className?: string }) {
-  return <div aria-hidden className={cx(s.appLogo, className)} />;
 }
 
 type ButtonVariant = "default" | "primary" | "danger";
@@ -190,7 +185,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
   { mono, large, invalid, secret, leading, trailing, fieldClassName, className, type, ...rest },
   ref,
 ) {
-  const t = useT();
+  const strings = useUiStrings();
   const [revealed, setRevealed] = useState(false);
   return (
     <div
@@ -219,8 +214,8 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
         <button
           type="button"
           className={s.fieldAdornmentButton}
-          aria-label={revealed ? t("field.hide") : t("field.show")}
-          title={revealed ? t("field.hide") : t("field.show")}
+          aria-label={revealed ? strings.hide : strings.show}
+          title={revealed ? strings.hide : strings.show}
           onClick={() => setRevealed((v) => !v)}
         >
           <Icon name={revealed ? "eye-slash" : "eye"} />

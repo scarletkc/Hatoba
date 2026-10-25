@@ -1,5 +1,4 @@
-import { Button, Icon } from "@/components/controls";
-import { Dialog } from "@/components/overlay";
+import { Button, Dialog, Icon } from "@hatoba/ui";
 import { useT, type MessageKey } from "@/i18n";
 import s from "./Dialogs.module.css";
 

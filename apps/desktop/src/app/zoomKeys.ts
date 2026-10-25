@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { toast } from "@/components/overlay";
+import { toast } from "@hatoba/ui";
 import { useAi } from "@/features/ai/store";
 import { AI_TEXT_SIZE_DEFAULT, AI_TEXT_SIZE_MAX, AI_TEXT_SIZE_MIN } from "@/features/ai/textSize";
 import { defaultTerminalSettings, FONT_SIZE_MAX, FONT_SIZE_MIN, useTermSettings } from "@/features/terminal/theme";

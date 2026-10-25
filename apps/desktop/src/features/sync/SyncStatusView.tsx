@@ -1,15 +1,28 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Button, Icon, LinkButton, Switch, TextField } from "@/components/controls";
-import { Group, Row, RowValue, Section, StatusTile } from "@/components/layout";
-import { confirm, toast } from "@/components/overlay";
-import { Chip, ErrorText, ListRow } from "@/components/patterns";
+import {
+  Button,
+  Chip,
+  ErrorText,
+  Group,
+  Icon,
+  LinkButton,
+  ListRow,
+  Row,
+  RowValue,
+  Section,
+  StatusTile,
+  Switch,
+  TextField,
+  confirm,
+  isImeEvent,
+  toast,
+} from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { formatRelative, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { DeviceView, SyncStatus, TooLargeItem, WorkerUpdate } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
 import { DEPLOY_GUIDE_URL, openExternal } from "./external";
 import { ChangePasswordDialog, NewRecoveryDialog, VerifyPasswordDialog } from "@/features/settings/dialogs";
 import { countsLine, deviceIcon, isStale, refreshSyncStatus, type T } from "./syncUtils";

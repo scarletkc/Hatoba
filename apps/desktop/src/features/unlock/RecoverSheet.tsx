@@ -1,9 +1,7 @@
 import { useState, type FormEvent } from "react";
+import { Button, ErrorText, FooterSpacer, HintText, Sheet, SheetHeader, TextField } from "@hatoba/ui";
 import { enterUnlocked } from "@/app/boot";
 import { errorMessage } from "@/app/errors";
-import { Button, TextField } from "@/components/controls";
-import { FooterSpacer, Sheet, SheetHeader } from "@/components/overlay";
-import { ErrorText, HintText } from "@/components/patterns";
 import { NewPasswordFields, useNewPassword } from "@/features/onboarding/PasswordStrength";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";

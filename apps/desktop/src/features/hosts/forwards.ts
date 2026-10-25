@@ -1,10 +1,10 @@
 import { useMemo } from "react";
 import { create } from "zustand";
+import { toast } from "@hatoba/ui";
 import { hostById, useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
-import { toast } from "@/components/overlay";
 import { collectCredentials } from "@/features/terminal/connect";
 import { askPassword, askSecret } from "@/features/terminal/prompts";
 import { needsPassphrase, needsPassword } from "@/features/terminal/session";

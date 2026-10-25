@@ -1,9 +1,7 @@
 import { useState } from "react";
+import { Button, Group, PopupSelect, Switch, toast } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
-import { Button, Switch } from "@/components/controls";
-import { Group } from "@/components/layout";
-import { PopupSelect, toast } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import { shortcutLabel } from "@/lib/platform";

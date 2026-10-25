@@ -1,7 +1,7 @@
+import { toast } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useTabs } from "@/app/tabs";
-import { toast } from "@/components/overlay";
 import { connectHost } from "@/features/terminal/connect";
 import { t } from "@/i18n";
 import { api } from "@/ipc/api";

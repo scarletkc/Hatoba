@@ -1,9 +1,19 @@
 import { useEffect, useId, useRef, useState } from "react";
+import {
+  Button,
+  Chip,
+  ErrorText,
+  FooterSpacer,
+  Group,
+  HintText,
+  Section,
+  Sheet,
+  SheetHeader,
+  TextArea,
+  WarningText,
+  toast,
+} from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
-import { Button, TextArea } from "@/components/controls";
-import { Group, Section } from "@/components/layout";
-import { FooterSpacer, Sheet, SheetHeader, toast } from "@/components/overlay";
-import { Chip, ErrorText, HintText, WarningText } from "@/components/patterns";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { McpImportPreview, McpServerView } from "@/ipc/types";

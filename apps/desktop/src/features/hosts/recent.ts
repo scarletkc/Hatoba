@@ -1,6 +1,6 @@
 import { create } from "zustand";
+import { toast } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
-import { toast } from "@/components/overlay";
 import { t } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { QuickTarget } from "@/ipc/types";

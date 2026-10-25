@@ -1,8 +1,8 @@
+import { confirm, toast } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { useTabs, type SessionTab, type TabSource } from "@/app/tabs";
-import { confirm, toast } from "@/components/overlay";
 import { connectHost, connectTarget, openLocalTerminal } from "@/features/terminal/connect";
 import { getSession, type LiveSession } from "@/features/terminal/session";
 import { getLocale, t, type MessageKey, type Params } from "@/i18n";

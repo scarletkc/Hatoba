@@ -1,4 +1,4 @@
-import { Icon, IconButton } from "@/components/controls";
+import { Icon, IconButton } from "@hatoba/ui";
 import { formatBytes, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import { cx } from "@/lib/cx";

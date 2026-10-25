@@ -1,8 +1,5 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
-import { Button, Icon } from "@/components/controls";
-import { PageHeader, SearchField, EmptyState } from "@/components/layout";
-import { confirm, toast } from "@/components/overlay";
-import { Chip } from "@/components/patterns";
+import { Button, Chip, EmptyState, Icon, PageHeader, SearchField, confirm, toast } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { formatDate, useT } from "@/i18n";

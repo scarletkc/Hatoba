@@ -170,10 +170,10 @@ Before requesting review:
 
 - Run the tests and checks in the [development guide](docs/development.md).
   CI runs on every update to the pull request, and every job must pass.
-- Build UI from the shared components in `apps/desktop/src/components` and the
-  design tokens in `apps/desktop/src/styles/tokens.css`, take icons from
-  Phosphor through the `Icon` component (the app bundles them and loads no
-  icons from the network), and put copy in `apps/desktop/src/i18n/locales/`.
+- Build UI from the shared components and design tokens in `packages/ui`
+  (`@hatoba/ui`), take icons from Phosphor through the `Icon` component (the
+  app bundles them and loads no icons from the network), and put copy in
+  `apps/desktop/src/i18n/locales/`.
 - When behavior changes, update the
   [architecture and requirements](docs/hatoba-spec.md) and any other affected
   docs in the same pull request; the

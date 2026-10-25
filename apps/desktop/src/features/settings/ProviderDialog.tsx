@@ -1,8 +1,28 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Button, Icon, IconButton, LinkButton, Segmented, TextField, controlStyles } from "@/components/controls";
-import { FormRow, Group, Section } from "@/components/layout";
-import { FooterSpacer, Menu, PopupSelect, Sheet, SheetHeader, toast, useMenu } from "@/components/overlay";
-import { ErrorText, HintText, StatusLine, WarningText } from "@/components/patterns";
+import {
+  Button,
+  ErrorText,
+  FooterSpacer,
+  FormRow,
+  Group,
+  HintText,
+  Icon,
+  IconButton,
+  LinkButton,
+  Menu,
+  PopupSelect,
+  Section,
+  Segmented,
+  Sheet,
+  SheetHeader,
+  StatusLine,
+  TextField,
+  WarningText,
+  controlStyles,
+  isImeEvent,
+  toast,
+  useMenu,
+} from "@hatoba/ui";
 import { openExternal } from "@/features/sync/external";
 import { EFFORTS, UNKNOWN_EFFORTS, effortKey } from "@/features/ai/effort";
 import { useT, type MessageKey } from "@/i18n";
@@ -17,7 +37,6 @@ import type {
   AiProviderView,
 } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
 import {
   addModels,
   decisionDrafts,

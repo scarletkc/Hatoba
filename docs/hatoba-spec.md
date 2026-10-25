@@ -4,7 +4,7 @@
 
 This document defines Hatoba's feature scope, architecture, data formats, sync protocol, and security model, and the implementation follows it. Progress on each requirement is tracked in [Implementation status](status.md).
 
-The visuals come from the design tokens in `apps/desktop/src/styles/tokens.css` and the shared components in `apps/desktop/src/components`, which the component gallery shows in each state ([development guide](development.md#run)). New pages and elements are built from them in the same style.
+The visuals come from the design tokens and shared components in `packages/ui` (`@hatoba/ui`), which the component gallery shows in each state ([development guide](development.md#run)). New pages and elements are built from them in the same style.
 
 **Windows is the first platform.** §9.1 covers its title bar, fonts, shortcuts, and so on, and §9.2 what the macOS version (P1) does differently.
 
@@ -99,12 +99,12 @@ hatoba/
 │   ├── src/                  # Frontend
 │   │   ├── app/              # Layout, routing
 │   │   ├── features/         # onboarding, unlock, hosts, terminal, sftp, keys, sync, settings, ai
-│   │   ├── components/       # Shared components
-│   │   ├── styles/           # Design tokens (CSS variables, light and dark)
+│   │   ├── styles/           # The app's own tokens: window chrome, terminal, server logos
 │   │   ├── i18n/             # Message tables
 │   │   └── ipc/              # tauri-specta bindings, frontend contract, browser mock backend
 │   ├── src-tauri/            # Tauri shell: commands, channels, capabilities
 │   └── e2e/                  # WebDriver end-to-end smoke test
+├── packages/ui/              # @hatoba/ui: shared components and design tokens (CSS variables, light and dark)
 ├── crates/
 │   ├── hatoba-ai/            # Model provider adapters, MCP client, web search, URL fetching
 │   ├── hatoba-core/          # Crypto, vault, data model, local store, sync engine

@@ -8,11 +8,21 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import {
+  ErrorText,
+  HintText,
+  Icon,
+  ListRow,
+  Spinner,
+  StatusLine,
+  Switch,
+  overlayStyles,
+  useExitAnimation,
+  useOverlaysLocked,
+  windowSurface,
+} from "@hatoba/ui";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
-import { Icon, Spinner, Switch } from "@/components/controls";
-import { overlayStyles, useExitAnimation, useOverlaysLocked, windowSurface } from "@/components/overlay";
-import { ErrorText, HintText, ListRow, StatusLine } from "@/components/patterns";
 import { useT, type MessageKey } from "@/i18n";
 import type { McpServerState } from "@/ipc/types";
 import { cx } from "@/lib/cx";

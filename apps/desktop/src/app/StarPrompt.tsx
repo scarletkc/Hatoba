@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Button, Icon } from "@/components/controls";
+import { Button, Icon } from "@hatoba/ui";
 import { openExternal } from "@/features/sync/external";
 import { useT } from "@/i18n";
 import { REPO_URL, bugReportUrl } from "@/lib/github";

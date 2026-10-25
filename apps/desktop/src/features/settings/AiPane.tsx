@@ -1,9 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Button,
+  Group,
+  HintText,
+  Icon,
+  IconButton,
+  ListRow,
+  Menu,
+  PopupSelect,
+  Segmented,
+  StatusLine,
+  Switch,
+  confirm,
+  controlStyles,
+  layoutStyles,
+  toast,
+  useMenu,
+  type MenuEntry,
+} from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
-import { Button, Icon, IconButton, Segmented, Switch, controlStyles } from "@/components/controls";
-import { Group, layoutStyles } from "@/components/layout";
-import { Menu, PopupSelect, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
-import { HintText, ListRow, StatusLine } from "@/components/patterns";
 import { LOCAL_TARGET, removeAllowance, savedAllowances, useAllowances } from "@/features/ai/allowances";
 import { EFFORTS, effortKey } from "@/features/ai/effort";
 import { answersText, verdictText } from "@/features/ai/autoText";

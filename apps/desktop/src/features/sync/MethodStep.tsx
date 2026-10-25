@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { Button, Icon, LinkButton } from "@/components/controls";
+import { Button, Chip, Icon, LinkButton } from "@hatoba/ui";
 import { useApp } from "@/app/store";
-import { Chip } from "@/components/patterns";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { EncryptionDialog } from "./EncryptionDialog";

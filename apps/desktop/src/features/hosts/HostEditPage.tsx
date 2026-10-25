@@ -1,11 +1,29 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  Button,
+  EmptyState,
+  FormRow,
+  Group,
+  HintText,
+  Icon,
+  IconButton,
+  LinkButton,
+  PopupSelect,
+  Section,
+  Segmented,
+  StatusDot,
+  TagInput,
+  TextArea,
+  TextField,
+  WarningText,
+  confirm,
+  isImeEvent,
+  toast,
+  type SelectOption,
+} from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
-import { Button, Icon, IconButton, LinkButton, Segmented, StatusDot, TextArea, TextField } from "@/components/controls";
-import { EmptyState, FormRow, Group, Section, TagInput } from "@/components/layout";
-import { PopupSelect, confirm, toast, type SelectOption } from "@/components/overlay";
-import { HintText, WarningText } from "@/components/patterns";
 import { InstructionsField } from "@/features/ai/InstructionsField";
 import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
 import { useT } from "@/i18n";
@@ -13,7 +31,6 @@ import { api, toAppError } from "@/ipc/api";
 import type { AuthKind, HostInput, HostView, KeyView, ProxyMode, QuickTarget } from "@/ipc/types";
 import { proxySummary } from "@/features/settings/proxyLogic";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
 import { ENV_FOCUS_ID, EnvVarsSection } from "./EnvVarsSection";
 import { envInput, envRows, envTooLarge, validateEnvRows, type EnvRow } from "./envVars";
 import { useHostsUi } from "./ui";

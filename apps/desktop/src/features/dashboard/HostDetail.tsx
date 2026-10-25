@@ -1,7 +1,5 @@
 import { useState } from "react";
-import { Button, Icon } from "@/components/controls";
-import { FooterSpacer, Sheet } from "@/components/overlay";
-import { StatusLine, type StatusTone } from "@/components/patterns";
+import { Button, FooterSpacer, Icon, Sheet, StatusLine, type StatusTone } from "@hatoba/ui";
 import { OsIcon } from "@/features/hosts/OsIcon";
 import { Sparkline } from "@/features/terminal/Sparkline";
 import {

@@ -1,4 +1,4 @@
-import { confirm } from "@/components/overlay";
+import { confirm } from "@hatoba/ui";
 import { t, useT } from "@/i18n";
 import type { AiFileChange, AiFilePreview } from "@/ipc/types";
 import { FileChange } from "./FileChange";

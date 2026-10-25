@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { Icon, IconButton, Modal, toast } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { useApp, type SettingsTab } from "@/app/store";
-import { Icon, IconButton } from "@/components/controls";
-import { Modal, toast } from "@/components/overlay";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { SettingsView, TerminalSettings } from "@/ipc/types";

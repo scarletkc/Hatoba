@@ -1,8 +1,8 @@
+import { toast } from "@hatoba/ui";
 import { hostById, useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
-import { toast } from "@/components/overlay";
 import { hostConnected } from "@/features/hosts/connections";
 import { formatTarget, savedHostFor } from "@/features/hosts/quickConnect";
 import { t } from "@/i18n";

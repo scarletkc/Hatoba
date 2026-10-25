@@ -1,9 +1,7 @@
 import { useState } from "react";
+import { Button, ErrorText, FooterSpacer, Icon, Segmented, StatusLine, TextField } from "@hatoba/ui";
 import { enterUnlocked } from "@/app/boot";
 import { errorMessage } from "@/app/errors";
-import { Button, Icon, Segmented, TextField } from "@/components/controls";
-import { FooterSpacer } from "@/components/overlay";
-import { ErrorText, StatusLine } from "@/components/patterns";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { SyncConfigInput } from "@/ipc/types";

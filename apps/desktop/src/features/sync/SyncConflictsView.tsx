@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Icon } from "@/components/controls";
-import { StatusTile } from "@/components/layout";
-import { toast } from "@/components/overlay";
-import { StatusLine } from "@/components/patterns";
+import { Button, Icon, StatusLine, StatusTile, toast } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { formatRelative, useT, type MessageKey } from "@/i18n";

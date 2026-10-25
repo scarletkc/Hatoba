@@ -7,9 +7,7 @@ import {
   type ReactNode,
   type RefCallback,
 } from "react";
-import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
-import { Tag } from "@/components/layout";
-import { Card, Chip } from "@/components/patterns";
+import { Button, Card, Chip, Icon, IconButton, LinkButton, Spinner, Tag } from "@hatoba/ui";
 import { OsIcon } from "@/features/hosts/OsIcon";
 import { formatLoad, formatPercent, formatRate, formatUptime, type StatsReading } from "@/features/terminal/stats";
 import { formatBytes, formatMessageTime, useT, type MessageKey } from "@/i18n";

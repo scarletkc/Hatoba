@@ -1,12 +1,13 @@
 import { readdirSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * Screens take their text sizes, radii and gaps from tokens.css, so the same role looks the same
+ * Screens take their text sizes, radii and gaps from the tokens, so the same role looks the same
  * everywhere. A raw px value in a feature stylesheet fails here: use a token, or add one to
- * tokens.css when no step fits.
+ * @hatoba/ui's tokens.css (or the app's own, for Hatoba's frame) when no step fits.
  */
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -35,8 +36,12 @@ function declarations(css: string): { prop: string; value: string; line: number 
   return found;
 }
 
+const TOKEN_FILES = [
+  createRequire(import.meta.url).resolve("@hatoba/ui/tokens.css"),
+  resolve(SRC, "styles/tokens.css"),
+];
 const tokens = new Set(
-  [...readFileSync(resolve(SRC, "styles/tokens.css"), "utf8").matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]),
+  TOKEN_FILES.flatMap((file) => [...readFileSync(file, "utf8").matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1])),
 );
 
 describe("feature stylesheets", () => {

@@ -1,4 +1,4 @@
-import { controlStyles, Icon, IconButton, StatusDot } from "@/components/controls";
+import { Icon, IconButton, StatusDot, controlStyles } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import type { TabStatus } from "@/app/tabs";
 import { cx } from "@/lib/cx";

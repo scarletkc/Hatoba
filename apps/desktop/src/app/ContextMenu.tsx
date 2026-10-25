@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Menu, toast, useOverlaysLocked, type MenuAnchor, type MenuEntry } from "@/components/overlay";
+import { Menu, toast, useOverlaysLocked, type MenuAnchor, type MenuEntry } from "@hatoba/ui";
 import { readClipboard, writeClipboard } from "@/features/terminal/clipboard";
 import { useT, type MessageKey } from "@/i18n";
 import { shortcutLabel, type Platform } from "@/lib/platform";

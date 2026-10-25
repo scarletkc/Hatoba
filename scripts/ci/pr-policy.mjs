@@ -86,11 +86,14 @@ export function linkedIssues(body, repo) {
   return [...new Set(numbers)];
 }
 
-/** Whether a change to the file at `path` changes the desktop app's UI, which needs screenshots. */
+/**
+ * Whether a change to the file at `path` changes the desktop app's UI, which needs screenshots: its
+ * own screens or the shared components and tokens in packages/ui.
+ */
 export function isUiFile(path) {
-  if (!path.startsWith("apps/desktop/")) return false;
   if (path === "apps/desktop/index.html" || path.startsWith("apps/desktop/src/i18n/locales/")) return true;
-  if (!path.startsWith("apps/desktop/src/") || /\.test\.tsx?$/.test(path)) return false;
+  if (!path.startsWith("apps/desktop/src/") && !path.startsWith("packages/ui/src/")) return false;
+  if (/\.test\.tsx?$/.test(path)) return false;
   return path.endsWith(".tsx") || path.endsWith(".css");
 }
 
