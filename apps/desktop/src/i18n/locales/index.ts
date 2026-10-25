@@ -11,7 +11,7 @@ import vault from "./vault";
 
 const tables = [common, hosts, dashboard, terminal, keys, sync, vault, settings, ai, aiSettings];
 
-export type Locale = "zh-CN" | "en" | "ja";
+export type Locale = "zh-CN" | "zh-TW" | "en" | "ja";
 
 type Zh<T extends { "zh-CN": object }> = T["zh-CN"];
 type AllZh = Zh<typeof common> &
@@ -33,6 +33,7 @@ function merge(locale: Locale): Record<string, string> {
 
 export const messages: Record<Locale, Record<string, string>> = {
   "zh-CN": merge("zh-CN"),
+  "zh-TW": merge("zh-TW"),
   en: merge("en"),
   ja: merge("ja"),
 };

@@ -10,6 +10,7 @@ import { messages, type Locale, type MessageKey } from "./locales";
 /** The English name of each language that gets label files. */
 const LANGUAGE_NAME: Record<Exclude<Locale, "en">, string> = {
   "zh-CN": "Simplified Chinese",
+  "zh-TW": "Traditional Chinese",
   ja: "Japanese",
 };
 

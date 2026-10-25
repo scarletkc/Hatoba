@@ -1,5 +1,5 @@
 /**
- * The English text of the site, which zh.ts and ja.ts translate. `meta.description` is the one-line
+ * The English text of the site, which zh.ts, zhTW.ts and ja.ts translate. `meta.description` is the one-line
  * description of Hatoba that the README, package.json, and the repository share; the other languages
  * translate it, and every page's description and the structured data start from it.
  */

@@ -152,6 +152,7 @@ function LanguageRow() {
   const languages: { value: Language; label: string }[] = [
     { value: "system", label: t("settings.language.system") },
     { value: "zh-CN", label: t("settings.language.zh") },
+    { value: "zh-TW", label: t("settings.language.zhTW") },
     { value: "en", label: t("settings.language.en") },
     { value: "ja", label: t("settings.language.ja") },
   ];

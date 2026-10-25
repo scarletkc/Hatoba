@@ -46,7 +46,11 @@ const image = new URL(localePath(translated ? locale : "en", "/og.png"), SITE_UR
  * languages for them.
  */
 const LOCALE_KEY = "hatoba.locale";
-const paths = JSON.stringify({ zh: localePath("zh", path), ja: localePath("ja", path) });
+const paths = JSON.stringify({
+  zh: localePath("zh", path),
+  tw: localePath("zh-tw", path),
+  ja: localePath("ja", path),
+});
 const redirect =
   locale === "en" && translated
     ? `try {
@@ -55,7 +59,9 @@ const redirect =
           for (const language of navigator.languages || [navigator.language]) {
             const tag = language.toLowerCase();
             if (tag.startsWith("en")) break;
-            const target = tag.startsWith("zh") ? paths.zh : tag.startsWith("ja") ? paths.ja : "";
+            // Traditional Chinese for Taiwan, Hong Kong and Macau, and wherever the script is named, as the app picks it.
+            const chinese = /^zh-(hant|tw|hk|mo)(-|$)/.test(tag) ? paths.tw : paths.zh;
+            const target = tag.startsWith("zh") ? chinese : tag.startsWith("ja") ? paths.ja : "";
             if (target) {
               location.replace(target + location.search + location.hash);
               break;

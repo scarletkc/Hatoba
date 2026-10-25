@@ -975,7 +975,7 @@ The design tokens and shared components define the visuals (§0). This section o
 - Shortcuts: see WIN-04 in §9.1, and MAC-03 in §9.2 for macOS.
 - Input methods: the Enter that commits an input method candidate never submits, saves, or sends.
 - The theme follows the system by default, and every token has a light and a dark value.
-- Internationalization: **all copy is externalized from day one, with no hard-coded strings** (P0). Simplified Chinese, Japanese, and English translations are P1, and the default follows the system language. MCP server errors (AI-29) are the exception: their messages stay in English under a translated label.
+- Internationalization: **all copy is externalized from day one, with no hard-coded strings** (P0). Simplified Chinese, Traditional Chinese, Japanese, and English translations are P1, and the default follows the system language. MCP server errors (AI-29) are the exception: their messages stay in English under a translated label.
 - §9.1 covers the Windows title bar, fonts, and backdrop, and §9.2 the macOS ones.
 
 ### 9.1 Windows adaptation
@@ -985,7 +985,7 @@ Windows has its own title bar, fonts, backdrop, and shortcuts, as below. The res
 | ID | Requirement | Priority |
 |---|---|---|
 | WIN-01 | Custom title bar (Tauri `decorations: false`): the tab bar and the title bar are one, with Windows-style minimize, maximize, and close buttons at the top right. It supports dragging, double-click to maximize, and Windows 11 Snap Layouts on hovering the maximize button (tauri-plugin-decorum and similar projects are useful references) | P0 |
-| WIN-02 | Font mapping: the UI font SF Pro becomes `Segoe UI Variable`, falling back to `Segoe UI` on Windows 10. The terminal font SF Mono becomes `Cascadia Mono`, falling back to `Consolas`. Chinese falls back to `Microsoft YaHei UI`, and Japanese to `Yu Gothic UI` | P0 |
+| WIN-02 | Font mapping: the UI font SF Pro becomes `Segoe UI Variable`, falling back to `Segoe UI` on Windows 10. The terminal font SF Mono becomes `Cascadia Mono`, falling back to `Consolas`. Chinese falls back to `Microsoft YaHei UI` (`Microsoft JhengHei UI` for Traditional Chinese), and Japanese to `Yu Gothic UI` | P0 |
 | WIN-03 | High DPI and multiple monitors: sharp at 100%, 125%, 150%, and 200% scaling, with no blur or misplacement when the window moves between monitors with different scaling | P0 |
 | WIN-04 | Shortcuts (see the table below). While the terminal has focus, Ctrl+letter must reach the remote side unchanged (Ctrl+L clears the screen, Ctrl+W deletes a word, Ctrl+K deletes to the end of the line, and so on), so every app-level shortcut adds Shift. The zoom keys (TERM-13) are not Ctrl+letter and need none | P0 |
 | WIN-05 | Terminal copy and paste: Ctrl+C copies when text is selected and sends `^C` otherwise. Ctrl+V and Ctrl+Shift+V both paste. Right-click can be set to copy if text is selected and paste otherwise (the PuTTY habit), or to open a menu. The default is the PuTTY habit (macOS: MAC-04) | P0 |
@@ -1018,7 +1018,7 @@ The macOS version (P1, §11) keeps the native macOS elements: the traffic-light 
 | ID | Requirement | Priority |
 |---|---|---|
 | MAC-01 | Title bar: the native traffic-light buttons over the window content (Tauri `TitleBarStyle::Overlay`, no title), centered on the row of the 44 pt title bar, where the tab bar centers its tabs, and over the home tab's navigation rail, which is 96 pt wide on macOS so they keep 18 pt from both its edges. They stay put as the interface zooms in (TERM-13): the rail grows with what it holds above 100%, and the title bar with its tabs from 150%, so the lights keep to their left and top, as by a wider Finder sidebar. The tab bar starts past the rail on every tab | P1 |
-| MAC-02 | Fonts: the UI uses the system font, falling back to `PingFang SC` for Chinese and `Hiragino Sans` for Japanese. A vault created on macOS starts with the terminal font `Menlo`, because WebKit cannot use SF Mono by name, and the terminal falls back to the same CJK fonts | P1 |
+| MAC-02 | Fonts: the UI uses the system font, falling back to `PingFang SC` for Chinese (`PingFang TC` for Traditional Chinese) and `Hiragino Sans` for Japanese. A vault created on macOS starts with the terminal font `Menlo`, because WebKit cannot use SF Mono by name, and the terminal falls back to the same CJK fonts | P1 |
 | MAC-03 | Shortcuts: the macOS column of the table in §9.1. App shortcuts use ⌘, so Ctrl+letter always reaches the remote side unchanged. The zoom keys (TERM-13) have no wheel zoom on macOS | P1 |
 | MAC-04 | Secondary click in the terminal opens the menu by default, and **Right-Click in Terminal** can switch it to copy and paste (WIN-05). The default applies only while the setting is unset, so an explicit choice still syncs between devices (§5.1) | P1 |
 | MAC-05 | Retina displays: sharp at every scale, and a file dropped from Finder on the SFTP panel or the AI panel lands where it is released | P1 |

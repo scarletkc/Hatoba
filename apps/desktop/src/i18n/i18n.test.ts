@@ -15,12 +15,12 @@ const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1
 describe("message tables", () => {
   const zh = messages["zh-CN"];
 
-  it.each(["en", "ja"] as const)("%s has every zh-CN key", (locale) => {
+  it.each(["zh-TW", "en", "ja"] as const)("%s has every zh-CN key", (locale) => {
     const missing = Object.keys(zh).filter((k) => !(k in messages[locale]));
     expect(missing).toEqual([]);
   });
 
-  it.each(["en", "ja"] as const)("%s uses the same placeholders as zh-CN", (locale) => {
+  it.each(["zh-TW", "en", "ja"] as const)("%s uses the same placeholders as zh-CN", (locale) => {
     const table = messages[locale];
     const mismatched = Object.keys(zh).filter(
       (k) => k in table && placeholders(zh[k]).join() !== placeholders(table[k]).join(),
@@ -29,7 +29,7 @@ describe("message tables", () => {
   });
 
   it("has no empty strings", () => {
-    for (const locale of ["zh-CN", "en", "ja"] as const) {
+    for (const locale of ["zh-CN", "zh-TW", "en", "ja"] as const) {
       const empty = Object.entries(messages[locale])
         .filter(([, v]) => !v.trim())
         .map(([k]) => k);
@@ -48,7 +48,12 @@ describe("translate", () => {
 
 describe("locale helpers", () => {
   it("detects the system language", () => {
-    expect(detectLocale(["zh-TW"])).toBe("zh-CN");
+    expect(detectLocale(["zh-CN"])).toBe("zh-CN");
+    expect(detectLocale(["zh-SG"])).toBe("zh-CN");
+    expect(detectLocale(["zh-Hans-HK"])).toBe("zh-CN");
+    expect(detectLocale(["zh-TW"])).toBe("zh-TW");
+    expect(detectLocale(["zh-HK"])).toBe("zh-TW");
+    expect(detectLocale(["zh-Hant"])).toBe("zh-TW");
     expect(detectLocale(["ja-JP"])).toBe("ja");
     expect(detectLocale(["fr-FR", "en-GB"])).toBe("en");
     expect(detectLocale(["fr-FR"])).toBe("en");
@@ -123,6 +128,7 @@ describe("document language", () => {
     ["en-US", "en"],
     ["ja-JP", "ja"],
     ["zh-CN", "zh-CN"],
+    ["zh-TW", "zh-TW"],
   ] as const)("matches the locale from startup on a %s system", async (system, locale) => {
     vi.spyOn(navigator, "languages", "get").mockReturnValue([system]);
     document.documentElement.lang = "";

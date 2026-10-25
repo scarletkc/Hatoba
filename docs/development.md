@@ -206,7 +206,7 @@ The scripts in [`scripts/media`](../scripts/media) capture the screenshots and t
 pip install -r scripts/media/requirements.txt
 playwright install chromium
 python scripts/media/screenshots.py                  # ai-assistant, ai-approval, dashboard, and sync-deploy PNGs
-python scripts/media/screenshots.py --locale zh-CN   # the same in Chinese, and with --locale ja in Japanese
+python scripts/media/screenshots.py --locale zh-CN   # the same in Chinese, and with --locale zh-TW or ja in Traditional Chinese or Japanese
 python scripts/media/promo/capture.py                # the app's states that the film shows, in English and Chinese
 python scripts/media/promo/render.py --lang en --music track.mp3 --music-offset 0.37   # hatoba-promo-en.mp4, and --lang zh
 ```
@@ -217,7 +217,7 @@ The repository's social preview, the image that links to the repository show, is
 
 ## Website
 
-The website at https://hatoba.fog.moe is an Astro site in [`apps/site`](../apps/site), in English, Chinese, and Japanese. Its text is in `apps/site/src/i18n`, where `en.ts` holds the English that the other files translate. The [Site workflow](../.github/workflows/site.yml) builds it for pull requests that touch it or the desktop frontend, and deploys it to GitHub Pages from `main` and after each release.
+The website at https://hatoba.fog.moe is an Astro site in [`apps/site`](../apps/site), in English, Simplified and Traditional Chinese, and Japanese. Its text is in `apps/site/src/i18n`, where `en.ts` holds the English that the other files translate. The [Site workflow](../.github/workflows/site.yml) builds it for pull requests that touch it or the desktop frontend, and deploys it to GitHub Pages from `main` and after each release.
 
 ```sh
 pnpm --filter @hatoba/site dev    # http://localhost:4321

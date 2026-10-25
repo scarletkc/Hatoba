@@ -994,6 +994,8 @@ pub enum Language {
     System,
     #[serde(rename = "zh-CN")]
     ZhCn,
+    #[serde(rename = "zh-TW")]
+    ZhTw,
     #[serde(rename = "en")]
     En,
     #[serde(rename = "ja")]

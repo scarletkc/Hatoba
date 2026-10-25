@@ -1928,7 +1928,7 @@ export type KeyView = {
 	used_by: string[],
 };
 
-export type Language = "system" | "zh-CN" | "en" | "ja";
+export type Language = "system" | "zh-CN" | "zh-TW" | "en" | "ja";
 
 /**  A second launch handed its arguments to this window (HOST-13); `launch_take` returns them. */
 export type LaunchEvent = null;

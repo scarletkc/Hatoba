@@ -238,6 +238,16 @@
     "Cascadia Mono", Consolas, ui-monospace, "SF Mono", Menlo, "Yu Gothic UI", "Microsoft YaHei UI", monospace;
 }
 
+/* Traditional Chinese UI prefers JhengHei and PingFang TC, whose glyphs follow the Taiwan standard */
+:root:lang(zh-TW) {
+  --font-sans:
+    "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Microsoft JhengHei UI", "PingFang TC", "Microsoft YaHei UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono:
+    "Cascadia Mono", Consolas, ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono",
+    "Microsoft JhengHei UI", "Microsoft YaHei UI", monospace;
+}
+
 /* macOS keeps its native look (P1). The mono stack keeps CJK fallbacks for wide characters (TERM-02).
    The native traffic lights stay where the window was made (tao puts them back on every redraw), so
    the title bar keeps its 44 window pixels as the interface zooms, while it can hold the 28 px tabs. */
@@ -254,11 +264,20 @@
     "Hiragino Sans", monospace;
 }
 
-/* The macOS block above has the same specificity as :root:lang(ja) and comes later, so Japanese needs its own rule. */
+/* The macOS block above has the same specificity as :root:lang(ja) and comes later, so Japanese and
+   Traditional Chinese need their own rules. */
 :root[data-platform="macos"]:lang(ja) {
   --font-sans:
     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", "PingFang SC", "Helvetica Neue", Helvetica,
     Arial, sans-serif;
   --font-mono:
     ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "Hiragino Sans", "PingFang SC", monospace;
+}
+
+:root[data-platform="macos"]:lang(zh-TW) {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang TC", "PingFang SC", "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "PingFang TC", "PingFang SC", monospace;
 }

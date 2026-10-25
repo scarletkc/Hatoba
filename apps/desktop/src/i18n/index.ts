@@ -2,13 +2,14 @@ import { useMemo, useSyncExternalStore } from "react";
 import { messages, type Locale, type MessageKey } from "./locales";
 
 export type { Locale, MessageKey };
-export const LOCALES: Locale[] = ["zh-CN", "en", "ja"];
+export const LOCALES: Locale[] = ["zh-CN", "zh-TW", "en", "ja"];
 
 /** Picks a supported locale from the OS / WebView language list (default: system language). */
 export function detectLocale(languages: readonly string[] = navigator.languages ?? [navigator.language]): Locale {
   for (const raw of languages) {
     const lang = raw.toLowerCase();
-    if (lang.startsWith("zh")) return "zh-CN";
+    // Traditional Chinese for Taiwan, Hong Kong and Macau, and wherever the script is named.
+    if (lang.startsWith("zh")) return /^zh-(hant|tw|hk|mo)(-|$)/.test(lang) ? "zh-TW" : "zh-CN";
     if (lang.startsWith("ja")) return "ja";
     if (lang.startsWith("en")) return "en";
   }

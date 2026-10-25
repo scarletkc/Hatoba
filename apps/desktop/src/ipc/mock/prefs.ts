@@ -5,7 +5,7 @@ type ChoicePref = "language" | "appearance" | "density" | "ai_permission_mode" |
 
 /** The values this build knows for each pref that is one of a set; the record keys keep them complete. */
 const CHOICES: { [K in ChoicePref]: Record<LocalPrefs[K], true> } = {
-  language: { system: true, "zh-CN": true, en: true, ja: true },
+  language: { system: true, "zh-CN": true, "zh-TW": true, en: true, ja: true },
   appearance: { system: true, light: true, dark: true },
   density: { regular: true, compact: true },
   ai_permission_mode: { manual: true, auto: true, bypass: true },

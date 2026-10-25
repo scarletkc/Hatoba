@@ -5,6 +5,7 @@ import { repoRoot } from "../lib/docs";
 import { en } from "./en";
 import { ja } from "./ja";
 import { zh } from "./zh";
+import { zhTW } from "./zhTW";
 
 const root = repoRoot();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -19,7 +20,7 @@ describe("the description of Hatoba", () => {
   });
 
   it("is translated whole", () => {
-    for (const messages of [zh, ja]) {
+    for (const messages of [zh, zhTW, ja]) {
       for (const word of ["SSH", "AI", "Cloudflare"]) expect(messages.meta.description).toContain(word);
     }
   });
@@ -27,7 +28,7 @@ describe("the description of Hatoba", () => {
 
 describe("the translations", () => {
   it("have as many points and items as the English", () => {
-    for (const messages of [zh, ja]) {
+    for (const messages of [zh, zhTW, ja]) {
       expect(messages.ai.points).toHaveLength(en.ai.points.length);
       expect(messages.sync.points).toHaveLength(en.sync.points.length);
       expect(messages.essentials.items).toHaveLength(en.essentials.items.length);

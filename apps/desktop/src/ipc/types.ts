@@ -858,7 +858,7 @@ export interface SettingsPatch {
   terminal?: Partial<TerminalSettings>;
 }
 
-export type Language = "system" | "zh-CN" | "en" | "ja";
+export type Language = "system" | "zh-CN" | "zh-TW" | "en" | "ja";
 
 /** The interface zoom in effect (TERM-13). */
 export interface ZoomView {

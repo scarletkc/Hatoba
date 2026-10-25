@@ -148,7 +148,7 @@ describe("forkTitle", () => {
   });
 
   it("cuts a long title so the mark still fits in 200 characters", () => {
-    for (const locale of ["en", "zh-CN", "ja"] as const) {
+    for (const locale of ["en", "zh-CN", "zh-TW", "ja"] as const) {
       const title = forkTitle(tr(locale), "日".repeat(200), []);
       expect([...title].length).toBe(200);
       expect(title.endsWith(translate(locale, "ai.fork.title", { title: "" }).trim())).toBe(true);

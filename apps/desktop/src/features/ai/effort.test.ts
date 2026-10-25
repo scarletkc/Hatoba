@@ -81,7 +81,7 @@ describe("thinking levels (AI-05)", () => {
 
   it("sorts levels and labels every one in every language", () => {
     expect(sortEfforts(["max", "low", "high", "low"])).toEqual(["low", "high", "max"]);
-    for (const locale of ["zh-CN", "en", "ja"] as const) {
+    for (const locale of ["zh-CN", "zh-TW", "en", "ja"] as const) {
       const labels = [null, ...EFFORTS].map((e) => translate(locale, effortKey(e)));
       expect(new Set(labels).size).toBe(6);
       for (const label of labels) expect(label).not.toMatch(/^ai\.effort/);

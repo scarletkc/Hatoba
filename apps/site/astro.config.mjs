@@ -11,13 +11,13 @@ export default defineConfig({
     shikiConfig: { theme: "css-variables" },
   },
   i18n: {
-    locales: ["en", "zh", "ja"],
+    locales: ["en", "zh", "zh-tw", "ja"],
     defaultLocale: "en",
     routing: { prefixDefaultLocale: false },
   },
   integrations: [
     sitemap({
-      i18n: { defaultLocale: "en", locales: { en: "en", zh: "zh-CN", ja: "ja" } },
+      i18n: { defaultLocale: "en", locales: { en: "en", zh: "zh-CN", "zh-tw": "zh-TW", ja: "ja" } },
     }),
   ],
   vite: {

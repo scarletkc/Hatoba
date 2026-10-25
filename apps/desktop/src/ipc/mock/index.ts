@@ -65,7 +65,7 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  *   ?launch=<command line>                  ?cli=offpath
  *   ?close=prompt                           ?hello=off   ?pin=on | persist
  *   ?biometric=unavailable | stale | cancelled   (how Windows Hello or Touch ID fails)
- *   ?lang=en | zh-CN | ja
+ *   ?lang=en | zh-CN | zh-TW | ja
  * Quick connect (HOST-12) asks to trust a new host key once per address, then for the password
  * (anything but "wrong" is accepted); targets whose address contains "timeout" fail with a timeout.
  * Connecting to staging-web-02 always fails with a timeout; with `?ssh`, every host fails with that

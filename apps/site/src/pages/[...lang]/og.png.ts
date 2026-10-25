@@ -20,6 +20,7 @@ const AMPLITUDE = 36;
 const FOLDER: Record<Locale, string> = {
   en: "docs/media",
   zh: "apps/site/src/assets/screenshots/zh-CN",
+  "zh-tw": "apps/site/src/assets/screenshots/zh-TW",
   ja: "apps/site/src/assets/screenshots/ja",
 };
 

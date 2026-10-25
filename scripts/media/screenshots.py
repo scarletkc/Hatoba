@@ -1,6 +1,6 @@
 """Capture the website's screenshots from the frontend's mock backend.
 
-usage: python scripts/media/screenshots.py [--locale en|zh-CN|ja] [--out DIR] [--url URL]
+usage: python scripts/media/screenshots.py [--locale en|zh-CN|zh-TW|ja] [--out DIR] [--url URL]
 
 Needs `pnpm dev` running; --url defaults to http://localhost:1420. The English screenshots go to
 docs/media and the Chinese and Japanese ones to apps/site/src/assets/screenshots/<locale>, where
@@ -46,6 +46,19 @@ LOCALES = {
         "stats": "资源占用",
         "sync": "云同步",
         "continue": "继续",
+        "deploy": "部署",
+        "deployed": "同步 Worker 已部署",
+    },
+    "zh-TW": {
+        "browser": "zh-TW",
+        "prompt": "這台機器上的 nginx 一直回傳 502，找出原因並修好它。",
+        "show_ai": "顯示 AI 面板",
+        "run": "執行",
+        "fixed": "修好了。",
+        "cards": "卡片",
+        "stats": "資源使用量",
+        "sync": "雲端同步",
+        "continue": "繼續",
         "deploy": "部署",
         "deployed": "同步 Worker 已部署",
     },

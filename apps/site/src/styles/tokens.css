@@ -157,6 +157,10 @@
     "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans CJK JP", "Source Han Sans JP";
 }
 
+:root:lang(zh-TW) {
+  --cjk: "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", "Noto Sans CJK TC", "Source Han Sans TC";
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --paper: #0b1430;

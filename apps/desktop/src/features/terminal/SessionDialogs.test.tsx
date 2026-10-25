@@ -48,7 +48,7 @@ describe("host key dialogs", () => {
     expect(dialog.textContent).toContain("SHA256:received-demo-key");
   });
 
-  it.each(["en", "zh-CN", "ja"] as const)(
+  it.each(["en", "zh-CN", "zh-TW", "ja"] as const)(
     "shows the other trusted key when asking to trust a new key type in %s",
     (locale) => {
       const dialog = show({ known_key_type: "ssh-rsa", known_fingerprint: "SHA256:trusted-demo-rsa" }, locale);

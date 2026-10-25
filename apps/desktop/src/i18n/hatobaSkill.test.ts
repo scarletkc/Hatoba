@@ -46,6 +46,25 @@ const files: SkillFile[] = [
 const referenceFiles = files.filter((f) => f.name !== "SKILL.md");
 const generated = labelFiles();
 const mentions = (text: string) => new Set(text.match(/references\/[A-Za-z0-9_./-]+\.md/g) ?? []);
+/** SKILL.md names the label files by this pattern, with the languages and areas that fill it in. */
+const LABEL_PATTERN = "`references/labels/<language>-<area>.md`";
+
+/** The label files SKILL.md names by the pattern: those whose language it gives as `code` and whose area it has a row for. */
+function patternMentions(text: string): Set<string> {
+  if (!text.includes(LABEL_PATTERN)) return new Set();
+  return new Set(
+    AREAS.flatMap((area) => {
+      if (!text.includes(`| \`${area.name}\` |`)) return [];
+      return generated
+        .map((f) => f.path)
+        .filter((path) => {
+          const name = path.slice(LABELS.length + 1);
+          if (!name.endsWith(`-${area.name}.md`)) return false;
+          return text.includes(`\`${name.slice(0, -`-${area.name}.md`.length)}\``);
+        });
+    }),
+  );
+}
 
 describe("built-in hatoba skill", () => {
   it("has SKILL.md and reference files", () => {
@@ -89,7 +108,7 @@ describe("built-in hatoba skill", () => {
   });
 
   it("links every reference file from SKILL.md, and links only existing files", () => {
-    const linked = mentions(files[0].text);
+    const linked = new Set([...mentions(files[0].text), ...patternMentions(files[0].text)]);
     const present = new Set(referenceFiles.map((f) => f.name));
     expect([...present].filter((n) => !linked.has(n)).map((n) => `SKILL.md does not mention ${n}`)).toEqual([]);
     expect(

@@ -500,13 +500,24 @@ pub fn emit_status(app: &AppHandle) {
 fn conflict_suffix(app: &AppHandle) -> &'static str {
     use crate::dto::Language;
     let lang = match crate::commands::settings::prefs_get(state(app)).map(|p| p.language) {
-        Ok(Language::ZhCn) => "zh".to_owned(),
+        Ok(Language::ZhCn) => "zh-cn".to_owned(),
+        Ok(Language::ZhTw) => "zh-tw".to_owned(),
         Ok(Language::Ja) => "ja".to_owned(),
         Ok(Language::En) => "en".to_owned(),
         _ => crate::platform::system::locale(),
     };
     if lang.starts_with("zh") {
-        "（冲突副本）"
+        // Traditional Chinese for Taiwan, Hong Kong and Macau, and wherever the script is named, as
+        // `detectLocale` in the frontend picks it.
+        let traditional = matches!(
+            lang.split(['-', '_', '.']).nth(1),
+            Some("hant" | "tw" | "hk" | "mo")
+        );
+        if traditional {
+            "（衝突副本）"
+        } else {
+            "（冲突副本）"
+        }
     } else if lang.starts_with("ja") {
         "（競合コピー）"
     } else {
