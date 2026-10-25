@@ -362,11 +362,13 @@ async fn shell_output_is_batched_in_chunks_of_at_most_32k() {
                 total += d.len();
                 largest = largest.max(d.len());
                 tail.extend_from_slice(&d);
-                if tail.len() > 256 {
-                    tail.drain(..tail.len() - 256);
-                }
+                // Checked before trimming: the prompt that follows the marker can arrive in the
+                // same event and, with systemd's OSC 3008 context sequences, outgrow what is kept.
                 if contains(&tail, "DONE-2") {
                     break;
+                }
+                if tail.len() > 256 {
+                    tail.drain(..tail.len() - 256);
                 }
             }
             other => panic!("unexpected {other:?}"),
@@ -951,14 +953,18 @@ async fn wrong_port_is_refused_not_auth_failed() {
 
 // ----------------------------------------------------------------------- throughput & backpressure
 
-/// Turns off echo, newline translation and the prompt, and waits until the shell has done so:
-/// output read after this is the next command's own, plus a few bracketed-paste bytes.
+/// Turns off echo, newline translation, the prompt and the prompt hooks, and waits until the shell
+/// has done so: output read after this is the next command's own, plus a few bracketed-paste
+/// bytes. systemd's login profile hooks `PS0` and `PROMPT_COMMAND` to print OSC 3008 context
+/// sequences of a few hundred bytes around every command.
 async fn quiet_shell(
     shell: &hatoba_ssh::ShellHandle,
     rx: &mut tokio::sync::mpsc::Receiver<ShellEvent>,
 ) {
     shell
-        .write(b"PS1=; stty -echo -onlcr; echo READY-$((1+1))\n".to_vec())
+        .write(
+            b"PS1=; PS0=; unset PROMPT_COMMAND; stty -echo -onlcr; echo READY-$((1+1))\n".to_vec(),
+        )
         .await
         .unwrap();
     read_until(rx, Duration::from_secs(10), |o| contains(o, "READY-2")).await;
@@ -992,11 +998,11 @@ async fn fifty_megabytes_of_output_arrive_complete() {
                 total += d.len();
                 assert!(d.len() <= 32 * 1024);
                 tail.extend_from_slice(&d);
-                if tail.len() > 256 {
-                    tail.drain(..tail.len() - 256);
-                }
                 if contains(&tail, "END-42") {
                     break;
+                }
+                if tail.len() > 256 {
+                    tail.drain(..tail.len() - 256);
                 }
             }
             other => panic!("unexpected {other:?}"),
@@ -1045,11 +1051,11 @@ async fn a_stalled_consumer_applies_backpressure() {
             Some(ShellEvent::Data(d)) => {
                 total += d.len();
                 tail.extend_from_slice(&d);
-                if tail.len() > 256 {
-                    tail.drain(..tail.len() - 256);
-                }
                 if contains(&tail, "END-42") {
                     break;
+                }
+                if tail.len() > 256 {
+                    tail.drain(..tail.len() - 256);
                 }
             }
             other => panic!("unexpected {other:?}"),
