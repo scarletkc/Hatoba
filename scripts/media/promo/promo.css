@@ -35,7 +35,7 @@
   --ink2: #4b5a7a;
   --mist: #eef3fb;
 
-  /* The app's dark theme (apps/desktop/src/styles/tokens.css) */
+  /* The app's dark theme (packages/ui/src/styles/tokens.css, the terminal's in apps/desktop/src/styles/tokens.css) */
   --win: #1e1e20;
   --side: #2a2a2e;
   --term: #17181b;
