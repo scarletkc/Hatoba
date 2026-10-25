@@ -40,7 +40,8 @@ try {
   if (!scripts["build:demo"]) {
     console.log(`${ref} has no build:demo script in apps/desktop, so the site has no demo.`);
   } else {
-    if (checkout !== ROOT) run("pnpm", ["install", "--frozen-lockfile", "--filter", "@hatoba/desktop"], checkout);
+    // `...` also installs the workspace packages the app depends on, such as @hatoba/ui.
+    if (checkout !== ROOT) run("pnpm", ["install", "--frozen-lockfile", "--filter", "@hatoba/desktop..."], checkout);
     run("pnpm", ["run", "build:demo", "--base", "/demo/", "--outDir", OUT, "--emptyOutDir"], desktop);
     if (!existsSync(join(OUT, "index.html")))
       throw new Error(`Building the demo of ${ref} left no index.html in ${OUT}.`);

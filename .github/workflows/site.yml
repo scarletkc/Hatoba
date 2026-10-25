@@ -30,6 +30,7 @@ on:
       - apps/desktop/index.html
       - apps/desktop/package.json
       - apps/desktop/vite.config.ts
+      - packages/ui/**
       - crates/hatoba-ai/src/skills/builtin/hatoba/**
       - docs/media/**
       - apps/desktop/src-tauri/app-icon.svg
@@ -75,7 +76,8 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile --filter @hatoba/site --filter @hatoba/desktop
+      # `...` also installs the workspace packages the desktop app depends on (@hatoba/ui).
+      - run: pnpm install --frozen-lockfile --filter @hatoba/site --filter "@hatoba/desktop..."
       - run: pnpm --filter @hatoba/site typecheck
       - run: pnpm --filter @hatoba/site test
       - run: pnpm --filter @hatoba/site demo
