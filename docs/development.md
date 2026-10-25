@@ -24,6 +24,16 @@ In the browser, `pnpm dev` uses the mock backend in `apps/desktop/src/ipc/mock` 
 
 `/?gallery` opens the component gallery instead of the app: every control and pattern in `apps/desktop/src/components` in each state, in light, dark or side by side, at either density. Check it after changing a shared component. Only development builds include it.
 
+## Build
+
+`pnpm tauri build --no-sign` produces the NSIS installer on Windows, and the deb package and the AppImage on Linux, without the update signatures that only release builds carry.
+
+On macOS, don't pass `--no-sign`: it also drops the ad-hoc code signature, and Apple Silicon Macs report an app without one as damaged once it is downloaded or copied from another Mac. Turn off the update artifacts instead, and the build produces the app bundle and the DMG:
+
+```sh
+pnpm tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
+```
+
 ## Testing
 
 `hatoba-desktop` embeds the frontend build output at compile time, so build the frontend once before your first `cargo` command:

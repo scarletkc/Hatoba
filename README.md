@@ -20,10 +20,10 @@ https://github.com/user-attachments/assets/cd33e989-36e3-4e17-bc7f-74d472c96078
 </div>
 
 Hatoba keeps your hosts, keys, and terminal sessions in one place, syncs them
-between your devices, and puts an AI assistant beside each terminal. The sync
-backend is a Worker and a D1 database that you deploy to your own Cloudflare
-account.
+between your devices, and puts an AI assistant beside each terminal.
 
+- **AI in every terminal.** The assistant reads the screen, runs commands, and
+  edits files on the host, and you choose what it may do without asking.
 - **No Hatoba server.** Sync runs entirely in your Cloudflare account, so
   nobody else holds your data.
 - **End-to-end encrypted.** Everything is encrypted on your device before it
@@ -36,46 +36,30 @@ account.
 
 ## Features
 
-- **Hosts**: groups, tags, favorites, fuzzy search, recent connections, online
-  status, `~/.ssh/config` import, ProxyJump, and SOCKS5 and HTTP proxies. Type
-  `ssh user@host` in the search box to connect without saving a host, or run
-  `hatoba user@host` in a terminal once the `hatoba` command is on in Settings.
-- **Resource usage**: the online status, CPU, memory, disks, network, load,
-  and uptime of every saved host, on the hosts page as a list or cards, read
-  over SSH without installing anything on the servers.
-- **Terminal**: tabs, 256 colors and truecolor, CJK wide characters and input
-  methods, confirmation before multi-line paste, search, clickable links, and
-  the CPU, memory, and network usage of Linux and macOS servers in the status
-  bar.
-- **Local terminal**: tabs for the shells of your own computer, such as
-  PowerShell, Command Prompt, Git Bash, and WSL distributions on Windows, or
-  your login shell on macOS and Linux, beside the SSH tabs.
-- **Authentication**: passwords, Ed25519, ECDSA, and RSA keys with or without
-  a passphrase, ask on every connection, ssh-agent, and keyboard-interactive
-  (2FA).
-- **Security**: host key confirmation on first connect, a blocked connection
-  when the key changes, a master password with a recovery code, and auto-lock
-  on idle, on sleep, or on demand.
-- **SFTP**: a file panel beside the terminal with drag-and-drop upload,
-  download with progress and cancel, rename, delete, and new folder.
-- **Key vault**: import OpenSSH, PEM, and PuTTY `.ppk` keys, generate Ed25519
-  or RSA 4096 keys, and copy or deploy public keys.
+- **AI assistant**: reads the screen, runs commands, edits files on the host or
+  your own computer, and searches the web. You approve its actions, or let Auto
+  mode approve the safe ones. It uses your own OpenAI-compatible or Anthropic
+  API key and supports skills and MCP servers.
+- **Hosts**: groups, tags, fuzzy search, `~/.ssh/config` import, ProxyJump, and
+  proxies. Type `ssh user@host` in the search box to connect without saving a
+  host.
+- **Resource usage**: the CPU, memory, disks, and network of every saved host,
+  read over SSH with nothing to install on the servers.
+- **Terminal**: tabs, truecolor, CJK input methods, search, and clickable
+  links, with local shells such as PowerShell, WSL, or your login shell beside
+  the SSH tabs.
+- **SFTP**: a file panel beside the terminal with drag-and-drop upload and
+  download.
 - **Port forwarding**: local, remote, and SOCKS forwards that can start with
   the connection or run without a terminal.
-- **Cloud sync**: through your Worker or directly to D1, with incremental
-  sync, automatic conflict resolution you can review item by item, and a
-  device list with revocation.
-- **AI assistant**: a panel beside each terminal that reads the screen, runs
-  commands, types into the shell, reads, edits, and searches files on the host,
-  or on your own computer in a local terminal, and can search the web and read
-  pages. You approve its actions, a model you
-  choose approves the safe ones in Auto mode, or bypass mode skips approval. It
-  uses your own OpenAI-compatible or Anthropic API key, supports skills and MCP
-  servers, and takes terminal selections, connection errors, long pastes, and
-  text files as attachments. Type `/` for commands, skills, and MCP prompts, and
-  `@` to attach files and folders on the host or MCP resources. Conversations,
-  and the memories the assistant keeps across them, sync with the rest of the
-  vault.
+- **Authentication**: passwords, Ed25519, ECDSA, and RSA keys, ssh-agent, and
+  2FA, with OpenSSH, PEM, and PuTTY key import and key generation.
+- **Security**: host key verification, a master password with a recovery code,
+  and auto-lock.
+- **Sync**: incremental sync between your devices, with conflicts you can
+  review item by item and a device list with revocation.
+
+The [documentation](https://hatoba.fog.moe/docs/) covers each one in detail.
 
 ## Download
 
@@ -105,7 +89,8 @@ yay -S hatoba-bin
 
 The maintainer uses Windows, so the Linux and macOS builds get little testing on
 real machines. If something doesn't work on them, please
-[open an issue](https://github.com/scarletkc/Hatoba/issues).
+[open an issue](https://github.com/scarletkc/Hatoba/issues). To build Hatoba
+yourself, follow the [development guide](docs/development.md#build).
 
 ## Security
 
@@ -123,31 +108,6 @@ what its tools read. Host addresses, passwords, and keys reach the provider
 only when they appear on the screen, in a tool result, or in an attachment you
 send.
 
-## Build from source
-
-You need Rust stable, Node.js 22 or later, and pnpm. Windows also needs
-WebView2, which Windows 11 includes, macOS needs the Xcode Command Line Tools,
-and Linux needs the Tauri system dependencies such as `libwebkit2gtk-4.1-dev`.
-
-```sh
-pnpm install
-pnpm tauri dev
-```
-
-`pnpm tauri build --no-sign` produces the NSIS installer on Windows, and the deb
-package and the AppImage on Linux, without the update signatures that only
-release builds carry. On macOS, don't pass `--no-sign`: it also drops the
-ad-hoc code signature, and Apple Silicon Macs report an app without one as
-damaged once it is downloaded or copied from another Mac. Turn off the update
-artifacts instead, and the build produces the app bundle and the DMG:
-
-```sh
-pnpm tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
-```
-
-The [development guide](docs/development.md) covers the browser-only frontend,
-tests, and the generated TypeScript bindings.
-
 ## Set up sync
 
 Sync is optional. It runs on a Worker and a D1 database that you deploy once to
@@ -163,13 +123,9 @@ connecting Hatoba, and covers upgrades, resets, and backups.
 ## Documentation
 
 - [User documentation](https://hatoba.fog.moe/docs/): hosts, the terminal, SFTP, keys and the vault, sync, the AI assistant, and troubleshooting
-- [Architecture and requirements](docs/hatoba-spec.md): architecture, security model, data formats, the sync protocol and Worker API, and requirements
-- [Implementation status](docs/status.md): progress on each requirement, milestones, and open questions
-- [Development guide](docs/development.md): building, running, and testing
-- [Release Hatoba](docs/releasing.md): versions, release notes, and publishing
 - [Deploy the sync Worker](workers/sync/README.md): deployment, upgrades, resets, and backups
-- [End-to-end smoke test](apps/desktop/e2e/README.md): driving the real app against a real OpenSSH server
-- [Design](docs/design/README.md): design files, porting conventions, and deviations from the design
+- [Architecture and requirements](docs/hatoba-spec.md): architecture, security model, data formats, the sync protocol and Worker API, and requirements
+- [Development guide](docs/development.md): building, running, and testing
 - [Contributing](CONTRIBUTING.md): issues, branches, commits, and pull requests
 - [Security policy](SECURITY.md): reporting a vulnerability privately
 
