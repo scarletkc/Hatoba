@@ -384,6 +384,14 @@ mod tests {
     async fn close_ends_the_shell() {
         let shell = test_shell();
         let (pty, mut events) = LocalPty::spawn(&shell, size(), &[], None).unwrap();
+        // macOS's sh can outlive a hangup that comes while it is still starting, and a tab is
+        // closed once its shell runs, so the test waits until sh has run a command. Only the
+        // command's output, not its echo, has `hatoba-42`.
+        #[cfg(not(windows))]
+        {
+            pty.write(b"echo hatoba-$((40+2))\r".to_vec()).unwrap();
+            output_until(&mut events, "hatoba-42").await;
+        }
         pty.close();
         let (_, exited) = output_until(&mut events, "").await;
         assert!(exited.is_some());
