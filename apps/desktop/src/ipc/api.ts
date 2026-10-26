@@ -280,6 +280,8 @@ export interface HatobaApi {
   sftp_edit_discard(edit_id: string): Promise<void>;
   /** Resolves to whether editing ended; with `upload`, a save that cannot upload yet keeps it going until it does. */
   sftp_edit_stop(edit_id: string, upload: boolean): Promise<boolean>;
+  /** Whether the copy holds a save the server does not have, also one not noticed yet. */
+  sftp_edit_changed(edit_id: string): Promise<boolean>;
   sftp_edit_list(): Promise<RemoteEditView[]>;
 
   // sync

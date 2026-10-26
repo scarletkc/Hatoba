@@ -22,6 +22,7 @@ export function createEditsMock(
   | "sftp_edit_upload"
   | "sftp_edit_discard"
   | "sftp_edit_stop"
+  | "sftp_edit_changed"
   | "sftp_edit_list"
 > & { lock(): void } {
   const edits = new Map<string, RemoteEditView>();
@@ -96,6 +97,7 @@ export function createEditsMock(
       end(id);
       return true;
     },
+    sftp_edit_changed: async (id) => (edits.get(id)?.state ?? "saved") !== "saved",
     sftp_edit_list: async () => [...edits.values()],
     lock: () => {
       for (const edit of [...edits.values()]) {

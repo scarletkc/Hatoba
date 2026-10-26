@@ -264,6 +264,11 @@ export const commands = {
 	 *  editing ended; a save that cannot upload yet keeps it going until it does.
 	 */
 	sftpEditStop: (editId: string, upload: boolean) => __TAURI_INVOKE<boolean>("sftp_edit_stop", { editId, upload }),
+	/**
+	 *  SFTP-05: whether an edited file's copy holds a save the server does not have, also one not
+	 *  noticed yet.
+	 */
+	sftpEditChanged: (editId: string) => __TAURI_INVOKE<boolean>("sftp_edit_changed", { editId }),
 	/**  SFTP-05: the files being edited. */
 	sftpEditList: () => __TAURI_INVOKE<RemoteEditView[]>("sftp_edit_list"),
 	syncStatus: () => __TAURI_INVOKE<SyncStatus>("sync_status"),

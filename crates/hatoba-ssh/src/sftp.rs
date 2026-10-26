@@ -431,7 +431,8 @@ impl SftpClient {
     }
 
     /// [`upload`](Self::upload), with the permission bits of `mode` set on the new file before it
-    /// replaces the old one, so a file written back keeps its mode (SFTP-05).
+    /// replaces the old one, so a file written back keeps its mode (SFTP-05). A server that refuses
+    /// to set them still gets the content, with the mode it gives new files.
     pub async fn upload_with_mode(
         &self,
         local: &Path,
@@ -453,7 +454,7 @@ impl SftpClient {
             .await
             .map_err(|e| SshError::io_context(&format!("open {}", local.display()), &e))?;
         let (part, target) = self.create_remote_part(remote).await?;
-        let mut result = self
+        let result = self
             .upload_to(local, source, &part, target, meta.len(), &progress, &cancel)
             .await;
         if let (Ok(()), Some(mode)) = (&result, mode) {
@@ -461,11 +462,7 @@ impl SftpClient {
                 permissions: Some(mode & 0o7777),
                 ..Default::default()
             };
-            result = self
-                .sftp
-                .set_metadata(part.as_str(), attrs)
-                .await
-                .map_err(|e| self.err("set permissions of", remote, e));
+            let _ = self.sftp.set_metadata(part.as_str(), attrs).await;
         }
         match result {
             Ok(()) => self.replace(&part, remote).await,

@@ -1,12 +1,13 @@
 //! SFTP-05: opens the copy of a remote file in the program set in Settings, or in the app the
-//! system opens that kind of file with. A file the system has no app for, and a program or script
-//! whose app would run it rather than show it, opens in the platform's text editor.
+//! system opens that kind of file with. A file the system has no app for, a program or script whose
+//! app would run it rather than show it, and a web page, which a browser would run, open in the
+//! platform's text editor.
 
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
-/// Kinds of file the system's app for them runs (programs, scripts, installers, shortcuts), so
-/// that opening a copy would run it on this computer.
+/// Kinds of file the system's app for them runs (programs, scripts, installers, shortcuts, and
+/// web pages in a browser), so that opening a copy would run it on this computer.
 const RUNS: &[&str] = &[
     "app",
     "appimage",
@@ -25,12 +26,16 @@ const RUNS: &[&str] = &[
     "fish",
     "gadget",
     "hta",
+    "htm",
+    "html",
     "inf",
     "jar",
     "js",
     "jse",
     "ksh",
     "lnk",
+    "mht",
+    "mhtml",
     "mpkg",
     "msc",
     "msi",
@@ -48,6 +53,7 @@ const RUNS: &[&str] = &[
     "scf",
     "scr",
     "sh",
+    "svg",
     "terminal",
     "tool",
     "url",
@@ -58,6 +64,7 @@ const RUNS: &[&str] = &[
     "ws",
     "wsf",
     "wsh",
+    "xhtml",
     "zsh",
 ];
 
@@ -279,6 +286,8 @@ mod tests {
             "x.ps1",
             "a.desktop",
             "b.jar",
+            "index.html",
+            "logo.svg",
         ] {
             assert!(runs(Path::new(name)), "{name}");
         }
@@ -288,7 +297,7 @@ mod tests {
             "Makefile",
             "app.json",
             "notes.txt",
-            "index.html",
+            "style.css",
         ] {
             assert!(!runs(Path::new(name)), "{name}");
         }

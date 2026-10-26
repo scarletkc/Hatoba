@@ -135,7 +135,12 @@ export async function stopEditing(edit: RemoteEditView, connected: boolean) {
 export async function endTabEdits(tabId: string, connected: boolean): Promise<boolean> {
   const edits = tabEdits(useEdits.getState().items, tabId);
   if (edits.length === 0) return true;
-  const waiting = edits.filter(unsent);
+  // Connected, a save not noticed yet uploads as editing stops; disconnected, it would be lost, so the
+  // copies are asked about it first.
+  const changed = connected
+    ? edits.map(unsent)
+    : await Promise.all(edits.map((e) => unsent(e) || api.sftp_edit_changed(e.edit_id).catch(() => true)));
+  const waiting = edits.filter((_, i) => changed[i]);
   let upload = connected;
   if (waiting.length > 0) {
     const choice = await askUnsent(waiting, connected);

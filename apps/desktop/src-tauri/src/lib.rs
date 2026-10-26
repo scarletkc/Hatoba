@@ -152,6 +152,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             sftp::sftp_edit_upload,
             sftp::sftp_edit_discard,
             sftp::sftp_edit_stop,
+            sftp::sftp_edit_changed,
             sftp::sftp_edit_list,
             sync_cmd::sync_status,
             sync_cmd::sync_test,

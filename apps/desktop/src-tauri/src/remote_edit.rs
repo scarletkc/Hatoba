@@ -74,6 +74,8 @@ enum Command {
         upload: bool,
         reply: oneshot::Sender<bool>,
     },
+    /// Replies whether the copy differs from what the server has, or cannot be read.
+    Changed { reply: oneshot::Sender<bool> },
     /// The vault locked.
     Lock,
 }
@@ -178,6 +180,15 @@ impl RemoteEdits {
         {
             // It ended meanwhile.
             Err(e) if e.code == ErrorCode::NotFound => Ok(true),
+            other => other,
+        }
+    }
+
+    /// Whether the copy holds a save the server does not have, also one the worker has not
+    /// noticed yet.
+    pub async fn changed(&self, edit_id: &str) -> AppResult<bool> {
+        match self.ask(edit_id, |reply| Command::Changed { reply }).await {
+            Err(e) if e.code == ErrorCode::NotFound => Ok(false),
             other => other,
         }
     }
@@ -494,9 +505,10 @@ impl Worker {
             } => {
                 self.finishing = true;
                 self.held = false;
+                // A copy that cannot be read now (an editor replacing it) is kept, as changed.
                 let flow = match self.changed().await {
-                    Some(true) => self.upload(false).await.0,
-                    _ => Flow::End,
+                    Some(false) => Flow::End,
+                    _ => self.upload(false).await.0,
                 };
                 let _ = reply.send(matches!(flow, Flow::End));
                 if matches!(flow, Flow::Go) {
@@ -504,8 +516,12 @@ impl Worker {
                 }
                 flow
             }
+            Command::Changed { reply } => {
+                let _ = reply.send(self.changed().await != Some(false));
+                Flow::Go
+            }
             Command::Lock => {
-                if self.changed().await != Some(true) {
+                if self.changed().await == Some(false) {
                     return Flow::End;
                 }
                 self.held = true;
@@ -599,7 +615,9 @@ impl Worker {
                 Err(e) => return self.failed(&session_id, e.into()),
             }
         }
-        let mode = self.stat.mode;
+        // A server that reports no permissions gets none set.
+        let keep = self.stat.mode;
+        let mode = (keep & 0o7777 != 0).then_some(keep);
         let written = run_transfer(
             self.app.clone(),
             session_id.clone(),
@@ -609,7 +627,7 @@ impl Worker {
                 let (sftp, copy, remote) = (sftp.clone(), self.edit.copy.clone(), remote.clone());
                 move |progress, token| {
                     Box::pin(async move {
-                        sftp.upload_with_mode(&copy, &remote, Some(mode), progress, token)
+                        sftp.upload_with_mode(&copy, &remote, mode, progress, token)
                             .await
                     })
                 }
@@ -629,12 +647,19 @@ impl Worker {
         }
         self.synced = digest(&content);
         match sftp.stat(&remote).await {
-            Ok(Some(now)) => self.stat = RemoteStat { mode, ..now },
+            Ok(Some(now)) => self.stat = RemoteStat { mode: keep, ..now },
             // Read again before the next upload, which then asks.
             _ => self.stat.mtime = None,
         }
         self.set(RemoteEditState::Saved, None);
-        (if self.finishing { Flow::End } else { Flow::Go }, Ok(()))
+        if !self.finishing {
+            return (Flow::Go, Ok(()));
+        }
+        // A save made while this upload ran goes up too, before the copy is deleted.
+        match self.changed().await {
+            Some(false) => (Flow::End, Ok(())),
+            _ => Box::pin(self.upload(false)).await,
+        }
     }
 
     fn failed(&mut self, session_id: &str, e: AppError) -> (Flow, AppResult<()>) {

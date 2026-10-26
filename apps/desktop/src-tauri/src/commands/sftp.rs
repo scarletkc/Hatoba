@@ -369,6 +369,14 @@ pub async fn sftp_edit_stop(
     state.edits.stop(&edit_id, upload).await
 }
 
+/// SFTP-05: whether an edited file's copy holds a save the server does not have, also one not
+/// noticed yet.
+#[tauri::command]
+#[specta::specta]
+pub async fn sftp_edit_changed(state: State<'_, AppState>, edit_id: String) -> AppResult<bool> {
+    state.edits.changed(&edit_id).await
+}
+
 /// SFTP-05: the files being edited.
 #[tauri::command]
 #[specta::specta]
