@@ -94,6 +94,8 @@ fn after_unlock(app: &AppHandle, state: &AppState) {
     }) {
         tracing::debug!("connections not stamped again: {}", e.detail);
     }
+    // SFTP-05: editing goes on, after asking about saves that did not upload.
+    state.edits.unlock();
     sync::on_unlock(app);
 }
 

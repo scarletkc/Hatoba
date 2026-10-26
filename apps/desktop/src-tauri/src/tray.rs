@@ -29,7 +29,7 @@ mod imp {
 
     use crate::dto::{
         CloseAction, ClosePromptEvent, ForwardKind, HostConnectionView, LocalPrefs, LockReason,
-        RunningForwardView, TrayMenuInput, TrayUpdateEvent,
+        RemoteEditQuitEvent, RunningForwardView, TrayMenuInput, TrayUpdateEvent,
     };
     use crate::state::AppState;
     use crate::{lock, platform};
@@ -405,6 +405,11 @@ mod imp {
         let app = window.app_handle();
         let action = close_action();
         if action == CloseAction::Quit || !tray_shown(app) {
+            // SFTP-05: the window stays to ask about saves of edited files that did not upload.
+            if app.state::<AppState>().edits.holds_quit() {
+                api.prevent_close();
+                let _ = RemoteEditQuitEvent.emit(app);
+            }
             return;
         }
         api.prevent_close();

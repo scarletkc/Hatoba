@@ -6,8 +6,8 @@
 //! connection of the tab the file was opened from. Before each upload it compares the remote
 //! file's size and modification time with what it last downloaded or uploaded, so a change made
 //! on the server meanwhile is never overwritten without asking. Editing ends with Stop Editing,
-//! with the tab, or with the lock, and the copy is deleted then; the copies a crash leaves are
-//! deleted at the next start.
+//! with the tab, or when Hatoba quits, and the copy is deleted then; the lock only pauses it. The
+//! copies a crash leaves are deleted at the next start.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -43,6 +43,8 @@ struct Inner {
     edits: HashMap<String, Arc<Edit>>,
     /// The session of each tab with edits, while it is connected.
     sessions: HashMap<String, String>,
+    /// Hatoba may quit: the user answered for the saves that did not upload.
+    quit: bool,
 }
 
 struct Edit {
@@ -76,8 +78,10 @@ enum Command {
     },
     /// Replies whether the copy differs from what the server has, or cannot be read.
     Changed { reply: oneshot::Sender<bool> },
-    /// The vault locked.
+    /// The vault locked: nothing uploads until it unlocks.
     Lock,
+    /// The vault unlocked: editing goes on, after asking about saves that did not upload.
+    Unlock,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -134,12 +138,29 @@ impl RemoteEdits {
         }
     }
 
-    /// The vault locked: editing ends, except for copies whose last save did not upload, which
-    /// wait for the user to upload or discard them after the unlock.
+    /// The vault locked: editing pauses, so nothing uploads until the unlock.
     pub fn lock(&self) {
         for edit in lock(&self.inner).edits.values() {
             let _ = edit.commands.send(Command::Lock);
         }
+    }
+
+    /// The vault unlocked: editing goes on, and copies with saves that did not upload ask first.
+    pub fn unlock(&self) {
+        for edit in lock(&self.inner).edits.values() {
+            let _ = edit.commands.send(Command::Unlock);
+        }
+    }
+
+    /// Whether quitting waits for the user to answer for the edits first.
+    pub fn holds_quit(&self) -> bool {
+        let inner = lock(&self.inner);
+        !inner.quit && !inner.edits.is_empty()
+    }
+
+    /// The user answered for the edits: Hatoba quits, deleting the copies.
+    pub fn allow_quit(&self) {
+        lock(&self.inner).quit = true;
     }
 
     fn get(&self, edit_id: &str) -> AppResult<Arc<Edit>> {
@@ -273,7 +294,7 @@ pub async fn open(
     let copy = dir.join(local_name(&name));
     let downloaded = run_transfer(
         app.clone(),
-        session_id,
+        session_id.clone(),
         TransferDirection::Download,
         name.clone(),
         Box::new({
@@ -319,7 +340,15 @@ pub async fn open(
         commands,
         view: Mutex::new(view.clone()),
     });
-    lock(&edits.inner).edits.insert(id, edit.clone());
+    {
+        let mut inner = lock(&edits.inner);
+        // Ending the tab's other edits during the download forgot its session.
+        inner
+            .sessions
+            .entry(edit.tab_id.clone())
+            .or_insert(session_id);
+        inner.edits.insert(id, edit.clone());
+    }
     let worker = Worker {
         app: app.clone(),
         seen: seen(&copy).await,
@@ -330,6 +359,7 @@ pub async fn open(
         state: RemoteEditState::Saved,
         error: None,
         finishing: false,
+        locked: false,
         held: false,
     };
     tauri::async_runtime::spawn(worker.run(rx));
@@ -432,7 +462,8 @@ enum Flow {
 struct Worker {
     app: AppHandle,
     edit: Arc<Edit>,
-    /// The server's file as last downloaded or uploaded; its mode is the one to keep.
+    /// The server's file as last downloaded or uploaded, whose size and modification time tell
+    /// whether it changed since.
     stat: RemoteStat,
     /// The content the server has.
     synced: [u8; 32],
@@ -444,7 +475,9 @@ struct Worker {
     error: Option<String>,
     /// Stop Editing waits for the copy to upload.
     finishing: bool,
-    /// The vault locked before the last save uploaded.
+    /// The vault is locked: nothing uploads.
+    locked: bool,
+    /// After the unlock, a save that did not upload waits for the user to upload or discard it.
     held: bool,
 }
 
@@ -459,7 +492,7 @@ impl Worker {
                     Some(command) => self.handle(command).await,
                     None => Flow::End,
                 },
-                _ = tick.tick(), if !self.held => self.poll().await,
+                _ = tick.tick(), if !self.locked && !self.held => self.poll().await,
             };
             if let Flow::End = flow {
                 break;
@@ -481,13 +514,21 @@ impl Worker {
     async fn handle(&mut self, command: Command) -> Flow {
         match command {
             Command::Connected => {
-                if !self.held && self.state == RemoteEditState::Pending && self.changed_at.is_none()
+                // A save that failed while the connection was dying uploads too.
+                if !self.locked
+                    && !self.held
+                    && matches!(
+                        self.state,
+                        RemoteEditState::Pending | RemoteEditState::Failed
+                    )
+                    && self.changed_at.is_none()
                 {
                     return self.upload(false).await.0;
                 }
                 Flow::Go
             }
             Command::Upload { overwrite, reply } => {
+                self.held = false;
                 let (flow, result) = self.upload(overwrite).await;
                 let _ = reply.send(result);
                 flow
@@ -527,11 +568,16 @@ impl Worker {
                 Flow::Go
             }
             Command::Lock => {
-                if self.changed().await == Some(false) {
-                    return Flow::End;
+                self.locked = true;
+                Flow::Go
+            }
+            Command::Unlock => {
+                self.locked = false;
+                // Also a save made while locked, which nothing checked: the user may not have made it.
+                if self.changed().await != Some(false) {
+                    self.held = true;
+                    self.publish();
                 }
-                self.held = true;
-                self.publish();
                 Flow::Go
             }
         }
@@ -610,19 +656,17 @@ impl Worker {
         };
         self.set(RemoteEditState::Uploading, None);
         let remote = self.edit.remote.clone();
-        if !overwrite {
-            match sftp.stat(&remote).await {
-                Ok(Some(now)) if unchanged(&now, &self.stat) => {}
-                // Changed or deleted on the server.
-                Ok(_) => {
-                    self.set(RemoteEditState::Conflict, None);
-                    return (Flow::Go, Err(conflict()));
-                }
-                Err(e) => return self.failed(&session_id, e.into()),
-            }
+        // The file as it is now, whose mode, owner and group the upload keeps: a chmod made on the
+        // server since it opened stays.
+        let now = match sftp.stat(&remote).await {
+            Ok(now) => now,
+            Err(e) => return self.failed(&session_id, e.into()),
+        };
+        // Changed or deleted on the server.
+        if !overwrite && !now.is_some_and(|now| unchanged(&now, &self.stat)) {
+            self.set(RemoteEditState::Conflict, None);
+            return (Flow::Go, Err(conflict()));
         }
-        // A server that reports no permissions gets none set.
-        let mode = self.stat.mode;
         let sent = digest(&content);
         let written = run_transfer(
             self.app.clone(),
@@ -633,7 +677,7 @@ impl Worker {
                 let (sftp, remote) = (sftp.clone(), remote.clone());
                 move |progress, token| {
                     Box::pin(async move {
-                        sftp.upload_content(content, &remote, mode, progress, token)
+                        sftp.write_back(content, &remote, now, progress, token)
                             .await
                     })
                 }
@@ -653,7 +697,7 @@ impl Worker {
         }
         self.synced = sent;
         match sftp.stat(&remote).await {
-            Ok(Some(now)) => self.stat = RemoteStat { mode, ..now },
+            Ok(Some(now)) => self.stat = now,
             // Read again before the next upload, which then asks.
             _ => self.stat.mtime = None,
         }
@@ -709,6 +753,7 @@ impl Worker {
         self.stat = stat;
         self.seen = seen(&self.edit.copy).await;
         self.changed_at = None;
+        self.held = false;
         self.set(RemoteEditState::Saved, None);
         Ok(())
     }

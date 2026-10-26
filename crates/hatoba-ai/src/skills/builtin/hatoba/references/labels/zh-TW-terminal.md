@@ -186,7 +186,7 @@ The labels that these files name in English, as the interface shows them in Trad
 | Discard Changes | 放棄修改 |
 | Their last saves haven’t uploaded to {host} yet. | 最近一次儲存還沒有上傳到 {host}。 |
 | Their last saves haven’t uploaded to {host}, and the tab isn’t connected. Reconnect to upload them. | 最近一次儲存還沒有上傳到 {host}，而這個分頁已中斷連線。重新連線後才能上傳。 |
-| Their last saves hadn’t uploaded when Hatoba locked. | Hatoba 鎖定時，最近一次儲存還沒有上傳。 |
+| Their last saves haven’t uploaded yet. Nothing uploads while Hatoba is locked. | 最近一次儲存還沒有上傳。Hatoba 鎖定期間不會上傳。 |
 | Couldn’t open “{name}” in an editor. You can choose one in Settings → Terminal. | 無法在編輯器中開啟「{name}」。可以在設定 → 終端機中選擇編輯器。 |
 | {n} files didn’t upload. | {n} 個檔案沒有上傳。 |
 

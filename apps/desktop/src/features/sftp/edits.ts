@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { toast } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
+import { useTabs } from "@/app/tabs";
 import { t } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { RemoteEditEvent, RemoteEditView } from "@/ipc/types";
@@ -43,6 +44,8 @@ export function tabEdits(items: Record<string, RemoteEditView>, tabId: string): 
 
 /** The copy's last save is not on the server. */
 export const unsent = (e: RemoteEditView) => e.state !== "saved";
+
+const isConnected = (tabId: string) => useTabs.getState().tabs.find((x) => x.id === tabId)?.status === "connected";
 
 /** The tab connected with a new session: saves that waited for it upload. */
 export function editSessionChanged(tabId: string, sessionId: string) {
@@ -92,19 +95,22 @@ interface UnsentAsk {
   edits: RemoteEditView[];
   /** The tab is connected, so the saves can upload now. */
   canUpload: boolean;
+  /** Hatoba quits after the answer. */
+  quit: boolean;
   resolve(choice: UnsentChoice | null): void;
 }
 
 export const useUnsentAsk = create<{ pending: UnsentAsk | null }>(() => ({ pending: null }));
 
 /** Asks whether to upload or discard the saves of `edits` that did not upload; null keeps editing. */
-export function askUnsent(edits: RemoteEditView[], canUpload: boolean): Promise<UnsentChoice | null> {
+export function askUnsent(edits: RemoteEditView[], canUpload: boolean, quit = false): Promise<UnsentChoice | null> {
   useUnsentAsk.getState().pending?.resolve(null);
   return new Promise((resolve) =>
     useUnsentAsk.setState({
       pending: {
         edits,
         canUpload,
+        quit,
         resolve: (choice) => {
           useUnsentAsk.setState({ pending: null });
           resolve(choice);
@@ -147,14 +153,52 @@ export async function endTabEdits(tabId: string, connected: boolean): Promise<bo
     if (!choice) return false;
     upload = choice === "upload";
   }
-  const ended = await Promise.all(edits.map((e) => api.sftp_edit_stop(e.edit_id, upload).catch(() => false)));
+  // The answer is for the listed copies; a save of another not noticed yet uploads.
+  const ended = await Promise.all(
+    edits.map((e, i) => api.sftp_edit_stop(e.edit_id, changed[i] ? upload : connected).catch(() => false)),
+  );
   const left = ended.filter((done) => !done).length;
   if (left === 0) return true;
   toast(t("sftp.edit.notUploaded", { n: left }), "error");
   return false;
 }
 
-/** After the unlock: the copies the lock kept because their last save did not upload. */
+/**
+ * After the unlock: copies whose last save did not upload, which may have been made behind the lock
+ * screen. Editing goes on either way; Discard downloads the server's file into the copy again, or ends
+ * editing while the tab is disconnected.
+ */
 export async function settleHeld(edits: RemoteEditView[], choice: UnsentChoice) {
-  await Promise.all(edits.map((e) => api.sftp_edit_stop(e.edit_id, choice === "upload").catch(() => false)));
+  await Promise.all(
+    edits.map((e) =>
+      choice === "upload"
+        ? uploadEdit(e, false)
+        : isConnected(e.tab_id)
+          ? discardEdit(e)
+          : api.sftp_edit_stop(e.edit_id, false).catch(() => false),
+    ),
+  );
+}
+
+/**
+ * Quitting with files being edited, which the backend holds for this: asks about saves that did not
+ * upload, then quits. Behind the lock screen they can only be discarded.
+ */
+export async function quitEditing() {
+  const edits = Object.values(useEdits.getState().items);
+  const changed = await Promise.all(edits.map((e) => unsent(e) || api.sftp_edit_changed(e.edit_id).catch(() => true)));
+  const waiting = edits.filter((_, i) => changed[i]);
+  if (waiting.length > 0) {
+    const choice = await askUnsent(waiting, true, true);
+    if (!choice) return;
+    if (choice === "upload") {
+      const ended = await Promise.all(waiting.map((e) => api.sftp_edit_stop(e.edit_id, true).catch(() => false)));
+      const left = ended.filter((done) => !done).length;
+      if (left > 0) {
+        toast(t("sftp.edit.notUploaded", { n: left }), "error");
+        return;
+      }
+    }
+  }
+  await api.sftp_edit_quit();
 }

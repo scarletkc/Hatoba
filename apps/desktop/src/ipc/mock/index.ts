@@ -273,7 +273,7 @@ export function createMockApi(): HatobaApi {
     null;
   const listeners = new Map<string, Set<(p: unknown) => void>>();
   const shells = new Map<string, FakeShell>();
-  const { lock: lockEdits, ...edits } = createEditsMock(emit, startTransfer, q.get("edit"));
+  const { unlock: unlockEdits, ...edits } = createEditsMock(emit, startTransfer, q.get("edit"));
   const dashboard = createDashboardMock({
     host: (hid) => hosts.find((h) => h.id === hid),
     unlocked: () => vaultState === "unlocked",
@@ -519,6 +519,7 @@ export function createMockApi(): HatobaApi {
       retryAt = null;
       armPin();
       vaultState = "unlocked";
+      unlockEdits();
     },
     vault_unlock_biometric: async () => {
       await delay(700);
@@ -547,7 +548,6 @@ export function createMockApi(): HatobaApi {
     vault_lock: async () => {
       vaultState = "locked";
       dashboard.stopAll();
-      lockEdits();
     },
     vault_verify_password: async (password) => password.length >= 4,
     vault_change_password: async (current) => {

@@ -94,7 +94,7 @@ export function App() {
       {locked && <UnlockScreen />}
       {!locked && settingsOpen && <SettingsWindow onClose={() => useApp.getState().openSettings(false)} />}
       {!locked && <SessionDialogs />}
-      {!locked && <EditDialogs />}
+      <EditDialogs locked={locked} />
       <EditFilesHost />
       <ConfirmHost />
       <ClosePrompt />

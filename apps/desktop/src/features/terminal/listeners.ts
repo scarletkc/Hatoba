@@ -1,4 +1,4 @@
-import { useEdits } from "@/features/sftp/edits";
+import { quitEditing, useEdits } from "@/features/sftp/edits";
 import { useTransfers } from "@/features/sftp/transfers";
 import { api } from "@/ipc/api";
 import { pushAuthPrompt, pushHostKeyPrompt } from "./prompts";
@@ -24,5 +24,6 @@ export function startSessionListeners() {
     .then(() => api.sftp_edit_list())
     .then((list) => useEdits.getState().load(list))
     .catch(() => {});
+  void api.listen("sftp://quit", () => void quitEditing());
   watchTerminalAppearance();
 }

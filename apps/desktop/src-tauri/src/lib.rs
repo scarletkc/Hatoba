@@ -154,6 +154,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             sftp::sftp_edit_stop,
             sftp::sftp_edit_changed,
             sftp::sftp_edit_list,
+            sftp::sftp_edit_quit,
             sync_cmd::sync_status,
             sync_cmd::sync_test,
             sync_cmd::sync_configure,
@@ -268,6 +269,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             dto::SessionStateEvent,
             dto::TransferProgressEvent,
             dto::RemoteEditEvent,
+            dto::RemoteEditQuitEvent,
             dto::ConnectionsEvent,
             dto::ForwardsLostEvent,
             dto::McpServerStatus,
@@ -407,6 +409,18 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building Hatoba")
         .run(|app, event| match event {
+            // SFTP-05: saves of edited files that did not upload are asked about first. An update's
+            // restart cannot wait.
+            tauri::RunEvent::ExitRequested { api, code, .. }
+                if code != Some(tauri::RESTART_EXIT_CODE)
+                    && app
+                        .try_state::<state::AppState>()
+                        .is_some_and(|state| state.edits.holds_quit()) =>
+            {
+                api.prevent_exit();
+                platform::window::reopen_main(app);
+                let _ = tauri_specta::Event::emit(&dto::RemoteEditQuitEvent, app);
+            }
             tauri::RunEvent::Exit => {
                 if let Some(state) = app.try_state::<state::AppState>() {
                     // AI-32: MCP servers stop when the app quits.

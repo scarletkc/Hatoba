@@ -726,10 +726,10 @@ async fn edits_write_back_through_symlinks_and_keep_the_mode() {
     assert!(sftp.stat(s(&area)).await.unwrap().unwrap().is_dir());
     assert_eq!(sftp.stat(s(&area.join("gone"))).await.unwrap(), None);
 
-    sftp.upload_content(
+    sftp.write_back(
         b"#!/bin/sh\necho new\n".to_vec(),
         &target,
-        before.mode,
+        Some(before),
         |_| {},
         CancellationToken::new(),
     )
@@ -745,4 +745,25 @@ async fn edits_write_back_through_symlinks_and_keep_the_mode() {
     let link = fs::symlink_metadata(area.join("link.sh")).unwrap();
     assert!(link.file_type().is_symlink());
     assert_eq!(names_in(&area), ["link.sh", "run.sh"]);
+
+    // In a folder the login user cannot write, the file itself is written.
+    let locked = area.join("locked");
+    fs::create_dir(&locked).unwrap();
+    let conf = locked.join("app.conf");
+    fs::write(&conf, "old\n").unwrap();
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).unwrap();
+    let old = sftp.stat(s(&conf)).await.unwrap();
+    let written = sftp
+        .write_back(
+            b"new\n".to_vec(),
+            s(&conf),
+            old,
+            |_| {},
+            CancellationToken::new(),
+        )
+        .await;
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+    written.unwrap();
+    assert_eq!(fs::read_to_string(&conf).unwrap(), "new\n");
+    assert_eq!(names_in(&locked), ["app.conf"]);
 }

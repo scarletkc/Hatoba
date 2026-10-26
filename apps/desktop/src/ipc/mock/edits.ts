@@ -7,8 +7,8 @@ type StartTransfer = (sid: string, direction: "upload" | "download", name: strin
 /**
  * SFTP-05 in the browser: a file opened for editing is "saved" in its editor a few seconds later and
  * uploads. With `?edit=conflict` that save finds the file changed on the server; with `?edit=fail` the
- * upload fails; with `?edit=held` the files stay edited after the lock, as if their last save had not
- * uploaded, and ask after the unlock.
+ * upload fails; with `?edit=held` the files ask after the unlock, as if a save made behind the lock
+ * screen had not uploaded.
  */
 export function createEditsMock(
   emit: Emit,
@@ -24,7 +24,8 @@ export function createEditsMock(
   | "sftp_edit_stop"
   | "sftp_edit_changed"
   | "sftp_edit_list"
-> & { lock(): void } {
+  | "sftp_edit_quit"
+> & { unlock(): void } {
   const edits = new Map<string, RemoteEditView>();
   const sessions = new Map<string, string>();
   let seq = 0;
@@ -99,11 +100,12 @@ export function createEditsMock(
     },
     sftp_edit_changed: async (id) => (edits.get(id)?.state ?? "saved") !== "saved",
     sftp_edit_list: async () => [...edits.values()],
-    lock: () => {
-      for (const edit of [...edits.values()]) {
-        if (demo === "held") set(edit.edit_id, "pending", null, true);
-        else end(edit.edit_id);
-      }
+    sftp_edit_quit: async () => {
+      for (const id of [...edits.keys()]) end(id);
+    },
+    unlock: () => {
+      if (demo !== "held") return;
+      for (const edit of [...edits.values()]) set(edit.edit_id, "pending", null, true);
     },
   };
 }

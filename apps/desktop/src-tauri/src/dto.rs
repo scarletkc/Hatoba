@@ -631,6 +631,12 @@ pub struct RemoteEditEvent {
     pub edit: Option<RemoteEditView>,
 }
 
+/// Hatoba is quitting with files being edited: the WebView asks about saves that did not upload,
+/// then quits with `sftp_edit_quit`.
+#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "sftp://quit")]
+pub struct RemoteEditQuitEvent;
+
 // ───────────────────────── Sync ─────────────────────────
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]

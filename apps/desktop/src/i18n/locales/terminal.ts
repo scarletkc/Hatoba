@@ -214,7 +214,10 @@ export default defineMessages({
     "sftp.edit.unsent.title": "上传对 {n} 个文件的修改？",
     "sftp.edit.unsent.body": "最近一次保存还没有上传到 {host}。",
     "sftp.edit.unsent.offline": "最近一次保存还没有上传到 {host}，而这个标签页已断开连接。重新连接后才能上传。",
-    "sftp.edit.unsent.locked": "Hatoba 锁定时，最近一次保存还没有上传。",
+    "sftp.edit.unsent.locked": "最近一次保存还没有上传。Hatoba 锁定期间不会上传。",
+    "sftp.edit.unsent.quit": "最近一次保存还没有上传。上传或放弃修改后，Hatoba 会退出。",
+    "sftp.edit.unsent.quitLockedTitle": "放弃修改并退出？",
+    "sftp.edit.unsent.quitLocked": "有 {n} 个正在编辑的文件，最近一次保存还没有上传。要上传，需要先解锁 Hatoba。",
     "sftp.edit.upload": "上传",
     "sftp.edit.discard": "放弃修改",
   },
@@ -434,8 +437,15 @@ export default defineMessages({
       "Their last saves haven’t uploaded to {host}, and the tab isn’t connected. Reconnect to upload them.",
     "sftp.edit.unsent.offline_one":
       "Its last save hasn’t uploaded to {host}, and the tab isn’t connected. Reconnect to upload it.",
-    "sftp.edit.unsent.locked": "Their last saves hadn’t uploaded when Hatoba locked.",
-    "sftp.edit.unsent.locked_one": "Its last save hadn’t uploaded when Hatoba locked.",
+    "sftp.edit.unsent.locked": "Their last saves haven’t uploaded yet. Nothing uploads while Hatoba is locked.",
+    "sftp.edit.unsent.locked_one": "Its last save hasn’t uploaded yet. Nothing uploads while Hatoba is locked.",
+    "sftp.edit.unsent.quit": "Their last saves haven’t uploaded yet. Hatoba quits once they’re uploaded or discarded.",
+    "sftp.edit.unsent.quit_one": "Its last save hasn’t uploaded yet. Hatoba quits once it’s uploaded or discarded.",
+    "sftp.edit.unsent.quitLockedTitle": "Discard changes and quit?",
+    "sftp.edit.unsent.quitLocked":
+      "{n} files being edited have saves that haven’t uploaded. Uploading them needs Hatoba unlocked.",
+    "sftp.edit.unsent.quitLocked_one":
+      "A file being edited has a save that hasn’t uploaded. Uploading it needs Hatoba unlocked.",
     "sftp.edit.upload": "Upload",
     "sftp.edit.discard": "Discard Changes",
   },
@@ -646,7 +656,13 @@ export default defineMessages({
     "sftp.edit.unsent.body": "最後の保存が {host} にまだアップロードされていません。",
     "sftp.edit.unsent.offline":
       "最後の保存が {host} にまだアップロードされておらず、このタブは接続されていません。アップロードするには再接続してください。",
-    "sftp.edit.unsent.locked": "Hatoba がロックされたとき、最後の保存がまだアップロードされていませんでした。",
+    "sftp.edit.unsent.locked":
+      "最後の保存はまだアップロードされていません。Hatoba のロック中は何もアップロードされません。",
+    "sftp.edit.unsent.quit":
+      "最後の保存はまだアップロードされていません。アップロードするか破棄すると、Hatoba は終了します。",
+    "sftp.edit.unsent.quitLockedTitle": "変更を破棄して終了しますか？",
+    "sftp.edit.unsent.quitLocked":
+      "編集中の {n} 個のファイルに、まだアップロードされていない保存があります。アップロードするには Hatoba のロックを解除してください。",
     "sftp.edit.upload": "アップロード",
     "sftp.edit.discard": "変更を破棄",
   },
@@ -862,7 +878,10 @@ export default defineMessages({
     "sftp.edit.unsent.title": "上傳對 {n} 個檔案的修改？",
     "sftp.edit.unsent.body": "最近一次儲存還沒有上傳到 {host}。",
     "sftp.edit.unsent.offline": "最近一次儲存還沒有上傳到 {host}，而這個分頁已中斷連線。重新連線後才能上傳。",
-    "sftp.edit.unsent.locked": "Hatoba 鎖定時，最近一次儲存還沒有上傳。",
+    "sftp.edit.unsent.locked": "最近一次儲存還沒有上傳。Hatoba 鎖定期間不會上傳。",
+    "sftp.edit.unsent.quit": "最近一次儲存還沒有上傳。上傳或放棄修改後，Hatoba 會結束。",
+    "sftp.edit.unsent.quitLockedTitle": "放棄修改並結束？",
+    "sftp.edit.unsent.quitLocked": "有 {n} 個正在編輯的檔案，最近一次儲存還沒有上傳。要上傳，需要先解鎖 Hatoba。",
     "sftp.edit.upload": "上傳",
     "sftp.edit.discard": "放棄修改",
   },

@@ -6,16 +6,19 @@ import { discardEdit, settleHeld, uploadEdit, useEdits, useUnsentAsk, type Unsen
 import s from "./EditDialogs.module.css";
 
 /**
- * SFTP-05's questions, mounted once while the vault is unlocked: a file that changed on the server, saves
- * that did not upload when editing stops or the tab closes, and those the lock kept.
+ * SFTP-05's questions: a file that changed on the server, saves that did not upload when editing stops,
+ * the tab closes or Hatoba quits, and those found after the unlock. Behind the lock screen only quitting
+ * asks, naming no file or host, and its saves can only be discarded.
  */
-export function EditDialogs() {
+export function EditDialogs({ locked }: { locked: boolean }) {
   const items = useEdits((st) => st.items);
   const deferred = useEdits((st) => st.deferred);
   const ask = useUnsentAsk((st) => st.pending);
+  if (locked)
+    return ask?.quit ? <UnsentDialog edits={ask.edits} canUpload={false} quit locked onChoose={ask.resolve} /> : null;
   const held = Object.values(items).filter((e) => e.held);
   const conflict = Object.values(items).find((e) => e.state === "conflict" && !e.held && !deferred[e.edit_id]);
-  if (ask) return <UnsentDialog edits={ask.edits} canUpload={ask.canUpload} onChoose={ask.resolve} />;
+  if (ask) return <UnsentDialog edits={ask.edits} canUpload={ask.canUpload} quit={ask.quit} onChoose={ask.resolve} />;
   if (held.length > 0)
     return <UnsentDialog edits={held} canUpload held onChoose={(c) => c && void settleHeld(held, c)} />;
   if (conflict) return <ConflictDialog key={conflict.edit_id} edit={conflict} />;
@@ -51,36 +54,49 @@ function ConflictDialog({ edit }: { edit: RemoteEditView }) {
 }
 
 /**
- * Upload or Discard for saves that did not upload. Stopping or closing a tab can be cancelled; the copies
- * the lock kept wait for an answer.
+ * Upload or Discard for saves that did not upload. Stopping, closing a tab and quitting can be cancelled;
+ * the copies found after the unlock wait for an answer.
  */
 function UnsentDialog({
   edits,
   canUpload,
   held,
+  quit,
+  locked,
   onChoose,
 }: {
   edits: RemoteEditView[];
   canUpload: boolean;
   held?: boolean;
+  quit?: boolean;
+  /** Over the lock screen, which hides the files' names. */
+  locked?: boolean;
   onChoose(choice: UnsentChoice | null): void;
 }) {
   const t = useT();
   const host = useTabTitle(edits[0]?.tab_id ?? "");
-  const one = edits.length === 1;
-  const title = one
-    ? t("sftp.edit.unsent.titleOne", { name: edits[0].name })
-    : t("sftp.edit.unsent.title", { n: edits.length });
-  const body = held
-    ? t("sftp.edit.unsent.locked", { n: edits.length })
-    : canUpload
-      ? t("sftp.edit.unsent.body", { n: edits.length, host })
-      : t("sftp.edit.unsent.offline", { n: edits.length, host });
+  const n = edits.length;
+  const one = n === 1;
+  const title = locked
+    ? t("sftp.edit.unsent.quitLockedTitle")
+    : one
+      ? t("sftp.edit.unsent.titleOne", { name: edits[0].name })
+      : t("sftp.edit.unsent.title", { n });
+  const body = locked
+    ? t("sftp.edit.unsent.quitLocked", { n })
+    : held
+      ? t("sftp.edit.unsent.locked", { n })
+      : quit
+        ? t("sftp.edit.unsent.quit", { n })
+        : canUpload
+          ? t("sftp.edit.unsent.body", { n, host })
+          : t("sftp.edit.unsent.offline", { n, host });
   return (
     <Dialog
       icon="cloud-arrow-up"
       title={title}
       body={body}
+      whileLocked={locked}
       onClose={held ? undefined : () => onChoose(null)}
       actions={
         <>
@@ -99,7 +115,7 @@ function UnsentDialog({
         </>
       }
     >
-      {!one && (
+      {!one && !locked && (
         <ul className={s.files}>
           {edits.map((e) => (
             <li key={e.edit_id} className={s.file} title={e.remote_path}>

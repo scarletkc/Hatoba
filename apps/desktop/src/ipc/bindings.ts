@@ -271,6 +271,8 @@ export const commands = {
 	sftpEditChanged: (editId: string) => __TAURI_INVOKE<boolean>("sftp_edit_changed", { editId }),
 	/**  SFTP-05: the files being edited. */
 	sftpEditList: () => __TAURI_INVOKE<RemoteEditView[]>("sftp_edit_list"),
+	/**  SFTP-05: quits once the user has answered for the edits' saves that did not upload. */
+	sftpEditQuit: () => __TAURI_INVOKE<void>("sftp_edit_quit"),
 	syncStatus: () => __TAURI_INVOKE<SyncStatus>("sync_status"),
 	/**  Wizard "Test connection": Worker `/v1/health`, or (D1 mode) token check + database list. */
 	syncTest: (config: SyncConfigInput) => __TAURI_INVOKE<SyncTestResult>("sync_test", { config }),
@@ -612,6 +614,7 @@ export const events = {
 	appNotificationClick: makeEvent<NotificationTarget>("app://notification-click"),
 	cliActivity: makeEvent<CliActivityEvent>("cli://activity"),
 	sftpEdit: makeEvent<RemoteEditEvent>("sftp://edit"),
+	sftpQuit: makeEvent<RemoteEditQuitEvent>("sftp://quit"),
 	sshAuthPrompt: makeEvent<AuthPrompt>("ssh://auth-prompt"),
 	sshConnections: makeEvent<ConnectionsEvent>("ssh://connections"),
 	sshForwardsLost: makeEvent<ForwardsLostEvent>("ssh://forwards-lost"),
@@ -2302,6 +2305,12 @@ export type RemoteEditEvent = {
 	edit_id: string,
 	edit: RemoteEditView | null,
 };
+
+/**
+ *  Hatoba is quitting with files being edited: the WebView asks about saves that did not upload,
+ *  then quits with `sftp_edit_quit`.
+ */
+export type RemoteEditQuitEvent = null;
 
 /**  SFTP-05: where the copy of a file edited in a local editor stands. */
 export type RemoteEditState = 

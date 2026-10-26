@@ -186,7 +186,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Discard Changes | 変更を破棄 |
 | Their last saves haven’t uploaded to {host} yet. | 最後の保存が {host} にまだアップロードされていません。 |
 | Their last saves haven’t uploaded to {host}, and the tab isn’t connected. Reconnect to upload them. | 最後の保存が {host} にまだアップロードされておらず、このタブは接続されていません。アップロードするには再接続してください。 |
-| Their last saves hadn’t uploaded when Hatoba locked. | Hatoba がロックされたとき、最後の保存がまだアップロードされていませんでした。 |
+| Their last saves haven’t uploaded yet. Nothing uploads while Hatoba is locked. | 最後の保存はまだアップロードされていません。Hatoba のロック中は何もアップロードされません。 |
 | Couldn’t open “{name}” in an editor. You can choose one in Settings → Terminal. | 「{name}」をエディターで開けませんでした。設定 → ターミナルでエディターを選べます。 |
 | {n} files didn’t upload. | {n} 個のファイルがアップロードされませんでした。 |
 

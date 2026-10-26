@@ -6,15 +6,17 @@
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
-/// Kinds of file the system's app for them runs (programs, scripts, installers, shortcuts, and
-/// web pages in a browser), so that opening a copy would run it on this computer.
+/// Kinds of file the system's app for them runs (programs, scripts, installers, shortcuts, help
+/// files, and web pages and XML in a browser), so that opening a copy would run it on this computer.
 const RUNS: &[&str] = &[
+    "ahk",
     "app",
     "appimage",
-    "appref-ms",
     "application",
+    "appref-ms",
     "bash",
     "bat",
+    "chm",
     "cmd",
     "com",
     "command",
@@ -40,20 +42,26 @@ const RUNS: &[&str] = &[
     "msc",
     "msi",
     "msp",
+    "msu",
     "pif",
     "pkg",
     "pl",
     "ps1",
     "psm1",
     "py",
+    "pyc",
     "pyw",
+    "pyz",
+    "pyzw",
     "rb",
+    "rbw",
     "reg",
     "run",
     "scf",
     "scr",
     "sh",
     "svg",
+    "tcl",
     "terminal",
     "tool",
     "url",
@@ -65,6 +73,9 @@ const RUNS: &[&str] = &[
     "wsf",
     "wsh",
     "xhtml",
+    "xml",
+    "xsl",
+    "xslt",
     "zsh",
 ];
 

@@ -186,7 +186,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Discard Changes | 放弃修改 |
 | Their last saves haven’t uploaded to {host} yet. | 最近一次保存还没有上传到 {host}。 |
 | Their last saves haven’t uploaded to {host}, and the tab isn’t connected. Reconnect to upload them. | 最近一次保存还没有上传到 {host}，而这个标签页已断开连接。重新连接后才能上传。 |
-| Their last saves hadn’t uploaded when Hatoba locked. | Hatoba 锁定时，最近一次保存还没有上传。 |
+| Their last saves haven’t uploaded yet. Nothing uploads while Hatoba is locked. | 最近一次保存还没有上传。Hatoba 锁定期间不会上传。 |
 | Couldn’t open “{name}” in an editor. You can choose one in Settings → Terminal. | 无法在编辑器中打开“{name}”。可以在设置 → 终端中选择编辑器。 |
 | {n} files didn’t upload. | {n} 个文件没有上传。 |
 

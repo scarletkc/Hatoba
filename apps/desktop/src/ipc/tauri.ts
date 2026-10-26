@@ -139,6 +139,7 @@ export function createTauriApi(): HatobaApi {
     sftp_edit_stop: (editId, upload) => commands.sftpEditStop(editId, upload),
     sftp_edit_changed: (editId) => commands.sftpEditChanged(editId),
     sftp_edit_list: () => commands.sftpEditList(),
+    sftp_edit_quit: () => commands.sftpEditQuit(),
 
     sync_status: () => commands.syncStatus(),
     sync_test: (config) => commands.syncTest(config),

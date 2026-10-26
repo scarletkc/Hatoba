@@ -1817,6 +1817,8 @@ export interface EventMap {
   "ssh://state": SessionStateEvent;
   "transfer://progress": TransferProgressEvent;
   "sftp://edit": RemoteEditEvent;
+  /** SFTP-05: Hatoba is quitting with files being edited, and waits for `sftp_edit_quit`. */
+  "sftp://quit": null;
   /** SSH-16: a host's connection opened or closed, or its forwards changed. */
   "ssh://connections": ConnectionsEvent;
   "ssh://forwards-lost": ForwardsLostEvent;

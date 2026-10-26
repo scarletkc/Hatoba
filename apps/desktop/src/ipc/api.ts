@@ -283,6 +283,7 @@ export interface HatobaApi {
   /** Whether the copy holds a save the server does not have, also one not noticed yet. */
   sftp_edit_changed(edit_id: string): Promise<boolean>;
   sftp_edit_list(): Promise<RemoteEditView[]>;
+  sftp_edit_quit(): Promise<void>;
 
   // sync
   sync_status(): Promise<SyncStatus>;

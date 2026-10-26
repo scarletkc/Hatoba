@@ -384,6 +384,14 @@ pub fn sftp_edit_list(state: State<'_, AppState>) -> Vec<RemoteEditView> {
     state.edits.list()
 }
 
+/// SFTP-05: quits once the user has answered for the edits' saves that did not upload.
+#[tauri::command]
+#[specta::specta]
+pub fn sftp_edit_quit(app: AppHandle, state: State<'_, AppState>) {
+    state.edits.allow_quit();
+    app.exit(0);
+}
+
 /// The program set to edit remote files on this device.
 fn editor(vault: &hatoba_core::vault::Vault) -> Option<String> {
     let json = vault.local_prefs().ok().flatten()?;
