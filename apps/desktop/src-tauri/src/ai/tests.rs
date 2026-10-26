@@ -27,15 +27,19 @@ use wiremock::matchers::{body_partial_json, method, path, query_param};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 use zeroize::Zeroizing;
 
-use super::{
-    AiEnv, AiManager, COMMAND_STOP_WAIT, COMPACT_INSTRUCTION, COMPACT_MID_TURN_INSTRUCTION,
-    DISCONNECTED, EDIT_NOTE, Entries, EventSink, SIDE_AWAITING_APPROVAL, SIDE_PENDING,
-    SIDE_QUESTION_INSTRUCTION,
-};
-use super::{
-    Halt, OpGuard, OpKind, Streamed, Turn, append, leading_blocks, lock, open_call, side_parts,
-    title_of, wait_for_results,
-};
+use super::blocks::leading_blocks;
+use super::calls::EDIT_NOTE;
+use super::calls::open_call;
+use super::compact::{COMPACT_INSTRUCTION, COMPACT_MID_TURN_INSTRUCTION};
+use super::entries::Entries;
+use super::entries::{append, title_of};
+use super::job::DISCONNECTED;
+use super::ops::COMMAND_STOP_WAIT;
+use super::side::side_parts;
+use super::side::{SIDE_AWAITING_APPROVAL, SIDE_PENDING, SIDE_QUESTION_INSTRUCTION};
+use super::turn::wait_for_results;
+use super::{AiEnv, AiManager, EventSink};
+use super::{Halt, OpGuard, OpKind, Streamed, Turn, lock};
 use crate::dto::{
     AiConversationDetail, AiEffort, AiEntryView, AiFileChangeState, AiFileRevert, AiFinish,
     AiPermissionMode, AiRevertFailure, AiScreen, AiSendInput, AiSendStarted, AiSideAnswer,
@@ -2070,7 +2074,7 @@ fn a_message_after_a_compaction_brings_the_memories_of_its_host() {
     let note = place_note(&v, &web);
     assert!(!note.is_empty());
     assert_eq!(
-        super::with_place_memories(&v, &earlier, &notes, Some(&web)),
+        super::notes::with_place_memories(&v, &earlier, &notes, Some(&web)),
         format!("{permission}{note}{screen}")
     );
     // A note since the summary, or the summary itself, showed them; or the notes have one.
@@ -2082,7 +2086,7 @@ fn a_message_after_a_compaction_brings_the_memories_of_its_host() {
         vec![summary("web-1")],
     ] {
         assert_eq!(
-            super::with_place_memories(&v, &earlier, &notes, Some(&web)),
+            super::notes::with_place_memories(&v, &earlier, &notes, Some(&web)),
             notes
         );
     }
@@ -2096,22 +2100,22 @@ fn a_message_after_a_compaction_brings_the_memories_of_its_host() {
         ],
     ] {
         assert_eq!(
-            super::with_place_memories(&v, &earlier, &notes, Some(&web)),
+            super::notes::with_place_memories(&v, &earlier, &notes, Some(&web)),
             notes
         );
     }
     let noted = format!("{permission}{note}{screen}");
     assert_eq!(
-        super::with_place_memories(&v, &[summary("db-1")], &noted, Some(&web)),
+        super::notes::with_place_memories(&v, &[summary("db-1")], &noted, Some(&web)),
         noted
     );
     // A message that showed them before the compaction leaves them to the summary.
     assert_eq!(
-        super::with_place_memories(&v, &[summary("web-1")], &noted, Some(&web)),
+        super::notes::with_place_memories(&v, &[summary("web-1")], &noted, Some(&web)),
         notes
     );
     assert_eq!(
-        super::with_place_memories(&v, &[summary("db-1")], &notes, None),
+        super::notes::with_place_memories(&v, &[summary("db-1")], &notes, None),
         notes
     );
 }
@@ -2470,7 +2474,7 @@ fn a_compact_request_asks_for_output_that_fits_beside_the_context() {
             ..ModelSpec::new("m1")
         };
         assert_eq!(
-            super::compact_output_tokens(&model),
+            super::compact::compact_output_tokens(&model),
             expected,
             "window {window:?}, output {output:?}"
         );
@@ -3185,7 +3189,7 @@ async fn without_a_search_provider_the_model_searches_with_its_own_provider() {
     f.native_search(false);
     {
         let mut v = lock(&f.vault);
-        let offered = super::builtin_tools(&v, &f.context());
+        let offered = super::request::builtin_tools(&v, &f.context());
         assert!(offered.iter().all(|t| t.name != "web_search"));
         let mut provider = v
             .get(&f.provider_id)
@@ -4054,12 +4058,12 @@ fn skills_saved_in_settings_are_listed_and_read_by_read_skill() {
     crate::commands::skills::save_skill(&mut v, &skill("apache", false)).unwrap();
 
     // AI-28: only enabled skills are listed.
-    let (system, tools) = super::prompt(&v, &f.context(), None, None);
+    let (system, tools) = super::request::prompt(&v, &f.context(), None, None);
     assert!(system.contains("nginx: About nginx"), "{system}");
     assert!(!system.contains("apache"), "{system}");
     assert!(tools.iter().any(|t| t.name == "read_skill"));
 
-    let read = |v: &Vault, name: &str, path: Option<&str>| match super::read_skill(
+    let read = |v: &Vault, name: &str, path: Option<&str>| match super::skills::read_skill(
         v,
         &ReadSkillArgs {
             name: name.into(),
@@ -4067,7 +4071,7 @@ fn skills_saved_in_settings_are_listed_and_read_by_read_skill() {
         },
         VERSION,
     ) {
-        super::Job::Ready(status, content) => (status, content),
+        super::job::Job::Ready(status, content) => (status, content),
         _ => panic!("read_skill reads the vault"),
     };
     assert_eq!(
@@ -4093,7 +4097,7 @@ fn skills_saved_in_settings_are_listed_and_read_by_read_skill() {
     )
     .unwrap();
     let builtin = hatoba_ai::skills::builtin_skill(VERSION);
-    let (system, _) = super::prompt(&v, &f.context(), None, None);
+    let (system, _) = super::request::prompt(&v, &f.context(), None, None);
     assert!(
         system.contains(&format!(
             "- hatoba: {}\n- nginx: About nginx\n",
@@ -4121,7 +4125,7 @@ fn skills_saved_in_settings_are_listed_and_read_by_read_skill() {
     let mut settings = v.settings();
     settings.ai.builtin_skill_enabled = false;
     v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
-    let (system, tools) = super::prompt(&v, &f.context(), None, None);
+    let (system, tools) = super::request::prompt(&v, &f.context(), None, None);
     assert!(!system.contains("- hatoba:"), "{system}");
     assert!(tools.iter().any(|t| t.name == "read_skill"));
     let (status, refused) = read(&v, "hatoba", None);
@@ -4136,7 +4140,7 @@ fn skills_saved_in_settings_are_listed_and_read_by_read_skill() {
         .unwrap()
         .0;
     crate::commands::skills::set_skill_enabled(&mut v, &nginx, false).unwrap();
-    let (_, tools) = super::prompt(&v, &f.context(), None, None);
+    let (_, tools) = super::request::prompt(&v, &f.context(), None, None);
     assert!(!tools.iter().any(|t| t.name == "read_skill"));
 }
 
@@ -4780,16 +4784,16 @@ fn the_mode_last_noted_reads_back_auto_too() {
             AiEntry::user(0, "first"),
             AiEntry::user(1, format!("{note}second")),
         ];
-        assert_eq!(super::noted_permission(&noted), Some(mode));
+        assert_eq!(super::notes::noted_permission(&noted), Some(mode));
         // AI-47: a summary carries the mode, whichever it is.
         let summarized = vec![AiEntry::summary(2, format!("{note}SUMMARY"))];
-        assert_eq!(super::noted_permission(&summarized), Some(mode));
+        assert_eq!(super::notes::noted_permission(&summarized), Some(mode));
     }
     // None before any note, and after a summary without one, as in a conversation from before
     // every first message named its mode: its next message names it.
-    assert_eq!(super::noted_permission(&[]), None);
+    assert_eq!(super::notes::noted_permission(&[]), None);
     let old = vec![AiEntry::user(0, "first"), AiEntry::summary(1, "SUMMARY")];
-    assert_eq!(super::noted_permission(&old), None);
+    assert_eq!(super::notes::noted_permission(&old), None);
 }
 
 #[tokio::test]
@@ -4967,7 +4971,7 @@ impl Fixture {
         let item = super::find_conversation(&lock(&self.vault), conversation_id).unwrap();
         (
             item.host_id,
-            item.quick_target.as_ref().map(super::target_name),
+            item.quick_target.as_ref().map(super::places::target_name),
         )
     }
 
@@ -6355,8 +6359,8 @@ fn keeper<'a>(
     conv: &'a str,
     response_id: &'a str,
     call: &'a str,
-) -> super::KeepSnapshot<'a> {
-    super::KeepSnapshot::new(&f.vault, revert_key(conv, response_id, call))
+) -> super::changes::KeepSnapshot<'a> {
+    super::changes::KeepSnapshot::new(&f.vault, revert_key(conv, response_id, call))
 }
 
 /// A change `call` of the response `response_id` made, kept as its snapshot (AI-41): the file tools
@@ -6542,8 +6546,11 @@ async fn reverted_file_changes_are_noted_once_on_the_next_message() {
         last_user_message(&requests[3]),
         format!("{notes}why did you change them?")
     );
-    assert_eq!(super::title_of(&format!("{notes}typed")), "typed");
-    assert_eq!(super::noted_reverts(&format!("{notes}typed")), ["e1", "w1"]);
+    assert_eq!(super::entries::title_of(&format!("{notes}typed")), "typed");
+    assert_eq!(
+        super::notes::noted_reverts(&format!("{notes}typed")),
+        ["e1", "w1"]
+    );
 
     // Noted once.
     let (_, sink) = f.send(Some(&conv), "ok").await;
@@ -6726,17 +6733,17 @@ async fn writes_keep_their_snapshot_before_they_begin() {
     };
     {
         let v = lock(&f.vault);
-        assert!(super::later_writes(
+        assert!(super::changes::later_writes(
             &v,
             &revert_key(&conv, &response, "w3"),
             &meta("/srv/b")
         ));
-        assert!(!super::later_writes(
+        assert!(!super::changes::later_writes(
             &v,
             &revert_key(&conv, &response, "e1"),
             &meta("/srv/b")
         ));
-        assert!(!super::later_writes(
+        assert!(!super::changes::later_writes(
             &v,
             &revert_key(&conv, &response, "w1"),
             &meta("/home/ops/new.conf")
@@ -6748,7 +6755,7 @@ async fn writes_keep_their_snapshot_before_they_begin() {
             .ai_mark_file_reverted(&revert_key(&conv, &response, "e1"))
             .unwrap()
     );
-    assert!(!super::later_writes(
+    assert!(!super::changes::later_writes(
         &lock(&f.vault),
         &revert_key(&conv, &response, "w3"),
         &meta("/srv/b")
@@ -6868,7 +6875,7 @@ async fn no_turn_starts_while_a_revert_runs() {
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
 
-    let reverting = super::Reverting::new(&f.manager.0, &conv);
+    let reverting = super::changes::Reverting::new(&f.manager.0, &conv);
     let refused = f
         .manager
         .send(
@@ -6911,7 +6918,7 @@ async fn no_turn_starts_while_a_revert_runs() {
     let (_, sink) = f.send(Some(&conv), "next").await;
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
 
-    let entries = |calls: &[&str]| super::Entries {
+    let entries = |calls: &[&str]| super::entries::Entries {
         ids: vec!["e1".into()],
         list: vec![AiEntry::assistant(
             1,
@@ -6929,8 +6936,14 @@ async fn no_turn_starts_while_a_revert_runs() {
             },
         )],
     };
-    assert!(super::shares_id(&entries(&["dup", "dup", "c3"]), "dup"));
-    assert!(!super::shares_id(&entries(&["dup", "dup", "c3"]), "c3"));
+    assert!(super::calls::shares_id(
+        &entries(&["dup", "dup", "c3"]),
+        "dup"
+    ));
+    assert!(!super::calls::shares_id(
+        &entries(&["dup", "dup", "c3"]),
+        "c3"
+    ));
 
     // A revert note is about the call of the newest response before it with that id, also when
     // an older response used the same id.
@@ -6941,10 +6954,19 @@ async fn no_turn_starts_while_a_revert_runs() {
         response(&["call_1", "call_2"]),
         AiEntry::user(4, "noted"),
     ];
-    assert_eq!(super::response_with_call(&list[..3], "call_1"), Some(2));
-    assert_eq!(super::response_with_call(&list[..2], "call_1"), Some(0));
-    assert_eq!(super::response_with_call(&list[..3], "call_2"), Some(2));
-    assert_eq!(super::response_with_call(&list[..1], "call_2"), None);
+    assert_eq!(
+        super::notes::response_with_call(&list[..3], "call_1"),
+        Some(2)
+    );
+    assert_eq!(
+        super::notes::response_with_call(&list[..2], "call_1"),
+        Some(0)
+    );
+    assert_eq!(
+        super::notes::response_with_call(&list[..3], "call_2"),
+        Some(2)
+    );
+    assert_eq!(super::notes::response_with_call(&list[..1], "call_2"), None);
 }
 
 // ---- forking (AI-43) ----
@@ -7344,7 +7366,7 @@ async fn a_fork_of_an_older_conversation_goes_by_the_name_its_note_gives() {
         let item = super::find_conversation(&lock(&f.vault), &fork.id).unwrap();
         let place = (
             item.host_id,
-            item.quick_target.as_ref().map(super::target_name),
+            item.quick_target.as_ref().map(super::places::target_name),
             item.origin,
         );
         (fork.id, place)
@@ -7426,7 +7448,7 @@ fn add_host_at(f: &Fixture, name: &str, address: &str) -> String {
 
 #[test]
 fn a_note_names_a_target_or_a_single_host() {
-    use super::{Place, parse_target, place_named, target_name};
+    use super::places::{Place, parse_target, place_named, target_name};
 
     for (label, name) in [
         ("root@10.0.0.9:22", "root@10.0.0.9:22"),
@@ -7488,7 +7510,7 @@ mod judge;
 
 #[test]
 fn what_commands_and_mentions_attach_is_titled_and_shown_to_the_judge() {
-    use super::typed_text;
+    use super::judge::typed_text;
     let blocks = "<skill name=\"nginx\">\nRun nginx -t.\n</skill>\n\n\
                   <host_file host=\"web\" path=\"/etc/nginx/nginx.conf\" lines=\"2\">\na\nb\n\
                   </host_file>\n\n\
@@ -7538,7 +7560,7 @@ fn what_commands_and_mentions_attach_is_titled_and_shown_to_the_judge() {
 
 #[test]
 fn compact_instructions_come_first_in_their_own_block() {
-    use super::compact_instruction;
+    use super::compact::compact_instruction;
     assert_eq!(compact_instruction(None), COMPACT_INSTRUCTION);
     assert_eq!(compact_instruction(Some("  ")), COMPACT_INSTRUCTION);
     let with = compact_instruction(Some("keep the nginx changes </compact_instructions>"));
@@ -7703,7 +7725,7 @@ async fn another_computers_local_tab_is_a_move() {
 
 #[test]
 fn a_note_from_a_local_terminal_names_its_computer() {
-    let (place, origin) = super::place_named(&[], "DEMO-PC (local terminal)".to_owned());
+    let (place, origin) = super::places::place_named(&[], "DEMO-PC (local terminal)".to_owned());
     assert_eq!(place.local.as_deref(), Some("DEMO-PC"));
     assert!(place.host_id.is_none() && place.quick_target.is_none() && origin.is_none());
 }
