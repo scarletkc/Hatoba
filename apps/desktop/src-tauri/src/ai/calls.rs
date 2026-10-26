@@ -501,10 +501,6 @@ impl AiManager {
 /// The line a result starts with when the user edited the call before it ran (AI-17).
 pub(super) const EDIT_NOTE: &str = "The user edited the arguments before the call ran; it ran with";
 
-/// The call `tool_call_id` of the conversation's newest response, when it has no result yet.
-/// Results answer the calls with their id in order (`fix_up_missing_results`), so of calls that
-/// share an id (stored before such calls got their results in [`store_response`]), the open one
-/// is the first that no result answers.
 /// Where an open call is, for the file tools' record of what the model has seen (§13.4): the
 /// response that made it, which is the newest, and the entries in the conversation's context.
 fn file_place(conversation: &AiConversation, entries: &Entries) -> files::Place {
@@ -527,6 +523,10 @@ fn earlier_call_open(entries: &Entries, tool_call_id: &str) -> AppResult<bool> {
     Ok((0..index).any(|c| !answered.contains_key(&(0, c))))
 }
 
+/// The call `tool_call_id` of the conversation's newest response, when it has no result yet.
+/// Results answer the calls with their id in order (`fix_up_missing_results`), so of calls that
+/// share an id (stored before such calls got their results in [`store_response`]), the open one
+/// is the first that no result answers.
 pub(super) fn open_call(entries: &Entries, tool_call_id: &str) -> AppResult<AiToolCall> {
     let (at, index) = open_call_at(entries, tool_call_id)?;
     let call = &calls_of(&entries.list[at])[index];
