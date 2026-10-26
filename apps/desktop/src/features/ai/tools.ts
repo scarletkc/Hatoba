@@ -7,10 +7,10 @@ import {
   readsOnlyCommand,
   savablePrefixes,
   type ShellDialect,
-} from "./commandRules";
-import { parseSendKey, SEND_KEY_NOTATION, showTerminalInput, type SendKey } from "./sendKeys";
-export { SEND_KEYS, keySequence, parseSendKey } from "./sendKeys";
-export type { SendKey } from "./sendKeys";
+} from "./rules/commandRules";
+import { parseSendKey, SEND_KEY_NOTATION, showTerminalInput, type SendKey } from "./terminal/sendKeys";
+export { SEND_KEYS, keySequence, parseSendKey } from "./terminal/sendKeys";
+export type { SendKey } from "./terminal/sendKeys";
 
 /**
  * Built-in tool names (§13.4, §13.8); MCP tools are `mcp__<server>__<tool>` (§13.9), called directly or,

@@ -2,15 +2,8 @@ import { useEffect } from "react";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
 import { api } from "@/ipc/api";
-import {
-  detachSlot,
-  loadCatalog,
-  openNotified,
-  refreshAfterSync,
-  reloadAll,
-  reloadSlot,
-  resetForLock,
-} from "./actions";
+import { loadCatalog, refreshAfterSync } from "./actions/conversations";
+import { detachSlot, openNotified, reloadAll, reloadSlot, resetForLock } from "./actions/slots";
 import { applyMcpStatus, loadMcp, resetMcp, useMcp } from "./mcp";
 import { useAi } from "./store";
 

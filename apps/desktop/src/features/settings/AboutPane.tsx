@@ -3,7 +3,7 @@ import { AppLogo } from "@/app/AppLogo";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
 import { useUpdate } from "@/app/update";
-import { Markdown } from "@/features/ai/Markdown";
+import { Markdown } from "@/features/ai/messages/Markdown";
 import { copyText } from "@/features/keys/clipboard";
 import { useTransfers } from "@/features/sftp/transfers";
 import { openExternal } from "@/features/sync/external";

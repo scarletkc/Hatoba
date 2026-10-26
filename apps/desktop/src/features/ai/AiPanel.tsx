@@ -18,23 +18,17 @@ import { useT } from "@/i18n";
 import type { HostView } from "@/ipc/types";
 import { shortcutLabel } from "@/lib/platform";
 import { cx } from "@/lib/cx";
-import {
-  attachDroppedPaths,
-  attachFiles,
-  connectConversation,
-  continueHomeConversation,
-  focusInput,
-  newConversation,
-  reloadSlot,
-  stopSideQuestion,
-  stopTurn,
-  toggleAiPanel,
-} from "./actions";
-import { dialectOf } from "./commandRules";
-import { Composer } from "./Composer";
+import { attachDroppedPaths, attachFiles } from "./actions/attach";
+import { focusInput, toggleAiPanel } from "./actions/panel";
+import { stopSideQuestion } from "./actions/sideQuestions";
+import { connectConversation, continueHomeConversation, newConversation, reloadSlot } from "./actions/slots";
+import { stopTurn } from "./actions/turns";
+import { dialectOf } from "./rules/commandRules";
+import { Composer } from "./composer/Composer";
 import { usePanelFileDrop } from "./fileDrop";
-import { History } from "./History";
-import { hostInfo, MessageList } from "./Messages";
+import { History } from "./history/History";
+import { hostInfo } from "./calls/hostInfo";
+import { MessageList } from "./messages/Messages";
 import { chats, conversationModel, hasModels } from "./models";
 import { connectionFor, movedFrom, placeLabel } from "./place";
 import { sideRunning } from "./side";

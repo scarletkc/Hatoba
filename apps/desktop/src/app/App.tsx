@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { ConfirmHost, ToastHost, setOverlaysLocked } from "@hatoba/ui";
 import { toggleAiPanel } from "@/features/ai/actions";
 import { AiPanel } from "@/features/ai/AiPanel";
-import { EditFilesHost } from "@/features/ai/EditFiles";
+import { EditFilesHost } from "@/features/ai/calls/EditFiles";
 import { useAiLifecycle } from "@/features/ai/lifecycle";
 import { clearReadouts } from "@/features/dashboard/readings";
 import { ForwardsPage } from "@/features/hosts/ForwardsPage";

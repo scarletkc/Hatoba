@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { formatCommandLine } from "@/features/settings/mcpLogic";
 import { api } from "@/ipc/api";
 import type { McpServerState, McpServerStatus, McpServerView, McpTransportView } from "@/ipc/types";
-import { commandNames, type PromptCommand, type ResourceItem } from "./commands";
+import { commandNames, type PromptCommand, type ResourceItem } from "./composer/commands";
 
 /** The MCP servers that `/mcp` shows (AI-30), with their live state (AI-32), prompts and resources (AI-50, AI-51). */
 interface McpState {

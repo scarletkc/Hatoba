@@ -24,16 +24,10 @@ vi.mock("@/ipc/api", async (importActual) => ({
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 
-const {
-  askAiAboutConnection,
-  askSideQuestion,
-  dismissSideQuestion,
-  noteSelection,
-  retrySideQuestion,
-  sendMessage,
-  stopSideQuestion,
-  tabSelection,
-} = await import("./actions");
+const { askAiAboutConnection, noteSelection, tabSelection } = await import("./actions/attach");
+const { askSideQuestion, dismissSideQuestion, retrySideQuestion, stopSideQuestion } =
+  await import("./actions/sideQuestions");
+const { sendMessage } = await import("./actions/turns");
 const { approvalCall, canAskSide, newSideQuestion, reduceSideEvent, sideRunning } = await import("./side");
 const { blankSlot, getSlot, HOME_SLOT, patchSlot, slotActivity, useAi } = await import("./store");
 type Slot = import("./store").Slot;

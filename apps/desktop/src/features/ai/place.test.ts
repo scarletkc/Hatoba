@@ -3,7 +3,7 @@ import type { TabSource } from "@/app/tabs";
 import { translate, type MessageKey, type Params } from "@/i18n";
 import type { HostView, QuickTarget } from "@/ipc/types";
 import { connectionFor, conversationPlace, movedFrom, moves, placeLabel, placeName } from "./place";
-import { serverLabel } from "./revertText";
+import { serverLabel } from "./calls/revertText";
 
 const t = (key: MessageKey, params?: Params) => translate("en", key, params);
 const host = (id: string, name: string, address: string, port = 22, username = "root") =>

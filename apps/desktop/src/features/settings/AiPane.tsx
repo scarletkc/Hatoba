@@ -19,9 +19,9 @@ import {
   type MenuEntry,
 } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
-import { LOCAL_TARGET, removeAllowance, savedAllowances, useAllowances } from "@/features/ai/allowances";
+import { LOCAL_TARGET, removeAllowance, savedAllowances, useAllowances } from "@/features/ai/rules/allowances";
 import { EFFORTS, effortKey } from "@/features/ai/effort";
-import { answersText, verdictText } from "@/features/ai/autoText";
+import { answersText, verdictText } from "@/features/ai/rules/autoText";
 import { InstructionsField } from "@/features/ai/InstructionsField";
 import { judgeChosen } from "@/features/ai/models";
 import { byteCount, INSTRUCTIONS_MAX_BYTES } from "@/features/ai/instructions";

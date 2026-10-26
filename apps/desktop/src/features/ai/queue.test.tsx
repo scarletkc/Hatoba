@@ -31,22 +31,11 @@ vi.mock("@/ipc/api", async (importActual) => ({
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 
-const {
-  askAiAboutConnection,
-  discardQueued,
-  editQueued,
-  newConversation,
-  noteSelection,
-  queueMessage,
-  reloadSlot,
-  removeQueuedAttachment,
-  resetForLock,
-  selectionAttachment,
-  sendMessage,
-  stopTurn,
-  tabSelection,
-} = await import("./actions");
-const { Composer } = await import("./Composer");
+const { askAiAboutConnection, noteSelection, selectionAttachment, tabSelection } = await import("./actions/attach");
+const { discardQueued, editQueued, queueMessage, removeQueuedAttachment } = await import("./actions/queued");
+const { newConversation, reloadSlot, resetForLock } = await import("./actions/slots");
+const { sendMessage, stopTurn } = await import("./actions/turns");
+const { Composer } = await import("./composer/Composer");
 const { joinMessages, messageBack, sendsQueued, takenBeside } = await import("./queue");
 const { blankSlot, getSlot, HOME_SLOT, patchSlot, useAi } = await import("./store");
 const { newTurn } = await import("./turn");

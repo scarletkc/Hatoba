@@ -7,7 +7,7 @@ import type {
   AiUsage,
   McpToolInfo,
 } from "@/ipc/types";
-import type { HardRule } from "./autoRules";
+import type { HardRule } from "./rules/autoRules";
 
 /** A response while it streams, before Rust stores it as an entry (§13.1 step 2). */
 export interface LiveResponse {
