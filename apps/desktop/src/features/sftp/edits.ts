@@ -188,17 +188,27 @@ export async function quitEditing() {
   const edits = Object.values(useEdits.getState().items);
   const changed = await Promise.all(edits.map((e) => unsent(e) || api.sftp_edit_changed(e.edit_id).catch(() => true)));
   const waiting = edits.filter((_, i) => changed[i]);
+  let upload = false;
   if (waiting.length > 0) {
-    const choice = await askUnsent(waiting, true, true);
+    const choice = await askUnsent(
+      waiting,
+      waiting.every((e) => isConnected(e.tab_id)),
+      true,
+    );
     if (!choice) return;
-    if (choice === "upload") {
-      const ended = await Promise.all(waiting.map((e) => api.sftp_edit_stop(e.edit_id, true).catch(() => false)));
-      const left = ended.filter((done) => !done).length;
-      if (left > 0) {
-        toast(t("sftp.edit.notUploaded", { n: left }), "error");
-        return;
-      }
-    }
+    upload = choice === "upload";
+  }
+  // The answer is for the listed copies; another saved while it was asked uploads like any save.
+  const listed = new Set(waiting.map((e) => e.edit_id));
+  const ended = await Promise.all(
+    Object.values(useEdits.getState().items).map((e) =>
+      api.sftp_edit_stop(e.edit_id, listed.has(e.edit_id) ? upload : isConnected(e.tab_id)).catch(() => false),
+    ),
+  );
+  const left = ended.filter((done) => !done).length;
+  if (left > 0) {
+    toast(t("sftp.edit.notUploaded", { n: left }), "error");
+    return;
   }
   await api.sftp_edit_quit();
 }

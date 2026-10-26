@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use russh_sftp::client::{Config as SftpConfig, SftpSession};
@@ -479,27 +479,31 @@ impl SftpClient {
     /// file was; a server that refuses the permission bits keeps the mode it gave the `.part` file
     /// only when that grants nothing more, and fails the upload otherwise. When the `.part` file
     /// cannot be created (a folder the login user cannot write) or cannot get the file's owner and
-    /// group, the content goes into `remote` itself, which keeps them; a dropped connection then
-    /// leaves it partly written, for the next upload to complete.
+    /// group, the content goes into `remote` itself, which keeps them, and `in_place` is set just
+    /// before the file is emptied: a failure after that leaves it partly written, for the next
+    /// upload to complete.
+    #[allow(clippy::too_many_arguments)]
     pub async fn write_back(
         &self,
         content: Vec<u8>,
         remote: &str,
         old: Option<RemoteStat>,
+        in_place: &AtomicBool,
         progress: impl Fn(TransferProgress) + Send + Sync + 'static,
         cancel: CancellationToken,
     ) -> Result<(), SshError> {
         let total = content.len() as u64;
         let source = std::io::Cursor::new(content);
         let mode = old.and_then(|old| old.mode).map(|mode| mode & 0o7777);
-        let (part, target) = match self.create_remote_part(remote, mode).await {
-            Ok(created) => created,
-            Err((_, true)) if old.is_some() => {
+        let created = self.create_remote_part(remote, mode).await;
+        let (part, target) = match (created, &old) {
+            (Ok(created), _) => created,
+            (Err((_, true)), Some(old)) => {
                 return self
-                    .write_in_place(source, total, remote, mode, &progress, &cancel)
+                    .write_in_place(source, total, remote, old, in_place, &progress, &cancel)
                     .await;
             }
-            Err((e, _)) => return Err(e),
+            (Err((e, _)), _) => return Err(e),
         };
         if let Some(old) = &old
             && !self.keep_owner(&target, old).await
@@ -507,7 +511,7 @@ impl SftpClient {
             drop(target);
             let _ = self.sftp.remove_file(part.as_str()).await;
             return self
-                .write_in_place(source, total, remote, mode, &progress, &cancel)
+                .write_in_place(source, total, remote, old, in_place, &progress, &cancel)
                 .await;
         }
         if let Some(mode) = mode
@@ -535,8 +539,12 @@ impl SftpClient {
     /// Gives the new `target` file the owner and group of `old`; false when the server refuses,
     /// as it does unless the login user is root or only the group changes to one of theirs.
     async fn keep_owner(&self, target: &russh_sftp::client::fs::File, old: &RemoteStat) -> bool {
-        let (Some(uid), Some(gid)) = (old.uid, old.gid) else {
-            return true;
+        let (uid, gid) = match (old.uid, old.gid) {
+            (Some(uid), Some(gid)) => (uid, gid),
+            // The server reports no owner.
+            (None, None) => return true,
+            // SFTP reports both or neither; an owner known by halves cannot be kept.
+            _ => return false,
         };
         let now = target.metadata().await.ok();
         if now.is_some_and(|now| now.uid == Some(uid) && now.gid == Some(gid)) {
@@ -570,22 +578,50 @@ impl SftpClient {
         Ok(())
     }
 
-    /// Writes `source` into `remote` itself, which keeps its owner, group and mode.
+    /// Writes `source` into `remote` itself, which keeps its owner, group and mode. The open file
+    /// is compared with `old` through its handle before it is emptied, so a symlink put in its
+    /// place meanwhile cannot send the write to another file.
+    #[allow(clippy::too_many_arguments)]
     async fn write_in_place(
         &self,
         source: impl AsyncRead + Unpin,
         total: u64,
         remote: &str,
-        mode: Option<u32>,
+        old: &RemoteStat,
+        in_place: &AtomicBool,
         progress: &(impl Fn(TransferProgress) + Send + Sync),
         cancel: &CancellationToken,
     ) -> Result<(), SshError> {
         // Without CREATE, so a file deleted meanwhile is not made again.
         let target = self
             .sftp
-            .open_with_flags(remote, OpenFlags::WRITE | OpenFlags::TRUNCATE)
+            .open_with_flags(remote, OpenFlags::WRITE)
             .await
             .map_err(|e| self.err("open", remote, e))?;
+        let now = target
+            .metadata()
+            .await
+            .map_err(|e| self.err("stat", remote, e))?;
+        if now.size != Some(old.size)
+            || now.mtime != old.mtime
+            || now.uid != old.uid
+            || now.gid != old.gid
+        {
+            return Err(SshError::new(
+                SshErrorKind::Sftp,
+                format!("{remote} changed on the server while it was being saved"),
+            ));
+        }
+        in_place.store(true, Ordering::Relaxed);
+        let empty = russh_sftp::protocol::FileAttributes {
+            size: Some(0),
+            ..Default::default()
+        };
+        target
+            .set_metadata(empty)
+            .await
+            .map_err(|e| self.err("write", remote, e))?;
+        let mode = old.mode.map(|mode| mode & 0o7777);
         self.write_file(
             target,
             source,

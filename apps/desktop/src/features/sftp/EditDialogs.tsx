@@ -86,7 +86,7 @@ function UnsentDialog({
     ? t("sftp.edit.unsent.quitLocked", { n })
     : held
       ? t("sftp.edit.unsent.locked", { n })
-      : quit
+      : quit && canUpload
         ? t("sftp.edit.unsent.quit", { n })
         : canUpload
           ? t("sftp.edit.unsent.body", { n, host })

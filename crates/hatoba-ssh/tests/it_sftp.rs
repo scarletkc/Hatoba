@@ -6,6 +6,7 @@ mod common;
 use std::fs;
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -730,6 +731,7 @@ async fn edits_write_back_through_symlinks_and_keep_the_mode() {
         b"#!/bin/sh\necho new\n".to_vec(),
         &target,
         Some(before),
+        &AtomicBool::new(false),
         |_| {},
         CancellationToken::new(),
     )
@@ -758,6 +760,7 @@ async fn edits_write_back_through_symlinks_and_keep_the_mode() {
             b"new\n".to_vec(),
             s(&conf),
             old,
+            &AtomicBool::new(false),
             |_| {},
             CancellationToken::new(),
         )

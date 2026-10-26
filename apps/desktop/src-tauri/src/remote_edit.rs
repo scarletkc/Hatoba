@@ -11,6 +11,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, SystemTime};
 
@@ -361,6 +362,7 @@ pub async fn open(
         finishing: false,
         locked: false,
         held: false,
+        partial: false,
     };
     tauri::async_runtime::spawn(worker.run(rx));
     if let Err(e) = open_editor(copy, editor).await {
@@ -479,6 +481,9 @@ struct Worker {
     locked: bool,
     /// After the unlock, a save that did not upload waits for the user to upload or discard it.
     held: bool,
+    /// A failed upload left the server's file partly written in place: the next one writes it
+    /// again without asking about the change.
+    partial: bool,
 }
 
 impl Worker {
@@ -663,27 +668,36 @@ impl Worker {
             Err(e) => return self.failed(&session_id, e.into()),
         };
         // Changed or deleted on the server.
-        if !overwrite && !now.is_some_and(|now| unchanged(&now, &self.stat)) {
+        let ours = self.partial && now.is_some();
+        if !overwrite && !ours && !now.is_some_and(|now| unchanged(&now, &self.stat)) {
             self.set(RemoteEditState::Conflict, None);
             return (Flow::Go, Err(conflict()));
         }
+        // A file deleted on the server is made again with the mode it had, owned by the login user.
+        let old = now.or(Some(RemoteStat {
+            uid: None,
+            gid: None,
+            ..self.stat
+        }));
         let sent = digest(&content);
+        let in_place = Arc::new(AtomicBool::new(false));
         let written = run_transfer(
             self.app.clone(),
             session_id.clone(),
             TransferDirection::Upload,
             self.view_name(),
             Box::new({
-                let (sftp, remote) = (sftp.clone(), remote.clone());
+                let (sftp, remote, in_place) = (sftp.clone(), remote.clone(), in_place.clone());
                 move |progress, token| {
                     Box::pin(async move {
-                        sftp.write_back(content, &remote, now, progress, token)
+                        sftp.write_back(content, &remote, old, &in_place, progress, token)
                             .await
                     })
                 }
             }),
         )
         .await;
+        self.partial = written.is_err() && (self.partial || in_place.load(Ordering::Relaxed));
         match written {
             Ok(()) => {}
             Err(e) if e.kind == hatoba_ssh::SshErrorKind::Cancelled => {
@@ -754,6 +768,7 @@ impl Worker {
         self.seen = seen(&self.edit.copy).await;
         self.changed_at = None;
         self.held = false;
+        self.partial = false;
         self.set(RemoteEditState::Saved, None);
         Ok(())
     }
