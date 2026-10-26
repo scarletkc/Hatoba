@@ -46,6 +46,7 @@ Then:
 
 ```sh
 cargo test --workspace                # Rust unit tests
+cargo test -p hatoba-assistant        # The AI assistant's tests alone, without building Tauri
 pnpm typecheck && pnpm test           # Frontend type check and unit tests
 node --test "scripts/**/*.test.mjs"   # Release and CI scripts
 ```

@@ -2,9 +2,10 @@
 //! assistant's tools on this computer.
 //!
 //! [`shells::detect`] lists the shells a tab can run, and [`pty::LocalPty`] runs one in a
-//! pseudo-terminal: ConPTY on Windows, a Unix PTY elsewhere. The crate is independent of Tauri,
-//! like `hatoba-ssh`, whose result types the assistant's tools share so the same code formats
-//! their results for both kinds of tab.
+//! pseudo-terminal: ConPTY on Windows, a Unix PTY elsewhere; a [`LocalSession`] is a tab's shell
+//! with its tools, and [`system`] names this computer's OS and user. The crate is independent of
+//! Tauri, like `hatoba-ssh`, whose result types the assistant's tools share so the same code
+//! formats their results for both kinds of tab.
 
 pub mod error;
 pub mod pty;

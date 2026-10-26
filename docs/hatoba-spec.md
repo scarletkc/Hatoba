@@ -61,6 +61,7 @@ flowchart LR
       CMD["Tauri commands / channels"]
       CORE["hatoba-core<br/>crypto · vault · models · sync"]
       SSH["hatoba-ssh<br/>sessions · sftp · forwarding"]
+      ASSIST["hatoba-assistant<br/>turns · tools · MCP servers"]
       AI["hatoba-ai<br/>model providers · web tools · MCP"]
       DB[("Local SQLite<br/>ciphertext only")]
       KC["System credential store"]
@@ -73,7 +74,8 @@ flowchart LR
   UI <--> CMD
   CMD --> CORE
   CMD --> SSH
-  CMD --> AI
+  CMD --> ASSIST
+  ASSIST --> AI
   AI -->|HTTPS or HTTP| Providers["User-configured model<br/>and search providers"]
   AI -->|stdio or HTTP| MCP["User-configured<br/>MCP servers"]
   CORE --> DB
@@ -107,7 +109,9 @@ hatoba/
 ├── packages/ui/              # @hatoba/ui: shared components and design tokens (CSS variables, light and dark)
 ├── crates/
 │   ├── hatoba-ai/            # Model provider adapters, MCP client, web search, URL fetching
+│   ├── hatoba-assistant/     # The AI assistant's runtime: turns, tools, MCP servers, skills, its DTOs
 │   ├── hatoba-core/          # Crypto, vault, data model, local store, sync engine
+│   ├── hatoba-ipc/           # AppError and the DTOs the desktop app's crates share
 │   ├── hatoba-local/         # Local terminal tabs: this computer's shells, PTY, the AI's tools here
 │   └── hatoba-ssh/           # SSH sessions, PTY, SFTP, port forwarding, known_hosts
 ├── workers/sync/             # Cloudflare Worker source, D1 migrations, deployment guide
@@ -1088,7 +1092,7 @@ Conversations are vault items (§5.1), encrypted and synced like hosts and keys.
 
 ### 13.1 Architecture
 
-The Rust backend holds the API keys, this device's ChatGPT sessions (AI-52), and the conversations, builds every request from the stored conversation, and runs `run_command`, the file tools (`read_file`, `edit_file`, `write_file`), the search tools (`grep`, `glob`), `web_search`, `fetch_url`, `read_skill`, `search_tools`, and MCP tools. It also reads the file that an `edit_file` or `write_file` call would change, for the diff on its approval card (AI-39), reverts a change those calls made (AI-41), and asks the judge of Auto mode about a call (AI-47). The frontend renders the panel, applies the permission mode, and runs `read_terminal` and `send_input`, which need the tab's xterm instance. The protocol adapters and the web tools live in `crates/hatoba-ai`, which depends on neither Tauri nor `hatoba-ssh`. What is stored is exactly what the model receives, so continuing a conversation on another device sends the same context.
+The Rust backend holds the API keys, this device's ChatGPT sessions (AI-52), and the conversations, builds every request from the stored conversation, and runs `run_command`, the file tools (`read_file`, `edit_file`, `write_file`), the search tools (`grep`, `glob`), `web_search`, `fetch_url`, `read_skill`, `search_tools`, and MCP tools. It also reads the file that an `edit_file` or `write_file` call would change, for the diff on its approval card (AI-39), reverts a change those calls made (AI-41), and asks the judge of Auto mode about a call (AI-47). The frontend renders the panel, applies the permission mode, and runs `read_terminal` and `send_input`, which need the tab's xterm instance. The protocol adapters and the web tools live in `crates/hatoba-ai`, which depends on neither Tauri nor `hatoba-ssh`. The runtime that runs turns and these tools, the MCP servers' manager, and the skills and settings of **Settings → AI** live in `crates/hatoba-assistant`, which does not depend on Tauri either: the desktop app keeps the `ai_*` commands and gives it the tabs' sessions, the sync trigger, its async runtime, and where events go. What is stored is exactly what the model receives, so continuing a conversation on another device sends the same context.
 
 A turn:
 

@@ -21,8 +21,8 @@
  * `mcp_tools`, `mcp_change`); the panel
  * shows the terminal's screen as a collapsed block, hides the memories, and shows the others as dividers. The block
  * format and its escaping are specified once, in docs/hatoba-spec.md §13.3
- * ("Attachment blocks"); Rust's `title_of` (src-tauri/src/ai.rs) reads the same blocks to title a
- * conversation.
+ * ("Attachment blocks"); Rust's `title_of` (crates/hatoba-assistant/src/ai/entries.rs) reads the
+ * same blocks to title a conversation.
  */
 
 import type { AiEntryView, AiPermissionMode, DroppedFile } from "@/ipc/types";

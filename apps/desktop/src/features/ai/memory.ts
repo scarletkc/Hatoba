@@ -1,7 +1,7 @@
 /**
  * AI-53: the memories the assistant keeps across conversations. Rust checks a memory the same way
- * when it is saved (`ai/memory.rs` in src-tauri); the limits are `MAX_MEMORY_BYTES` and
- * `MAX_MEMORY_NAME_CHARS` in crates/hatoba-ai/src/tools.rs.
+ * when it is saved (`ai/memory.rs` in crates/hatoba-assistant); the limits are `MAX_MEMORY_BYTES`
+ * and `MAX_MEMORY_NAME_CHARS` in crates/hatoba-ai/src/tools.rs.
  */
 
 import type { AiMemoryView } from "@/ipc/types";
