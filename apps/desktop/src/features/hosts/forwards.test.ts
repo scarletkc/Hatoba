@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { appError } from "@/ipc/api";
 import type { AppError, ConnectionsEvent, ForwardsLostEvent, ForwardView, HostView } from "@/ipc/types";
 
 const ipc = vi.hoisted(() => ({
@@ -19,7 +20,8 @@ const ui = vi.hoisted(() => ({
   host: null as HostView | null,
 }));
 
-vi.mock("@/ipc/api", () => ({
+vi.mock("@/ipc/api", async (importActual) => ({
+  ...(await importActual<typeof import("@/ipc/api")>()),
   api: {
     listen: async (event: string, handler: (payload: never) => void) => {
       ipc.handlers.set(event, handler);
@@ -133,7 +135,7 @@ describe("the hosts' shared connections (SSH-16)", () => {
   });
 
   it("keeps why a forward failed to start on the connection", () => {
-    const busy: AppError = { code: "ssh", ssh_kind: "io", detail: "address in use" };
+    const busy: AppError = appError("ssh", "address in use", { ssh_kind: "io" });
     emit("ssh://connections", {
       version: ++version,
       connections: [{ host_id: "h1", host_name: "db", forwards: [], failed: [{ forward_id: "f1", error: busy }] }],
@@ -208,7 +210,7 @@ describe("a lost connection", () => {
   const lost: ForwardsLostEvent = {
     host_id: "h1",
     host_name: "db",
-    error: { code: "ssh", ssh_kind: "disconnected", detail: "connection closed" },
+    error: appError("ssh", "connection closed", { ssh_kind: "disconnected" }),
   };
 
   it("is told in a toast while the window has the focus", async () => {

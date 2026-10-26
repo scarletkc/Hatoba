@@ -33,6 +33,7 @@ const provider: AiProviderView = {
     },
     { id: "fast", name: "Fast", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null },
   ],
+  chatgpt: null,
   updated_at: 0,
 };
 const settings = (judge_model: AiSettingsView["judge_model"]): AiSettingsView => ({

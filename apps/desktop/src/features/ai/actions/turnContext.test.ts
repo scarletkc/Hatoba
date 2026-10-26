@@ -42,6 +42,7 @@ const provider: AiProviderView = {
   models: [
     { id: "m", name: "m", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null },
   ],
+  chatgpt: null,
   updated_at: 0,
 };
 const view = (host_id: string | null, quick_target: QuickTarget | null): AiConversationView => ({

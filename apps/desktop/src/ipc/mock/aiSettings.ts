@@ -1,6 +1,6 @@
 import { byteCount, INSTRUCTIONS_MAX_BYTES } from "@/features/ai/instructions";
 import { AI_TEXT_SIZE_DEFAULT, AI_TEXT_SIZE_MAX, AI_TEXT_SIZE_MIN } from "@/features/ai/textSize";
-import type { HatobaApi } from "../api";
+import { appError, type HatobaApi } from "../api";
 import { applyPatch } from "./patch";
 import type {
   AiAllowance,
@@ -22,6 +22,9 @@ import type {
 
 const ALL_LEVELS: readonly AiEffort[] = ["low", "medium", "high", "xhigh", "max"];
 
+/** The fields of `AiSettingsPatch` that null clears, as `Clearable` ones in Rust; null leaves the others as they are. */
+const AI_CLEARABLE = ["default_model", "default_effort", "search_provider_id", "judge_model"] as const;
+
 /** `?ai=instructions`: custom instructions are saved (AI-36). */
 const INSTRUCTIONS_DEMO =
   "Answer in the language I write in.\nI use Debian 12 and zsh, and manage services with systemctl.\nWrite <placeholders> for values I need to fill in.";
@@ -41,10 +44,10 @@ function chatgptModels(): AiModel[] {
 
 /** The error of a request to a ChatGPT provider that is not signed in here. */
 function notSignedIn(): AppError {
-  return {
-    code: "ai",
-    detail: "This ChatGPT provider is not signed in on this device. Choose Continue with ChatGPT in Settings → AI.",
-  };
+  return appError(
+    "ai",
+    "This ChatGPT provider is not signed in on this device. Choose Continue with ChatGPT in Settings → AI.",
+  );
 }
 
 type AiSettingsApi = Pick<
@@ -134,6 +137,7 @@ export function createAiSettingsMock(): AiSettingsApi {
               adaptive_thinking: false,
             },
           ],
+          chatgpt: null,
           updated_at: Date.now() - 86_400_000,
         },
         {
@@ -161,6 +165,7 @@ export function createAiSettingsMock(): AiSettingsApi {
               adaptive_thinking: null,
             },
           ],
+          chatgpt: null,
           updated_at: Date.now() - 3_600_000,
         },
         {
@@ -181,6 +186,7 @@ export function createAiSettingsMock(): AiSettingsApi {
               adaptive_thinking: null,
             },
           ],
+          chatgpt: null,
           updated_at: Date.now() - 1_800_000,
         },
       ];
@@ -335,12 +341,9 @@ export function createAiSettingsMock(): AiSettingsApi {
     ai_providers_list: async () => providers.map(clone),
     ai_provider_save: async (input) => {
       if (urlProblem(input.base_url)) {
-        const err: AppError = {
-          code: "invalid_input",
-          detail: "the base URL must not contain a user name or password",
+        throw appError("invalid_input", "the base URL must not contain a user name or password", {
           field: "base_url",
-        };
-        throw err;
+        });
       }
       await wait(150);
       const old = providers.find((p) => p.id === input.id);
@@ -368,8 +371,7 @@ export function createAiSettingsMock(): AiSettingsApi {
     ai_provider_models: async (input) => {
       await wait(500);
       if (flags.has("modelsfail")) {
-        const err: AppError = { code: "ai", detail: "404 page not found", http_status: 404 };
-        throw err;
+        throw appError("ai", "404 page not found", { http_status: 404 });
       }
       const chatgpt = providers.find((p) => p.id === input.id)?.chatgpt;
       if (chatgpt) {
@@ -425,21 +427,15 @@ export function createAiSettingsMock(): AiSettingsApi {
         };
       });
       if (cancelled) {
-        const err: AppError = { code: "cancelled", detail: "cancelled" };
-        throw err;
+        throw appError("cancelled", "cancelled");
       }
       if (flags.has("signinfail")) {
-        const err: AppError = {
-          code: "ai",
-          detail: "ChatGPT's ID token is not valid: it has expired; check this device's clock.",
-        };
-        throw err;
+        throw appError("ai", "ChatGPT's ID token is not valid: it has expired; check this device's clock.");
       }
       // A new sign-in of an account that has a provider signs in to it (the mock's account is one email).
       const old = providers.find((p) => (providerId ? p.id === providerId : p.chatgpt?.email === "you@example.com"));
       if (providerId && !old?.chatgpt) {
-        const err: AppError = { code: "not_found", detail: "provider not found" };
-        throw err;
+        throw appError("not_found", "provider not found");
       }
       const view: AiProviderView = old
         ? {
@@ -501,26 +497,18 @@ export function createAiSettingsMock(): AiSettingsApi {
     ai_settings_get: async () => structuredClone(settings),
     ai_settings_save: async (patch) => {
       // Like Rust (AI-36).
-      if (patch.custom_instructions !== undefined && byteCount(patch.custom_instructions) > INSTRUCTIONS_MAX_BYTES)
-        throw {
-          code: "invalid_input",
-          detail: "custom instructions are limited to 32 KB",
-          field: "custom_instructions",
-        } satisfies AppError;
+      if (patch.custom_instructions != null && byteCount(patch.custom_instructions) > INSTRUCTIONS_MAX_BYTES)
+        throw appError("invalid_input", "custom instructions are limited to 32 KB", { field: "custom_instructions" });
       // Like Rust (AI-47): a System One model cannot chat.
       const chosen = patch.default_model && providers.find((p) => p.id === patch.default_model?.provider_id);
       if (chosen && chosen.protocol === "system_one")
-        throw {
-          code: "invalid_input",
-          detail: "a System One model cannot chat",
-          field: "default_model",
-        } satisfies AppError;
+        throw appError("invalid_input", "a System One model cannot chat", { field: "default_model" });
       // Like Rust (TERM-13).
       const text_size =
-        patch.text_size === undefined
+        patch.text_size == null
           ? {}
           : { text_size: Math.min(AI_TEXT_SIZE_MAX, Math.max(AI_TEXT_SIZE_MIN, patch.text_size)) };
-      settings = applyPatch(settings, structuredClone({ ...patch, ...text_size }));
+      settings = applyPatch(settings, structuredClone({ ...patch, ...text_size }), AI_CLEARABLE);
     },
     // AI-47: Test beside the judge, with fixed answers (`JUDGE_SAMPLES`); like Rust, the judge must be listed.
     ai_judge_test: async (judge) => {
@@ -528,11 +516,7 @@ export function createAiSettingsMock(): AiSettingsApi {
       const listed =
         chosen && providers.find((p) => p.id === chosen.provider_id)?.models.some((m) => m.id === chosen.model_id);
       if (!chosen || !listed)
-        throw {
-          code: "invalid_input",
-          detail: "the judge model is not listed",
-          field: "judge_model",
-        } satisfies AppError;
+        throw appError("invalid_input", "the judge model is not listed", { field: "judge_model" });
       await wait(flags.has("judgeslow") ? 4000 : 1200);
       return JUDGE_SAMPLES.map((sample): AiJudgeSampleOutcome => {
         const verdict: AiAutoVerdict = flags.has("judgefail")

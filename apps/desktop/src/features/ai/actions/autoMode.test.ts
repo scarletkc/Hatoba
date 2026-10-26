@@ -136,6 +136,7 @@ const provider: AiProviderView = {
       adaptive_thinking: null,
     },
   ],
+  chatgpt: null,
   updated_at: 0,
 };
 /** Settings → AI with the judge of {@link verdict}, or with `judge`. */

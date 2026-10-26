@@ -13,7 +13,7 @@ import {
   scopeFields,
   type MemoryScope,
 } from "@/features/ai/memory";
-import type { HatobaApi } from "../api";
+import { appError, type HatobaApi } from "../api";
 import type { AiMemoryView, AppError } from "../types";
 
 export type AiMemoryApi = Pick<
@@ -96,7 +96,7 @@ export function createAiMemoryMock(): AiMemoryMock {
   /** As Rust's `memory::save`: in place of the memories `replaced`, the first keeping its place and the others deleted. */
   function save(replaced: readonly string[], scope: MemoryScope, name: string, content: string): AiMemoryView {
     const problem = memoryProblem(memories, replaced, scope, name, content);
-    if (problem) throw { code: "invalid_input", detail: DETAIL[problem], field: "memory" } satisfies AppError;
+    if (problem) throw appError("invalid_input", DETAIL[problem], { field: "memory" });
     const id = replaced[0] ?? `mem-new-${++seq}`;
     const saved: AiMemoryView = {
       id,
@@ -117,14 +117,12 @@ export function createAiMemoryMock(): AiMemoryMock {
   return {
     ai_memories_list: async () => structuredClone(memories),
     ai_memory_save: async (input) => {
-      if (input.id && !memories.some((m) => m.id === input.id))
-        throw { code: "not_found", detail: "memory not found" } satisfies AppError;
+      if (input.id && !memories.some((m) => m.id === input.id)) throw appError("not_found", "memory not found");
       const scope = memoryScope(input);
       return save(editedIds(memories, input.id, scope, input.name), scope, input.name, input.content);
     },
     ai_memory_delete: async (id) => {
-      if (!memories.some((m) => m.id === id))
-        throw { code: "not_found", detail: "memory not found" } satisfies AppError;
+      if (!memories.some((m) => m.id === id)) throw appError("not_found", "memory not found");
       memories = memories.filter((m) => m.id !== id);
     },
     ai_memories_delete_all: async () => {

@@ -14,7 +14,7 @@ import { forkCopies } from "@/features/ai/fork";
 import { localName, movedFrom, moves, recordedTarget } from "@/features/ai/place";
 import { shownCall } from "@/features/ai/tools";
 import { formatTarget, parseQuickConnect, sameTarget } from "@/features/hosts/quickConnect";
-import type { HatobaApi } from "../api";
+import { appError, type HatobaApi } from "../api";
 import type {
   AiAutoVerdict,
   AiConversationView,
@@ -256,7 +256,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     return `${lastMs.toString(16).padStart(12, "0")}-7${(++seq).toString(16).padStart(5, "0")}`;
   };
   const fail = (code: AppError["code"], detail: string, extra: Partial<AppError> = {}): never => {
-    throw { code, detail, ...extra } satisfies AppError;
+    throw appError(code, detail, extra);
   };
   const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -2724,7 +2724,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       // Like Rust: a rejection stores the user's reason; the adapter tells the model the call was rejected.
       const content = result.status === "rejected" ? result.content.trim() : result.content;
       fileBases.delete(callId);
-      return storeResult(c, callId, result.status, content, result.edited_arguments, result.judged);
+      return storeResult(c, callId, result.status, content, result.edited_arguments, result.judged ?? false);
     },
     ai_tool_run: async (id, callId, sessionId, edited, judged) => {
       const c = need(id);

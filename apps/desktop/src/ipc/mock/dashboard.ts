@@ -1,4 +1,4 @@
-import type { HatobaApi } from "../api";
+import { appError, type HatobaApi } from "../api";
 import type { DashboardEvent, HostView } from "../types";
 import { mockStats, PROBE, type StatsProfile } from "./data";
 
@@ -101,11 +101,9 @@ export function createDashboardMock(ctx: {
           kind: "held",
           host_id: hostId,
           hold: "sign_in_failed",
-          error: {
-            code: "ssh",
-            detail: "authentication failed: no method succeeded (tried publickey)",
+          error: appError("ssh", "authentication failed: no method succeeded (tried publickey)", {
             ssh_kind: "auth_failed",
-          },
+          }),
         }),
       );
       return;
@@ -124,7 +122,7 @@ export function createDashboardMock(ctx: {
           emit({
             kind: "failed",
             host_id: hostId,
-            error: { code: "ssh", detail: "connection reset by peer", ssh_kind: "disconnected" },
+            error: appError("ssh", "connection reset by peer", { ssh_kind: "disconnected" }),
           });
           return;
         }
@@ -140,7 +138,7 @@ export function createDashboardMock(ctx: {
 
   return {
     dashboard_watch: async (hostIds, intervalSecs, onEvent) => {
-      if (!ctx.unlocked()) throw { code: "locked", detail: "vault is locked" };
+      if (!ctx.unlocked()) throw appError("locked", "vault is locked");
       const interval = Math.min(60, Math.max(1, intervalSecs));
       const restart = current !== null && current.interval !== interval;
       const wanted = new Set(hostIds);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StatsReading } from "@/features/terminal/stats";
+import { appError } from "@/ipc/api";
 import type { DashboardEvent, GroupView, HostView, ServerStatsView } from "@/ipc/types";
 import {
   DASHBOARD_COLUMNS,
@@ -104,7 +105,7 @@ describe("dashboard events (HOST-14)", () => {
   it("keeps the readings when the host stops answering", () => {
     const r = apply([
       { kind: "stats", host_id: "h", stats: stats() },
-      { kind: "failed", host_id: "h", error: { code: "ssh", detail: "reset", ssh_kind: "disconnected" } },
+      { kind: "failed", host_id: "h", error: appError("ssh", "reset", { ssh_kind: "disconnected" }) },
       { kind: "probe", host_id: "h", online: false },
     ])!;
     expect(r.phase).toBe("offline");
@@ -133,7 +134,7 @@ describe("dashboard events (HOST-14)", () => {
         kind: "held",
         host_id: "h",
         hold: "sign_in_failed",
-        error: { code: "ssh", detail: "denied", ssh_kind: "auth_failed" },
+        error: appError("ssh", "denied", { ssh_kind: "auth_failed" }),
       },
     ])!;
     expect(held.phase).toBe("held");

@@ -1,4 +1,4 @@
-import type { HatobaApi } from "../api";
+import { appError, type HatobaApi } from "../api";
 import { builtinSkill } from "./builtinSkill";
 import type {
   AiHostEntry,
@@ -507,8 +507,7 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
   const id = (p: string) => `${p}-${(++seq).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   function fail(code: AppError["code"], detail: string, field?: string): never {
-    const err: AppError = { code, detail, ...(field ? { field } : {}) };
-    throw err;
+    throw appError(code, detail, field ? { field } : {});
   }
 
   // ── skills ──

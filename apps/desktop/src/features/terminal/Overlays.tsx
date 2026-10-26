@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { Button, Icon, LinkButton, Spinner, toast, useExitAnimation } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { useT } from "@/i18n";
+import { appError } from "@/ipc/api";
 import type { AppError, HostView, QuickTarget } from "@/ipc/types";
 import { writeClipboard } from "./clipboard";
 import { clockTime, diagnosticsText, errorCode } from "./diagnostics";
@@ -47,7 +48,7 @@ export function ErrorCard({
   onAskAi(diagnostics: string): void;
 }) {
   const t = useT();
-  const err: AppError = error ?? { code: "internal", detail: "" };
+  const err: AppError = error ?? appError("internal", "");
   const when = clockTime(at ?? Date.now());
   const meta =
     attempts > 1

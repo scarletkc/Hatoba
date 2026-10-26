@@ -3,7 +3,9 @@
 //! notes of Auto.
 
 use super::*;
-use crate::ai::{auto_view, find_conversation, guard, judge_state, open_call_at, screen_tail};
+use crate::ai::calls::open_call_at;
+use crate::ai::judge::{auto_view, judge_state, screen_tail};
+use crate::ai::{find_conversation, guard};
 use crate::commands::ai::save_ai_settings;
 use crate::dto::{
     AiAutoVerdict, AiJudgeDecision, AiJudgeSampleOutcome, AiModelRef, AiSettingsPatch, Clearable,

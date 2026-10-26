@@ -51,6 +51,8 @@ fn unbracketed(address: &str) -> &str {
         .map_or(address, |(inner, _)| inner)
 }
 
+/// Reads `source` from `path`, a file or folder the user chose, or else from where the client keeps
+/// its sessions.
 #[tauri::command]
 #[specta::specta]
 pub async fn hosts_import_preview(

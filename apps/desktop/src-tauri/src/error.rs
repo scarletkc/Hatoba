@@ -1,5 +1,5 @@
 //! The single error type every command returns. Serialized to the WebView as `AppError`
-//! (see `src/ipc/types.ts`). `detail` is short technical English and never contains secrets.
+//! (see `src/ipc/bindings.ts`). `detail` is short technical English and never contains secrets.
 
 use serde::Serialize;
 use specta::Type;
@@ -110,16 +110,23 @@ pub enum KeyParseErrorKind {
     Invalid,
 }
 
+/// Every command rejects with this shape. `detail` is technical English text, safe to show.
 #[derive(Debug, Clone, Serialize, Type, thiserror::Error)]
 #[error("{code:?}: {detail}")]
 pub struct AppError {
     pub code: ErrorCode,
     pub detail: String,
+    /// `throttled`: unlock is allowed again at this time.
     pub retry_at: Option<i64>,
+    /// `invalid_input`: the offending field's name.
     pub field: Option<String>,
+    /// `ssh`: the classified SSH failure.
     pub ssh_kind: Option<SshErrorKind>,
+    /// `key_parse`: why the private key could not be read.
     pub key_kind: Option<KeyParseErrorKind>,
+    /// `cloudflare_permission`: the permission the API token lacks.
     pub permission: Option<CloudflarePermission>,
+    /// `cloudflare`: Cloudflare's numeric error code, when it sent one.
     pub cf_code: Option<u32>,
     /// `ai`: the HTTP status the provider answered with.
     pub http_status: Option<u16>,

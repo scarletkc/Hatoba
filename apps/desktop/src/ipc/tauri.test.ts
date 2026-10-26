@@ -35,8 +35,8 @@ describe("createTauriApi", () => {
     expect(invoke).toHaveBeenLastCalledWith("app_info");
   });
 
-  it("resolves a command that returns () to undefined and passes results and errors through", async () => {
-    await expect(api.host_delete("h1")).resolves.toBeUndefined();
+  it("passes results, null ones too, and errors through", async () => {
+    await expect(api.ai_session_server("s1")).resolves.toBeNull();
     invoke.mockResolvedValueOnce(["prod"]);
     await expect(api.hosts_probe(["h1"])).resolves.toEqual(["prod"]);
     const error = { code: "not_found", detail: "host" };

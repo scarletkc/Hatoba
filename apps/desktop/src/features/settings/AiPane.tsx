@@ -36,7 +36,6 @@ import type {
   AiModelRef,
   AiPermissionMode,
   AiProviderView,
-  AiSettingsPatch,
   AiSettingsView,
   SearchProviderView,
 } from "@/ipc/types";
@@ -124,7 +123,7 @@ export function AiPane() {
   };
 
   /** Stores the fields in `patch` of the synced settings. On failure the pane shows what the backend has. */
-  const saveSettings = async (patch: AiSettingsPatch) => {
+  const saveSettings = async (patch: Partial<AiSettingsView>) => {
     const cur = dataRef.current;
     if (!cur) return;
     commit({ ...cur, settings: { ...cur.settings, ...patch } });

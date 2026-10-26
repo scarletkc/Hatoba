@@ -56,6 +56,7 @@ pub fn settings_get(state: State<'_, AppState>) -> AppResult<SettingsView> {
     state.with_unlocked(|v| Ok(settings_view(&v.settings())))
 }
 
+/// Writes the fields `patch` sets over the stored settings; the others keep their stored values.
 #[tauri::command]
 #[specta::specta]
 pub fn settings_save(

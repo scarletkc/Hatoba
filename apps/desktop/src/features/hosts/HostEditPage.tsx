@@ -27,7 +27,7 @@ import { useApp } from "@/app/store";
 import { InstructionsField } from "@/features/ai/InstructionsField";
 import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
 import { useT } from "@/i18n";
-import { api, toAppError } from "@/ipc/api";
+import { api, appError, toAppError } from "@/ipc/api";
 import type { AuthKind, HostInput, HostView, KeyView, ProxyMode, QuickTarget } from "@/ipc/types";
 import { proxySummary } from "@/features/settings/proxyLogic";
 import { cx } from "@/lib/cx";
@@ -256,7 +256,7 @@ export function HostEditPage({
       } else {
         setTest({
           state: "error",
-          text: errorMessage(t, r.error ?? { code: "ssh", detail: "" }, {
+          text: errorMessage(t, r.error ?? appError("ssh", ""), {
             host: form.address,
             port: Number(form.port),
           }),
