@@ -408,6 +408,8 @@ mod imp {
             // SFTP-05: the window stays to ask about saves of edited files that did not upload.
             if app.state::<AppState>().edits.holds_quit() {
                 api.prevent_close();
+                // A minimized window, closed from the taskbar, shows the question.
+                platform::window::reopen_main(app);
                 let _ = RemoteEditQuitEvent.emit(app);
             }
             return;

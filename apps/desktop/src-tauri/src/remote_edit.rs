@@ -578,7 +578,8 @@ impl Worker {
             }
             Command::Unlock => {
                 self.locked = false;
-                // Also a save made while locked, which nothing checked: the user may not have made it.
+                // Also a save made while locked, which nothing checked: the user may not have
+                // made it.
                 if self.changed().await != Some(false) {
                     self.held = true;
                     self.publish();

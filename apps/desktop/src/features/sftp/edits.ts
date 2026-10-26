@@ -190,9 +190,11 @@ export async function quitEditing() {
   const waiting = edits.filter((_, i) => changed[i]);
   let upload = false;
   if (waiting.length > 0) {
+    // Upload sends what it can; a copy whose tab is disconnected keeps Hatoba open, and quitting
+    // again asks about it alone.
     const choice = await askUnsent(
       waiting,
-      waiting.every((e) => isConnected(e.tab_id)),
+      waiting.some((e) => isConnected(e.tab_id)),
       true,
     );
     if (!choice) return;

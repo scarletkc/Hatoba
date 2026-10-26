@@ -7,7 +7,8 @@ use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
 /// Kinds of file the system's app for them runs (programs, scripts, installers, shortcuts, help
-/// files, and web pages and XML in a browser), so that opening a copy would run it on this computer.
+/// files, and web pages and XML in a browser), so that opening a copy would run it on this
+/// computer.
 const RUNS: &[&str] = &[
     "ahk",
     "app",
