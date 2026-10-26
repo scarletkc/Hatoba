@@ -598,8 +598,8 @@ impl Worker {
             self.set(RemoteEditState::Pending, None);
             return (Flow::Go, Err(not_connected()));
         };
-        // What is recorded as synced is what was read here; a save after it changes `seen`, and
-        // uploads next.
+        // These bytes are what uploads and what is recorded as synced; a save after they were read
+        // changes `seen`, and uploads next.
         self.seen = seen(&self.edit.copy).await;
         let content = match tokio::fs::read(&self.edit.copy).await {
             Ok(content) => content,
@@ -623,16 +623,17 @@ impl Worker {
         }
         // A server that reports no permissions gets none set.
         let mode = self.stat.mode;
+        let sent = digest(&content);
         let written = run_transfer(
             self.app.clone(),
             session_id.clone(),
             TransferDirection::Upload,
             self.view_name(),
             Box::new({
-                let (sftp, copy, remote) = (sftp.clone(), self.edit.copy.clone(), remote.clone());
+                let (sftp, remote) = (sftp.clone(), remote.clone());
                 move |progress, token| {
                     Box::pin(async move {
-                        sftp.upload_with_mode(&copy, &remote, mode, progress, token)
+                        sftp.upload_content(content, &remote, mode, progress, token)
                             .await
                     })
                 }
@@ -650,7 +651,7 @@ impl Worker {
             }
             Err(e) => return self.failed(&session_id, e.into()),
         }
-        self.synced = digest(&content);
+        self.synced = sent;
         match sftp.stat(&remote).await {
             Ok(Some(now)) => self.stat = RemoteStat { mode, ..now },
             // Read again before the next upload, which then asks.

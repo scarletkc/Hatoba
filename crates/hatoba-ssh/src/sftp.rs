@@ -433,22 +433,6 @@ impl SftpClient {
         progress: impl Fn(TransferProgress) + Send + Sync + 'static,
         cancel: CancellationToken,
     ) -> Result<(), SshError> {
-        self.upload_with_mode(local, remote, None, progress, cancel)
-            .await
-    }
-
-    /// [`upload`](Self::upload), with the permission bits of `mode` set on the new file before it
-    /// replaces the old one, so a file written back keeps its mode (SFTP-05). A server that refuses
-    /// to set them still gets the content, with the mode it gives new files, as long as that mode
-    /// grants nothing the old one did not; otherwise the upload fails and the old file stays.
-    pub async fn upload_with_mode(
-        &self,
-        local: &Path,
-        remote: &str,
-        mode: Option<u32>,
-        progress: impl Fn(TransferProgress) + Send + Sync + 'static,
-        cancel: CancellationToken,
-    ) -> Result<(), SshError> {
         let meta = tokio::fs::metadata(local)
             .await
             .map_err(|e| SshError::io_context(&format!("stat {}", local.display()), &e))?;
@@ -461,29 +445,60 @@ impl SftpClient {
         let source = tokio::fs::File::open(local)
             .await
             .map_err(|e| SshError::io_context(&format!("open {}", local.display()), &e))?;
-        let (part, target) = self.create_remote_part(remote).await?;
-        let mut result = self
-            .upload_to(local, source, &part, target, meta.len(), &progress, &cancel)
-            .await;
-        if let (Ok(()), Some(mode)) = (&result, mode) {
-            let wanted = mode & 0o7777;
-            let attrs = russh_sftp::protocol::FileAttributes {
-                permissions: Some(wanted),
-                ..Default::default()
-            };
-            if let Err(e) = self.sftp.set_metadata(part.as_str(), attrs).await {
-                // The new file keeps the mode the server gave it, unless that grants more than the
-                // old one did: a private file never becomes readable by others.
-                let given = self
-                    .sftp
-                    .metadata(part.as_str())
-                    .await
-                    .ok()
-                    .and_then(|m| m.permissions);
-                if given.is_none_or(|given| given & 0o7777 & !wanted != 0) {
-                    result = Err(self.err("set permissions of", remote, e));
-                }
-            }
+        let name = local.display().to_string();
+        self.write_new(source, &name, meta.len(), remote, None, &progress, &cancel)
+            .await
+    }
+
+    /// Writes `content` to `remote` the way [`upload`](Self::upload) writes a file, with the
+    /// permission bits of `mode` on the new file before any of it is written, so a file written
+    /// back keeps its mode and is never readable by more users than before (SFTP-05). A server that
+    /// refuses to set them still gets the content, with the mode it gives new files, as long as
+    /// that mode grants nothing the old one did not; otherwise the upload fails and the old file
+    /// stays.
+    pub async fn upload_content(
+        &self,
+        content: Vec<u8>,
+        remote: &str,
+        mode: Option<u32>,
+        progress: impl Fn(TransferProgress) + Send + Sync + 'static,
+        cancel: CancellationToken,
+    ) -> Result<(), SshError> {
+        let total = content.len() as u64;
+        let source = std::io::Cursor::new(content);
+        self.write_new(
+            source,
+            "the content",
+            total,
+            remote,
+            mode,
+            &progress,
+            &cancel,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn write_new(
+        &self,
+        source: impl AsyncRead + Unpin,
+        source_name: &str,
+        total: u64,
+        remote: &str,
+        mode: Option<u32>,
+        progress: &(impl Fn(TransferProgress) + Send + Sync),
+        cancel: &CancellationToken,
+    ) -> Result<(), SshError> {
+        let wanted = mode.map(|mode| mode & 0o7777);
+        let (part, target) = self.create_remote_part(remote, wanted).await?;
+        let mut result = match wanted {
+            Some(wanted) => self.restrict_part(&part, remote, wanted).await,
+            None => Ok(()),
+        };
+        if result.is_ok() {
+            result = self
+                .upload_to(source, source_name, &part, target, total, progress, cancel)
+                .await;
         }
         match result {
             Ok(()) => self.replace(&part, remote).await,
@@ -494,21 +509,50 @@ impl SftpClient {
         }
     }
 
+    /// Sets the permission bits `wanted` on the empty `.part` file. When the server refuses, the
+    /// file keeps the mode the server gave it, unless that grants more than `wanted`: a private
+    /// file never becomes readable by others.
+    async fn restrict_part(&self, part: &str, remote: &str, wanted: u32) -> Result<(), SshError> {
+        let attrs = russh_sftp::protocol::FileAttributes {
+            permissions: Some(wanted),
+            ..Default::default()
+        };
+        let Err(e) = self.sftp.set_metadata(part, attrs).await else {
+            return Ok(());
+        };
+        let given = self
+            .sftp
+            .metadata(part)
+            .await
+            .ok()
+            .and_then(|m| m.permissions);
+        if given.is_none_or(|given| given & 0o7777 & !wanted != 0) {
+            return Err(self.err("set permissions of", remote, e));
+        }
+        Ok(())
+    }
+
     /// Creates a new, empty temporary file next to `remote` that no other
-    /// file or transfer is using.
+    /// file or transfer is using, asking for the permission bits `mode`.
     async fn create_remote_part(
         &self,
         remote: &str,
+        mode: Option<u32>,
     ) -> Result<(String, russh_sftp::client::fs::File), SshError> {
+        let attrs = russh_sftp::protocol::FileAttributes {
+            permissions: mode,
+            ..Default::default()
+        };
         let mut last = None;
         for _ in 0..PART_ATTEMPTS {
             let part = format!("{remote}.{}.part", part_token());
             // EXCLUDE (O_EXCL) fails on any existing entry, including a symlink.
             match self
                 .sftp
-                .open_with_flags(
+                .open_with_flags_and_attributes(
                     part.as_str(),
                     OpenFlags::CREATE | OpenFlags::EXCLUDE | OpenFlags::WRITE,
+                    attrs.clone(),
                 )
                 .await
             {
@@ -526,8 +570,8 @@ impl SftpClient {
     #[allow(clippy::too_many_arguments)]
     async fn upload_to(
         &self,
-        local: &Path,
-        mut source: tokio::fs::File,
+        mut source: impl AsyncRead + Unpin,
+        source_name: &str,
         part: &str,
         mut target: russh_sftp::client::fs::File,
         total: u64,
@@ -541,7 +585,7 @@ impl SftpClient {
                 biased;
                 () = cancel.cancelled() => return Err(SshError::cancelled()),
                 read = source.read(&mut buf) => read
-                    .map_err(|e| SshError::io_context(&format!("read {}", local.display()), &e))?,
+                    .map_err(|e| SshError::io_context(&format!("read {source_name}"), &e))?,
             };
             if n == 0 {
                 break;

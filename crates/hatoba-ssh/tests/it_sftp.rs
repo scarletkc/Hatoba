@@ -709,7 +709,6 @@ async fn edits_write_back_through_symlinks_and_keep_the_mode() {
     let server = server!();
     let (_s, sftp) = sftp_for(&server).await;
     let area = server.area("edit_back");
-    let local = tempfile::tempdir().unwrap();
 
     let script = area.join("run.sh");
     fs::write(&script, "#!/bin/sh\necho old\n").unwrap();
@@ -726,10 +725,8 @@ async fn edits_write_back_through_symlinks_and_keep_the_mode() {
     assert!(sftp.stat(s(&area)).await.unwrap().unwrap().is_dir());
     assert_eq!(sftp.stat(s(&area.join("gone"))).await.unwrap(), None);
 
-    let copy = local.path().join("run.sh");
-    fs::write(&copy, "#!/bin/sh\necho new\n").unwrap();
-    sftp.upload_with_mode(
-        &copy,
+    sftp.upload_content(
+        b"#!/bin/sh\necho new\n".to_vec(),
         &target,
         before.mode,
         |_| {},
