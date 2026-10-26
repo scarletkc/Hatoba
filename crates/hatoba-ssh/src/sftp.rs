@@ -500,6 +500,16 @@ impl SftpClient {
                 .upload_to(source, source_name, &part, target, total, progress, cancel)
                 .await;
         }
+        // Writing clears setuid and setgid on Unix, so those are set once more after the content;
+        // a server that refuses leaves the file without them, which grants less.
+        if let (Ok(()), Some(wanted)) = (&result, wanted)
+            && wanted & 0o6000 != 0
+        {
+            let _ = self
+                .sftp
+                .set_metadata(part.as_str(), permissions(Some(wanted)))
+                .await;
+        }
         match result {
             Ok(()) => self.replace(&part, remote).await,
             Err(e) => {
@@ -513,11 +523,11 @@ impl SftpClient {
     /// file keeps the mode the server gave it, unless that grants more than `wanted`: a private
     /// file never becomes readable by others.
     async fn restrict_part(&self, part: &str, remote: &str, wanted: u32) -> Result<(), SshError> {
-        let attrs = russh_sftp::protocol::FileAttributes {
-            permissions: Some(wanted),
-            ..Default::default()
-        };
-        let Err(e) = self.sftp.set_metadata(part, attrs).await else {
+        let Err(e) = self
+            .sftp
+            .set_metadata(part, permissions(Some(wanted)))
+            .await
+        else {
             return Ok(());
         };
         let given = self
@@ -539,10 +549,7 @@ impl SftpClient {
         remote: &str,
         mode: Option<u32>,
     ) -> Result<(String, russh_sftp::client::fs::File), SshError> {
-        let attrs = russh_sftp::protocol::FileAttributes {
-            permissions: mode,
-            ..Default::default()
-        };
+        let attrs = permissions(mode);
         let mut last = None;
         for _ in 0..PART_ATTEMPTS {
             let part = format!("{remote}.{}.part", part_token());
@@ -752,6 +759,14 @@ fn part_path(local: &Path, token: &str) -> PathBuf {
     let mut name = local.as_os_str().to_owned();
     name.push(format!(".{token}.part"));
     PathBuf::from(name)
+}
+
+/// Attributes that set only the permission bits.
+fn permissions(bits: Option<u32>) -> russh_sftp::protocol::FileAttributes {
+    russh_sftp::protocol::FileAttributes {
+        permissions: bits,
+        ..Default::default()
+    }
 }
 
 /// A short token that differs between transfers, so that transfers to the same

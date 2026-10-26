@@ -712,7 +712,8 @@ async fn edits_write_back_through_symlinks_and_keep_the_mode() {
 
     let script = area.join("run.sh");
     fs::write(&script, "#!/bin/sh\necho old\n").unwrap();
-    fs::set_permissions(&script, fs::Permissions::from_mode(0o750)).unwrap();
+    // Setuid too, which writing the content clears.
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o4750)).unwrap();
     symlink(&script, area.join("link.sh")).unwrap();
 
     // The link resolves to the script, whose size and mode the edit compares and keeps.
@@ -720,7 +721,7 @@ async fn edits_write_back_through_symlinks_and_keep_the_mode() {
     assert_eq!(target, s(&fs::canonicalize(&script).unwrap()));
     let before = sftp.stat(&target).await.unwrap().unwrap();
     assert_eq!(before.size, 19);
-    assert_eq!(before.mode.unwrap() & 0o7777, 0o750);
+    assert_eq!(before.mode.unwrap() & 0o7777, 0o4750);
     assert!(!before.is_dir());
     assert!(sftp.stat(s(&area)).await.unwrap().unwrap().is_dir());
     assert_eq!(sftp.stat(s(&area.join("gone"))).await.unwrap(), None);
@@ -740,7 +741,7 @@ async fn edits_write_back_through_symlinks_and_keep_the_mode() {
         "#!/bin/sh\necho new\n"
     );
     let mode = fs::metadata(&script).unwrap().permissions().mode();
-    assert_eq!(mode & 0o7777, 0o750);
+    assert_eq!(mode & 0o7777, 0o4750);
     let link = fs::symlink_metadata(area.join("link.sh")).unwrap();
     assert!(link.file_type().is_symlink());
     assert_eq!(names_in(&area), ["link.sh", "run.sh"]);
