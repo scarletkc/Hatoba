@@ -141,7 +141,7 @@ fn leading_blocks_read_the_shared_cases_as_the_panel_does() {
         typed: String,
     }
     let cases: Vec<Case> = serde_json::from_str(include_str!(
-        "../../../../src/features/ai/blocks.fixtures.json"
+        "../../../../../apps/desktop/src/features/ai/blocks.fixtures.json"
     ))
     .unwrap();
     for case in cases {

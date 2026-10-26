@@ -12,7 +12,7 @@ use super::view::conversation_view;
 use super::{AiEnv, AiManager, MAX_TITLE_CHARS, guard, unlocked};
 use crate::dto::{AiConversationDetail, AiConversationView, AiTurnEndReason};
 use crate::error::{AppError, AppResult};
-use crate::state::now_ms;
+use crate::now_ms;
 
 impl AiManager {
     /// A conversation with its entries (raw provider messages left out).

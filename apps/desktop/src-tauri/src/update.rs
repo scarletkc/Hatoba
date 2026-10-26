@@ -132,7 +132,10 @@ pub async fn install(app: &AppHandle, progress: &Channel<UpdateProgress>) -> App
     .await?;
     let _ = progress.send(UpdateProgress::Installing);
     tracing::info!("installing Hatoba {}", update.version);
-    let data_dir = app.path().app_local_data_dir()?;
+    let data_dir = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| AppError::internal(e.to_string()))?;
     crate::launch::mark_restart(&data_dir, true);
     let installed = tauri::async_runtime::spawn_blocking(move || update.install(bytes))
         .await

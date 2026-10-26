@@ -5,11 +5,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use hatoba_local::LocalSession;
 use hatoba_ssh::SshSession;
 use hatoba_ssh::remote_file::{self, Expect, RemoteDir, RemoteFile, RemoteFileError, RemoteLines};
 use hatoba_ssh::remote_search::{self, GrepQuery, RemoteSearchError, Scope, SearchOutput};
-
-use crate::local::LocalSession;
 
 #[derive(Clone)]
 pub enum Conn {

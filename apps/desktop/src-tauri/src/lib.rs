@@ -1,22 +1,19 @@
 //! Hatoba desktop shell: Tauri commands, events and channels on top of `hatoba-core` (vault,
-//! crypto, sync) and `hatoba-ssh` (sessions, SFTP). The WebView never receives secrets (spec §3.2).
+//! crypto, sync), `hatoba-ssh` (sessions, SFTP) and `hatoba-assistant` (the AI assistant). The
+//! WebView never receives secrets (spec §3.2).
 
-mod ai;
 mod cli_access;
 mod commands;
 mod connection;
 mod convert;
 mod dashboard;
 mod deploy;
-mod dropped;
 mod dto;
-mod error;
 mod import;
 mod launch;
 mod local;
 mod lock;
 mod logging;
-mod mcp;
 mod notification;
 mod platform;
 mod remote_edit;
@@ -32,6 +29,8 @@ use commands::{
     hosts, import as import_cmd, keys, local as local_cmd, mcp as mcp_cmd, memory as memory_cmd,
     proxies, quick, settings, sftp, skills, ssh as ssh_cmd, sync as sync_cmd, vault,
 };
+// `crate::error`: `AppError`, which every command returns, is in a crate the assistant's shares.
+use hatoba_ipc::error;
 use tauri::Manager;
 use tauri_specta::{collect_commands, collect_events};
 
@@ -272,7 +271,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             dto::RemoteEditQuitEvent,
             dto::ConnectionsEvent,
             dto::ForwardsLostEvent,
-            dto::McpServerStatus,
+            dto::McpStatusEvent,
             dto::WindowChromeEvent,
             dto::ZoomView,
             dto::LaunchEvent,

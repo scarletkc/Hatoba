@@ -20,8 +20,8 @@ fn skills_saved_in_settings_are_listed_and_read_by_read_skill() {
             content: format!("TLS of {name}"),
         }],
     };
-    crate::commands::skills::save_skill(&mut v, &skill("nginx", true)).unwrap();
-    crate::commands::skills::save_skill(&mut v, &skill("apache", false)).unwrap();
+    crate::skills::save_skill(&mut v, &skill("nginx", true)).unwrap();
+    crate::skills::save_skill(&mut v, &skill("apache", false)).unwrap();
 
     // AI-28: only enabled skills are listed.
     let (system, tools) = crate::ai::request::prompt(&v, &f.context(), None, None);
@@ -105,7 +105,7 @@ fn skills_saved_in_settings_are_listed_and_read_by_read_skill() {
         .find(|(_, s)| s.name == "nginx")
         .unwrap()
         .0;
-    crate::commands::skills::set_skill_enabled(&mut v, &nginx, false).unwrap();
+    crate::skills::set_skill_enabled(&mut v, &nginx, false).unwrap();
     let (_, tools) = crate::ai::request::prompt(&v, &f.context(), None, None);
     assert!(!tools.iter().any(|t| t.name == "read_skill"));
 }

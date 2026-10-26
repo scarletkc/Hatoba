@@ -22,8 +22,10 @@ serde_json.workspace = true
 
 [dependencies]
 hatoba-ai.workspace = true
+hatoba-assistant.workspace = true
 hatoba-cli.workspace = true
 hatoba-core.workspace = true
+hatoba-ipc.workspace = true
 hatoba-local.workspace = true
 hatoba-ssh.workspace = true
 # WIN-10: the system tray on Windows and Linux.
@@ -61,8 +63,6 @@ sha2.workspace = true
 # The update check's status probe. Same features and TLS stack as hatoba-core's sync transport.
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "system-proxy"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-# The AI assistant's system prompt names today's local date (spec §13.1).
-chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # Host import from other SSH clients (SSH-15): their ANSI and UTF-16 files, Tabby's YAML config,
 # and Xshell's `.xts` exports, which are zip files. Versions match hatoba-ai's own.
 encoding_rs = "0.8"

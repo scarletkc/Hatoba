@@ -1,5 +1,6 @@
 //! The single error type every command returns. Serialized to the WebView as `AppError`
-//! (see `src/ipc/bindings.ts`). `detail` is short technical English and never contains secrets.
+//! (see `apps/desktop/src/ipc/bindings.ts`). `detail` is short technical English and never
+//! contains secrets.
 
 use serde::Serialize;
 use specta::Type;
@@ -202,12 +203,6 @@ impl AppError {
 impl From<std::io::Error> for AppError {
     fn from(e: std::io::Error) -> Self {
         Self::io(e)
-    }
-}
-
-impl From<tauri::Error> for AppError {
-    fn from(e: tauri::Error) -> Self {
-        Self::internal(e.to_string())
     }
 }
 

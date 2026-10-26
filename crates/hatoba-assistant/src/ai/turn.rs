@@ -34,7 +34,7 @@ use super::view::{
 use super::{AiEnv, AiManager, EventSink, Halt, Streamed, Turn, TurnTask, guard, lock, unlocked};
 use crate::dto::{AiSendInput, AiSendStarted, AiTurnContext, AiTurnEndReason, AiTurnEvent};
 use crate::error::{AppError, AppResult, ErrorCode};
-use crate::state::now_ms;
+use crate::now_ms;
 
 impl AiManager {
     /// `ai_send` (§13.1 step 1): stores the user's message, creating the conversation when it has

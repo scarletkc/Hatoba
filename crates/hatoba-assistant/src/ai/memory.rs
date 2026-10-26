@@ -18,7 +18,7 @@ use hatoba_core::model::{AiMemory, Item, SETTINGS_ID};
 /// Whose memories (AI-53): every conversation's, a saved host's, or a computer's local
 /// terminal's. Names are unique, and [`MAX_MEMORY_BYTES`] counts, within each scope.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Scope {
+pub enum Scope {
     Global,
     /// A saved host, by id.
     Host(String),
@@ -28,7 +28,7 @@ pub(crate) enum Scope {
 
 impl Scope {
     /// The scope of a memory stored with `host_id` and `local`: the host when there is one.
-    pub(crate) fn new(host_id: Option<&str>, local: Option<&str>) -> Self {
+    pub fn new(host_id: Option<&str>, local: Option<&str>) -> Self {
         match (host_id, local) {
             (Some(id), _) => Self::Host(id.to_owned()),
             (None, Some(device)) => Self::Local(device.to_owned()),
@@ -56,7 +56,7 @@ pub(crate) struct Place {
 
 /// Why a memory was not saved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Refusal {
+pub enum Refusal {
     EmptyName,
     LongName,
     EmptyContent,
@@ -71,7 +71,7 @@ pub(crate) enum Refusal {
 
 impl Refusal {
     /// What the model reads, and what Settings → AI shows when its own checks let one through.
-    pub(crate) fn message(self) -> String {
+    pub fn message(self) -> String {
         match self {
             Self::EmptyName => "The memory has no name.".to_owned(),
             Self::LongName => {
@@ -128,7 +128,7 @@ fn named(v: &Vault, scope: &Scope, name: &str) -> Vec<String> {
 /// The memories an edit in Settings → AI saves in place of: the memory `id`, and when the edit
 /// keeps its name and its scope, the other memories of that name there, which count as one with
 /// it. A rename or a move onto another memory's name stays refused.
-pub(crate) fn edited(v: &Vault, id: &str, scope: &Scope, name: &str) -> Vec<String> {
+pub fn edited(v: &Vault, id: &str, scope: &Scope, name: &str) -> Vec<String> {
     let name = clean_name(name);
     let kept = v
         .get(id)
@@ -150,7 +150,7 @@ pub(crate) fn edited(v: &Vault, id: &str, scope: &Scope, name: &str) -> Vec<Stri
 ///
 /// # Errors
 /// The [`Refusal`] when they break a rule; the vault's error when the vault cannot store it.
-pub(crate) fn save(
+pub fn save(
     v: &mut Vault,
     ids: &[String],
     scope: &Scope,

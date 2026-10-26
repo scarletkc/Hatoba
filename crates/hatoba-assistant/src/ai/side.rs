@@ -21,7 +21,7 @@ use super::{AiEnv, AiManager, Request, unlocked};
 use crate::dto::{AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiTurnContext};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::mcp::Offer;
-use crate::state::now_ms;
+use crate::now_ms;
 
 impl AiManager {
     /// `ai_side_question` (AI-42): asks the conversation's model `input.text` with the request

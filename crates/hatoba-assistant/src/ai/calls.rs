@@ -28,7 +28,7 @@ use crate::dto::{
     AiEntryView, AiFilePreview, AiToolCall, AiToolResultInput, AiToolRun, AiTurnEvent,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
-use crate::state::now_ms;
+use crate::now_ms;
 
 impl AiManager {
     /// `ai_tool_result`: stores a result the frontend produced (`read_terminal`, `send_input`, a

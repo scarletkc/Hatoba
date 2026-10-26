@@ -912,7 +912,7 @@ async fn a_turn_offers_mcp_tools_and_runs_their_calls() {
 
     // AI-31: the approval card's view of a call, with Always allow and Always ask.
     let info = |name: &str| {
-        crate::commands::mcp::tool_info(&lock(&f.vault), &f.mcp, &conv, name).expect("tool info")
+        crate::mcp::tool_info(&lock(&f.vault), &f.mcp, &conv, name).expect("tool info")
     };
     let echo = info("mcp__files__echo");
     assert_eq!(
@@ -922,11 +922,10 @@ async fn a_turn_offers_mcp_tools_and_runs_their_calls() {
     assert!(!echo.always_ask && !echo.tool.always_allow);
     assert_eq!(echo.tool.tool, "echo");
     assert_eq!(echo.tool.annotations.read_only_hint, Some(true));
-    crate::commands::mcp::set_always_allow(&mut lock(&f.vault), &files, Some("echo"), true)
-        .unwrap();
+    crate::mcp::set_always_allow(&mut lock(&f.vault), &files, Some("echo"), true).unwrap();
     assert!(info("mcp__files__echo").tool.always_allow);
     assert!(!info("mcp__files__fail").tool.always_allow);
-    crate::commands::mcp::set_always_allow(&mut lock(&f.vault), &web, None, true).unwrap();
+    crate::mcp::set_always_allow(&mut lock(&f.vault), &web, None, true).unwrap();
     assert!(info("mcp__web__lookup").tool.always_allow);
     {
         let mut v = lock(&f.vault);
@@ -935,9 +934,7 @@ async fn a_turn_offers_mcp_tools_and_runs_their_calls() {
         v.put(Some(&web), Item::McpServer(server)).unwrap();
     }
     assert!(info("mcp__web__lookup").always_ask);
-    assert!(
-        crate::commands::mcp::tool_info(&lock(&f.vault), &f.mcp, &conv, "mcp__nope__x").is_none()
-    );
+    assert!(crate::mcp::tool_info(&lock(&f.vault), &f.mcp, &conv, "mcp__nope__x").is_none());
 
     let c1 = f.run(&conv, "c1", None, None).await.unwrap();
     assert_eq!(view_content(&c1), ("c1", AiToolStatus::Ok, "hi"));
@@ -1135,10 +1132,7 @@ async fn a_call_of_a_server_deleted_elsewhere_does_not_run() {
     sink.done_with(AiFinish::ToolCalls).await;
     // A sync pull took the item away; the server keeps running until the next request.
     lock(&f.vault).delete(&files).unwrap();
-    assert!(
-        crate::commands::mcp::tool_info(&lock(&f.vault), &f.mcp, &conv, "mcp__files__pid")
-            .is_none()
-    );
+    assert!(crate::mcp::tool_info(&lock(&f.vault), &f.mcp, &conv, "mcp__files__pid").is_none());
     let c1 = f.run(&conv, "c1", None, None).await.unwrap();
     assert_eq!(view_content(&c1).1, AiToolStatus::Error);
     assert!(view_content(&c1).2.contains("was deleted"), "{c1:?}");

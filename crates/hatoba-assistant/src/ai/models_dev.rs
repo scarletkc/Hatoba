@@ -54,7 +54,7 @@ pub async fn fill_list(http: reqwest::Client, protocol: Protocol, models: &mut [
     }
     let ids = to_ask(models, models_dev::knows, &asked());
     if !ids.is_empty() {
-        let fetch = tauri::async_runtime::spawn(async move {
+        let fetch = crate::runtime::spawn(async move {
             let _one_at_a_time = FETCHING.lock().await;
             // A fetch that ran meanwhile may have answered.
             let ids: Vec<String> = {

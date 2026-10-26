@@ -22,11 +22,11 @@ use hatoba_ai::chatgpt::{
 };
 use hatoba_core::Vault;
 use hatoba_core::model::{AiChatgptAccount, AiProvider, Item};
+use hatoba_core::sync::SharedVault;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 use crate::error::{AppError, AppResult};
-use crate::state::{AppState, SharedVault};
 
 /// This device's sessions and host id, as the vault keeps them (sealed, never synced).
 #[derive(Default, Serialize, Deserialize)]
@@ -76,14 +76,18 @@ fn orphaned(v: &Vault) -> Vec<String> {
 
 /// Ends this device's sessions of providers that no longer exist, such as after sync pulled a
 /// deletion from another device: removes them and revokes them at OpenAI.
-pub fn end_orphaned(state: &AppState) {
-    let Ok(ids) = state.with_unlocked(|v| Ok(orphaned(v))) else {
-        return;
+pub fn end_orphaned(vault: &SharedVault) {
+    let ids = {
+        let v = vault.lock().unwrap_or_else(PoisonError::into_inner);
+        if !v.is_unlocked() {
+            return;
+        }
+        orphaned(&v)
     };
     if ids.is_empty() {
         return;
     }
-    tauri::async_runtime::spawn(async move {
+    crate::runtime::spawn(async move {
         for id in ids {
             let revoked = sessions()
                 .sign_out(&id, &tokio_util::sync::CancellationToken::new())

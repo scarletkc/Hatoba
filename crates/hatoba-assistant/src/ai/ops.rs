@@ -23,7 +23,7 @@ use super::{
 };
 use crate::dto::{AiEntryView, AiTurnContext, AiTurnEndReason, AiTurnEvent};
 use crate::error::{AppError, AppResult};
-use crate::state::now_ms;
+use crate::now_ms;
 
 impl AiManager {
     /// A turn of the conversation is running, or a stop of one waits for its commands to end.

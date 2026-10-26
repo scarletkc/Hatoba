@@ -53,6 +53,6 @@ pub use proxy::{ProxyConfig, ProxyKind};
 pub use server_os::{ServerOs, server_os};
 pub use session::{
     AuthMethod, ConnectConfig, ExecOutput, JumpHop, MountStats, ServerStats, ShellEvent,
-    ShellHandle, ShellOptions, SshSession, StatsEvent, StatsHandle, connect,
+    ShellHandle, ShellOptions, SshSession, StatsEvent, StatsHandle, connect, target_label,
 };
 pub use sftp::{FileEntry, RemoteStat, SftpClient, TransferDirection, TransferProgress};

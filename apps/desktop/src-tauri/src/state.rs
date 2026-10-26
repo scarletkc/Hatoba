@@ -4,19 +4,19 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use std::time::Instant;
 
+use hatoba_assistant::ai::AiManager;
+use hatoba_assistant::dropped::DroppedPaths;
+use hatoba_assistant::mcp::McpManager;
 use hatoba_core::vault::Vault;
 use tauri::{AppHandle, Manager};
 
-use crate::ai::AiManager;
 use crate::cli_access::CliAccess;
 use crate::connection::Connections;
 use crate::dashboard::Dashboard;
 use crate::deploy::Deployments;
-use crate::dropped::DroppedPaths;
 use crate::error::{AppError, AppResult};
 use crate::local::LocalManager;
 use crate::lock::LockPolicy;
-use crate::mcp::McpManager;
 use crate::platform::secrets::KeyringStore;
 use crate::remote_edit::RemoteEdits;
 use crate::ssh::SshManager;
@@ -57,10 +57,15 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(vault: Vault, mica: bool) -> Self {
+        // The assistant's background work runs on Tauri's runtime, as the app's own does.
+        hatoba_assistant::runtime::set(tauri::async_runtime::handle().inner().clone());
         let mcp = McpManager::default();
+        // On macOS, MCP stdio servers get the login shell's PATH, which an app started from the
+        // Dock lacks.
+        mcp.set_default_path(crate::platform::login_shell::default_path);
         let vault = Arc::new(Mutex::new(vault));
         // AI-52: this device's ChatGPT sessions live in the vault.
-        crate::ai::chatgpt::install(&vault);
+        hatoba_assistant::ai::chatgpt::install(&vault);
         Self {
             vault,
             secrets: Arc::new(KeyringStore),

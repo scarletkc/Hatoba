@@ -23,7 +23,7 @@ use super::{AiEnv, AiManager, OpGuard, Request, Turn, lock, memory, unlocked};
 use crate::dto::{AiEntryView, AiTurnContext, AiTurnEvent};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::mcp::Offer;
-use crate::state::now_ms;
+use crate::now_ms;
 
 impl AiManager {
     /// `ai_compact` (AI-21): asks the model for a summary of the context with the request a turn

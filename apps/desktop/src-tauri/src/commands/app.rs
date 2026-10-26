@@ -56,7 +56,7 @@ pub fn window_zoom(app: AppHandle, percent: u32) -> AppResult<ZoomView> {
     let window = app
         .get_webview_window(platform::window::MAIN)
         .ok_or_else(|| AppError::internal("the main window is gone"))?;
-    Ok(platform::window::apply_zoom(&window, percent)?)
+    platform::window::apply_zoom(&window, percent).map_err(|e| AppError::internal(e.to_string()))
 }
 
 /// Whether the Linux main window shows its painted chrome: false while maximized, fullscreen

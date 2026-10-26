@@ -12,7 +12,7 @@ use crate::dto::{AiTurnContext, QuickTarget};
 
 /// How a quick-connect target (HOST-12) is named where a host's display name would be.
 pub(super) fn quick_label(target: &QuickTarget) -> String {
-    crate::ssh::target_label(&target.username, &target.address, target.port)
+    hatoba_ssh::target_label(&target.username, &target.address, target.port)
 }
 
 /// The quick-connect target of a tab without a saved host, as the conversation item records it
@@ -54,7 +54,7 @@ pub(super) fn host_target(v: &Vault, host_id: &str) -> Option<AiQuickTarget> {
 
 /// How a recorded quick-connect target is named in a `host_change` note: `user@host:port`.
 pub(super) fn target_name(target: &AiQuickTarget) -> String {
-    crate::ssh::target_label(&target.username, &target.address, target.port)
+    hatoba_ssh::target_label(&target.username, &target.address, target.port)
 }
 
 /// Whether a `host_change` note's `from` names the server at `here` (AI-09): the target's name,

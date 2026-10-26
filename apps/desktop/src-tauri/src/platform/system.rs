@@ -1,6 +1,8 @@
 //! System facts that each platform reports differently: the name this device shows in the sync
 //! device list, the user's language, and the local user name.
 
+pub use hatoba_local::system::default_user;
+
 /// The first candidate that has text, trimmed.
 fn first_non_blank(candidates: impl IntoIterator<Item = Option<String>>) -> Option<String> {
     candidates
@@ -69,14 +71,6 @@ fn preferred_language() -> Option<String> {
 #[cfg(not(target_os = "macos"))]
 fn preferred_language() -> Option<String> {
     None
-}
-
-/// The local user name, which OpenSSH logs in as when a destination names no user (SSH config
-/// import, quick connect); empty when unknown.
-pub fn default_user() -> String {
-    std::env::var("USERNAME")
-        .or_else(|_| std::env::var("USER"))
-        .unwrap_or_default()
 }
 
 #[cfg(test)]

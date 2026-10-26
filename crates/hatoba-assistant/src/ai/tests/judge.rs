@@ -6,11 +6,11 @@ use super::*;
 use crate::ai::calls::open_call_at;
 use crate::ai::judge::{auto_view, judge_state, screen_tail};
 use crate::ai::{find_conversation, guard};
-use crate::commands::ai::save_ai_settings;
 use crate::dto::{
     AiAutoVerdict, AiJudgeDecision, AiJudgeSampleOutcome, AiModelRef, AiSettingsPatch, Clearable,
 };
 use crate::mcp::tests::{put_server, set_enabled, stdio_server};
+use crate::settings::save_ai_settings;
 use hatoba_ai::entry::{AutoDecision, AutoVerdict};
 use hatoba_ai::judge::{
     self, CHANGES_ANYTHING, DESTROYS_DATA, FORBIDDEN, JudgeState, REQUESTED, RUNS_UNSEEN_CODE,

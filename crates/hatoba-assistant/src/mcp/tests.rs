@@ -388,7 +388,7 @@ pub(crate) fn put_server(vault: &SharedVault, server: McpServer) -> String {
 /// Enables or disables a server on this device.
 pub(crate) fn set_enabled(vault: &SharedVault, id: &str, enabled: bool) {
     let mut v = vault.lock().unwrap();
-    crate::commands::mcp::set_enabled(&mut v, id, enabled).unwrap();
+    crate::mcp::set_enabled(&mut v, id, enabled).unwrap();
 }
 
 pub(crate) fn manager() -> (McpManager, Arc<Events>) {
@@ -505,7 +505,7 @@ fn a_choice_made_for_http_does_not_hold_once_the_server_uses_stdio() {
     };
     let id = put_server(&vault, http);
     set_enabled(&vault, &id, true);
-    crate::commands::mcp::set_always_allow(&mut vault.lock().unwrap(), &id, None, true).unwrap();
+    crate::mcp::set_always_allow(&mut vault.lock().unwrap(), &id, None, true).unwrap();
 
     // Another device makes it a stdio server: it arrives off here, as a new stdio server does
     // (AI-29), and without the Always allow chosen for the http server.
@@ -880,7 +880,7 @@ async fn a_command_line_changed_elsewhere_stays_on_and_keeps_always_allow() {
     let (mcp, events) = manager();
     let files = put_server(&vault, stdio_server("files"));
     set_enabled(&vault, &files, true);
-    crate::commands::mcp::set_always_allow(&mut vault.lock().unwrap(), &files, None, true).unwrap();
+    crate::mcp::set_always_allow(&mut vault.lock().unwrap(), &files, None, true).unwrap();
     let cancel = CancellationToken::new();
     assert_eq!(
         mcp.offer(&vault, &context(&[]), &cancel).await.tools.len(),
@@ -943,8 +943,8 @@ async fn a_called_name_resolves_through_its_conversations_offer() {
     let name = "mcp__my_server__echo";
     let server_of = |conversation: &str| {
         let v = vault.lock().unwrap();
-        let info = crate::commands::mcp::tool_info(&v, &mcp, conversation, name)
-            .expect("the approval card's tool");
+        let info =
+            crate::mcp::tool_info(&v, &mcp, conversation, name).expect("the approval card's tool");
         // The card names the server the call runs on.
         assert_eq!(
             mcp.offered(conversation, name).unwrap().server_id,
@@ -961,7 +961,7 @@ async fn a_called_name_resolves_through_its_conversations_offer() {
     // not run although its connection is up.
     let tool = mcp.offered("a", name).unwrap();
     vault.lock().unwrap().delete(&spaced).unwrap();
-    assert!(crate::commands::mcp::tool_info(&vault.lock().unwrap(), &mcp, "a", name).is_none());
+    assert!(crate::mcp::tool_info(&vault.lock().unwrap(), &mcp, "a", name).is_none());
     let (status, content) = mcp
         .call(&vault, &tool, args(json!({"text": "hi"})), &cancel)
         .await;

@@ -75,13 +75,6 @@ pub trait EventSink: Send + Sync + 'static {
     fn send(&self, event: AiTurnEvent);
 }
 
-impl EventSink for tauri::ipc::Channel<AiTurnEvent> {
-    fn send(&self, event: AiTurnEvent) {
-        // A reloaded WebView drops its channels; the turn goes on and its entries are stored.
-        let _ = tauri::ipc::Channel::<AiTurnEvent>::send(self, event);
-    }
-}
-
 /// What the runtime needs from the app.
 pub trait AiEnv: Send + Sync + 'static {
     /// The vault changed: schedules a sync (`sync::local_change`). Never called with the vault

@@ -1,10 +1,10 @@
 //! AI memory commands (AI-53, spec §13.12): Settings → AI lists, edits and deletes the memories
-//! the assistant keeps, under the rules its `memory` tool follows ([`crate::ai::memory`]).
+//! the assistant keeps, under the rules its `memory` tool follows ([`hatoba_assistant::ai::memory`]).
 
+use hatoba_assistant::ai::memory;
 use hatoba_core::model::{AiMemory, Item};
 use tauri::{AppHandle, State};
 
-use crate::ai::memory;
 use crate::dto::{AiMemoryInput, AiMemoryView};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;

@@ -11,7 +11,7 @@ use super::blocks::leading_blocks;
 use super::view::entry_view;
 use crate::dto::AiEntryView;
 use crate::error::{AppError, AppResult};
-use crate::state::now_ms;
+use crate::now_ms;
 
 /// A conversation's stored entries, decoded, oldest first. Unreadable entries are left out.
 pub(super) struct Entries {

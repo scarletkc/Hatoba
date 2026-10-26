@@ -4,8 +4,8 @@
 //! stay byte for byte the same from request to request.
 
 use super::*;
-use crate::commands::mcp::{proxy_info, set_always_allow};
 use crate::mcp::tests::{hanging_server, put_server, set_enabled, stdio_server};
+use crate::mcp::{proxy_info, set_always_allow};
 use hatoba_core::model::{McpServer, McpTransport};
 
 /// Tools of the `big` mock server, each with a long description, so that their definitions

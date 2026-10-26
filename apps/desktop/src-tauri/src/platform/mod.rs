@@ -13,6 +13,8 @@ pub mod secrets;
 pub mod system;
 pub mod window;
 
+pub use hatoba_local::system::os_label;
+
 /// Platform name reported to the WebView (`AppInfo.platform`).
 pub fn platform_name() -> &'static str {
     if cfg!(target_os = "windows") {
@@ -29,14 +31,5 @@ pub fn platform() -> crate::dto::Platform {
         "windows" => crate::dto::Platform::Windows,
         "macos" => crate::dto::Platform::Macos,
         _ => crate::dto::Platform::Linux,
-    }
-}
-
-/// Human-readable OS name for the device list, e.g. "Windows", "macOS", "Linux".
-pub fn os_label() -> String {
-    match platform_name() {
-        "windows" => "Windows".into(),
-        "macos" => "macOS".into(),
-        _ => "Linux".into(),
     }
 }

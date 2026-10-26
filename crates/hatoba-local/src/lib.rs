@@ -8,10 +8,13 @@
 
 pub mod error;
 pub mod pty;
+pub mod session;
 pub mod shells;
+pub mod system;
 pub mod tools;
 
 pub use error::LocalError;
 pub use pty::{LocalPty, PtyEvent, PtySize};
+pub use session::LocalSession;
 pub use shells::{Shell, ShellKind};
 pub use tools::LocalTools;

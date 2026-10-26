@@ -159,8 +159,8 @@ pub(super) fn prompt(
     // A WSL distribution's user is its own, which Windows does not know.
     let local_user = local
         .filter(|l| l.kind != Some(LocalShellKind::Wsl))
-        .map(|_| crate::platform::system::default_user());
-    let os = crate::platform::os_label();
+        .map(|_| hatoba_local::system::default_user());
+    let os = hatoba_local::system::os_label();
     let local_prompt = local.and_then(|l| {
         Some(LocalPrompt {
             device: &l.device,

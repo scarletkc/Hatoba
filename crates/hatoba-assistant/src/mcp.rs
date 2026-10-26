@@ -41,18 +41,18 @@ use hatoba_ai::mcp::{
 use hatoba_ai::provider::Protocol;
 use hatoba_ai::tools;
 use hatoba_core::Vault;
-use hatoba_core::model::{Item, McpTransport};
+use hatoba_core::model::{Item, McpServer, McpTransport};
 use hatoba_core::sync::SharedVault;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
 use crate::dto::{
-    AiTurnContext, McpPromptArgumentView, McpPromptView, McpResourceView, McpServerState,
-    McpServerStatus, McpToolAnnotations, McpToolView, McpTransportView,
+    AiTurnContext, McpPromptArgumentView, McpPromptView, McpProxyInfo, McpResourceView,
+    McpServerState, McpServerStatus, McpToolAnnotations, McpToolInfo, McpToolView,
+    McpTransportView,
 };
 use crate::error::{AppError, AppResult};
-use crate::platform;
 
 /// How long a server gets to start and answer `initialize` (and each `tools/list` page). Long
 /// enough for `npx -y` to download a package the first time.
@@ -74,14 +74,14 @@ fn guard<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 /// Runs a task on the async runtime: the current one when there is one (commands, turns,
-/// tests), Tauri's otherwise.
+/// tests), the app's otherwise ([`crate::runtime`]).
 fn spawn(task: impl Future<Output = ()> + Send + 'static) {
     match tokio::runtime::Handle::try_current() {
         Ok(handle) => {
             handle.spawn(task);
         }
         Err(_) => {
-            tauri::async_runtime::spawn(task);
+            crate::runtime::spawn(task);
         }
     }
 }
@@ -674,6 +674,10 @@ impl Server {
     }
 }
 
+/// The default `PATH` for `stdio` servers: the login shell's on macOS, `None` where the inherited
+/// one is right. It may block the first time.
+pub type DefaultPath = fn() -> Option<&'static std::ffi::OsStr>;
+
 /// The MCP servers' live state. Cheap to clone; every clone is the same manager.
 #[derive(Clone, Default)]
 pub struct McpManager(Arc<Inner>);
@@ -682,6 +686,7 @@ pub struct McpManager(Arc<Inner>);
 struct Inner {
     http: OnceLock<reqwest::Client>,
     events: OnceLock<Arc<dyn McpEvents>>,
+    default_path: OnceLock<DefaultPath>,
     servers: Mutex<HashMap<String, Arc<Server>>>,
     /// The latest offer of each conversation.
     offers: Mutex<HashMap<String, Arc<Offer>>>,
@@ -691,6 +696,16 @@ impl McpManager {
     /// Where status events go; set once at startup.
     pub fn set_events(&self, events: Arc<dyn McpEvents>) {
         let _ = self.0.events.set(events);
+    }
+
+    /// Where the default `PATH` of `stdio` servers comes from ([`with_default_path`]); set once
+    /// at startup. Without it, they inherit the app's.
+    pub fn set_default_path(&self, default_path: DefaultPath) {
+        let _ = self.0.default_path.set(default_path);
+    }
+
+    fn default_path(&self) -> DefaultPath {
+        self.0.default_path.get().copied().unwrap_or(|| None)
     }
 
     fn http(&self) -> reqwest::Client {
@@ -1019,7 +1034,7 @@ impl McpManager {
                 let http = manager.http();
                 // The login shell's PATH on macOS, resolved when the first stdio server starts.
                 let path = if matches!(config, McpTransportConfig::Stdio { .. }) {
-                    tauri::async_runtime::spawn_blocking(platform::login_shell::default_path)
+                    crate::runtime::spawn_blocking(manager.default_path())
                         .await
                         .ok()
                         .flatten()
@@ -1639,6 +1654,84 @@ impl McpManager {
             starts_ended
         );
         servers.into_iter().map(|(id, _)| id).collect()
+    }
+}
+
+// ───────────────────────── this device's choices and approval cards ─────────────────────────
+
+pub fn find_server(v: &Vault, id: &str) -> AppResult<McpServer> {
+    v.get(id)
+        .and_then(Item::as_mcp_server)
+        .cloned()
+        .ok_or_else(|| AppError::not_found("MCP server"))
+}
+
+pub fn set_enabled(v: &mut Vault, id: &str, enabled: bool) -> AppResult<()> {
+    let server = find_server(v, id)?;
+    let mut device = DeviceState::load(v);
+    device.server_mut(id, &server.transport).enabled = Some(enabled);
+    device.save(v)
+}
+
+/// AI-31 Always allow on this device: one tool (the server's own name) or the whole server.
+pub fn set_always_allow(v: &mut Vault, id: &str, tool: Option<&str>, allow: bool) -> AppResult<()> {
+    let server = find_server(v, id)?;
+    let mut device = DeviceState::load(v);
+    let here = device.server_mut(id, &server.transport);
+    match tool.map(str::trim) {
+        None => here.always_allow = allow,
+        Some("") => return Err(AppError::invalid("tool", "The tool name is empty.")),
+        Some(tool) => {
+            here.always_allow_tools.retain(|t| t != tool);
+            if allow {
+                here.always_allow_tools.push(tool.to_owned());
+            }
+        }
+    }
+    device.save(v)
+}
+
+/// The tool behind a name the model called in a conversation, for the approval card (AI-31):
+/// resolved like the call itself (`McpManager::offered`), so the card names the server that runs
+/// it. `None` when the conversation's offer has no such tool, or its server was deleted.
+pub fn tool_info(
+    v: &Vault,
+    mcp: &McpManager,
+    conversation_id: &str,
+    name: &str,
+) -> Option<McpToolInfo> {
+    let tool = mcp.offered(conversation_id, name)?;
+    let server = v.get(&tool.server_id).and_then(Item::as_mcp_server)?;
+    let device = DeviceState::load(v);
+    Some(McpToolInfo {
+        server_id: tool.server_id.clone(),
+        server_name: server.name.clone(),
+        always_ask: server.always_ask,
+        tool: tool_view(&device, &tool),
+    })
+}
+
+/// AI-45: what the approval card of a `call_mcp_tool` call needs, as `ai_tool_run` resolves the
+/// call: the tool it names, and whether it runs. A call that does not run (arguments that do not
+/// match the tool's input schema, a tool the conversation does not have, a deleted server) gets
+/// its error result without asking.
+pub fn proxy_info(
+    v: &Vault,
+    mcp: &McpManager,
+    conversation_id: &str,
+    arguments: &str,
+) -> McpProxyInfo {
+    match crate::ai::proxy_call(v, mcp, conversation_id, arguments) {
+        Ok((tool, _)) => McpProxyInfo {
+            tool: tool_info(v, mcp, conversation_id, &tool.name),
+            runs: true,
+        },
+        Err(_) => McpProxyInfo {
+            tool: hatoba_ai::mcp::deferred::parse_call(arguments)
+                .ok()
+                .and_then(|call| tool_info(v, mcp, conversation_id, &call.tool)),
+            runs: false,
+        },
     }
 }
 

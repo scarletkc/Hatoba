@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use hatoba_local::{LocalPty, PtyEvent, PtySize, Shell, ShellKind};
+use hatoba_local::{LocalPty, LocalSession, PtyEvent, PtySize, Shell, ShellKind};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
 use tokio::sync::mpsc;
@@ -11,7 +11,7 @@ use tokio::sync::mpsc;
 use crate::commands::ssh::{FRAME_CLOSED, FRAME_DATA, TermFrame, emit_state};
 use crate::dto::{LocalOpenOptions, LocalShellKind, LocalShellView, SessionState};
 use crate::error::{AppError, AppResult};
-use crate::local::{LocalSession, shell_env, tools_env};
+use crate::local::{shell_env, tools_env};
 use crate::state::AppState;
 
 pub(crate) fn shell_view(shell: &Shell, default: bool) -> LocalShellView {

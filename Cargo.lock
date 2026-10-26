@@ -2320,6 +2320,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "hatoba-assistant"
+version = "0.7.2"
+dependencies = [
+ "chrono",
+ "futures",
+ "hatoba-ai",
+ "hatoba-core",
+ "hatoba-ipc",
+ "hatoba-local",
+ "hatoba-ssh",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "specta",
+ "specta-typescript",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+ "wiremock",
+ "zeroize",
+]
+
+[[package]]
 name = "hatoba-cli"
 version = "0.7.2"
 dependencies = [
@@ -2362,7 +2386,6 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "bytes",
- "chrono",
  "core-foundation 0.10.1",
  "core-foundation-sys",
  "dirs 6.0.0",
@@ -2370,8 +2393,10 @@ dependencies = [
  "futures",
  "gtk",
  "hatoba-ai",
+ "hatoba-assistant",
  "hatoba-cli",
  "hatoba-core",
+ "hatoba-ipc",
  "hatoba-local",
  "hatoba-ssh",
  "keyring",
@@ -2412,6 +2437,19 @@ dependencies = [
  "zbus 5.19.0",
  "zeroize",
  "zip",
+]
+
+[[package]]
+name = "hatoba-ipc"
+version = "0.7.2"
+dependencies = [
+ "hatoba-ai",
+ "hatoba-core",
+ "hatoba-local",
+ "hatoba-ssh",
+ "serde",
+ "specta",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
