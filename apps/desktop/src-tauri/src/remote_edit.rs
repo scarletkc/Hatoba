@@ -755,22 +755,35 @@ impl Worker {
             Ok(None) => return Err(AppError::not_found("file")),
             Err(e) => return Err(e.into()),
         };
+        // Downloaded beside the copy and read before it replaces it, so a save the editor makes
+        // right after is never taken for the server's content.
+        let fresh = self.edit.dir.with_extension("download");
         run_transfer(
             self.app.clone(),
             session_id,
             TransferDirection::Download,
             self.view_name(),
             Box::new({
-                let (sftp, copy) = (sftp.clone(), self.edit.copy.clone());
+                let (sftp, fresh) = (sftp.clone(), fresh.clone());
                 move |progress, token| {
-                    Box::pin(async move { sftp.download(&remote, &copy, progress, token).await })
+                    Box::pin(async move { sftp.download(&remote, &fresh, progress, token).await })
                 }
             }),
         )
         .await?;
-        let content = tokio::fs::read(&self.edit.copy)
-            .await
-            .map_err(AppError::io)?;
+        let replaced = match tokio::fs::read(&fresh).await {
+            Ok(content) => tokio::fs::rename(&fresh, &self.edit.copy)
+                .await
+                .map(|()| content),
+            Err(e) => Err(e),
+        };
+        let content = match replaced {
+            Ok(content) => content,
+            Err(e) => {
+                let _ = tokio::fs::remove_file(&fresh).await;
+                return Err(AppError::io(e));
+            }
+        };
         self.synced = digest(&content);
         self.stat = stat;
         self.seen = seen(&self.edit.copy).await;
