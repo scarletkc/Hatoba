@@ -131,3 +131,39 @@ describe("the list of deferred MCP tools (AI-45)", () => {
     expect(noteLabel(tr("ja"), note(0))).toBe("使える MCP ツールはありません");
   });
 });
+
+describe("MCP servers whose tools came or went (AI-30)", () => {
+  // `change::block` in crates/hatoba-ai/src/mcp/change.rs.
+  const stored =
+    '<mcp_change available="2" unavailable="1">\nWith this message, the MCP servers whose tools you can call changed. Replies before it had the tools offered then, so what they said about MCP tools was true at the time.\nNow available:\n- Context7\n- Linear\nNo longer available:\n- GitHub\n</mcp_change>\n\nwhich MCP servers?';
+
+  it("is a note before the message, read back with its servers", () => {
+    const parts = parseMessage(stored);
+    expect(parts.typed).toBe("which MCP servers?");
+    expect(parts.notes).toEqual([{ kind: "mcp_change", available: ["Context7", "Linear"], unavailable: ["GitHub"] }]);
+    expect(composeMessage("which MCP servers?", [], parts.notes)).toBe(stored);
+    expect(parseMessage(stored.replace('unavailable="1"', 'unavailable="x"')).notes).toEqual([]);
+  });
+
+  it("comes after the other notes", () => {
+    const text = composeMessage(
+      "q",
+      [],
+      [{ kind: "mcp_change", available: [], unavailable: ["a"] }, { kind: "interrupted" }],
+    );
+    expect(parseMessage(text).notes.map((n) => n.kind)).toEqual(["interrupted", "mcp_change"]);
+  });
+
+  it("names the servers", () => {
+    const note = (available: string[], unavailable: string[]) =>
+      ({ kind: "mcp_change", available, unavailable }) as const;
+    expect(noteLabel(tr("en"), note(["Context7"], []))).toBe("MCP: Context7 now available");
+    expect(noteLabel(tr("en"), note([], ["Context7", "GitHub"]))).toBe("MCP: Context7, GitHub no longer available");
+    expect(noteLabel(tr("en"), note(["Context7"], ["GitHub"]))).toBe(
+      "MCP: Context7 now available, GitHub no longer available",
+    );
+    expect(noteLabel(tr("zh-CN"), note(["Context7", "Linear"], []))).toBe("MCP：Context7、Linear 已可用");
+    expect(noteLabel(tr("zh-CN"), note(["Context7"], ["GitHub"]))).toBe("MCP：Context7 已可用，GitHub 不再可用");
+    expect(noteLabel(tr("ja"), note([], ["GitHub"]))).toBe("MCP：GitHub を使えなくなりました");
+  });
+});

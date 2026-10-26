@@ -174,6 +174,11 @@ pub struct AssistantEntry {
     /// needs a `terminal_change` note. `None` in entries from before it was recorded.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal: Option<bool>,
+    /// The servers whose MCP tools its request offered directly (AI-30), by name, which tells
+    /// when the next message needs an `mcp_change` note. `None` once the conversation's MCP tools
+    /// are deferred (AI-45), and in entries from before it was recorded.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mcp_servers: Option<Vec<String>>,
     /// The user stopped the response while it streamed (spec §13.1): `text` and `tool_calls` are
     /// what had arrived, `raw` is empty, and the next message gets an `interrupted` note. Stored
     /// only when true.
@@ -422,6 +427,7 @@ mod tests {
                 }),
                 raw: json!({"role": "assistant"}),
                 terminal: Some(true),
+                mcp_servers: Some(vec!["Context7".into()]),
                 interrupted: false,
             },
         );
@@ -439,7 +445,8 @@ mod tests {
                 "finish": "tool_calls",
                 "usage": {"input_tokens": 10, "output_tokens": 2, "estimated": false},
                 "raw": {"role": "assistant"},
-                "terminal": true
+                "terminal": true,
+                "mcp_servers": ["Context7"]
             })
         );
         let back: AiEntry = serde_json::from_value(value).unwrap();

@@ -10,8 +10,9 @@ type Tr = (key: MessageKey, params?: Params) => string;
  * where the conversation moved, whether a terminal became attached or went away, which model it went
  * to, and what came before, the permission mode it was sent in when it changed (AI-16), which file's
  * change the user reverted, how many memories it started with (AI-53), how many lines of the terminal's
- * screen it showed (AI-46, the title of its collapsed block), or how many MCP tools it listed (AI-45).
- * A host that no longer exists is named as deleted; a model by its name.
+ * screen it showed (AI-46, the title of its collapsed block), how many MCP tools it listed (AI-45), or
+ * which MCP servers' tools became available or stopped being available (AI-30). A host that no longer
+ * exists is named as deleted; a model by its name.
  */
 export function noteLabel(t: Tr, note: Note, device = ""): string {
   switch (note.kind) {
@@ -42,6 +43,12 @@ export function noteLabel(t: Tr, note: Note, device = ""): string {
       return t("ai.note.screen", { n: note.lines });
     case "mcp_tools":
       return note.tools === 0 ? t("ai.note.mcpToolsNone") : t("ai.note.mcpTools", { n: note.tools });
+    case "mcp_change": {
+      const names = (list: string[]) => list.join(t("ai.note.mcpChange.separator"));
+      if (note.unavailable.length === 0) return t("ai.note.mcpAvailable", { names: names(note.available) });
+      if (note.available.length === 0) return t("ai.note.mcpUnavailable", { names: names(note.unavailable) });
+      return t("ai.note.mcpChange", { available: names(note.available), unavailable: names(note.unavailable) });
+    }
   }
 }
 

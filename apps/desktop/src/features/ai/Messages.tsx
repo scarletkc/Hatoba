@@ -656,13 +656,15 @@ const NOTE_ICONS = {
   file_revert: "arrow-counter-clockwise",
   terminal_state: "terminal-window",
   mcp_tools: "plug",
+  mcp_change: "plug",
   memory: "brain",
 } as const;
 
 /**
  * A note Hatoba stored before a message: the user stopped the reply before it, the conversation moved
  * to another host, a terminal became attached or went away, it went to another model, the user
- * reverted a file tool's change, or it listed the deferred MCP tools (AI-45).
+ * reverted a file tool's change, it listed the deferred MCP tools (AI-45), or MCP servers' tools came
+ * or went (AI-30).
  */
 function NoteDivider({ note }: { note: Note }) {
   const t = useT();

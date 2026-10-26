@@ -9,6 +9,8 @@
 //!   list and call its tools, list and get its prompts, list and read its resources, and shut it
 //!   down (AI-32).
 //! - [`tool_names`] and [`clean_schema`]: what a request offers the model (AI-30).
+//! - [`change`]: the `mcp_change` note of a message whose servers' tools changed while they are
+//!   offered directly (AI-30).
 //! - [`deferred`]: `search_tools`, `call_mcp_tool` and the `mcp_tools` note of a conversation
 //!   whose MCP tools are deferred (AI-45).
 //! - [`config`]: import and export in the `mcpServers` format (AI-33).
@@ -22,6 +24,7 @@ use std::fmt;
 
 use zeroize::Zeroizing;
 
+pub mod change;
 mod client;
 pub mod config;
 pub mod deferred;

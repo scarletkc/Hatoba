@@ -367,6 +367,12 @@ impl Offer {
             .collect()
     }
 
+    /// The servers the tools come from, by name, as a response records them and the
+    /// `mcp_change` note names them (AI-30).
+    pub fn server_names(&self) -> Vec<String> {
+        mcp::change::server_names(self.tools.iter().map(|t| t.server_name.as_str()))
+    }
+
     fn find(&self, name: &str) -> Option<&OfferedTool> {
         self.tools.iter().find(|t| t.name == name)
     }

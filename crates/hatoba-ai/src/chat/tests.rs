@@ -220,6 +220,7 @@ async fn chat_completions_streams_text_and_sends_the_expected_request() {
             usage: Some(cached_usage(812, 9, 768, 0)),
             raw: json!({"role": "assistant", "content": "Disk usage is 42%.", "refusal": null}),
             terminal: None,
+            mcp_servers: None,
             interrupted: false,
         }
     );
@@ -606,6 +607,7 @@ fn thinking_entry() -> AssistantEntry {
         usage: a.usage,
         raw: a.raw,
         terminal: None,
+        mcp_servers: None,
         interrupted: false,
     }
 }
@@ -3300,6 +3302,7 @@ async fn a_refused_beta_and_a_replay_refusal_still_get_an_answer() {
             {"type": "text", "text": "Hello."}
         ]),
         terminal: None,
+        mcp_servers: None,
         interrupted: false,
     };
     let entries = vec![

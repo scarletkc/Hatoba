@@ -63,6 +63,9 @@ The labels that these files name in English, as the interface shows them in Trad
 | Starting… | 正在啟動… |
 | Failed | 出錯 |
 | Starting MCP servers… | 正在啟動 MCP 伺服器… |
+| MCP: {names} now available | MCP：{names} 已可用 |
+| MCP: {names} no longer available | MCP：{names} 不再可用 |
+| MCP: {available} now available, {unavailable} no longer available | MCP：{available} 已可用，{unavailable} 不再可用 |
 | Listed {n} MCP tools | 列出了 {n} 個 MCP 工具 |
 
 ## `references/ai-tools.md`

@@ -211,6 +211,59 @@ async fn mcp_tools_below_the_threshold_are_offered_directly() {
     f.mcp.shutdown().await;
 }
 
+/// AI-30: while the MCP tools are offered directly, the message after a server was switched off
+/// or on says which servers' tools came or went, so the model does not take a reply that named
+/// them for a mistake. Each reply records the servers its request offered.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn servers_that_come_or_go_between_replies_are_noted() {
+    use hatoba_ai::mcp::change;
+
+    let f = Fixture::new((0..4).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    f.set_context_window(1_000_000);
+    let (_files, big, _mock) = servers(&f).await;
+    let without_big = AiTurnContext {
+        disabled_mcp_servers: vec![big],
+        ..f.context()
+    };
+    let (conv, _) = f.exchange(None, "which MCP servers?", f.context()).await;
+    f.exchange(Some(&conv), "and now?", without_big.clone())
+        .await;
+    // Nothing changed since.
+    f.exchange(Some(&conv), "still?", without_big).await;
+    f.exchange(Some(&conv), "back?", f.context()).await;
+
+    let both = vec!["big".to_owned(), "files".to_owned()];
+    let files = vec!["files".to_owned()];
+    let expected = [
+        manual("which MCP servers?"),
+        format!("{}and now?", change::block(&both, &files)),
+        "still?".to_owned(),
+        format!("{}back?", change::block(&files, &both)),
+    ];
+    assert_eq!(user_texts(&f, &conv), expected);
+    let recorded: Vec<Option<Vec<String>>> = f
+        .entries(&conv)
+        .into_iter()
+        .filter_map(|e| match e.body {
+            EntryBody::Assistant(a) => Some(a.mcp_servers),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        recorded,
+        [
+            Some(both.clone()),
+            Some(files.clone()),
+            Some(files),
+            Some(both)
+        ]
+    );
+    // The notes go to the model with the message, as stored.
+    let last = f.requests().await.pop().unwrap();
+    assert_eq!(user_messages(&last), expected);
+    f.mcp.shutdown().await;
+}
+
 /// AI-45 on Chat Completions: past a tenth of the window the first message lists the tools, the
 /// requests offer `search_tools` and `call_mcp_tool` with the same tools and system prompt before
 /// and after a search and a call, a search finds by keyword and by name, a call runs the tool it

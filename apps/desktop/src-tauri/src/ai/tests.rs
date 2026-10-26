@@ -825,6 +825,8 @@ async fn stopping_mid_stream_keeps_the_text_that_streamed() {
             model_id: "m1".into(),
             text: "Hel".into(),
             terminal: Some(true),
+            // No MCP server is on, and a reply records that too.
+            mcp_servers: Some(Vec::new()),
             interrupted: true,
             ..AssistantEntry::default()
         })
@@ -845,6 +847,7 @@ fn a_stop_keeps_the_text_and_the_complete_calls_that_streamed() {
         model_id: "m".into(),
         text: text.into(),
         tool_calls,
+        mcp_servers: Some(vec!["Context7".into()]),
     };
     let call = ToolCall {
         id: "c1".into(),
@@ -863,6 +866,7 @@ fn a_stop_keeps_the_text_and_the_complete_calls_that_streamed() {
             tool_calls: vec![call.clone()],
             finish: Finish::ToolCalls,
             terminal: Some(false),
+            mcp_servers: Some(vec!["Context7".into()]),
             interrupted: true,
             ..AssistantEntry::default()
         }
@@ -910,6 +914,7 @@ async fn a_stop_keeps_the_text_when_the_task_acts_first() {
         model_id: "m1".into(),
         text: "The disk is 4".into(),
         tool_calls: Vec::new(),
+        mcp_servers: None,
     });
     // What the turn loop and `task` do when the request returns cancelled.
     let task = {

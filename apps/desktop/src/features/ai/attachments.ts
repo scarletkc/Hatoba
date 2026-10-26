@@ -15,9 +15,10 @@
  * Before them, Rust stores the notes Hatoba writes itself when a message follows a reply the user
  * stopped, moves the conversation to another host, changes whether a terminal is attached, goes to
  * another model, is sent in another permission mode than the model was told of, starts a conversation
- * with the memories, follows a revert of a file tool's change, is sent with a connected terminal, or
- * comes with another list of deferred MCP tools (`interrupted`, `host_change`, `terminal_change`,
- * `model_change`, `permission_mode`, `memory`, `file_revert`, `terminal_state`, `mcp_tools`); the panel
+ * with the memories, follows a revert of a file tool's change, is sent with a connected terminal, comes
+ * with another list of deferred MCP tools, or has other MCP servers' tools (`interrupted`, `host_change`,
+ * `terminal_change`, `model_change`, `permission_mode`, `memory`, `file_revert`, `terminal_state`,
+ * `mcp_tools`, `mcp_change`); the panel
  * shows the terminal's screen as a collapsed block, hides the memories, and shows the others as dividers. The block
  * format and its escaping are specified once, in docs/hatoba-spec.md §13.3
  * ("Attachment blocks"); Rust's `title_of` (src-tauri/src/ai.rs) reads the same blocks to title a
@@ -302,7 +303,8 @@ export function blockTitle(a: Attachment): string {
  * it was stopped by the user, or with this message the conversation moved to another host, a terminal
  * became attached or stopped being attached, it went to another model, the permission mode the model
  * works in changed (AI-16), or the user reverted the change a file tool call made, or this message
- * shows the attached terminal's screen (AI-46) or lists the deferred MCP tools (AI-45). `from` of a host change is empty when the earlier host no longer exists;
+ * shows the attached terminal's screen (AI-46), lists the deferred MCP tools (AI-45), or names the MCP servers whose
+ * tools became available or stopped being available (AI-30). `from` of a host change is empty when the earlier host no longer exists;
  * a model is named as `Name (id)`, or by its ID alone. A revert's `path` is the file's path as the call
  * resolved it, and `body` its text for the model; the screen counts its lines, and `alternate` says a
  * full-screen program showed it; the MCP tool list counts its servers and tools, and `body` lists them.
@@ -315,7 +317,8 @@ export type Note =
   | { kind: "memory"; entries: number; host?: string; body: string }
   | { kind: "file_revert"; path: string; toolCallId: string; body: string }
   | { kind: "terminal_state"; host: string; alternate: boolean; lines: number; body: string }
-  | { kind: "mcp_tools"; servers: number; tools: number; body: string };
+  | { kind: "mcp_tools"; servers: number; tools: number; body: string }
+  | { kind: "mcp_change"; available: string[]; unavailable: string[] };
 
 /** The order Hatoba writes its notes in; a `file_revert` comes once for each reverted call. */
 const NOTE_ORDER = [
@@ -328,6 +331,7 @@ const NOTE_ORDER = [
   "file_revert",
   "terminal_state",
   "mcp_tools",
+  "mcp_change",
 ] as const satisfies readonly Note["kind"][];
 
 const attr = (s: string) =>
@@ -436,16 +440,50 @@ const PERMISSION_BODY = {
   bypass: "From this message on, the permission mode is bypass.",
 } as const satisfies Record<AiPermissionMode, string>;
 
+const MCP_CHANGE_BODY =
+  "With this message, the MCP servers whose tools you can call changed. Replies before it had the tools offered then, so what they said about MCP tools was true at the time.";
+const MCP_AVAILABLE = "Now available:";
+const MCP_UNAVAILABLE = "No longer available:";
+
+/** The servers an `mcp_change` note's body names under each heading, as Rust's `change::block` writes them. */
+function mcpChangeServers(body: string): { available: string[]; unavailable: string[] } {
+  const servers = { available: [] as string[], unavailable: [] as string[] };
+  let list: string[] | null = null;
+  for (const line of body.split("\n")) {
+    if (line === MCP_AVAILABLE) list = servers.available;
+    else if (line === MCP_UNAVAILABLE) list = servers.unavailable;
+    else if (list && line.startsWith("- ")) list.push(line.slice(2));
+  }
+  return servers;
+}
+
 const INTERRUPTED_BODY =
   "The user stopped your previous reply before it was finished. It ends where it was cut off; anything you were still writing, tool calls included, was not kept.";
 
 /**
  * A note as Rust writes it (`interrupted_block`, `host_change_block`, `terminal_change_block`,
- * `model_change_block`, `permission_mode_block`, `memory_block`, `file_revert_block`, `terminal_state_block` and
- * `deferred::list_block` in crates/hatoba-ai). The panel never sends one; Rust adds them when it stores a message, and the mock
+ * `model_change_block`, `permission_mode_block`, `memory_block`, `file_revert_block`, `terminal_state_block`,
+ * `deferred::list_block` and `change::block` in crates/hatoba-ai). The panel never sends one; Rust adds them when it stores a message, and the mock
  * does the same.
  */
 export function noteBlock(n: Note): string {
+  if (n.kind === "mcp_change") {
+    const lists: [string, string[]][] = [
+      [MCP_AVAILABLE, n.available],
+      [MCP_UNAVAILABLE, n.unavailable],
+    ];
+    const body = lists
+      .filter(([, names]) => names.length > 0)
+      .map(([heading, names]) => [heading, ...names.map((name) => `- ${name}`)].join("\n"));
+    return writeBlock(
+      n.kind,
+      [
+        ["available", String(n.available.length)],
+        ["unavailable", String(n.unavailable.length)],
+      ],
+      [MCP_CHANGE_BODY, ...body].join("\n"),
+    );
+  }
   if (n.kind === "mcp_tools")
     return writeBlock(
       n.kind,
@@ -566,7 +604,7 @@ export interface MessageParts {
 }
 
 const OPEN =
-  /^<(interrupted|host_change|terminal_change|model_change|permission_mode|memory|file_revert|terminal_state|mcp_tools|terminal_selection|connection_diagnostics|pasted_text|file|host_file|host_directory|mcp_resource|skill|mcp_prompt)((?: [a-z_]+="[^"]*")*)>\n/;
+  /^<(interrupted|host_change|terminal_change|model_change|permission_mode|memory|file_revert|terminal_state|mcp_tools|mcp_change|terminal_selection|connection_diagnostics|pasted_text|file|host_file|host_directory|mcp_resource|skill|mcp_prompt)((?: [a-z_]+="[^"]*")*)>\n/;
 const DIGITS = /^\d+$/;
 
 type Block = { kind: "note"; note: Note } | { kind: "attachment"; attachment: Attachment };
@@ -615,6 +653,10 @@ function blockOf(tag: string, attrs: [string, string][], body: string): Block | 
     case "mcp_tools":
       return names === "servers,tools" && DIGITS.test(value(0)) && DIGITS.test(value(1))
         ? { kind: "note", note: { kind: tag, servers: Number(value(0)), tools: Number(value(1)), body } }
+        : null;
+    case "mcp_change":
+      return names === "available,unavailable" && DIGITS.test(value(0)) && DIGITS.test(value(1))
+        ? { kind: "note", note: { kind: tag, ...mcpChangeServers(body) } }
         : null;
     case TAGS.selection:
       if (

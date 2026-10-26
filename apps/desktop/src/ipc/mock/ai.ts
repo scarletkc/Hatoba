@@ -128,8 +128,14 @@ interface Turn {
   sleepers: Set<() => void>;
   /** AI-22 ran once in this turn. */
   compacted: boolean;
-  /** What the response being streamed has sent so far, which a stop stores (§13.1). */
-  streamed: { provider_id: string; model_id: string; text: string; calls: AiToolCall[] } | null;
+  /** What the response being streamed has sent so far, which a stop stores (§13.1), and the MCP servers its request offered directly. */
+  streamed: {
+    provider_id: string;
+    model_id: string;
+    text: string;
+    calls: AiToolCall[];
+    servers: string[] | null;
+  } | null;
 }
 
 const MIN = 60_000;
@@ -230,6 +236,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   const compacting = new Set<string>();
   /** By reply entry id: whether its request offered the terminal tools (AI-09). */
   const replyTerminal = new Map<string, boolean>();
+  /** By reply entry id: the servers whose MCP tools its request offered directly (AI-30). */
+  const replyServers = new Map<string, string[]>();
   /** By user entry id: where the entries before it came from (`Recorded`). */
   const cameFrom = new Map<string, Recorded>();
   /** Like Rust's `AssistantEntry.interrupted`, which the view does not carry: replies the user stopped (§13.1). */
@@ -329,6 +337,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         usage: null,
       };
       replyTerminal.set(entry.entry_id, turn.context.tab);
+      if (part.servers) replyServers.set(entry.entry_id, part.servers);
       interrupted.add(entry.entry_id);
       store(c, entry);
       stored.push(entry);
@@ -1137,12 +1146,14 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       return;
     }
     const p = await plan(c, turn);
+    const servers = deferredIn(c.entries) ? null : await offeredServers(turn.context);
     if (turn.ended) return;
     const part = (turn.streamed = {
       provider_id: turn.context.provider_id,
       model_id: turn.context.model_id,
       text: "",
       calls: [] as AiToolCall[],
+      servers,
     });
     // Like Rust, a thinking block says the model thinks before any reasoning text comes.
     const silent = flags.has("updates");
@@ -1182,8 +1193,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       finish: p.finish,
       usage,
     };
-    // Like Rust's `AssistantEntry.terminal` (AI-09), which the view does not carry.
+    // Like Rust's `AssistantEntry.terminal` (AI-09) and `mcp_servers` (AI-30), which the view does not carry.
     replyTerminal.set(entry.entry_id, turn.context.tab);
+    if (servers) replyServers.set(entry.entry_id, servers);
     turn.streamed = null;
     store(c, entry);
     turn.emit({ kind: "done", finish: p.finish });
@@ -1375,6 +1387,68 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         ? "No MCP tools are available from this message on."
         : `The MCP tools you can call with call_mcp_tool from this message on, by server. This list replaces any earlier one. search_tools returns a tool's description and input schema, and finds the tools of a server that is listed by count only.\n${lines.join("\n")}`;
     return `${noteBlock({ kind: "mcp_tools", servers: lines.length, tools, body })}\n\n`;
+  }
+
+  /** Like Rust's `mcp_deferred` (AI-45): a conversation is deferred once a message listed its MCP tools. */
+  function deferredIn(entries: AiEntryView[]): boolean {
+    return entries.some((e) => e.role === "user" && parseMessage(e.text).notes.some((n) => n.kind === "mcp_tools"));
+  }
+
+  /** Like Rust's `Offer::server_names` (AI-30): the running servers whose tools the requests offer, by name. */
+  async function offeredServers(context: AiTurnContext): Promise<string[]> {
+    if (!deps.mcp) return [];
+    const names: string[] = [];
+    const servers = (await deps.mcp.servers())
+      .filter((x) => x.enabled && !context.disabled_mcp_servers.includes(x.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    for (const s of servers) {
+      const status = await deps.mcp.status(s.id);
+      if (status.state === "running" && status.tools.length > 0 && !names.includes(s.name)) names.push(s.name);
+    }
+    return names;
+  }
+
+  /**
+   * Like Rust's `mcp_change_note` (AI-30): an `mcp_change` note when the message's requests offer the MCP tools
+   * of other servers than the model was last told of, unless the conversation is deferred or `listed` lists its
+   * tools.
+   */
+  async function mcpChange(earlier: AiEntryView[], context: AiTurnContext, listed: string): Promise<string> {
+    if (listed || deferredIn(earlier)) return "";
+    const before = mcpServersBefore(earlier);
+    if (!before) return "";
+    const now = await offeredServers(context);
+    const available = now.filter((n) => !before.includes(n));
+    const unavailable = before.filter((n) => !now.includes(n));
+    if (available.length === 0 && unavailable.length === 0) return "";
+    return `${noteBlock({ kind: "mcp_change", available, unavailable })}\n\n`;
+  }
+
+  /**
+   * Like Rust's `mcp_servers_before` (AI-30): the servers the newest reply's request offered, as the
+   * `mcp_change` notes after it changed them; undefined before the first reply or when unknown.
+   */
+  function mcpServersBefore(earlier: AiEntryView[]): string[] | undefined {
+    const notes: { available: string[]; unavailable: string[] }[] = [];
+    for (const e of [...earlier].reverse()) {
+      if (e.role === "assistant") {
+        const recorded = replyServers.get(e.entry_id);
+        if (!recorded) return undefined;
+        return notes
+          .reverse()
+          .reduce(
+            (servers, n) => [
+              ...servers.filter((x) => !n.unavailable.includes(x)),
+              ...n.available.filter((x) => !servers.includes(x)),
+            ],
+            recorded,
+          );
+      }
+      if (e.role !== "user") continue;
+      const note = parseMessage(e.text).notes.find((n) => n.kind === "mcp_change");
+      if (note?.kind === "mcp_change") notes.push(note);
+    }
+    return undefined;
   }
 
   /**
@@ -2529,6 +2603,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         const entry_id = newId();
         const terminal = replyTerminal.get(e.entry_id);
         if (terminal !== undefined) replyTerminal.set(entry_id, terminal);
+        const servers = replyServers.get(e.entry_id);
+        if (servers) replyServers.set(entry_id, servers);
         if (interrupted.has(e.entry_id)) interrupted.add(entry_id);
         const recorded = cameFrom.get(e.entry_id);
         if (recorded) cameFrom.set(entry_id, recorded);
@@ -2618,9 +2694,11 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       convs.set(c.view.id, c);
       const earlier = [...c.entries];
       const move = await moveOf(c, input.context);
+      const listed = await deferredList(input.context, input.text);
       const notes =
         (await notesBefore(c, earlier, move, move?.from ?? null, input.context)) +
-        (await deferredList(input.context, input.text));
+        listed +
+        (await mcpChange(earlier, input.context, listed));
       const recorded = input.conversation_id
         ? placeOf(c.view)
         : { host_id: null, quick_target: null, origin: null, local: null };
@@ -2947,7 +3025,11 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       // Like Rust: the kept move is dropped when its note names the server the message goes from under another name.
       if (noted !== null && (await namesServer(c, move, noted))) noted = null;
       else if (noted === null) noted = move?.from ?? null;
-      const notes = (await notesBefore(c, [...c.entries], move, noted, context)) + (await deferredList(context, text));
+      const listed = await deferredList(context, text);
+      const notes =
+        (await notesBefore(c, [...c.entries], move, noted, context)) +
+        listed +
+        (await mcpChange([...c.entries], context, listed));
       const user_entry = await storeMessage(c, turn, notes + text, context, move, recorded);
       return { conversation: view(c), user_entry };
     },

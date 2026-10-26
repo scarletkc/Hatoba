@@ -63,6 +63,9 @@ The labels that these files name in English, as the interface shows them in Japa
 | Starting… | 起動しています… |
 | Failed | エラー |
 | Starting MCP servers… | MCP サーバーを起動しています… |
+| MCP: {names} now available | MCP：{names} を使えるようになりました |
+| MCP: {names} no longer available | MCP：{names} を使えなくなりました |
+| MCP: {available} now available, {unavailable} no longer available | MCP：{available} を使えるようになり、{unavailable} を使えなくなりました |
 | Listed {n} MCP tools | MCP ツールを {n} 個一覧にしました |
 
 ## `references/ai-tools.md`

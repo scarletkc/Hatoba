@@ -49,7 +49,7 @@ use hatoba_ai::entry::{
     ToolCall, ToolStatus, Usage, fix_up_missing_results, pair_results,
 };
 use hatoba_ai::judge::{self, JudgeCall, JudgeFailure, JudgeState, Verdict};
-use hatoba_ai::mcp::deferred;
+use hatoba_ai::mcp::{change, deferred};
 use hatoba_ai::models::known_model;
 use hatoba_ai::provider::{AuthHeader, Effort, ModelSpec, Protocol, ProviderConfig};
 use hatoba_ai::skills::{BUILTIN_NAME, builtin_description, builtin_skill};
@@ -398,6 +398,9 @@ struct Streamed {
     text: String,
     /// Calls whose arguments are complete; a call still streaming has sent nothing yet.
     tool_calls: Vec<ToolCall>,
+    /// The servers whose MCP tools the request offered directly (AI-30), as a stored response
+    /// records them.
+    mcp_servers: Option<Vec<String>>,
 }
 
 impl Streamed {
@@ -419,6 +422,7 @@ impl Streamed {
             },
             tool_calls: self.tool_calls,
             terminal: Some(terminal),
+            mcp_servers: self.mcp_servers,
             interrupted: true,
             ..AssistantEntry::default()
         })
@@ -1342,6 +1346,7 @@ impl AiManager {
                 let entries = Entries::load(&v, &id)?;
                 let from = entries.context_from(conversation.context_start.as_deref());
                 let listed = mcp_note(&v, &turn.context, &entries.list, from, &offer);
+                let changed = mcp_change_note(&entries.list, &offer, &listed);
                 // AI-45: the message that defers the MCP tools takes their definitions out of its
                 // requests, which the last response's usage counts, and out of its Compact request.
                 let defers = !listed.is_empty() && !mcp_deferred(&entries.list);
@@ -1354,7 +1359,7 @@ impl AiManager {
                     &v,
                     &id,
                     &turn.context,
-                    &format!("{notes}{listed}{text}"),
+                    &format!("{notes}{listed}{changed}{text}"),
                     saved,
                 )?;
                 Ok((compact, defers))
@@ -1395,9 +1400,10 @@ impl AiManager {
                 v.put(Some(&id), Item::AiConversation(conversation))?;
             }
             // AI-45: the list of deferred MCP tools, when the model has not seen it, read after a
-            // compaction, whose summary leaves it out. AI-53: the memories of where the message
-            // is, which a summary of where the conversation was can leave out too.
-            let (listed, notes) = {
+            // compaction, whose summary leaves it out, or AI-30: the servers whose tools came or
+            // went. AI-53: the memories of where the message is, which a summary of where the
+            // conversation was can leave out too.
+            let (listed, changed, notes) = {
                 let conversation = find_conversation(&v, &id)?;
                 let entries = Entries::load(&v, &id)?;
                 let place = match &moved_to {
@@ -1426,10 +1432,12 @@ impl AiManager {
                 if deferred || !listed.is_empty() {
                     self.0.mcp.record_offer(&id, offer.clone());
                 }
-                (listed, notes)
+                let changed = mcp_change_note(&entries.list, &offer, &listed);
+                (listed, changed, notes)
             };
-            // AI-05, AI-09, AI-45: Hatoba's notes come before what the panel sent (spec §13.3).
-            let text = format!("{notes}{listed}{text}");
+            // AI-05, AI-09, AI-30, AI-45: Hatoba's notes come before what the panel sent (spec
+            // §13.3).
+            let text = format!("{notes}{listed}{changed}{text}");
             let entry = match came_from {
                 Some(came_from) => AiEntry::user_from(now_ms(), text, came_from),
                 None => AiEntry::user(now_ms(), text),
@@ -1803,7 +1811,10 @@ impl AiManager {
             // so a name the model read keeps meaning that tool when servers change mid-turn. A
             // retry after a restart or the lock, which forget them, records this request's, so
             // names never resolve through every server running on the device.
-            if !offers_deferred(&request.tools) || !self.0.mcp.has_offer(conversation_id) {
+            let deferred = offers_deferred(&request.tools);
+            // AI-30: the next message is noted when it has other servers' tools.
+            let mcp_servers = (!deferred).then(|| offer.server_names());
+            if !deferred || !self.0.mcp.has_offer(conversation_id) {
                 self.0.mcp.record_offer(conversation_id, offer);
             }
             turn.emit(AiTurnEvent::RequestStarted);
@@ -1813,6 +1824,7 @@ impl AiManager {
                 model_id: request.model.id.clone(),
                 text: String::new(),
                 tool_calls: Vec::new(),
+                mcp_servers: mcp_servers.clone(),
             });
             let result = {
                 let mut forward = |event: StreamEvent| {
@@ -1864,6 +1876,10 @@ impl AiManager {
             let wants_results = finish == Finish::ToolCalls && !response.tool_calls.is_empty();
             // Neither text nor calls, such as a reply of reasoning only: no answer (§13.1).
             let empty = response.text.trim().is_empty() && response.tool_calls.is_empty();
+            let response = AssistantEntry {
+                mcp_servers,
+                ..response
+            };
             let entry_id = match store_response(vault, env, conversation_id, turn, response) {
                 Ok(entry_id) => entry_id,
                 Err(halt) => return halted(turn, conversation_id, halt),
@@ -3188,6 +3204,7 @@ fn side_request(
     let notes = match timing {
         SideTiming::Idle => {
             next_message_notes(v, conversation_id, &conversation, &entries, context)
+                + &mcp_change_note(&entries.list, offer, "")
         }
         SideTiming::DuringTurn { .. } => String::new(),
     };
@@ -5002,6 +5019,9 @@ const FILE_REVERT: &str = "file_revert";
 /// The tag of the note Hatoba puts before a message that comes with another list of deferred MCP
 /// tools than the model last saw (AI-45). A conversation with one is deferred.
 const MCP_TOOLS: &str = deferred::LIST_TAG;
+/// The tag of the note Hatoba puts before a message whose requests offer the MCP tools of other
+/// servers than the model was last told of, while they are offered directly (AI-30).
+const MCP_CHANGE: &str = change::TAG;
 /// The tag of the note Hatoba puts before a message sent with a connected terminal attached,
 /// which shows its screen (AI-46).
 const TERMINAL_STATE: &str = "terminal_state";
@@ -5123,6 +5143,16 @@ const ATTACHMENTS: &[AttachmentKind] = &[
         attributes: |attrs| {
             matches!(attrs, [("servers", servers), ("tools", tools)]
                 if is_count(servers) && is_count(tools))
+        },
+    },
+    AttachmentKind {
+        tag: MCP_CHANGE,
+        note: true,
+        title: |_| String::new(),
+        placeholder: |_| String::new(),
+        attributes: |attrs| {
+            matches!(attrs, [("available", available), ("unavailable", unavailable)]
+                if is_count(available) && is_count(unavailable))
         },
     },
     AttachmentKind {
@@ -5390,6 +5420,40 @@ fn mcp_note(
     } else {
         note
     }
+}
+
+/// AI-30: the `mcp_change` note the conversation's next message starts with, when its requests
+/// offer the MCP tools of `offer` directly and those come from other servers than the model was
+/// last told of ([`mcp_servers_before`]). None before a conversation's first reply, once its MCP
+/// tools are deferred, where the `mcp_tools` note says what changed (AI-45), and for the message
+/// that defers them, whose `mcp_tools` note is `listed`. `entries` is every entry before the
+/// message.
+fn mcp_change_note(entries: &[AiEntry], offer: &Offer, listed: &str) -> String {
+    if !listed.is_empty() || mcp_deferred(entries) {
+        return String::new();
+    }
+    mcp_servers_before(entries).map_or_else(String::new, |before| {
+        change::block(&before, &offer.server_names())
+    })
+}
+
+/// AI-30: the servers whose MCP tools the model was last told of in `entries`, a conversation's
+/// entries oldest first: those the newest reply's request offered, as the `mcp_change` notes
+/// after it changed them. None before the first reply, and when that reply is from before
+/// replies recorded them. A summary leaves them as they were, as it leaves the terminal tools.
+fn mcp_servers_before(entries: &[AiEntry]) -> Option<Vec<String>> {
+    let mut notes = Vec::new();
+    for entry in entries.iter().rev() {
+        match &entry.body {
+            EntryBody::Assistant(a) => {
+                let before = a.mcp_servers.as_ref()?;
+                return Some(change::servers_after(before, notes.into_iter().rev()));
+            }
+            EntryBody::User { text, .. } => notes.extend(note_block(text, MCP_CHANGE)),
+            EntryBody::Tool { .. } | EntryBody::Summary { .. } => {}
+        }
+    }
+    None
 }
 
 /// The block `text` starts with (spec §13.3), and the text after it: the opening tag with its
