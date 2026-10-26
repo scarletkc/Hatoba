@@ -200,11 +200,12 @@ export async function quitEditing() {
     if (!choice) return;
     upload = choice === "upload";
   }
-  // The answer is for the listed copies; another saved while it was asked uploads like any save.
+  // The answer is for the listed copies; another saved while it was asked uploads like any save, or
+  // keeps Hatoba open when it cannot.
   const listed = new Set(waiting.map((e) => e.edit_id));
   const ended = await Promise.all(
     Object.values(useEdits.getState().items).map((e) =>
-      api.sftp_edit_stop(e.edit_id, listed.has(e.edit_id) ? upload : isConnected(e.tab_id)).catch(() => false),
+      api.sftp_edit_stop(e.edit_id, listed.has(e.edit_id) ? upload : true).catch(() => false),
     ),
   );
   const left = ended.filter((done) => !done).length;

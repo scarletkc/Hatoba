@@ -341,14 +341,28 @@ pub async fn open(
         commands,
         view: Mutex::new(view.clone()),
     });
-    {
+    let opened = {
         let mut inner = lock(&edits.inner);
         // Ending the tab's other edits during the download forgot its session.
         inner
             .sessions
             .entry(edit.tab_id.clone())
             .or_insert(session_id);
-        inner.edits.insert(id, edit.clone());
+        // Opened twice at once: the edit that finished first is the one.
+        let opened = inner
+            .edits
+            .values()
+            .find(|e| e.tab_id == edit.tab_id && e.remote == edit.remote)
+            .cloned();
+        if opened.is_none() {
+            inner.edits.insert(id, edit.clone());
+        }
+        opened
+    };
+    if let Some(opened) = opened {
+        let _ = tokio::fs::remove_dir_all(&edit.dir).await;
+        open_editor(opened.copy.clone(), editor).await?;
+        return Ok(opened.view());
     }
     let worker = Worker {
         app: app.clone(),
@@ -746,6 +760,13 @@ impl Worker {
     /// Downloads the server's file into the copy again, which an editor that watches its files
     /// reloads.
     async fn discard(&mut self) -> AppResult<()> {
+        // The server's file is partly written, so the copy is the only whole one.
+        if self.partial {
+            return Err(AppError::new(
+                ErrorCode::Sftp,
+                "the server's file is partly written; upload the copy to repair it",
+            ));
+        }
         let Some((session_id, sftp)) = self.client().await else {
             return Err(not_connected());
         };
@@ -756,35 +777,46 @@ impl Worker {
             Err(e) => return Err(e.into()),
         };
         // Downloaded beside the copy and read before it replaces it, so a save the editor makes
-        // right after is never taken for the server's content.
+        // right after is never taken for the server's content. A copy that cannot be replaced
+        // fails the transfer.
         let fresh = self.edit.dir.with_extension("download");
+        let got = Arc::new(Mutex::new(None));
         run_transfer(
             self.app.clone(),
             session_id,
             TransferDirection::Download,
             self.view_name(),
             Box::new({
-                let (sftp, fresh) = (sftp.clone(), fresh.clone());
+                let (sftp, copy, got) = (sftp.clone(), self.edit.copy.clone(), got.clone());
                 move |progress, token| {
-                    Box::pin(async move { sftp.download(&remote, &fresh, progress, token).await })
+                    Box::pin(async move {
+                        sftp.download(&remote, &fresh, progress, token).await?;
+                        let replaced = match tokio::fs::read(&fresh).await {
+                            Ok(content) => tokio::fs::rename(&fresh, &copy).await.map(|()| content),
+                            Err(e) => Err(e),
+                        };
+                        match replaced {
+                            Ok(content) => {
+                                *lock(&got) = Some(digest(&content));
+                                Ok(())
+                            }
+                            Err(e) => {
+                                let _ = tokio::fs::remove_file(&fresh).await;
+                                Err(hatoba_ssh::SshError::new(
+                                    hatoba_ssh::SshErrorKind::Io,
+                                    format!("replace {}: {e}", copy.display()),
+                                ))
+                            }
+                        }
+                    })
                 }
             }),
         )
         .await?;
-        let replaced = match tokio::fs::read(&fresh).await {
-            Ok(content) => tokio::fs::rename(&fresh, &self.edit.copy)
-                .await
-                .map(|()| content),
-            Err(e) => Err(e),
-        };
-        let content = match replaced {
-            Ok(content) => content,
-            Err(e) => {
-                let _ = tokio::fs::remove_file(&fresh).await;
-                return Err(AppError::io(e));
-            }
-        };
-        self.synced = digest(&content);
+        let synced = lock(&got)
+            .take()
+            .ok_or_else(|| AppError::internal("the discarded copy was not read"))?;
+        self.synced = synced;
         self.stat = stat;
         self.seen = seen(&self.edit.copy).await;
         self.changed_at = None;
