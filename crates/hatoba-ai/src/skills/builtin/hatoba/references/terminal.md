@@ -66,7 +66,7 @@ Other labels: **Previous (Shift+Enter)**, **Next (Enter)**, **Close find (Esc)**
 
 ## Terminal settings
 
-All of them are in Settings → Terminal and sync with the vault, except **Local Terminal Shell**. The page has three sections: **Text and Cursor**, with a preview under it of the font, size, cursor and color scheme, then **Colors** and **Behavior**.
+All of them are in Settings → Terminal and sync with the vault, except **Local Terminal Shell** and **Editor**. The page has four sections: **Text and Cursor**, with a preview under it of the font, size, cursor and color scheme, then **Colors**, **Behavior** and **SFTP**.
 
 Other labels: **Decrease font size**, **Increase font size**.
 
@@ -83,6 +83,7 @@ Other labels: **Decrease font size**, **Increase font size**.
 - **Confirm before pasting multiple lines**: on by default. Pasting text that contains line breaks shows a preview first.
 - **Scrollback**: 1,000, 5,000, 10,000 (default), or 50,000 lines.
 - **Local Terminal Shell**: the shell new local tabs run, kept on this device only (not synced); see "Local terminal tabs" above.
+- **SFTP** → **Editor**: the program that opens files edited from the SFTP panel, kept on this device only: **System Default** (the system's app for each kind of file) or a program picked with **Choose a Program…**; see `references/sftp.md`.
 - The language is in Settings → General, and the theme, list density and window zoom in Settings → Appearance; see `references/settings.md`.
 
 ## Tab states

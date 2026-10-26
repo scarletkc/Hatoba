@@ -109,6 +109,10 @@ The labels that these files name in English, as the interface shows them in Trad
 | Confirm before pasting multiple lines | 貼上多行文字前確認 |
 | Scrollback | 捲動緩衝區 |
 | Local Terminal Shell | 本機終端機的 shell |
+| SFTP | SFTP |
+| Editor | 編輯器 |
+| System Default | 系統預設 |
+| Choose a Program… | 選擇程式… |
 | General | 一般 |
 | Appearance | 外觀 |
 
@@ -143,6 +147,7 @@ The labels that these files name in English, as the interface shows them in Trad
 |---|---|
 | Open | 開啟 |
 | Download | 下載 |
+| Edit | 編輯 |
 | Rename | 重新命名 |
 | Delete | 刪除 |
 | Copy Path | 複製路徑 |
@@ -153,6 +158,37 @@ The labels that these files name in English, as the interface shows them in Trad
 | This folder and everything in it will be permanently deleted from the server. This can’t be undone. | 這個資料夾及其中的所有內容會從伺服器上永久刪除，無法復原。 |
 | Path copied | 路徑已複製 |
 | Drop to upload to {path} | 放開以上傳到 {path} |
+
+### Edit files
+
+| en | zh-TW |
+|---|---|
+| Edit | 編輯 |
+| Terminal | 終端機 |
+| SFTP | SFTP |
+| Editor | 編輯器 |
+| System Default | 系統預設 |
+| Choose a Program… | 選擇程式… |
+| Editing | 正在編輯 |
+| Saved | 已儲存 |
+| Waiting to upload | 等待上傳 |
+| Uploading… | 正在上傳… |
+| Changed on the server | 伺服器上已變更 |
+| Open in Editor | 在編輯器中開啟 |
+| Upload Again | 重新上傳 |
+| Stop Editing | 停止編輯 |
+| “{name}” changed on the server | 「{name}」在伺服器上已變更 |
+| Overwrite | 覆寫 |
+| Discard My Changes | 放棄我的修改 |
+| Resolve Conflict | 處理衝突 |
+| Upload the changes to “{name}”? | 上傳對「{name}」的修改？ |
+| Upload | 上傳 |
+| Discard Changes | 放棄修改 |
+| Their last saves haven’t uploaded to {host} yet. | 最近一次儲存還沒有上傳到 {host}。 |
+| Their last saves haven’t uploaded to {host}, and the tab isn’t connected. Reconnect to upload them. | 最近一次儲存還沒有上傳到 {host}，而這個分頁已中斷連線。重新連線後才能上傳。 |
+| Their last saves hadn’t uploaded when Hatoba locked. | Hatoba 鎖定時，最近一次儲存還沒有上傳。 |
+| Couldn’t open “{name}” in an editor. You can choose one in Settings → Terminal. | 無法在編輯器中開啟「{name}」。可以在設定 → 終端機中選擇編輯器。 |
+| {n} files didn’t upload. | {n} 個檔案沒有上傳。 |
 
 ### Transfers
 

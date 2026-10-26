@@ -49,7 +49,7 @@ between your devices, and puts an AI assistant beside each terminal.
   links, with local shells such as PowerShell, WSL, or your login shell beside
   the SSH tabs.
 - **SFTP**: a file panel beside the terminal with drag-and-drop upload and
-  download.
+  download, and remote files edited in your own editor, uploaded on every save.
 - **Port forwarding**: local, remote, and SOCKS forwards that can start with
   the connection or run without a terminal.
 - **Authentication**: passwords, Ed25519, ECDSA, and RSA keys, ssh-agent, and

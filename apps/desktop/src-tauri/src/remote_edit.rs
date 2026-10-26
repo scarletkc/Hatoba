@@ -65,7 +65,9 @@ enum Command {
         reply: oneshot::Sender<AppResult<()>>,
     },
     /// Downloads the server's file into the copy again.
-    Discard { reply: oneshot::Sender<AppResult<()>> },
+    Discard {
+        reply: oneshot::Sender<AppResult<()>>,
+    },
     /// Ends editing, after uploading the copy if `upload` and it changed. Replies whether editing
     /// ended: a save that cannot upload yet keeps it going until it does or the user discards it.
     Stop {
@@ -165,11 +167,15 @@ impl RemoteEdits {
     }
 
     pub async fn discard(&self, edit_id: &str) -> AppResult<()> {
-        self.ask(edit_id, |reply| Command::Discard { reply }).await?
+        self.ask(edit_id, |reply| Command::Discard { reply })
+            .await?
     }
 
     pub async fn stop(&self, edit_id: &str, upload: bool) -> AppResult<bool> {
-        match self.ask(edit_id, |reply| Command::Stop { upload, reply }).await {
+        match self
+            .ask(edit_id, |reply| Command::Stop { upload, reply })
+            .await
+        {
             // It ended meanwhile.
             Err(e) if e.code == ErrorCode::NotFound => Ok(true),
             other => other,
@@ -359,8 +365,7 @@ fn local_name(name: &str) -> String {
     let mut out: String = name
         .chars()
         .map(|c| {
-            if c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
-            {
+            if c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*') {
                 '_'
             } else {
                 c
@@ -476,11 +481,17 @@ impl Worker {
                 let _ = reply.send(result);
                 if ended { Flow::End } else { Flow::Go }
             }
-            Command::Stop { upload: false, reply } => {
+            Command::Stop {
+                upload: false,
+                reply,
+            } => {
                 let _ = reply.send(true);
                 Flow::End
             }
-            Command::Stop { upload: true, reply } => {
+            Command::Stop {
+                upload: true,
+                reply,
+            } => {
                 self.finishing = true;
                 self.held = false;
                 let flow = match self.changed().await {
@@ -609,7 +620,10 @@ impl Worker {
             Ok(()) => {}
             Err(e) if e.kind == hatoba_ssh::SshErrorKind::Cancelled => {
                 self.set(RemoteEditState::Failed, None);
-                return (Flow::Go, Err(AppError::new(ErrorCode::Cancelled, "cancelled")));
+                return (
+                    Flow::Go,
+                    Err(AppError::new(ErrorCode::Cancelled, "cancelled")),
+                );
             }
             Err(e) => return self.failed(&session_id, e.into()),
         }
@@ -620,10 +634,7 @@ impl Worker {
             _ => self.stat.mtime = None,
         }
         self.set(RemoteEditState::Saved, None);
-        (
-            if self.finishing { Flow::End } else { Flow::Go },
-            Ok(()),
-        )
+        (if self.finishing { Flow::End } else { Flow::Go }, Ok(()))
     }
 
     fn failed(&mut self, session_id: &str, e: AppError) -> (Flow, AppResult<()>) {

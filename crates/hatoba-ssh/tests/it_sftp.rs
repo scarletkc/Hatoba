@@ -738,7 +738,10 @@ async fn edits_write_back_through_symlinks_and_keep_the_mode() {
     .await
     .unwrap();
 
-    assert_eq!(fs::read_to_string(&script).unwrap(), "#!/bin/sh\necho new\n");
+    assert_eq!(
+        fs::read_to_string(&script).unwrap(),
+        "#!/bin/sh\necho new\n"
+    );
     let mode = fs::metadata(&script).unwrap().permissions().mode();
     assert_eq!(mode & 0o7777, 0o750);
     let link = fs::symlink_metadata(area.join("link.sh")).unwrap();

@@ -109,6 +109,10 @@ The labels that these files name in English, as the interface shows them in Simp
 | Confirm before pasting multiple lines | 粘贴多行文本前确认 |
 | Scrollback | 回滚缓冲区 |
 | Local Terminal Shell | 本地终端的 shell |
+| SFTP | SFTP |
+| Editor | 编辑器 |
+| System Default | 系统默认 |
+| Choose a Program… | 选择程序… |
 | General | 通用 |
 | Appearance | 外观 |
 
@@ -143,6 +147,7 @@ The labels that these files name in English, as the interface shows them in Simp
 |---|---|
 | Open | 打开 |
 | Download | 下载 |
+| Edit | 编辑 |
 | Rename | 重命名 |
 | Delete | 删除 |
 | Copy Path | 复制路径 |
@@ -153,6 +158,37 @@ The labels that these files name in English, as the interface shows them in Simp
 | This folder and everything in it will be permanently deleted from the server. This can’t be undone. | 这个文件夹及其中的所有内容会从服务器上永久删除，无法撤销。 |
 | Path copied | 路径已复制 |
 | Drop to upload to {path} | 松开以上传到 {path} |
+
+### Edit files
+
+| en | zh-CN |
+|---|---|
+| Edit | 编辑 |
+| Terminal | 终端 |
+| SFTP | SFTP |
+| Editor | 编辑器 |
+| System Default | 系统默认 |
+| Choose a Program… | 选择程序… |
+| Editing | 正在编辑 |
+| Saved | 已保存 |
+| Waiting to upload | 等待上传 |
+| Uploading… | 正在上传… |
+| Changed on the server | 服务器上已更改 |
+| Open in Editor | 在编辑器中打开 |
+| Upload Again | 重新上传 |
+| Stop Editing | 停止编辑 |
+| “{name}” changed on the server | “{name}”在服务器上已更改 |
+| Overwrite | 覆盖 |
+| Discard My Changes | 放弃我的修改 |
+| Resolve Conflict | 处理冲突 |
+| Upload the changes to “{name}”? | 上传对“{name}”的修改？ |
+| Upload | 上传 |
+| Discard Changes | 放弃修改 |
+| Their last saves haven’t uploaded to {host} yet. | 最近一次保存还没有上传到 {host}。 |
+| Their last saves haven’t uploaded to {host}, and the tab isn’t connected. Reconnect to upload them. | 最近一次保存还没有上传到 {host}，而这个标签页已断开连接。重新连接后才能上传。 |
+| Their last saves hadn’t uploaded when Hatoba locked. | Hatoba 锁定时，最近一次保存还没有上传。 |
+| Couldn’t open “{name}” in an editor. You can choose one in Settings → Terminal. | 无法在编辑器中打开“{name}”。可以在设置 → 终端中选择编辑器。 |
+| {n} files didn’t upload. | {n} 个文件没有上传。 |
 
 ### Transfers
 

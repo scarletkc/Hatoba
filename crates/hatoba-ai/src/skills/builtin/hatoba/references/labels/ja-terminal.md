@@ -109,6 +109,10 @@ The labels that these files name in English, as the interface shows them in Japa
 | Confirm before pasting multiple lines | 複数行を貼り付ける前に確認 |
 | Scrollback | スクロールバック |
 | Local Terminal Shell | ローカル ターミナルのシェル |
+| SFTP | SFTP |
+| Editor | エディター |
+| System Default | システムの既定 |
+| Choose a Program… | プログラムを選択… |
 | General | 一般 |
 | Appearance | 外観 |
 
@@ -143,6 +147,7 @@ The labels that these files name in English, as the interface shows them in Japa
 |---|---|
 | Open | 開く |
 | Download | ダウンロード |
+| Edit | 編集 |
 | Rename | 名前を変更 |
 | Delete | 削除 |
 | Copy Path | パスをコピー |
@@ -153,6 +158,37 @@ The labels that these files name in English, as the interface shows them in Japa
 | This folder and everything in it will be permanently deleted from the server. This can’t be undone. | このフォルダとその中身はすべてサーバーから完全に削除されます。元に戻せません。 |
 | Path copied | パスをコピーしました |
 | Drop to upload to {path} | ここにドロップして {path} にアップロード |
+
+### Edit files
+
+| en | ja |
+|---|---|
+| Edit | 編集 |
+| Terminal | ターミナル |
+| SFTP | SFTP |
+| Editor | エディター |
+| System Default | システムの既定 |
+| Choose a Program… | プログラムを選択… |
+| Editing | 編集中 |
+| Saved | 保存済み |
+| Waiting to upload | アップロード待ち |
+| Uploading… | アップロード中… |
+| Changed on the server | サーバー上で変更あり |
+| Open in Editor | エディターで開く |
+| Upload Again | もう一度アップロード |
+| Stop Editing | 編集を終了 |
+| “{name}” changed on the server | 「{name}」はサーバー上で変更されています |
+| Overwrite | 上書き |
+| Discard My Changes | 自分の変更を破棄 |
+| Resolve Conflict | 競合を解決 |
+| Upload the changes to “{name}”? | 「{name}」の変更をアップロードしますか？ |
+| Upload | アップロード |
+| Discard Changes | 変更を破棄 |
+| Their last saves haven’t uploaded to {host} yet. | 最後の保存が {host} にまだアップロードされていません。 |
+| Their last saves haven’t uploaded to {host}, and the tab isn’t connected. Reconnect to upload them. | 最後の保存が {host} にまだアップロードされておらず、このタブは接続されていません。アップロードするには再接続してください。 |
+| Their last saves hadn’t uploaded when Hatoba locked. | Hatoba がロックされたとき、最後の保存がまだアップロードされていませんでした。 |
+| Couldn’t open “{name}” in an editor. You can choose one in Settings → Terminal. | 「{name}」をエディターで開けませんでした。設定 → ターミナルでエディターを選べます。 |
+| {n} files didn’t upload. | {n} 個のファイルがアップロードされませんでした。 |
 
 ### Transfers
 

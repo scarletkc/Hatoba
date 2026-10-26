@@ -207,7 +207,10 @@ fn text_editor(path: &Path) -> std::io::Result<()> {
         })
         .flatten()
         .ok_or_else(|| std::io::Error::other("no app opens plain text"))?;
-    spawn("gio", &["launch".as_ref(), desktop.as_os_str(), path.as_os_str()])
+    spawn(
+        "gio",
+        &["launch".as_ref(), desktop.as_os_str(), path.as_os_str()],
+    )
 }
 
 #[cfg(windows)]
@@ -269,10 +272,24 @@ mod tests {
 
     #[test]
     fn scripts_and_programs_never_open_with_what_runs_them() {
-        for name in ["deploy.sh", "tool.PY", "setup.bat", "x.ps1", "a.desktop", "b.jar"] {
+        for name in [
+            "deploy.sh",
+            "tool.PY",
+            "setup.bat",
+            "x.ps1",
+            "a.desktop",
+            "b.jar",
+        ] {
             assert!(runs(Path::new(name)), "{name}");
         }
-        for name in ["nginx.conf", ".bashrc", "Makefile", "app.json", "notes.txt", "index.html"] {
+        for name in [
+            "nginx.conf",
+            ".bashrc",
+            "Makefile",
+            "app.json",
+            "notes.txt",
+            "index.html",
+        ] {
             assert!(!runs(Path::new(name)), "{name}");
         }
     }
