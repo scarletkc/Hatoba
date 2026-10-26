@@ -13,7 +13,7 @@ import { effectiveEffort, modelEfforts } from "@/features/ai/effort";
 import { forkCopies } from "@/features/ai/fork";
 import { localName, movedFrom, moves, recordedTarget } from "@/features/ai/place";
 import { shownCall } from "@/features/ai/tools";
-import { formatTarget, parseQuickConnect, sameTarget } from "@/features/hosts/quickConnect";
+import { formatTarget, parseQuickConnect, sameTarget } from "@/session/quickConnect";
 import { appError, type HatobaApi } from "../api";
 import type {
   AiAutoVerdict,

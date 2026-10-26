@@ -9,9 +9,6 @@ import { errorMessage } from "@/app/errors";
 import { isAppShortcut } from "@/app/shortcuts";
 import { useApp } from "@/app/store";
 import { useTabs, type LocalShell, type TabSource, type TabStatus } from "@/app/tabs";
-import { useRecentTargets } from "@/features/hosts/recent";
-import { editSessionChanged } from "@/features/sftp/edits";
-import { useTransfers } from "@/features/sftp/transfers";
 import { t } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import {
@@ -24,13 +21,16 @@ import {
   type QuickTarget,
   type SessionStateEvent,
 } from "@/ipc/types";
+import { openExternal, readClipboard, writeClipboard } from "@/lib/clipboard";
 import { isMac } from "@/lib/platform";
-import { openExternal, readClipboard, writeClipboard } from "./clipboard";
+import { editSessionChanged } from "./edits";
 import { clearInfo, getInfo, patchInfo } from "./info";
 import { confirmMultilinePaste } from "./paste";
 import { askPassword, askSecret, cancelSessionPrompts } from "./prompts";
+import { useRecentTargets } from "./recent";
 import { searchColors } from "./schemes";
 import { resolveScheme, terminalOptions, useTermSettings } from "./theme";
+import { useTransfers } from "./transfers";
 
 /** One-off credentials for a connection attempt (SSH-03). They are passed to `ssh_connect` and dropped. */
 export interface Credentials {

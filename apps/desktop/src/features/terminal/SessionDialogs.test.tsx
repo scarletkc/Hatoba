@@ -3,10 +3,10 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setLocale, t, type Locale } from "@/i18n";
 import type { HostKeyPrompt } from "@/ipc/types";
-import { pushHostKeyPrompt, usePrompts } from "./prompts";
+import { pushHostKeyPrompt, usePrompts } from "@/session/prompts";
 import { SessionDialogs } from "./SessionDialogs";
 
-vi.mock("./listeners", () => ({ startSessionListeners: () => () => {} }));
+vi.mock("@/session/listeners", () => ({ startSessionListeners: () => () => {} }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 let unmount: (() => void) | null = null;

@@ -59,7 +59,7 @@ vi.mock("@/lib/native", async (importActual) => ({
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 // The tabs' terminals: connected, with an empty screen.
-vi.mock("@/features/terminal/session", async (importActual) => {
+vi.mock("@/session/session", async (importActual) => {
   const active = {
     type: "normal",
     baseY: 0,
@@ -68,7 +68,7 @@ vi.mock("@/features/terminal/session", async (importActual) => {
   };
   const session = { status: "connected", term: { rows: 1, buffer: { active } } };
   return {
-    ...(await importActual<typeof import("@/features/terminal/session")>()),
+    ...(await importActual<typeof import("@/session/session")>()),
     getSession: (tabId: string) => (tabId.startsWith("tab-") ? session : undefined),
   };
 });

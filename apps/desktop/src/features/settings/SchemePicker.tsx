@@ -1,6 +1,6 @@
 import type { KeyboardEvent } from "react";
-import { DEFAULT_SCHEME, schemeFor, schemesFor, type TermMode, type TermScheme } from "@/features/terminal/schemes";
 import { cx } from "@/lib/cx";
+import { DEFAULT_SCHEME, schemeFor, schemesFor, type TermMode, type TermScheme } from "@/session/schemes";
 import s from "./SchemePicker.module.css";
 
 /** The built-in colour schemes of one mode, as miniature terminals (TERM-06). */

@@ -46,9 +46,9 @@ vi.mock("@/app/data", () => ({
 }));
 vi.mock("@/app/store", () => ({ useApp: { getState: () => ({ phase: "unlocked", navigate: ui.navigate }) } }));
 vi.mock("@/app/tabs", () => ({ useTabs: { getState: () => ({ activate: ui.activate }) } }));
-vi.mock("@/features/terminal/connect", () => ({ collectCredentials: ui.credentials }));
-vi.mock("@/features/terminal/prompts", () => ({ askPassword: ui.password, askSecret: ui.secret }));
-vi.mock("@/features/terminal/session", () => ({
+vi.mock("./connect", () => ({ collectCredentials: ui.credentials }));
+vi.mock("./prompts", () => ({ askPassword: ui.password, askSecret: ui.secret }));
+vi.mock("./session", () => ({
   needsPassphrase: (err: AppError) => err.code === "key_parse",
   needsPassword: (err: AppError) => err.code === "invalid_input" && err.field === "password",
 }));

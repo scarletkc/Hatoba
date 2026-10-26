@@ -1,6 +1,6 @@
-import { formatTarget } from "@/features/hosts/quickConnect";
 import type { MessageKey, Params } from "@/i18n";
 import type { AiConversationView, AiEntryView, AiToolCall } from "@/ipc/types";
+import { formatTarget } from "@/session/quickConnect";
 import { folderName, parseMessage, pathName, splitPermissionNote, type Attachment } from "../attachments";
 import { fenced, quoted } from "./markdownText";
 import { noteTitle } from "../messages/notes";

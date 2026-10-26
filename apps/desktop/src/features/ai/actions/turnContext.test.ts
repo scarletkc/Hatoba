@@ -7,7 +7,7 @@ vi.mock("@/ipc/api", async (importActual) => ({ ...(await importActual<typeof im
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 // The quick-connect tab's terminal, whose screen a message shows (AI-46).
-vi.mock("@/features/terminal/session", async (importActual) => {
+vi.mock("@/session/session", async (importActual) => {
   const rows = ["$ make", "error: no rule", "$ "];
   const line = (y: number) => ({ isWrapped: false, translateToString: () => rows[y] });
   const term = {
@@ -22,7 +22,7 @@ vi.mock("@/features/terminal/session", async (importActual) => {
     },
   };
   return {
-    ...(await importActual<typeof import("@/features/terminal/session")>()),
+    ...(await importActual<typeof import("@/session/session")>()),
     getSession: (tabId: string) => (tabId === "tab-1" ? { term } : undefined),
   };
 });

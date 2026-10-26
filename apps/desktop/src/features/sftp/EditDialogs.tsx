@@ -2,7 +2,7 @@ import { Button, Dialog, FooterSpacer } from "@hatoba/ui";
 import { useTabs } from "@/app/tabs";
 import { useT } from "@/i18n";
 import type { RemoteEditView } from "@/ipc/types";
-import { discardEdit, settleHeld, uploadEdit, useEdits, useUnsentAsk, type UnsentChoice } from "./edits";
+import { discardEdit, settleHeld, uploadEdit, useEdits, useUnsentAsk, type UnsentChoice } from "@/session/edits";
 import s from "./EditDialogs.module.css";
 
 /**

@@ -59,7 +59,7 @@ vi.mock("@/ipc/api", async (importActual) => ({
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 // The tab's terminal, whose last lines a `send_input` call's judge and hard rules read.
 const screen = vi.hoisted(() => ({ rows: ["$ "] }));
-vi.mock("@/features/terminal/session", async (importActual) => {
+vi.mock("@/session/session", async (importActual) => {
   const line = (text: string) => ({ isWrapped: false, translateToString: () => text });
   const active = {
     type: "normal",
@@ -76,7 +76,7 @@ vi.mock("@/features/terminal/session", async (importActual) => {
     buffer: { active },
   };
   return {
-    ...(await importActual<typeof import("@/features/terminal/session")>()),
+    ...(await importActual<typeof import("@/session/session")>()),
     getSession: (tabId: string) => (tabId === "tab-1" ? { status: "connected", term } : undefined),
   };
 });

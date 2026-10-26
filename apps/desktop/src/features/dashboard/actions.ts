@@ -2,10 +2,10 @@ import { toast } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useTabs } from "@/app/tabs";
-import { connectHost } from "@/features/terminal/connect";
 import { t } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { GroupView, HostView } from "@/ipc/types";
+import { connectHost } from "@/session/connect";
 import { leftOutBy } from "./logic";
 
 /** **Open Terminal**: brings the host's tab to the front, or opens one (which takes over the dashboard's connection). */

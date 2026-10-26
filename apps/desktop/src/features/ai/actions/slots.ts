@@ -4,7 +4,7 @@
  */
 
 import { useTabs, type TabSource } from "@/app/tabs";
-import { connectHost, connectTarget, openLocalTerminal } from "@/features/terminal/connect";
+import { connectHost, connectTarget, openLocalTerminal } from "@/session/connect";
 import { api, toAppError } from "@/ipc/api";
 import type { AiEffort, AiModelRef, AiPermissionMode, NotificationTarget } from "@/ipc/types";
 import { resetAllowances } from "../rules/allowances";

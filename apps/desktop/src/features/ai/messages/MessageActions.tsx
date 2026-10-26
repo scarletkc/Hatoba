@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from "react";
 import { IconButton, toast } from "@hatoba/ui";
-import { writeClipboard } from "@/features/terminal/clipboard";
 import { formatDateTime, formatMessageTime, useT, useToday } from "@/i18n";
+import { writeClipboard } from "@/lib/clipboard";
 import s from "./Messages.module.css";
 
 /** How long Copy shows its check after copying. */

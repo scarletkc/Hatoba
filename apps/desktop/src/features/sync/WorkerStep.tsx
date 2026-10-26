@@ -5,7 +5,7 @@ import { Field } from "@/features/keys/Field";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { SyncConfigInput } from "@/ipc/types";
-import { DEPLOY_GUIDE_URL, DEPLOY_URL, openExternal } from "./external";
+import { DEPLOY_GUIDE_URL, DEPLOY_URL, openExternal } from "@/lib/external";
 import { normalizeWorkerUrl, type WorkerForm } from "./wizardTypes";
 import { WizardFrame, WizardTitle } from "./WizardFrame";
 import s from "./Wizard.module.css";

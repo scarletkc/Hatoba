@@ -15,15 +15,15 @@ import {
 } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
-import { writeClipboard } from "@/features/terminal/clipboard";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { ForwardInput, ForwardView, HostView, RunningForwardView } from "@/ipc/types";
+import { forwardDest, forwardLabel, forwardRule, hostPort } from "@/lib/address";
+import { writeClipboard } from "@/lib/clipboard";
 import { cx } from "@/lib/cx";
-import { forwardDest, forwardLabel, forwardRule, hostPort } from "./address";
+import { forwardFailure, runningForward, useConnections } from "@/session/connections";
+import { dropForwardRule, putForwardRule, startForward, stopForward, useForwardRules } from "@/session/forwards";
 import { ForwardDialog } from "./ForwardDialog";
-import { forwardFailure, runningForward, useConnections } from "./connections";
-import { dropForwardRule, putForwardRule, startForward, stopForward, useForwardRules } from "./forwards";
 import s from "./ForwardsPage.module.css";
 
 const toInput = (f: ForwardView, patch: Partial<ForwardInput> = {}): ForwardInput => ({

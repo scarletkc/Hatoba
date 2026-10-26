@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Button, FooterSpacer, Icon, Sheet, StatusLine, type StatusTone } from "@hatoba/ui";
-import { OsIcon } from "@/features/hosts/OsIcon";
 import { Sparkline } from "@/features/terminal/Sparkline";
 import {
   formatLoad,
@@ -14,6 +13,7 @@ import {
 import { formatBytes, formatMessageTime, useT } from "@/i18n";
 import type { GroupView, HostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { OsIcon } from "@/lib/OsIcon";
 import { dashboardSwitch, openTerminal, retryHost } from "./actions";
 import { statusColor, statusText } from "./status";
 import { isStale, memPercent, readingGapMs, mountPercent, pastThreshold, rootPercent } from "./logic";

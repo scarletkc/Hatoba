@@ -3,14 +3,14 @@ import { hostById, useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
-import { hostConnected } from "@/features/hosts/connections";
-import { formatTarget, savedHostFor } from "@/features/hosts/quickConnect";
-import { endTabEdits } from "@/features/sftp/edits";
 import { t } from "@/i18n";
 import type { HostView, LocalShellView, QuickTarget } from "@/ipc/types";
+import { hostConnected } from "./connections";
+import { endTabEdits } from "./edits";
 import { startSessionListeners } from "./listeners";
 import { loadLocalShells, preferredShell, shellName } from "./localShells";
 import { askPassword, askUsername } from "./prompts";
+import { formatTarget, savedHostFor } from "./quickConnect";
 import { ensureSession, getSession, type Credentials } from "./session";
 
 const NONE: Credentials = { password: null, passphrase: null };

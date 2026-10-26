@@ -5,7 +5,7 @@ import { Field } from "@/features/keys/Field";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AppError, SyncConfigInput } from "@/ipc/types";
-import { API_TOKENS_URL, openExternal } from "./external";
+import { API_TOKENS_URL, openExternal } from "@/lib/external";
 import { EMPTY_D1, type D1Form } from "./wizardTypes";
 import { WizardFrame, WizardTitle } from "./WizardFrame";
 import s from "./Wizard.module.css";

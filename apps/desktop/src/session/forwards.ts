@@ -5,14 +5,14 @@ import { hostById, useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
-import { collectCredentials } from "@/features/terminal/connect";
-import { askPassword, askSecret } from "@/features/terminal/prompts";
-import { needsPassphrase, needsPassword } from "@/features/terminal/session";
 import { t } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { ForwardsLostEvent, ForwardView } from "@/ipc/types";
 import { windowFocused } from "@/lib/native";
+import { collectCredentials } from "./connect";
 import { hostConnected, startConnectionListeners } from "./connections";
+import { askPassword, askSecret } from "./prompts";
+import { needsPassphrase, needsPassword } from "./session";
 
 /** Every host's saved forwards (FWD-05); `null` until read. */
 const useRules = create<{ rules: ForwardView[] | null; loadFailed: boolean }>(() => ({

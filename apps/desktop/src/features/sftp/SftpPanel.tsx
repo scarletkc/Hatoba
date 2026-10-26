@@ -14,17 +14,17 @@ import {
   type MenuEntry,
 } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
-import { writeClipboard } from "@/features/terminal/clipboard";
 import { formatBytes, formatDate, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AppError, FileEntry } from "@/ipc/types";
+import { writeClipboard } from "@/lib/clipboard";
 import { cx } from "@/lib/cx";
+import { editFile } from "@/session/edits";
+import { useTransfers } from "@/session/transfers";
 import { EditList } from "./EditList";
-import { editFile } from "./edits";
 import { pickSavePath, pickUploadFiles } from "./native";
 import { joinPath, parentPath, splitLastSegment } from "./paths";
 import { TransferList } from "./TransferList";
-import { useTransfers } from "./transfers";
 import { useFileDrop } from "./useFileDrop";
 import s from "./SftpPanel.module.css";
 

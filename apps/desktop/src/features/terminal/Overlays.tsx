@@ -4,7 +4,7 @@ import { errorMessage } from "@/app/errors";
 import { useT } from "@/i18n";
 import { appError } from "@/ipc/api";
 import type { AppError, HostView, QuickTarget } from "@/ipc/types";
-import { writeClipboard } from "./clipboard";
+import { writeClipboard } from "@/lib/clipboard";
 import { clockTime, diagnosticsText, errorCode } from "./diagnostics";
 import s from "./Overlays.module.css";
 

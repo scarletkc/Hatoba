@@ -5,7 +5,7 @@ import type { Platform } from "@/lib/platform";
 
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
-const { defaultTerminalSettings, useTermSettings } = await import("@/features/terminal/theme");
+const { defaultTerminalSettings, useTermSettings } = await import("@/session/theme");
 const { useApp } = await import("./store");
 const { nextSize, nextZoom, useZoomKeys } = await import("./zoomKeys");
 

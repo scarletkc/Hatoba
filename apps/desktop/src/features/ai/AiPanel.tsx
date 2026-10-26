@@ -12,12 +12,12 @@ import { Button, EmptyState, Icon, IconButton, LinkButton, Spinner } from "@hato
 import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { useTabs, type SessionTab } from "@/app/tabs";
-import { reconnectSession } from "@/features/terminal/connect";
-import { shellName } from "@/features/terminal/localShells";
 import { useT } from "@/i18n";
 import type { HostView } from "@/ipc/types";
 import { shortcutLabel } from "@/lib/platform";
 import { cx } from "@/lib/cx";
+import { reconnectSession } from "@/session/connect";
+import { shellName } from "@/session/localShells";
 import { attachDroppedPaths, attachFiles } from "./actions/attach";
 import { focusInput, toggleAiPanel } from "./actions/panel";
 import { stopSideQuestion } from "./actions/sideQuestions";

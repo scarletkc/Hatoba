@@ -99,6 +99,8 @@ hatoba/
 │   ├── src/                  # Frontend
 │   │   ├── app/              # Layout, routing
 │   │   ├── features/         # onboarding, unlock, hosts, terminal, sftp, keys, sync, settings, ai
+│   │   ├── session/          # Live sessions, connections, forwards, and transfers, shared by the features
+│   │   ├── lib/              # Helpers and small components shared by the features
 │   │   ├── styles/           # The app's own tokens: window chrome, terminal, server logos
 │   │   ├── i18n/             # Message tables
 │   │   └── ipc/              # tauri-specta bindings, frontend contract, browser mock backend

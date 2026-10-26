@@ -20,7 +20,7 @@ import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AppError, DeployPlan, DeployStep as Step, DeployTarget } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { API_TOKENS_URL, DEPLOY_TOKEN_URL, openExternal } from "./external";
+import { API_TOKENS_URL, DEPLOY_TOKEN_URL, openExternal } from "@/lib/external";
 import type { T } from "./syncUtils";
 import { DEPLOY_STEPS, EMPTY_DEPLOY, type DeployForm, type StepState } from "./wizardTypes";
 import { WizardFrame, WizardTitle } from "./WizardFrame";

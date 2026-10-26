@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button, WarningText, isImeEvent, toast } from "@hatoba/ui";
-import { readClipboard } from "@/features/terminal/clipboard";
 import { useT } from "@/i18n";
+import { readClipboard } from "@/lib/clipboard";
 import { cx } from "@/lib/cx";
 import { tooMuchMessage } from "../actions/attach";
 import { composeMessage, fitsMessage, isLongPaste, makePaste, type MessageParts } from "../attachments";

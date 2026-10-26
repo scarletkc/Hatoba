@@ -3,7 +3,7 @@ import { useTabs } from "@/app/tabs";
 import { useT } from "@/i18n";
 import type { RemoteEditView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { reopenEdit, stopEditing, tabEdits, uploadEdit, useEdits } from "./edits";
+import { reopenEdit, stopEditing, tabEdits, uploadEdit, useEdits } from "@/session/edits";
 import s from "./EditList.module.css";
 
 /** SFTP-05: the files the tab is editing in a local editor, between the file list and the transfers. */

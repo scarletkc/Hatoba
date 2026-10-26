@@ -3,10 +3,10 @@ import { Button, Chip, DisclosureCaret, Icon, controlStyles } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
-import { getSession } from "@/features/terminal/session";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { shortcutLabel } from "@/lib/platform";
+import { getSession } from "@/session/session";
 import { hideSelection, noteSelection, removeDiagnostics, removeExtra } from "../actions/attach";
 import {
   attachmentTokens,

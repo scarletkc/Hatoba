@@ -1,7 +1,7 @@
 import type { TabSource } from "@/app/tabs";
-import { formatTarget, sameTarget, savedHostFor } from "@/features/hosts/quickConnect";
 import type { MessageKey, Params } from "@/i18n";
 import type { AiConversationView, HostView, QuickTarget } from "@/ipc/types";
+import { formatTarget, sameTarget, savedHostFor } from "@/session/quickConnect";
 
 type Tr = (key: MessageKey, params?: Params) => string;
 type Recorded = Pick<AiConversationView, "host_id" | "quick_target"> &

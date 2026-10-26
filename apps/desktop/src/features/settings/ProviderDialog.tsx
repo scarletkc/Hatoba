@@ -23,7 +23,6 @@ import {
   toast,
   useMenu,
 } from "@hatoba/ui";
-import { openExternal } from "@/features/sync/external";
 import { EFFORTS, UNKNOWN_EFFORTS, effortKey } from "@/features/ai/effort";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
@@ -37,6 +36,7 @@ import type {
   AiProviderView,
 } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { openExternal } from "@/lib/external";
 import {
   addModels,
   decisionDrafts,

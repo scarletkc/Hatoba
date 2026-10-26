@@ -1,4 +1,4 @@
-import { API_TOKENS_URL } from "@/features/sync/external";
+import { API_TOKENS_URL } from "@/lib/external";
 import { freeServerName, initialMcpForm, newSecretRow, type McpForm, type SecretRow } from "./mcpLogic";
 
 /*

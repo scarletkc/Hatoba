@@ -1,3 +1,5 @@
+import { hostPort, reachableAddress } from "@/lib/address";
+import { formatTarget, sameTarget } from "@/session/quickConnect";
 import { appError, type FrameHandler, type HatobaApi, type Unlisten } from "../api";
 import type {
   ConnectionsEvent,
@@ -19,8 +21,6 @@ import type {
 } from "../types";
 import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
 import { ENV_MAX_VARS, envRows, envTooLarge, validateEnvRows } from "@/features/hosts/envVars";
-import { formatTarget, sameTarget } from "@/features/hosts/quickConnect";
-import { hostPort, reachableAddress } from "@/features/hosts/address";
 import { defaultRightClick, defaultTerminalFont } from "@/lib/platform";
 import { ZOOM_STEPS, zoomStep } from "@/lib/zoom";
 import { FRAME_CLOSED, FRAME_DATA, FRAME_SESSION } from "../types";

@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { launchAction } from "@/features/hosts/launchAction";
 import { useHostsUi } from "@/features/hosts/ui";
-import { connectHost, connectTarget } from "@/features/terminal/connect";
 import { api } from "@/ipc/api";
+import { connectHost, connectTarget } from "@/session/connect";
 import { useVaultData } from "./data";
 import { useApp } from "./store";
 import { useTabs } from "./tabs";

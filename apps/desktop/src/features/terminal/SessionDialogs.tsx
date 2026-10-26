@@ -2,8 +2,15 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, ErrorText, Icon, Modal, TextField } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
-import { startSessionListeners } from "./listeners";
-import { answerAuth, answerHostKey, answerSecret, answerUsername, usePrompts, type PromptItem } from "./prompts";
+import { startSessionListeners } from "@/session/listeners";
+import {
+  answerAuth,
+  answerHostKey,
+  answerSecret,
+  answerUsername,
+  usePrompts,
+  type PromptItem,
+} from "@/session/prompts";
 import s from "./SessionDialogs.module.css";
 
 /** Global host-key / keyboard-interactive / one-off secret dialogs (mounted once by App). */

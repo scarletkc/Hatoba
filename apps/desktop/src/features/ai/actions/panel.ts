@@ -2,7 +2,7 @@
 
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
-import { getSession } from "@/features/terminal/session";
+import { getSession } from "@/session/session";
 import { HOME_SLOT, useAi } from "../store";
 
 /** `selectAll`: select the draft, so typing replaces a suggested question. */

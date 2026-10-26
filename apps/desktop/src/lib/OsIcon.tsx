@@ -1,5 +1,5 @@
 import { Icon } from "@hatoba/ui";
-import { cx } from "@/lib/cx";
+import { cx } from "./cx";
 import s from "./OsIcon.module.css";
 
 /** The OS ids the backend reports (HOST-11) and the names shown on hover. */

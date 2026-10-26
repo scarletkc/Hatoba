@@ -2,13 +2,13 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon, LinkButton, ListRow, Spinner, overlayStyles, toast, type MenuAnchor } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
-import { forwardDest, hostPort } from "@/features/hosts/address";
-import { forwardFailure, runningForward, useHostConnection } from "@/features/hosts/connections";
-import { startForward, stopForward, useHostForwardRules } from "@/features/hosts/forwards";
 import { useT } from "@/i18n";
 import type { ForwardView, RunningForwardView } from "@/ipc/types";
+import { forwardDest, hostPort } from "@/lib/address";
+import { writeClipboard } from "@/lib/clipboard";
 import { cx } from "@/lib/cx";
-import { writeClipboard } from "./clipboard";
+import { forwardFailure, runningForward, useHostConnection } from "@/session/connections";
+import { startForward, stopForward, useHostForwardRules } from "@/session/forwards";
 import { useStatusPopover } from "./popover";
 import s from "./ForwardsPopover.module.css";
 

@@ -18,22 +18,21 @@ import {
   isImeEvent,
 } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
-import { openExternal } from "@/features/sync/external";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { McpServerView } from "@/ipc/types";
+import { looksLikeCommandLine, splitCommandLine } from "@/lib/commandLine";
 import { cx } from "@/lib/cx";
+import { openExternal } from "@/lib/external";
 import { SavedKeyField } from "./aiShared";
 import {
   argRows,
   hasMcpProblems,
   initialMcpForm,
-  looksLikeCommandLine,
   mcpFormToInput,
   newSecretRow,
   newUid,
   shownRowProblems,
-  splitCommandLine,
   validateMcpForm,
   type McpForm,
   type SecretKind,

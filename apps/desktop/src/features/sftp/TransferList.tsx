@@ -2,7 +2,7 @@ import { Icon, IconButton } from "@hatoba/ui";
 import { formatBytes, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import { cx } from "@/lib/cx";
-import { formatProgress, useTransfers, type TransferItem } from "./transfers";
+import { formatProgress, useTransfers, type TransferItem } from "@/session/transfers";
 import s from "./TransferList.module.css";
 
 /** The "Transfers" section at the bottom of the SFTP panel (SFTP-02). */

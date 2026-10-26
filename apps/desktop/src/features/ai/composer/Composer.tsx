@@ -11,9 +11,9 @@ import {
 } from "react";
 import { Icon, LinkButton, Menu, confirm, isImeEvent, toast, useMenu, type MenuEntry } from "@hatoba/ui";
 import { useApp } from "@/app/store";
-import { readClipboard } from "@/features/terminal/clipboard";
 import { useT, type MessageKey } from "@/i18n";
 import type { AiEffort, AiModelRef, AiPermissionMode } from "@/ipc/types";
+import { readClipboard } from "@/lib/clipboard";
 import { cx } from "@/lib/cx";
 import { shortcutLabel } from "@/lib/platform";
 import { AddButton, McpPopover } from "./AddMenu";

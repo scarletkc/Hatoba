@@ -789,7 +789,7 @@ const SNAP_CSS = `html{zoom:${Z}}
 .pw{transition:none}`;
 
 // The terminal is xterm's canvas in the app, empty in a snapshot, so the film types its own lines
-// over it in the same font, size, and colors (features/terminal/theme.ts and schemes.ts).
+// over it in the same font, size, and colors (session/theme.ts and schemes.ts).
 const PROMPT = '<span class="pu">deploy@prod-api-tokyo</span>:<span class="pp">/srv/api</span>$ ';
 const PROMPT_LEN = "deploy@prod-api-tokyo:/srv/api$ ".length;
 const CURL = "curl -sI http://localhost/v1/hosts";

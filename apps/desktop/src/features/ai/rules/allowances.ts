@@ -1,8 +1,8 @@
 import { create } from "zustand";
 import type { TabSource } from "@/app/tabs";
-import { formatTarget } from "@/features/hosts/quickConnect";
 import { api } from "@/ipc/api";
 import type { AiAllowance } from "@/ipc/types";
+import { formatTarget } from "@/session/quickConnect";
 import { recordedTarget } from "../place";
 import type { HostRef } from "../tools";
 

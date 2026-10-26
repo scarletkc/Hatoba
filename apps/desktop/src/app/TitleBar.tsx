@@ -2,15 +2,15 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefO
 import { Icon, Menu, useMenu, type MenuEntry } from "@hatoba/ui";
 import { AiPanelButton } from "@/features/ai/AiPanel";
 import { tabActivity, useAi } from "@/features/ai/store";
-import { OsIcon } from "@/features/hosts/OsIcon";
-import { openLocalTerminal } from "@/features/terminal/connect";
-import { loadLocalShells, preferredShell, shellName } from "@/features/terminal/localShells";
 import { useT } from "@/i18n";
 import { api, isTauri } from "@/ipc/api";
 import type { LocalShellKind, LocalShellView } from "@/ipc/types";
+import { OsIcon } from "@/lib/OsIcon";
 import { shortcutLabel } from "@/lib/platform";
 import { cx } from "@/lib/cx";
 import { motion } from "@/lib/motion";
+import { openLocalTerminal } from "@/session/connect";
+import { loadLocalShells, preferredShell, shellName } from "@/session/localShells";
 import { useVaultData } from "./data";
 import { useApp } from "./store";
 import { useTabDrag } from "./tabDrag";

@@ -2,8 +2,8 @@ import { memo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Icon } from "@hatoba/ui";
-import { openExternal, writeClipboard } from "@/features/terminal/clipboard";
 import { useT } from "@/i18n";
+import { openExternal, writeClipboard } from "@/lib/clipboard";
 import { cx } from "@/lib/cx";
 import s from "./Markdown.module.css";
 

@@ -6,7 +6,7 @@
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { useTabs, type SessionTab } from "@/app/tabs";
-import { getSession, type LiveSession } from "@/features/terminal/session";
+import { getSession, type LiveSession } from "@/session/session";
 import { t, type MessageKey, type Params } from "@/i18n";
 import type { AiEffort, AiModelRef, AiTurnContext } from "@/ipc/types";
 import { chosenEffort } from "../effort";

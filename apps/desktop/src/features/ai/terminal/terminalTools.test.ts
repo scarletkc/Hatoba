@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { LiveSession } from "@/features/terminal/session";
+import type { LiveSession } from "@/session/session";
 import { sendInput } from "./terminalTools";
 
 afterEach(() => vi.useRealTimers());

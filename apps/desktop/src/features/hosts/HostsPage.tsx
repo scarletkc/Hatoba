@@ -57,17 +57,15 @@ import {
 } from "@/features/dashboard/views";
 import { durationLabel } from "@/features/settings/durations";
 import { usePrefs } from "@/features/settings/shared";
-import { connectHost, connectTarget } from "@/features/terminal/connect";
 import { useDocumentVisible } from "@/features/terminal/stats";
 import { formatRelative, useT, type Locale, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { GroupView, HostView, ImportSource, LocalPrefs, QuickTarget } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { copyText } from "@/lib/native";
+import { OsIcon } from "@/lib/OsIcon";
 import { isMac, shortcutLabel } from "@/lib/platform";
-import { GroupDialog, deleteGroup } from "./GroupDialog";
-import { IMPORT_APPS, ImportDialog } from "./ImportDialog";
-import { OsIcon } from "./OsIcon";
+import { connectHost, connectTarget } from "@/session/connect";
 import {
   bracketHost,
   formatTarget,
@@ -76,9 +74,11 @@ import {
   savedHostFor,
   type QuickProblem,
   type TypedTarget,
-} from "./quickConnect";
+} from "@/session/quickConnect";
+import { useRecentTargets } from "@/session/recent";
+import { GroupDialog, deleteGroup } from "./GroupDialog";
+import { IMPORT_APPS, ImportDialog } from "./ImportDialog";
 import { applyFilter, sortHosts } from "./order";
-import { useRecentTargets } from "./recent";
 import { buildHostIndex, searchHosts } from "./search";
 import { ALONE, pickHost, type PickKeys } from "./selection";
 import { LIST_SORTS, STATS_SORTS, isListSort, useHostsUi, type HostSort, type ListSort } from "./ui";

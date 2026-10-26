@@ -1,5 +1,5 @@
 import type { HostView } from "@/ipc/types";
-import { parseQuickConnect, savedHostFor, type TypedTarget } from "./quickConnect";
+import { parseQuickConnect, savedHostFor, type TypedTarget } from "@/session/quickConnect";
 
 /** What a `hatoba …` command line asks for (HOST-13); null when it only brings the window up. */
 export type LaunchAction =

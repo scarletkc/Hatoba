@@ -1,9 +1,9 @@
-import { quitEditing, useEdits } from "@/features/sftp/edits";
-import { useTransfers } from "@/features/sftp/transfers";
 import { api } from "@/ipc/api";
+import { quitEditing, useEdits } from "./edits";
 import { pushAuthPrompt, pushHostKeyPrompt } from "./prompts";
 import { routeStateEvent } from "./session";
 import { watchTerminalAppearance } from "./theme";
+import { useTransfers } from "./transfers";
 
 let started = false;
 

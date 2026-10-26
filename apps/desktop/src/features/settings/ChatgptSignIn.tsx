@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Dialog, Spinner, toast } from "@hatoba/ui";
-import { openExternal } from "@/features/sync/external";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AiChatgptSignIn, AiChatgptStatus, AiProviderView } from "@/ipc/types";
+import { openExternal } from "@/lib/external";
 import { aiErrorMessage } from "./aiShared";
 import s from "./AiPane.module.css";
 

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Button, Icon } from "@hatoba/ui";
-import { openExternal } from "@/features/sync/external";
 import { useT } from "@/i18n";
+import { openExternal } from "@/lib/external";
 import { REPO_URL, bugReportUrl } from "@/lib/github";
 import { useStarPrompt, useStarPromptDue } from "./star";
 import { useApp } from "./store";

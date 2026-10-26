@@ -8,11 +8,11 @@ import {
   type RefCallback,
 } from "react";
 import { Button, Card, Chip, Icon, IconButton, LinkButton, Spinner, Tag } from "@hatoba/ui";
-import { OsIcon } from "@/features/hosts/OsIcon";
 import { formatLoad, formatPercent, formatRate, formatUptime, type StatsReading } from "@/features/terminal/stats";
 import { formatBytes, formatMessageTime, useT, type MessageKey } from "@/i18n";
 import type { GroupView, HostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { OsIcon } from "@/lib/OsIcon";
 import { dashboardSwitch, retryHost } from "./actions";
 import {
   COLUMN_GAP,

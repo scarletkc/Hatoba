@@ -50,7 +50,7 @@ vi.mock("@/ipc/api", async (importActual) => ({
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 // The tab's terminal, which `read_terminal` reads.
-vi.mock("@/features/terminal/session", async (importActual) => {
+vi.mock("@/session/session", async (importActual) => {
   const line = (text: string) => ({ isWrapped: false, translateToString: () => text });
   const rows = ["$ uptime", " 10:00:00 up 3 days", "$ "];
   const active = {
@@ -62,7 +62,7 @@ vi.mock("@/features/terminal/session", async (importActual) => {
   };
   const term = { rows: rows.length, buffer: { active } };
   return {
-    ...(await importActual<typeof import("@/features/terminal/session")>()),
+    ...(await importActual<typeof import("@/session/session")>()),
     getSession: (tabId: string) => (tabId === "tab-1" ? { status: "connected", term } : undefined),
   };
 });

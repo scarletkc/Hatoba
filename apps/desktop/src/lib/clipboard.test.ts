@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import capabilities from "../../../src-tauri/capabilities/default.json";
+import capabilities from "../../src-tauri/capabilities/default.json";
 import { openExternal } from "./clipboard";
 
 const native = vi.hoisted(() => ({ enabled: false, openUrl: vi.fn() }));

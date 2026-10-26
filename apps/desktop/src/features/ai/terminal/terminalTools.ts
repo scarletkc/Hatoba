@@ -1,6 +1,6 @@
-import type { LiveSession } from "@/features/terminal/session";
 import { toAppError } from "@/ipc/api";
 import type { AiToolStatus } from "@/ipc/types";
+import type { LiveSession } from "@/session/session";
 import { readBuffer, OutputCapture, type ScreenText } from "./terminalText";
 import { keySequence, parseReadTerminal, parseSendInput } from "../tools";
 

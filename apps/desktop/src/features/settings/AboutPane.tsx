@@ -5,12 +5,12 @@ import { useTabs } from "@/app/tabs";
 import { useUpdate } from "@/app/update";
 import { Markdown } from "@/features/ai/messages/Markdown";
 import { copyText } from "@/features/keys/clipboard";
-import { useTransfers } from "@/features/sftp/transfers";
-import { openExternal } from "@/features/sync/external";
 import { formatBytes, formatDate, useT, type MessageKey, type Params } from "@/i18n";
 import type { AppError, AvailableUpdate, PackageManager, UpdateProgress } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { openExternal } from "@/lib/external";
 import { REPO_URL, WEBSITE_URL, bugReportUrl } from "@/lib/github";
+import { useTransfers } from "@/session/transfers";
 import { Pane, SettingRow, usePrefs } from "./shared";
 import s from "./AboutPane.module.css";
 
