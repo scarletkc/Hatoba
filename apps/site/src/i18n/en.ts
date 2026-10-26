@@ -74,7 +74,7 @@ export const en = {
       },
       {
         term: "SFTP",
-        text: "A file panel beside the terminal, with drag-and-drop upload and downloads that you can cancel.",
+        text: "A file panel beside the terminal, with drag-and-drop upload, downloads that you can cancel, and remote files edited in your own editor and uploaded on every save.",
       },
       {
         term: "Port forwarding",
