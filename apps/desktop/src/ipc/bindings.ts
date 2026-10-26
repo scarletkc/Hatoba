@@ -261,7 +261,8 @@ export const commands = {
 	sftpEditDiscard: (editId: string) => __TAURI_INVOKE<null>("sftp_edit_discard", { editId }),
 	/**
 	 *  SFTP-05: stops editing a file, uploading its last save first if `upload`. Returns whether
-	 *  editing ended; a save that cannot upload yet keeps it going until it does.
+	 *  editing ended; a save that cannot upload yet, as behind the lock screen, keeps it going until
+	 *  it does.
 	 */
 	sftpEditStop: (editId: string, upload: boolean) => __TAURI_INVOKE<boolean>("sftp_edit_stop", { editId, upload }),
 	/**
