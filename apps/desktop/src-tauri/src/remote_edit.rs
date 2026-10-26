@@ -645,6 +645,12 @@ impl Worker {
     /// Writes the copy back through a temporary file, with the mode the file had, unless the
     /// server's file changed since it was last downloaded or uploaded and `overwrite` is false.
     async fn upload(&mut self, overwrite: bool) -> (Flow, AppResult<()>) {
+        // Nothing uploads behind the lock screen, also before the lock's command arrives: a save
+        // made there asks after the unlock.
+        if !app_state(&self.app).vault().is_unlocked() {
+            self.locked = true;
+            return (Flow::Go, Err(AppError::locked()));
+        }
         let Some((session_id, sftp)) = self.client().await else {
             self.set(RemoteEditState::Pending, None);
             return (Flow::Go, Err(not_connected()));
