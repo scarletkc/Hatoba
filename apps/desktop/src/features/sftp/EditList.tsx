@@ -1,4 +1,5 @@
 import { Icon, IconButton, Spinner } from "@hatoba/ui";
+import { useTabs } from "@/app/tabs";
 import { useT } from "@/i18n";
 import type { RemoteEditView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
@@ -23,6 +24,7 @@ export function EditList({ tabId }: { tabId: string }) {
 
 function EditRow({ edit }: { edit: RemoteEditView }) {
   const t = useT();
+  const connected = useTabs((st) => st.tabs.find((x) => x.id === edit.tab_id)?.status === "connected");
   const bad = edit.state === "failed";
   const status =
     edit.state === "saved"
@@ -75,7 +77,7 @@ function EditRow({ edit }: { edit: RemoteEditView }) {
         icon="x"
         label={t("sftp.edit.stop")}
         className={s.action}
-        onClick={() => void stopEditing(edit, true)}
+        onClick={() => void stopEditing(edit, connected)}
       />
     </div>
   );

@@ -250,6 +250,12 @@ pub async fn open(
     if stat.is_dir() {
         return Err(AppError::invalid("path", "a folder cannot be edited"));
     }
+    if stat.is_special() {
+        return Err(AppError::invalid(
+            "path",
+            "only regular files can be edited",
+        ));
+    }
     let name = path
         .trim_end_matches('/')
         .rsplit('/')
@@ -616,8 +622,7 @@ impl Worker {
             }
         }
         // A server that reports no permissions gets none set.
-        let keep = self.stat.mode;
-        let mode = (keep & 0o7777 != 0).then_some(keep);
+        let mode = self.stat.mode;
         let written = run_transfer(
             self.app.clone(),
             session_id.clone(),
@@ -647,7 +652,7 @@ impl Worker {
         }
         self.synced = digest(&content);
         match sftp.stat(&remote).await {
-            Ok(Some(now)) => self.stat = RemoteStat { mode: keep, ..now },
+            Ok(Some(now)) => self.stat = RemoteStat { mode, ..now },
             // Read again before the next upload, which then asks.
             _ => self.stat.mtime = None,
         }

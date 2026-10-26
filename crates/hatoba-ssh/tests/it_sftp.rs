@@ -721,7 +721,7 @@ async fn edits_write_back_through_symlinks_and_keep_the_mode() {
     assert_eq!(target, s(&fs::canonicalize(&script).unwrap()));
     let before = sftp.stat(&target).await.unwrap().unwrap();
     assert_eq!(before.size, 19);
-    assert_eq!(before.mode & 0o7777, 0o750);
+    assert_eq!(before.mode.unwrap() & 0o7777, 0o750);
     assert!(!before.is_dir());
     assert!(sftp.stat(s(&area)).await.unwrap().unwrap().is_dir());
     assert_eq!(sftp.stat(s(&area.join("gone"))).await.unwrap(), None);
@@ -731,7 +731,7 @@ async fn edits_write_back_through_symlinks_and_keep_the_mode() {
     sftp.upload_with_mode(
         &copy,
         &target,
-        Some(before.mode),
+        before.mode,
         |_| {},
         CancellationToken::new(),
     )

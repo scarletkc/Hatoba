@@ -68,14 +68,21 @@ pub struct RemoteStat {
     pub size: u64,
     /// Modification time in Unix seconds, if the server reports it.
     pub mtime: Option<u32>,
-    /// Raw `st_mode` (type and permission bits).
-    pub mode: u32,
+    /// Raw `st_mode` (type and permission bits); `None` when the server does not report it.
+    pub mode: Option<u32>,
 }
 
 impl RemoteStat {
     /// The entry is a directory.
     pub fn is_dir(&self) -> bool {
-        self.mode & S_IFMT == S_IFDIR
+        self.mode.is_some_and(|m| m & S_IFMT == S_IFDIR)
+    }
+
+    /// The entry is something other than a regular file or a directory: a FIFO, a socket or a
+    /// device, which never ends or cannot be read as a file.
+    pub fn is_special(&self) -> bool {
+        self.mode
+            .is_some_and(|m| !matches!(m & S_IFMT, 0 | S_IFREG | S_IFDIR | S_IFLNK))
     }
 }
 
@@ -150,7 +157,7 @@ impl SftpClient {
             Ok(meta) => Ok(Some(RemoteStat {
                 size: meta.size.unwrap_or(0),
                 mtime: meta.mtime,
-                mode: meta.permissions.unwrap_or(0),
+                mode: meta.permissions,
             })),
             Err(SftpError::Status(status)) if status.status_code == StatusCode::NoSuchFile => {
                 Ok(None)
