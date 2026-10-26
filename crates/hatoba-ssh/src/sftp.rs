@@ -439,7 +439,8 @@ impl SftpClient {
 
     /// [`upload`](Self::upload), with the permission bits of `mode` set on the new file before it
     /// replaces the old one, so a file written back keeps its mode (SFTP-05). A server that refuses
-    /// to set them still gets the content, with the mode it gives new files.
+    /// to set them still gets the content, with the mode it gives new files, as long as that mode
+    /// grants nothing the old one did not; otherwise the upload fails and the old file stays.
     pub async fn upload_with_mode(
         &self,
         local: &Path,
@@ -461,15 +462,28 @@ impl SftpClient {
             .await
             .map_err(|e| SshError::io_context(&format!("open {}", local.display()), &e))?;
         let (part, target) = self.create_remote_part(remote).await?;
-        let result = self
+        let mut result = self
             .upload_to(local, source, &part, target, meta.len(), &progress, &cancel)
             .await;
         if let (Ok(()), Some(mode)) = (&result, mode) {
+            let wanted = mode & 0o7777;
             let attrs = russh_sftp::protocol::FileAttributes {
-                permissions: Some(mode & 0o7777),
+                permissions: Some(wanted),
                 ..Default::default()
             };
-            let _ = self.sftp.set_metadata(part.as_str(), attrs).await;
+            if let Err(e) = self.sftp.set_metadata(part.as_str(), attrs).await {
+                // The new file keeps the mode the server gave it, unless that grants more than the
+                // old one did: a private file never becomes readable by others.
+                let given = self
+                    .sftp
+                    .metadata(part.as_str())
+                    .await
+                    .ok()
+                    .and_then(|m| m.permissions);
+                if given.is_none_or(|given| given & 0o7777 & !wanted != 0) {
+                    result = Err(self.err("set permissions of", remote, e));
+                }
+            }
         }
         match result {
             Ok(()) => self.replace(&part, remote).await,
