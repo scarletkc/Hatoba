@@ -20,7 +20,7 @@ serde.workspace = true
 serde_json.workspace = true
 specta.workspace = true
 # `specta_typescript::Number`, the generated type of a float that is never `null`.
-specta-typescript = "0.0.12"
+specta-typescript.workspace = true
 tracing.workspace = true
 zeroize.workspace = true
 futures.workspace = true

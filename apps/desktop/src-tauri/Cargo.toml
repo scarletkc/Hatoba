@@ -41,7 +41,7 @@ tauri-plugin-single-instance = "2.5"
 tauri-plugin-updater = { version = "2.13", default-features = false, features = ["rustls-tls", "system-proxy"] }
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 specta.workspace = true
-specta-typescript = "0.0.12"
+specta-typescript.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 serde.workspace = true

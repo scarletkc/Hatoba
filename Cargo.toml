@@ -31,6 +31,7 @@ uuid = { version = "1", features = ["v4", "v7", "serde"] }
 bytes = "1"
 futures = "0.3"
 specta = { version = "=2.0.0-rc.25", features = ["derive"] }
+specta-typescript = "0.0.12"
 
 [profile.release]
 codegen-units = 1
