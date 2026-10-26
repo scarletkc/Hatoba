@@ -373,6 +373,7 @@ pub(crate) fn delete_provider(v: &mut Vault, id: &str) -> AppResult<()> {
     Ok(())
 }
 
+/// AI-01: the providers. API keys go one way to Rust and never come back.
 #[tauri::command]
 #[specta::specta]
 pub fn ai_providers_list(state: State<'_, AppState>) -> AppResult<Vec<AiProviderView>> {
@@ -726,6 +727,7 @@ pub(crate) fn delete_search_provider(v: &mut Vault, id: &str) -> AppResult<()> {
     Ok(())
 }
 
+/// AI-14: the search providers behind `web_search`.
 #[tauri::command]
 #[specta::specta]
 pub fn search_providers_list(state: State<'_, AppState>) -> AppResult<Vec<SearchProviderView>> {
@@ -926,6 +928,7 @@ pub fn ai_settings_get(state: State<'_, AppState>) -> AppResult<AiSettingsView> 
     state.with_unlocked(|v| Ok(ai_settings_view(&v.settings().ai)))
 }
 
+/// Writes the fields `patch` sets, like `settings_save`.
 #[tauri::command]
 #[specta::specta]
 pub fn ai_settings_save(

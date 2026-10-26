@@ -167,6 +167,7 @@ pub async fn local_resize(
     Ok(())
 }
 
+/// Ends the shell and the console programs it started.
 #[tauri::command]
 #[specta::specta]
 pub async fn local_close(state: State<'_, AppState>, session_id: String) -> AppResult<()> {

@@ -104,6 +104,7 @@ describe("ProviderDialog", () => {
             adaptive_thinking: true,
           },
         ],
+        chatgpt: null,
         updated_at: 1,
       },
       (view) => (saved = view),

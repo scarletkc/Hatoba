@@ -1,4 +1,4 @@
-import type { FrameHandler, HatobaApi, Unlisten } from "../api";
+import { appError, type FrameHandler, type HatobaApi, type Unlisten } from "../api";
 import type {
   ConnectionsEvent,
   AppError,
@@ -200,11 +200,12 @@ export function createMockApi(): HatobaApi {
     hosts = hosts.map((x) => (x.id === hostId ? { ...x, last_connected_at: Date.now() } : x));
     for (const f of forwards.filter((x) => x.host_id === hostId && x.auto_start)) {
       if (busyDemo) {
-        c.failed.set(f.id, {
-          code: "ssh",
-          ssh_kind: "io",
-          detail: `cannot listen on ${f.bind_address}:${f.bind_port}: address already in use`,
-        });
+        c.failed.set(
+          f.id,
+          appError("ssh", `cannot listen on ${f.bind_address}:${f.bind_port}: address already in use`, {
+            ssh_kind: "io",
+          }),
+        );
       } else runForward(c, f);
     }
     if (lostDemo) {
@@ -219,7 +220,7 @@ export function createMockApi(): HatobaApi {
             host_id: hostId,
             state: "disconnected",
             latency_ms: null,
-            error: { code: "ssh", ssh_kind: "disconnected", detail: "keepalive timeout: no reply from the server" },
+            error: appError("ssh", "keepalive timeout: no reply from the server", { ssh_kind: "disconnected" }),
             exit_status: null,
           });
         }
@@ -227,7 +228,7 @@ export function createMockApi(): HatobaApi {
           emit("ssh://forwards-lost", {
             host_id: hostId,
             host_name: c.name,
-            error: { code: "ssh", ssh_kind: "disconnected", detail: "keepalive timeout: no reply from the server" },
+            error: appError("ssh", "keepalive timeout: no reply from the server", { ssh_kind: "disconnected" }),
           });
         }
         connectionsChanged();
@@ -349,7 +350,7 @@ export function createMockApi(): HatobaApi {
   }
 
   function fail(code: AppError["code"], detail: string = code, extra: Partial<AppError> = {}): never {
-    throw { code, detail, ...extra } satisfies AppError;
+    throw appError(code, detail, extra);
   }
 
   function needUnlocked() {
@@ -911,7 +912,7 @@ export function createMockApi(): HatobaApi {
         await delay(400);
         const kind = sshDemo && sshDemo in SSH_DEMO_DETAIL ? (sshDemo as SshErrorKind) : "timeout";
         const detail = (SSH_DEMO_DETAIL[kind] ?? SSH_DEMO_DETAIL.timeout)(h.address, h.port);
-        const error: AppError = { code: "ssh", detail, ssh_kind: kind };
+        const error = appError("ssh", detail, { ssh_kind: kind });
         setTimeout(() => state("failed", { error }), 0);
         throw error;
       }
@@ -933,7 +934,7 @@ export function createMockApi(): HatobaApi {
           });
         });
         if (!accepted) {
-          const error: AppError = { code: "ssh", detail: "host key rejected", ssh_kind: "host_key_rejected" };
+          const error = appError("ssh", "host key rejected", { ssh_kind: "host_key_rejected" });
           setTimeout(() => state("failed", { error }), 0);
           throw error;
         }
@@ -980,7 +981,7 @@ export function createMockApi(): HatobaApi {
       setTimeout(() => state("connecting"), 0);
       await delay(400);
       if (target.address.includes("timeout"))
-        failWith({ code: "ssh", detail: SSH_DEMO_DETAIL.timeout(target.address, target.port), ssh_kind: "timeout" });
+        failWith(appError("ssh", SSH_DEMO_DETAIL.timeout(target.address, target.port), { ssh_kind: "timeout" }));
       const endpoint = `${target.address}:${target.port}`;
       if (!trustedQuickHosts.has(endpoint)) {
         const accepted = await new Promise<boolean>((resolve) => {
@@ -998,7 +999,7 @@ export function createMockApi(): HatobaApi {
             known_key_type: null,
           });
         });
-        if (!accepted) failWith({ code: "ssh", detail: "host key rejected", ssh_kind: "host_key_rejected" });
+        if (!accepted) failWith(appError("ssh", "host key rejected", { ssh_kind: "host_key_rejected" }));
         trustedQuickHosts.add(endpoint);
       }
       // No ssh-agent here: the server asks for the password.
@@ -1016,13 +1017,13 @@ export function createMockApi(): HatobaApi {
           target: `${target.username}@${host}:${target.port}`,
         });
       });
-      if (!answers) failWith({ code: "ssh", detail: "operation cancelled", ssh_kind: "cancelled" });
+      if (!answers) failWith(appError("ssh", "operation cancelled", { ssh_kind: "cancelled" }));
       if (answers![0] === "wrong")
-        failWith({
-          code: "ssh",
-          detail: "the server rejected the password (server accepts: publickey, password)",
-          ssh_kind: "auth_failed",
-        });
+        failWith(
+          appError("ssh", "the server rejected the password (server accepts: publickey, password)", {
+            ssh_kind: "auth_failed",
+          }),
+        );
       await delay(300);
       const shellHost: HostView = {
         ...D.HOSTS[0],
@@ -1145,7 +1146,7 @@ export function createMockApi(): HatobaApi {
           ok: false,
           latency_ms: null,
           host_key_verified: false,
-          error: { code: "ssh", detail: "timed out", ssh_kind: "timeout" },
+          error: appError("ssh", "timed out", { ssh_kind: "timeout" }),
         };
       return { ok: true, latency_ms: 38, host_key_verified: true, error: null };
     },
@@ -1238,7 +1239,7 @@ export function createMockApi(): HatobaApi {
             version: null,
             latency_ms: null,
             databases: null,
-            error: { code: "sync", detail: "token lacks D1 edit permission" },
+            error: appError("sync", "token lacks D1 edit permission"),
           };
         return {
           ok: true,
@@ -1256,7 +1257,7 @@ export function createMockApi(): HatobaApi {
           version: null,
           latency_ms: null,
           databases: null,
-          error: { code: "sync_offline", detail: "dns" },
+          error: appError("sync_offline", "dns"),
         };
       // First-launch demo (flow B) restores from a remote that already holds a vault, and so
       // does `?deploy=vault` (flow C).
@@ -1500,7 +1501,7 @@ export function createMockApi(): HatobaApi {
 
     settings_get: async () => structuredClone(settings),
     settings_save: async (patch) => {
-      const terminal = applyPatch(settings.terminal, patch.terminal);
+      const terminal = applyPatch(settings.terminal, patch.terminal ?? {});
       if (JSON.stringify(terminal) === JSON.stringify(settings.terminal)) return;
       settings = { ...settings, terminal };
       touch();

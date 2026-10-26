@@ -64,6 +64,7 @@ const provider = (id: string, models: AiModel[]): AiProviderView => ({
   has_api_key: true,
   auth_header: "x-api-key",
   models,
+  chatgpt: null,
   updated_at: 1,
 });
 

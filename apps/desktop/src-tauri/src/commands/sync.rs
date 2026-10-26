@@ -607,6 +607,7 @@ pub fn sync_conflicts(state: State<'_, AppState>) -> AppResult<Vec<ConflictView>
     })
 }
 
+/// `keep`: accept the automatic resolution. `restore`: re-apply the losing version as a new edit.
 #[tauri::command]
 #[specta::specta]
 pub fn sync_conflict_resolve(

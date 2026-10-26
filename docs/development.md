@@ -153,7 +153,7 @@ After changing a Rust command, event, or DTO, regenerate `apps/desktop/src/ipc/b
 cargo test -p hatoba-desktop export_bindings
 ```
 
-`pnpm typecheck` compares the generated bindings with the contract the frontend uses, through `apps/desktop/src/ipc/contract.check.ts`. CI fails when the bindings are out of date.
+The frontend has no IPC types of its own: `apps/desktop/src/ipc/types.ts` re-exports the bindings, and `HatobaApi` in `apps/desktop/src/ipc/api.ts` is derived from their `commands`. So `pnpm typecheck` fails wherever the frontend or the browser mock no longer matches a changed command or DTO, and the doc comments on the Rust items are what the frontend's editor shows. CI fails when the bindings are out of date.
 
 ## Raise the Worker version
 

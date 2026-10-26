@@ -1,7 +1,8 @@
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppError, AvailableUpdate, PackageManager, UpdateCheck, UpdateProgress } from "@/ipc/types";
+import { appError } from "@/ipc/api";
+import type { AvailableUpdate, PackageManager, UpdateCheck, UpdateProgress } from "@/ipc/types";
 
 const backend = vi.hoisted(() => ({
   calls: 0,
@@ -46,8 +47,8 @@ const found = (version: string | null): UpdateCheck => ({
       }
     : null,
 });
-const offline: AppError = { code: "sync_offline", detail: "GitHub could not be reached" };
-const badSignature: AppError = { code: "update_signature", detail: "Minisign error" };
+const offline = appError("sync_offline", "GitHub could not be reached");
+const badSignature = appError("update_signature", "Minisign error");
 
 // Each test gets fresh module state: the store and the automatic check's once-per-launch start.
 async function load() {

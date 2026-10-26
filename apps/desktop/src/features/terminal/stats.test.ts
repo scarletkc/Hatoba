@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { appError } from "@/ipc/api";
 import type { AppError, ServerStatsView, StatsEvent } from "@/ipc/types";
 
 const ipc = vi.hoisted(() => ({
@@ -10,7 +11,8 @@ const ipc = vi.hoisted(() => ({
   lastId: 0,
 }));
 
-vi.mock("@/ipc/api", () => ({
+vi.mock("@/ipc/api", async (importActual) => ({
+  ...(await importActual<typeof import("@/ipc/api")>()),
   api: {
     ssh_stats_start: async (sessionId: string, onEvent: (event: StatsEvent) => void) => {
       const id = ++ipc.lastId;
@@ -132,7 +134,7 @@ describe("resource usage sampling (TERM-12)", () => {
 
     startStats(sid);
     const second = lastStart().emit;
-    first({ kind: "ended", error: { code: "ssh", detail: "old" } });
+    first({ kind: "ended", error: appError("ssh", "old") });
     second({ kind: "stats", stats: reading(20) });
     expect(getSessionStats(sid)?.state.kind).toBe("live");
   });
@@ -152,7 +154,7 @@ describe("resource usage sampling (TERM-12)", () => {
   });
 
   it("sends no stop for a start that failed", async () => {
-    ipc.reject = { code: "not_found", detail: "session" };
+    ipc.reject = appError("not_found", "session");
     startStats(sid);
     stopStats(sid);
     await flush();
@@ -171,13 +173,13 @@ describe("resource usage sampling (TERM-12)", () => {
   it("reports a failure, and a retry starts again", async () => {
     startStats(sid);
     lastStart().emit({ kind: "stats", stats: reading(10) });
-    lastStart().emit({ kind: "ended", error: { code: "ssh", detail: "exit status 2", ssh_kind: "other" } });
+    lastStart().emit({ kind: "ended", error: appError("ssh", "exit status 2", { ssh_kind: "other" }) });
     const stats = getSessionStats(sid)!;
     expect(stats.state).toMatchObject({ kind: "failed", error: { detail: "exit status 2" } });
     // The readings so far stay on screen.
     expect(stats.history).toHaveLength(1);
 
-    ipc.reject = { code: "not_found", detail: "session" };
+    ipc.reject = appError("not_found", "session");
     startStats(sid);
     await flush();
     expect(getSessionStats(sid)?.state).toMatchObject({ kind: "failed", error: { code: "not_found" } });

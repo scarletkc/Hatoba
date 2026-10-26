@@ -1,6 +1,7 @@
 //! Data transfer objects exchanged with the WebView (spec §10).
 //!
-//! These mirror `apps/desktop/src/ipc/types.ts` and are exported to TypeScript with tauri-specta.
+//! tauri-specta exports them, with their doc comments, to `apps/desktop/src/ipc/bindings.ts`, the
+//! frontend's only definition of them.
 //! **No DTO carries a secret**: hosts expose `has_password`, keys expose only public material.
 //! Inputs may carry secrets one way (WebView → Rust), e.g. a new host password; they are never
 //! echoed back.
@@ -24,10 +25,14 @@ pub enum VaultState {
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct VaultStatus {
     pub state: VaultState,
+    /// Consecutive failed unlock attempts (SEC-06).
     pub failed_attempts: u32,
+    /// While throttled, the next attempt is allowed at this time.
     pub retry_at: Option<i64>,
     pub sync_kind: SyncKind,
+    /// Windows Hello or Touch ID is available on this device.
     pub biometric_available: bool,
+    /// Biometric unlock is enrolled for this vault.
     pub biometric_enabled: bool,
     /// SEC-11: a PIN is set on this device.
     pub pin_enabled: bool,
@@ -68,6 +73,7 @@ pub struct HostView {
     pub port: u16,
     pub username: String,
     pub auth_kind: AuthKind,
+    /// A password is saved (HOST-08: it can be replaced but never read back).
     pub has_password: bool,
     pub key_id: Option<String>,
     pub group_id: Option<String>,
@@ -82,6 +88,7 @@ pub struct HostView {
     /// What the AI assistant is told about the host (AI-37).
     pub ai_notes: String,
     pub updated_at: i64,
+    /// Device-local, never synced (HOST-06).
     pub last_connected_at: Option<i64>,
     /// The server's operating system from its SSH identification string on the last connection
     /// from this device, such as `ubuntu` (HOST-11). Device-local, like `last_connected_at`.
@@ -98,6 +105,7 @@ pub struct HostView {
 
 #[derive(Debug, Clone, Deserialize, Type)]
 pub struct HostInput {
+    /// `None` creates a new host.
     pub id: Option<String>,
     pub name: String,
     pub address: String,
@@ -238,6 +246,7 @@ pub struct ProxyView {
     pub port: u16,
     /// Empty when the proxy needs no sign-in.
     pub username: String,
+    /// A password is saved (as HOST-08: it can be replaced but never read back).
     pub has_password: bool,
     /// Hosts that name this proxy (not those that use it as the device default).
     pub host_ids: Vec<String>,
@@ -246,6 +255,7 @@ pub struct ProxyView {
 
 #[derive(Debug, Clone, Deserialize, Type)]
 pub struct ProxyInput {
+    /// `None` creates a new proxy.
     pub id: Option<String>,
     pub name: String,
     pub kind: ProxyKind,
@@ -278,13 +288,16 @@ pub struct KeyView {
     pub has_passphrase: bool,
     pub created_at: i64,
     pub updated_at: i64,
+    /// IDs of the hosts that use this key (KEY-03, KEY-05).
     pub used_by: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Type)]
 pub struct KeyImportInput {
     pub name: String,
+    /// Pasted private key text; ignored when `path` is set.
     pub private_key: Option<String>,
+    /// A file chosen in the native dialog, which Rust reads.
     pub path: Option<String>,
     pub passphrase: Option<String>,
 }
@@ -312,6 +325,7 @@ pub struct ConnectOptions {
     pub rows: u32,
     /// `ask` auth (SSH-03): used once, never stored.
     pub password: Option<String>,
+    /// For a passphrase-protected key whose passphrase isn't saved.
     pub passphrase: Option<String>,
 }
 
@@ -341,8 +355,10 @@ pub struct SessionStateEvent {
     /// `None` for a quick-connect session (HOST-12).
     pub host_id: Option<String>,
     pub state: SessionState,
+    /// The connection's round-trip time, once connected.
     pub latency_ms: Option<u32>,
     pub error: Option<crate::error::AppError>,
+    /// The remote exit status of a clean `disconnected`.
     pub exit_status: Option<u32>,
 }
 
@@ -396,6 +412,8 @@ pub struct HostKeyPrompt {
     pub port: u16,
     pub key_type: String,
     pub fingerprint: String,
+    /// `new`: the first connection (TOFU). `changed`: the fingerprint differs from the saved one,
+    /// and the connection is blocked (SSH-04).
     pub kind: HostKeyPromptKind,
     pub known_fingerprint: Option<String>,
     pub known_key_type: Option<String>,
@@ -407,6 +425,7 @@ pub struct AuthPromptField {
     pub echo: bool,
 }
 
+/// A keyboard-interactive (2FA) prompt (SSH-08).
 #[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
 #[tauri_specta(event_name = "ssh://auth-prompt")]
 pub struct AuthPrompt {
@@ -558,6 +577,7 @@ pub struct FileEntry {
     pub is_symlink: bool,
     pub size: u64,
     pub modified: Option<i64>,
+    /// Such as `drwxr-xr-x`.
     pub permissions: String,
 }
 
@@ -671,11 +691,15 @@ pub struct SyncCounts {
 #[tauri_specta(event_name = "sync://status")]
 pub struct SyncStatus {
     pub kind: SyncKind,
+    /// The Worker's host, or `api.cloudflare.com` in D1 direct mode.
     pub endpoint: Option<String>,
+    /// D1 direct mode: the database's ID.
     pub database: Option<String>,
     pub state: SyncState,
     pub last_synced_at: Option<i64>,
+    /// Local changes not pushed yet.
     pub pending: u32,
+    /// Automatically resolved conflicts not reviewed yet (§6.4).
     pub conflicts: u32,
     pub auto_sync: bool,
     pub message: Option<String>,
@@ -741,9 +765,11 @@ pub struct D1Database {
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct SyncTestResult {
     pub ok: bool,
+    /// The remote already holds a vault.
     pub initialized: bool,
     pub version: Option<String>,
     pub latency_ms: Option<u32>,
+    /// D1 direct mode: the databases the token can see, to pick from once the token is verified.
     pub databases: Option<Vec<D1Database>>,
     pub error: Option<crate::error::AppError>,
 }
@@ -769,6 +795,8 @@ pub enum ConflictResolution {
 
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct ConflictField {
+    /// A field key the interface translates, such as `port`, `jump_host`, `tags`, `name` or
+    /// `state`.
     pub field: String,
     pub local: Option<String>,
     pub remote: Option<String>,
@@ -806,6 +834,7 @@ pub struct ConflictView {
     pub remote_updated_at: Option<i64>,
     pub local_deleted: bool,
     pub remote_deleted: bool,
+    /// Only the fields that differ; secrets are never included.
     pub fields: Vec<ConflictField>,
     pub created_at: i64,
 }
@@ -1002,10 +1031,13 @@ pub struct TerminalSettings {
     pub light_scheme: Option<String>,
     pub cursor_style: CursorChoice,
     pub scrollback: u32,
+    /// WIN-05: PuTTY-style right click, or a context menu.
     pub right_click: RightClick,
+    /// TERM-04: ask before pasting text with line breaks.
     pub confirm_multiline_paste: bool,
 }
 
+/// The synced settings item (spec §5.1 `Settings`).
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct SettingsView {
     pub terminal: TerminalSettings,
@@ -1072,6 +1104,7 @@ pub struct LocalPrefs {
     /// TERM-13: the interface zoom in percent, one of [`crate::platform::window::ZOOM_STEPS`]. Kept
     /// per device, since the right size depends on the screen.
     pub ui_zoom: u32,
+    /// HOST-10: the TCP reachability dots.
     pub host_probe: bool,
     /// Check GitHub for a newer release once after the first unlock of each launch (spec §11).
     /// On by default; the request carries no identifier.
@@ -1227,6 +1260,7 @@ pub enum Platform {
 pub struct AppInfo {
     pub version: String,
     pub platform: Platform,
+    /// Windows 11 Mica is active (WIN-07).
     pub mica: bool,
     /// The local user name, which quick connect (HOST-12) uses when the target names no user;
     /// empty when unknown.
@@ -1461,11 +1495,13 @@ pub struct ForwardView {
     pub name: String,
     pub kind: ForwardKind,
     pub bind_address: String,
+    /// 0 picks a free port (on the server for a remote forward).
     pub bind_port: u16,
     /// As the server reaches it, or as this computer does for a remote forward; empty and 0 for
     /// a dynamic one.
     pub dest_host: String,
     pub dest_port: u16,
+    /// FWD-02: starts whenever Hatoba connects to the host.
     pub auto_start: bool,
 }
 
@@ -2685,6 +2721,7 @@ pub struct SkillImportPreview {
 // only their names, and the inputs that carry them print them redacted and wipe them when
 // dropped (AI-29).
 
+/// Environment and header values never reach the WebView, only their names (AI-29).
 #[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum McpTransportView {

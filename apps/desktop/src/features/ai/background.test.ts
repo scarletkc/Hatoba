@@ -153,6 +153,7 @@ const provider: AiProviderView = {
       adaptive_thinking: null,
     },
   ],
+  chatgpt: null,
   updated_at: 0,
 };
 

@@ -6,7 +6,6 @@ import type {
   AiModelRef,
   AiProtocol,
   AiProviderView,
-  AiSettingsPatch,
   AiSettingsView,
   AiTestFailure,
   SearchKind,
@@ -367,8 +366,8 @@ export function resolveSettings(
 }
 
 /** The fields of `next` that differ from `prev`, to save; null when none does. */
-export function changedSettings(prev: AiSettingsView, next: AiSettingsView): AiSettingsPatch | null {
-  const patch: AiSettingsPatch = {};
+export function changedSettings(prev: AiSettingsView, next: AiSettingsView): Partial<AiSettingsView> | null {
+  const patch: Partial<AiSettingsView> = {};
   if (!sameRef(prev.default_model, next.default_model)) patch.default_model = next.default_model;
   if (prev.default_effort !== next.default_effort) patch.default_effort = next.default_effort;
   if (prev.search_provider_id !== next.search_provider_id) patch.search_provider_id = next.search_provider_id;

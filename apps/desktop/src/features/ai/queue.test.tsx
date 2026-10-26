@@ -87,6 +87,7 @@ const provider: AiProviderView = {
       adaptive_thinking: null,
     },
   ],
+  chatgpt: null,
   updated_at: 0,
 };
 const paste = (text: string): PasteAttachment => ({ kind: "paste", text, lines: 1 });

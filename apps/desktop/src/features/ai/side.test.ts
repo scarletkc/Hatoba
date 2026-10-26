@@ -70,6 +70,7 @@ const provider: AiProviderView = {
       adaptive_thinking: null,
     },
   ],
+  chatgpt: null,
   updated_at: 0,
 };
 const paste: PasteAttachment = { kind: "paste", text: "error.log line", lines: 1 };
