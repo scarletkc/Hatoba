@@ -355,7 +355,8 @@ pub async fn sftp_edit_discard(state: State<'_, AppState>, edit_id: String) -> A
 }
 
 /// SFTP-05: stops editing a file, uploading its last save first if `upload`. Returns whether
-/// editing ended; a save that cannot upload yet keeps it going until it does.
+/// editing ended; a save that cannot upload yet, as behind the lock screen, keeps it going until
+/// it does.
 #[tauri::command]
 #[specta::specta]
 pub async fn sftp_edit_stop(
@@ -363,9 +364,6 @@ pub async fn sftp_edit_stop(
     edit_id: String,
     upload: bool,
 ) -> AppResult<bool> {
-    if upload {
-        state.with_unlocked(|_| Ok(()))?;
-    }
     state.edits.stop(&edit_id, upload).await
 }
 

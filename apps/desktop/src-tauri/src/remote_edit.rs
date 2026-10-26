@@ -621,10 +621,11 @@ impl Worker {
         }
     }
 
-    /// Whether the copy's content differs from the server's; `None` when it cannot be read.
+    /// Whether the copy's content differs from the server's, as it does while the server holds a
+    /// partly written file; `None` when the copy cannot be read.
     async fn changed(&self) -> Option<bool> {
         let content = tokio::fs::read(&self.edit.copy).await.ok()?;
-        Some(digest(&content) != self.synced)
+        Some(self.partial || digest(&content) != self.synced)
     }
 
     /// The tab's SFTP client and session, while the tab is connected.
