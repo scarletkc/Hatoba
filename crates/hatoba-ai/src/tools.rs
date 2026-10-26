@@ -1214,6 +1214,10 @@ const ATTACHMENTS: &str = "<attachments>\n\
      - <terminal_state host=\"…\" alternate_screen=\"…\" lines=\"…\">: the attached terminal's \
      screen when the user sent this message: its last lines, or the whole screen while a \
      full-screen program such as vim or less runs (alternate_screen=\"true\").\n\
+     - <mcp_change available=\"…\" unavailable=\"…\">: with this message the MCP servers whose \
+     tools you can call changed, as its Now available and No longer available lists say. Replies \
+     before it had the tools offered then, so what they said they could or could not do was true \
+     at the time.\n\
      Then come the blocks the user attached:\n\
      - <terminal_selection host=\"…\" lines=\"…\">: text selected in the terminal. \
      truncated=\"true\" means its middle was left out.\n\
@@ -2102,6 +2106,7 @@ mod tests {
             "<model_change from=",
             "<file_revert path=",
             "<terminal_state host=",
+            "<mcp_change available=",
             "<memory entries=",
             "<file name=",
             // A revert does not undo a reload (AI-41), so changes are tested before one.
@@ -2754,6 +2759,7 @@ A user message can start with blocks before the text the user typed. First come 
 - <memory entries="…" conversation_host="…">: your memories as they were when the note was added, each in an <entry name="…" scope="…" updated="…"> block. The entry's scope says whose memory it is: scope="global" shows in every conversation, scope="host" host="…" only on that host or computer. conversation_host is the host the conversation was on. updated is the day the memory was last saved. While memory is on and you have memories, a conversation's first message has one, so does the message that continues a compacted conversation, and so does a message on a host whose memories no note showed yet, with just those.
 - <file_revert path="…" tool_call_id="…">: the user reverted the change that your call tool_call_id made to the file at path, one block for each reverted call. The file holds what it held before the call again, or was deleted if the call created it. Nothing else was undone: commands run since stay, and a service that loaded the change keeps it until it reloads. Read the file again before you change it.
 - <terminal_state host="…" alternate_screen="…" lines="…">: the attached terminal's screen when the user sent this message: its last lines, or the whole screen while a full-screen program such as vim or less runs (alternate_screen="true").
+- <mcp_change available="…" unavailable="…">: with this message the MCP servers whose tools you can call changed, as its Now available and No longer available lists say. Replies before it had the tools offered then, so what they said they could or could not do was true at the time.
 Then come the blocks the user attached:
 - <terminal_selection host="…" lines="…">: text selected in the terminal. truncated="true" means its middle was left out.
 - <connection_diagnostics host="…">: the report of a connection that failed.
