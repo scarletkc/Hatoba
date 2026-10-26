@@ -138,7 +138,7 @@ export function createDashboardMock(ctx: {
 
   return {
     dashboard_watch: async (hostIds, intervalSecs, onEvent) => {
-      if (!ctx.unlocked()) throw { code: "locked", detail: "vault is locked" };
+      if (!ctx.unlocked()) throw appError("locked", "vault is locked");
       const interval = Math.min(60, Math.max(1, intervalSecs));
       const restart = current !== null && current.interval !== interval;
       const wanted = new Set(hostIds);
