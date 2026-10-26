@@ -302,7 +302,13 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
           )}
         </div>
         {info.sftpOpen && connected && tab.sessionId && !local && (
-          <SftpPanel key={tab.sessionId} sessionId={tab.sessionId} hostName={host?.name ?? tab.title} active={active} />
+          <SftpPanel
+            key={tab.sessionId}
+            tabId={tab.id}
+            sessionId={tab.sessionId}
+            hostName={host?.name ?? tab.title}
+            active={active}
+          />
         )}
       </div>
       {forwardsMenu.anchor && tab.hostId && connected && (

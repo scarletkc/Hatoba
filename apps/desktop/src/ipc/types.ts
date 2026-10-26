@@ -48,6 +48,8 @@ export type ErrorCode =
   | "ai"
   /** A downloaded update does not carry a valid signature from the release key (spec §11). */
   | "update_signature"
+  /** SFTP-05: no editor opened the copy of a remote file. */
+  | "editor"
   /** SEC-10: Touch ID can't be used now, e.g. while the lid is closed. */
   | "biometric_unavailable"
   /** SEC-07, SEC-10: the saved Windows Hello or Touch ID unlock no longer opens and was removed. */
@@ -621,6 +623,33 @@ export interface TransferProgressEvent {
   error: string | null;
 }
 
+/**
+ * SFTP-05: where an edited file's copy stands. `pending` waits for the save to settle or the tab to connect;
+ * `failed` without an error was cancelled; `conflict` means the file changed on the server.
+ */
+export type RemoteEditState = "saved" | "pending" | "uploading" | "failed" | "conflict";
+
+/** SFTP-05: a remote file being edited in a local editor. */
+export interface RemoteEditView {
+  edit_id: string;
+  /** The terminal tab it was opened from, whose connection it uploads over. */
+  tab_id: string;
+  /** The name it was opened as, which the copy keeps. */
+  name: string;
+  /** The file written back: the path opened, or a symlink's target. */
+  remote_path: string;
+  state: RemoteEditState;
+  error: string | null;
+  /** The vault locked before the last save uploaded: editing ended, and the copy waits to be uploaded or discarded. */
+  held: boolean;
+}
+
+/** `edit` is null once editing has ended and the copy is gone. */
+export interface RemoteEditEvent {
+  edit_id: string;
+  edit: RemoteEditView | null;
+}
+
 // ───────────────────────── Sync ─────────────────────────
 
 export type SyncKind = "none" | "worker" | "d1";
@@ -915,6 +944,8 @@ export interface LocalPrefs {
   close_action: CloseAction;
   /** LOCAL-02: the shell new local tabs run on this device, by id; the system default while null or when it is gone. */
   local_shell: string | null;
+  /** SFTP-05: the program that edits remote files on this device; the system's app for each kind of file while null. */
+  sftp_editor: string | null;
 }
 
 /** WIN-10: the close button asks, hides the window to the system tray, or quits. Without a tray it quits. */
@@ -1785,6 +1816,7 @@ export interface EventMap {
   "ssh://auth-prompt": AuthPrompt;
   "ssh://state": SessionStateEvent;
   "transfer://progress": TransferProgressEvent;
+  "sftp://edit": RemoteEditEvent;
   /** SSH-16: a host's connection opened or closed, or its forwards changed. */
   "ssh://connections": ConnectionsEvent;
   "ssh://forwards-lost": ForwardsLostEvent;

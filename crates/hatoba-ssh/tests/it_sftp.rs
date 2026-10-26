@@ -703,3 +703,45 @@ async fn concurrent_transfers_to_the_same_destination_do_not_collide() {
     assert_eq!(sha256_hex(&fs::read(&dst).unwrap()), got);
     assert_eq!(names_in(local.path()), ["a", "b", "dst.bin"]);
 }
+
+#[tokio::test]
+async fn edits_write_back_through_symlinks_and_keep_the_mode() {
+    let server = server!();
+    let (_s, sftp) = sftp_for(&server).await;
+    let area = server.area("edit_back");
+    let local = tempfile::tempdir().unwrap();
+
+    let script = area.join("run.sh");
+    fs::write(&script, "#!/bin/sh\necho old\n").unwrap();
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o750)).unwrap();
+    symlink(&script, area.join("link.sh")).unwrap();
+
+    // The link resolves to the script, whose size and mode the edit compares and keeps.
+    let target = sftp.resolve(s(&area.join("link.sh"))).await.unwrap();
+    assert_eq!(target, s(&fs::canonicalize(&script).unwrap()));
+    let before = sftp.stat(&target).await.unwrap().unwrap();
+    assert_eq!(before.size, 19);
+    assert_eq!(before.mode & 0o7777, 0o750);
+    assert!(!before.is_dir());
+    assert!(sftp.stat(s(&area)).await.unwrap().unwrap().is_dir());
+    assert_eq!(sftp.stat(s(&area.join("gone"))).await.unwrap(), None);
+
+    let copy = local.path().join("run.sh");
+    fs::write(&copy, "#!/bin/sh\necho new\n").unwrap();
+    sftp.upload_with_mode(
+        &copy,
+        &target,
+        Some(before.mode),
+        |_| {},
+        CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(fs::read_to_string(&script).unwrap(), "#!/bin/sh\necho new\n");
+    let mode = fs::metadata(&script).unwrap().permissions().mode();
+    assert_eq!(mode & 0o7777, 0o750);
+    let link = fs::symlink_metadata(area.join("link.sh")).unwrap();
+    assert!(link.file_type().is_symlink());
+    assert_eq!(names_in(&area), ["link.sh", "run.sh"]);
+}

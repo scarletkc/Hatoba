@@ -56,6 +56,8 @@ dirs = "6"
 bytes.workspace = true
 async-trait.workspace = true
 futures.workspace = true
+# SFTP-05: whether a copy of a remote file changed since it was last written back.
+sha2.workspace = true
 # The update check's status probe. Same features and TLS stack as hatoba-core's sync transport.
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "system-proxy"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
@@ -87,6 +89,7 @@ windows = { version = "0.62", features = [
   "Win32_Globalization",
   "Win32_System_Power",
   "Win32_System_SystemInformation",
+  "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
   "Security_Credentials",
   "Security_Credentials_UI",

@@ -59,6 +59,8 @@ pub enum ErrorCode {
     Ai,
     /// A downloaded update does not carry a valid signature from the release key (spec §11).
     UpdateSignature,
+    /// SFTP-05: no editor opened the copy of a remote file.
+    Editor,
     Cancelled,
     Io,
     Internal,

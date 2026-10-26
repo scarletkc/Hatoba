@@ -75,6 +75,7 @@ import type {
   ProxyInput,
   ProxyView,
   QuickTarget,
+  RemoteEditView,
   SearchProviderInput,
   SearchProviderView,
   SettingsPatch,
@@ -268,6 +269,18 @@ export interface HatobaApi {
   sftp_remove(session_id: string, path: string, is_dir: boolean): Promise<void>;
   sftp_mkdir(session_id: string, path: string): Promise<void>;
   transfer_cancel(transfer_id: string): Promise<void>;
+  /** SFTP-05: downloads `path` into a copy that uploads with every save and opens it in the editor (or opens the copy again). */
+  sftp_edit_open(tab_id: string, session_id: string, path: string): Promise<RemoteEditView>;
+  sftp_edit_reopen(edit_id: string): Promise<void>;
+  /** The session the tab is connected with, or null; saves that waited for it upload. */
+  sftp_edit_session(tab_id: string, session_id: string | null): Promise<void>;
+  /** Uploads now: a retry, or over the server's change when `overwrite`. */
+  sftp_edit_upload(edit_id: string, overwrite: boolean): Promise<void>;
+  /** Replaces the copy with the server's file. */
+  sftp_edit_discard(edit_id: string): Promise<void>;
+  /** Resolves to whether editing ended; with `upload`, a save that cannot upload yet keeps it going until it does. */
+  sftp_edit_stop(edit_id: string, upload: boolean): Promise<boolean>;
+  sftp_edit_list(): Promise<RemoteEditView[]>;
 
   // sync
   sync_status(): Promise<SyncStatus>;

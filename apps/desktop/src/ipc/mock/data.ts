@@ -393,6 +393,7 @@ export const PREFS: LocalPrefs = {
   dashboard_disk_alert: 90,
   close_action: "ask",
   local_shell: null,
+  sftp_editor: null,
 };
 
 /** The release that `?update=available` finds; its notes are shaped like the ones `release.mjs publish` writes. */

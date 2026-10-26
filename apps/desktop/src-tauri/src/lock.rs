@@ -99,6 +99,8 @@ pub async fn lock_vault(app: &AppHandle, reason: LockReason) {
     // HOST-15: what other programs run through the `hatoba` command stops, and its connections
     // close.
     state.cli.lock(app);
+    // SFTP-05: editing ends; copies whose last save did not upload wait for the unlock.
+    state.edits.lock();
     let disconnect = async {
         if disconnects_on_lock(&state) {
             // The sessions open now: one opened after an unlock in the meantime stays.

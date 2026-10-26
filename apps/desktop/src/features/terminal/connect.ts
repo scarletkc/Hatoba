@@ -5,6 +5,7 @@ import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
 import { hostConnected } from "@/features/hosts/connections";
 import { formatTarget, savedHostFor } from "@/features/hosts/quickConnect";
+import { endTabEdits } from "@/features/sftp/edits";
 import { t } from "@/i18n";
 import type { HostView, LocalShellView, QuickTarget } from "@/ipc/types";
 import { startSessionListeners } from "./listeners";
@@ -93,9 +94,13 @@ export async function reconnectSession(tabId: string): Promise<void> {
   await session.reconnect(async () => (host ? collectCredentials(host) : NONE));
 }
 
-/** Disconnect (if needed) and close a session tab. */
+/**
+ * Disconnect (if needed) and close a session tab. Editing its files ends first (SFTP-05), after asking about
+ * saves that did not upload; cancelling that keeps the tab.
+ */
 export async function closeSessionTab(tabId: string): Promise<void> {
   const session = getSession(tabId);
+  if (!(await endTabEdits(tabId, session?.status === "connected"))) return;
   useTabs.getState().closeTab(tabId);
   await session?.dispose();
 }

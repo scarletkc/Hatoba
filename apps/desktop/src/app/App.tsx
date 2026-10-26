@@ -14,6 +14,7 @@ import { KeysPage } from "@/features/keys/KeysPage";
 import { Onboarding } from "@/features/onboarding/Onboarding";
 import { SettingsWindow } from "@/features/settings/SettingsWindow";
 import { SyncPage } from "@/features/sync/SyncPage";
+import { EditDialogs } from "@/features/sftp/EditDialogs";
 import { SessionDialogs } from "@/features/terminal/SessionDialogs";
 import { TerminalView } from "@/features/terminal/TerminalView";
 import { closeSessionTab, openLocalTerminal } from "@/features/terminal/connect";
@@ -93,6 +94,7 @@ export function App() {
       {locked && <UnlockScreen />}
       {!locked && settingsOpen && <SettingsWindow onClose={() => useApp.getState().openSettings(false)} />}
       {!locked && <SessionDialogs />}
+      {!locked && <EditDialogs />}
       <EditFilesHost />
       <ConfirmHost />
       <ClosePrompt />

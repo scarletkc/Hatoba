@@ -1,4 +1,4 @@
-//! SFTP client (SFTP-01..04).
+//! SFTP client (SFTP-01..05).
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use russh_sftp::client::{Config as SftpConfig, SftpSession};
-use russh_sftp::protocol::OpenFlags;
+use russh_sftp::protocol::{OpenFlags, StatusCode};
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::time::Instant;
@@ -58,6 +58,25 @@ pub struct TransferProgress {
     pub total: u64,
     /// Smoothed transfer rate.
     pub bytes_per_sec: u64,
+}
+
+/// What an edit of a remote file compares before writing it back (SFTP-05): the size and
+/// modification time as the server reports them, and the mode to keep.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RemoteStat {
+    /// Size in bytes.
+    pub size: u64,
+    /// Modification time in Unix seconds, if the server reports it.
+    pub mtime: Option<u32>,
+    /// Raw `st_mode` (type and permission bits).
+    pub mode: u32,
+}
+
+impl RemoteStat {
+    /// The entry is a directory.
+    pub fn is_dir(&self) -> bool {
+        self.mode & S_IFMT == S_IFDIR
+    }
 }
 
 /// Direction of a transfer (for UI events built on [`TransferProgress`]).
@@ -122,6 +141,30 @@ impl SftpClient {
             .canonicalize(".")
             .await
             .map_err(|e| self.err("resolve", ".", e))
+    }
+
+    /// The size, modification time and mode of `path`, following symlinks; `None` when nothing is
+    /// there.
+    pub async fn stat(&self, path: &str) -> Result<Option<RemoteStat>, SshError> {
+        match self.sftp.metadata(path).await {
+            Ok(meta) => Ok(Some(RemoteStat {
+                size: meta.size.unwrap_or(0),
+                mtime: meta.mtime,
+                mode: meta.permissions.unwrap_or(0),
+            })),
+            Err(SftpError::Status(status)) if status.status_code == StatusCode::NoSuchFile => {
+                Ok(None)
+            }
+            Err(e) => Err(self.err("stat", path, e)),
+        }
+    }
+
+    /// The absolute path of `path` with every symlink resolved, as `realpath` gives it.
+    pub async fn resolve(&self, path: &str) -> Result<String, SshError> {
+        self.sftp
+            .canonicalize(path)
+            .await
+            .map_err(|e| self.err("resolve", path, e))
     }
 
     /// Whether `path` is a directory, or a symlink to one; `None` when it cannot be read, as when
@@ -383,6 +426,20 @@ impl SftpClient {
         progress: impl Fn(TransferProgress) + Send + Sync + 'static,
         cancel: CancellationToken,
     ) -> Result<(), SshError> {
+        self.upload_with_mode(local, remote, None, progress, cancel)
+            .await
+    }
+
+    /// [`upload`](Self::upload), with the permission bits of `mode` set on the new file before it
+    /// replaces the old one, so a file written back keeps its mode (SFTP-05).
+    pub async fn upload_with_mode(
+        &self,
+        local: &Path,
+        remote: &str,
+        mode: Option<u32>,
+        progress: impl Fn(TransferProgress) + Send + Sync + 'static,
+        cancel: CancellationToken,
+    ) -> Result<(), SshError> {
         let meta = tokio::fs::metadata(local)
             .await
             .map_err(|e| SshError::io_context(&format!("stat {}", local.display()), &e))?;
@@ -396,9 +453,20 @@ impl SftpClient {
             .await
             .map_err(|e| SshError::io_context(&format!("open {}", local.display()), &e))?;
         let (part, target) = self.create_remote_part(remote).await?;
-        let result = self
+        let mut result = self
             .upload_to(local, source, &part, target, meta.len(), &progress, &cancel)
             .await;
+        if let (Ok(()), Some(mode)) = (&result, mode) {
+            let attrs = russh_sftp::protocol::FileAttributes {
+                permissions: Some(mode & 0o7777),
+                ..Default::default()
+            };
+            result = self
+                .sftp
+                .set_metadata(part.as_str(), attrs)
+                .await
+                .map_err(|e| self.err("set permissions of", remote, e));
+        }
         match result {
             Ok(()) => self.replace(&part, remote).await,
             Err(e) => {

@@ -18,6 +18,7 @@ use crate::local::LocalManager;
 use crate::lock::LockPolicy;
 use crate::mcp::McpManager;
 use crate::platform::secrets::KeyringStore;
+use crate::remote_edit::RemoteEdits;
 use crate::ssh::SshManager;
 use crate::sync::SyncController;
 use crate::update::Updates;
@@ -47,6 +48,8 @@ pub struct AppState {
     pub cli: CliAccess,
     /// The update the last check found (spec §11).
     pub updates: Updates,
+    /// Remote files edited in a local editor (SFTP-05).
+    pub edits: RemoteEdits,
     pub mica: bool,
     pub lock_policy: LockPolicy,
     last_activity: Mutex<Instant>,
@@ -72,6 +75,7 @@ impl AppState {
             dropped: DroppedPaths::default(),
             cli: CliAccess::default(),
             updates: Updates::default(),
+            edits: RemoteEdits::default(),
             mica,
             lock_policy: LockPolicy::default(),
             last_activity: Mutex::new(Instant::now()),

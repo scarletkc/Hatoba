@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { PopupSelect, Segmented, Stepper, Switch, TextField, isImeEvent } from "@hatoba/ui";
 import { useApp } from "@/app/store";
+import { pickProgram, programName } from "@/features/sftp/native";
 import { loadLocalShells, shellName } from "@/features/terminal/localShells";
 import { FONT_SIZE_MAX, FONT_SIZE_MIN, resolveScheme, terminalTheme, useTermSettings } from "@/features/terminal/theme";
 import { useT } from "@/i18n";
@@ -15,7 +16,8 @@ const SCROLLBACK = [1000, 5000, 10000, 50000];
 
 /**
  * Settings → Terminal (TERM-05 / TERM-06): font, cursor and colour schemes with a preview of them, the
- * mouse and paste behaviour (WIN-05), scrollback, and the local tabs' shell (LOCAL-02).
+ * mouse and paste behaviour (WIN-05), scrollback, the local tabs' shell (LOCAL-02), and the editor of
+ * remote files (SFTP-05).
  */
 export function TerminalPane({ settings, updateTerminal }: PaneProps) {
   const t = useT();
@@ -201,7 +203,42 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
           />
         )}
       </Section>
+
+      <Section title={t("settings.section.sftp")}>
+        <EditorRow value={prefs.sftp_editor} onChange={(sftp_editor) => setPrefs({ sftp_editor })} />
+      </Section>
     </Pane>
+  );
+}
+
+const CHOOSE = "\u0000choose";
+
+/**
+ * SFTP-05: the program that edits remote files on this device, or the app the system opens each kind of
+ * file with. The last option picks a program with the file dialog.
+ */
+function EditorRow({ value, onChange }: { value: string | null; onChange(path: string | null): void }) {
+  const t = useT();
+  const platform = useApp((a) => a.info.platform);
+  const options = [
+    { value: "", label: t("settings.sftpEditor.system") },
+    ...(value ? [{ value, label: programName(value) }] : []),
+    { value: CHOOSE, label: t("settings.sftpEditor.choose") },
+  ];
+  const choose = async () => {
+    const picked = await pickProgram(platform);
+    if (picked) onChange(picked);
+  };
+  return (
+    <SettingRow label={t("settings.sftpEditor")}>
+      <PopupSelect
+        ariaLabel={t("settings.sftpEditor")}
+        value={value ?? ""}
+        minWidth={200}
+        options={options}
+        onChange={(next) => (next === CHOOSE ? void choose() : onChange(next === "" ? null : next))}
+      />
+    </SettingRow>
   );
 }
 

@@ -140,6 +140,7 @@ export default defineMessages({
     "err.ai": "AI 请求失败：{detail}",
     "err.ai_status": "服务商返回了 HTTP {status}：{detail}",
     "err.update_signature": "下载的更新没有 Hatoba 的有效签名，已拒绝安装。",
+    "err.editor": "无法在编辑器中打开这个文件。",
 
     "ssh.err.dns": "找不到主机 {host}，请检查地址拼写或 DNS。",
     "ssh.err.refused": "{host}:{port} 拒绝了连接，SSH 服务可能没有运行，或端口不对。",
@@ -319,6 +320,7 @@ export default defineMessages({
     "err.ai": "The AI request failed: {detail}",
     "err.ai_status": "The provider returned HTTP {status}: {detail}",
     "err.update_signature": "The downloaded update isn’t signed by Hatoba, so it wasn’t installed.",
+    "err.editor": "Couldn’t open the file in an editor.",
 
     "ssh.err.dns": "Can’t find the host {host}. Check the address or DNS.",
     "ssh.err.refused":
@@ -502,6 +504,7 @@ export default defineMessages({
     "err.ai_status": "プロバイダーが HTTP {status} を返しました: {detail}",
     "err.update_signature":
       "ダウンロードしたアップデートに Hatoba の有効な署名がないため、インストールしませんでした。",
+    "err.editor": "ファイルをエディターで開けませんでした。",
 
     "ssh.err.dns": "ホスト {host} が見つかりません。アドレスまたは DNS を確認してください。",
     "ssh.err.refused":
@@ -674,6 +677,7 @@ export default defineMessages({
     "err.ai": "AI 請求失敗：{detail}",
     "err.ai_status": "供應商傳回了 HTTP {status}：{detail}",
     "err.update_signature": "下載的更新沒有 Hatoba 的有效簽章，已拒絕安裝。",
+    "err.editor": "無法在編輯器中開啟這個檔案。",
 
     "ssh.err.dns": "找不到主機 {host}，請檢查位址拼字或 DNS。",
     "ssh.err.refused": "{host}:{port} 拒絕了連線，SSH 服務可能沒有執行，或連接埠不對。",

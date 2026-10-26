@@ -591,6 +591,46 @@ pub struct TransferProgressEvent {
     pub error: Option<String>,
 }
 
+/// SFTP-05: where the copy of a file edited in a local editor stands.
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteEditState {
+    /// The server has the copy's content.
+    Saved,
+    /// A save waits to upload: until the file settles, or until the tab connects again.
+    Pending,
+    Uploading,
+    /// The last upload failed (`error`), or was cancelled (no `error`).
+    Failed,
+    /// The file changed on the server since it was downloaded or uploaded.
+    Conflict,
+}
+
+/// SFTP-05: a remote file being edited in a local editor.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct RemoteEditView {
+    pub edit_id: String,
+    /// The terminal tab it was opened from, whose connection it uploads over.
+    pub tab_id: String,
+    /// The name it was opened as, which the copy keeps.
+    pub name: String,
+    /// The file written back: the path opened, or a symlink's target.
+    pub remote_path: String,
+    pub state: RemoteEditState,
+    pub error: Option<String>,
+    /// The vault locked before the last save uploaded: editing ended, and the copy waits until
+    /// the user uploads or discards it.
+    pub held: bool,
+}
+
+/// `edit` is `None` once editing has ended and the copy is gone.
+#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "sftp://edit")]
+pub struct RemoteEditEvent {
+    pub edit_id: String,
+    pub edit: Option<RemoteEditView>,
+}
+
 // ───────────────────────── Sync ─────────────────────────
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
@@ -1070,6 +1110,9 @@ pub struct LocalPrefs {
     /// LOCAL-02: the shell new local tabs run on this device, by its id; the system default
     /// while `None` or when the shell is gone.
     pub local_shell: Option<String>,
+    /// SFTP-05: the program that edits remote files on this device; the app the system opens each
+    /// kind of file with while `None`.
+    pub sftp_editor: Option<String>,
 }
 
 impl Default for LocalPrefs {
@@ -1100,6 +1143,7 @@ impl Default for LocalPrefs {
             dashboard_disk_alert: 90,
             close_action: CloseAction::Ask,
             local_shell: None,
+            sftp_editor: None,
         }
     }
 }

@@ -19,6 +19,7 @@ mod logging;
 mod mcp;
 mod notification;
 mod platform;
+mod remote_edit;
 mod ssh;
 mod ssh_agent;
 mod state;
@@ -145,6 +146,13 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             sftp::sftp_remove,
             sftp::sftp_mkdir,
             sftp::transfer_cancel,
+            sftp::sftp_edit_open,
+            sftp::sftp_edit_reopen,
+            sftp::sftp_edit_session,
+            sftp::sftp_edit_upload,
+            sftp::sftp_edit_discard,
+            sftp::sftp_edit_stop,
+            sftp::sftp_edit_list,
             sync_cmd::sync_status,
             sync_cmd::sync_test,
             sync_cmd::sync_configure,
@@ -258,6 +266,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             dto::AuthPrompt,
             dto::SessionStateEvent,
             dto::TransferProgressEvent,
+            dto::RemoteEditEvent,
             dto::ConnectionsEvent,
             dto::ForwardsLostEvent,
             dto::McpServerStatus,
@@ -314,6 +323,8 @@ pub fn run() {
             let vault = hatoba_core::vault::Vault::open(&data_dir.join("vault.db"))?;
             let (window, mica) = platform::window::create_main_window(&handle)?;
             app.manage(state::AppState::new(vault, mica));
+            // SFTP-05: copies of edited files that a crash left behind go.
+            app.state::<state::AppState>().edits.init(&data_dir);
             // TERM-13: the page opens at this device's zoom, before the window shows.
             let prefs = app.state::<state::AppState>().vault().local_prefs();
             let zoom = prefs
@@ -403,6 +414,8 @@ pub fn run() {
                     for (_, live) in state.local.take_all() {
                         live.close();
                     }
+                    // SFTP-05: and editing ends, deleting the copies.
+                    state.edits.shutdown();
                 }
             }
             // macOS: a Dock click shows the window again. Every click counts, including one while

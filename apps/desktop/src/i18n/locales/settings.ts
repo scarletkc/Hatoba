@@ -98,6 +98,10 @@ export default defineMessages({
     "settings.term.lines": "{n} 行",
     "settings.term.localShell": "本地终端的 shell",
     "settings.term.localShellDefault": "系统默认（{name}）",
+    "settings.section.sftp": "SFTP",
+    "settings.sftpEditor": "编辑器",
+    "settings.sftpEditor.system": "系统默认",
+    "settings.sftpEditor.choose": "选择程序…",
 
     "settings.sec.autoLock": "自动锁定",
     "settings.sec.seconds": "{n} 秒",
@@ -314,6 +318,10 @@ export default defineMessages({
     "settings.term.lines": "{n} lines",
     "settings.term.localShell": "Local Terminal Shell",
     "settings.term.localShellDefault": "System Default ({name})",
+    "settings.section.sftp": "SFTP",
+    "settings.sftpEditor": "Editor",
+    "settings.sftpEditor.system": "System Default",
+    "settings.sftpEditor.choose": "Choose a Program…",
 
     "settings.sec.autoLock": "Auto-Lock",
     "settings.sec.seconds": "{n} seconds",
@@ -537,6 +545,10 @@ export default defineMessages({
     "settings.term.lines": "{n} 行",
     "settings.term.localShell": "ローカル ターミナルのシェル",
     "settings.term.localShellDefault": "システムの既定（{name}）",
+    "settings.section.sftp": "SFTP",
+    "settings.sftpEditor": "エディター",
+    "settings.sftpEditor.system": "システムの既定",
+    "settings.sftpEditor.choose": "プログラムを選択…",
 
     "settings.sec.autoLock": "自動ロック",
     "settings.sec.seconds": "{n} 秒",
@@ -756,6 +768,10 @@ export default defineMessages({
     "settings.term.lines": "{n} 行",
     "settings.term.localShell": "本機終端機的 shell",
     "settings.term.localShellDefault": "系統預設（{name}）",
+    "settings.section.sftp": "SFTP",
+    "settings.sftpEditor": "編輯器",
+    "settings.sftpEditor.system": "系統預設",
+    "settings.sftpEditor.choose": "選擇程式…",
 
     "settings.sec.autoLock": "自動鎖定",
     "settings.sec.seconds": "{n} 秒",

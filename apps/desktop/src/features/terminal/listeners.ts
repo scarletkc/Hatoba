@@ -1,3 +1,4 @@
+import { useEdits } from "@/features/sftp/edits";
 import { useTransfers } from "@/features/sftp/transfers";
 import { api } from "@/ipc/api";
 import { pushAuthPrompt, pushHostKeyPrompt } from "./prompts";
@@ -17,5 +18,11 @@ export function startSessionListeners() {
   void api.listen("ssh://hostkey-prompt", pushHostKeyPrompt);
   void api.listen("ssh://auth-prompt", pushAuthPrompt);
   void api.listen("transfer://progress", (ev) => useTransfers.getState().handle(ev));
+  // SFTP-05: listening first, so no change between the two is lost.
+  void api
+    .listen("sftp://edit", (ev) => useEdits.getState().handle(ev))
+    .then(() => api.sftp_edit_list())
+    .then((list) => useEdits.getState().load(list))
+    .catch(() => {});
   watchTerminalAppearance();
 }

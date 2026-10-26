@@ -243,6 +243,29 @@ export const commands = {
 	sftpRemove: (sessionId: string, path: string, isDir: boolean) => __TAURI_INVOKE<null>("sftp_remove", { sessionId, path, isDir }),
 	sftpMkdir: (sessionId: string, path: string) => __TAURI_INVOKE<null>("sftp_mkdir", { sessionId, path }),
 	transferCancel: (transferId: string) => __TAURI_INVOKE<void>("transfer_cancel", { transferId }),
+	/**
+	 *  SFTP-05: opens `path` in the editor set in Settings, downloading it into a copy that uploads
+	 *  with every save, over the tab's connection.
+	 */
+	sftpEditOpen: (tabId: string, sessionId: string, path: string) => __TAURI_INVOKE<RemoteEditView>("sftp_edit_open", { tabId, sessionId, path }),
+	/**  SFTP-05: opens an edited file's copy in the editor again. */
+	sftpEditReopen: (editId: string) => __TAURI_INVOKE<null>("sftp_edit_reopen", { editId }),
+	/**  SFTP-05: the session the tab is connected with, or `None`; saves that waited for it upload. */
+	sftpEditSession: (tabId: string, sessionId: string | null) => __TAURI_INVOKE<void>("sftp_edit_session", { tabId, sessionId }),
+	/**
+	 *  SFTP-05: uploads an edited file now, as a retry, or over a change made on the server when
+	 *  `overwrite`.
+	 */
+	sftpEditUpload: (editId: string, overwrite: boolean) => __TAURI_INVOKE<null>("sftp_edit_upload", { editId, overwrite }),
+	/**  SFTP-05: replaces an edited file's copy with the server's file. */
+	sftpEditDiscard: (editId: string) => __TAURI_INVOKE<null>("sftp_edit_discard", { editId }),
+	/**
+	 *  SFTP-05: stops editing a file, uploading its last save first if `upload`. Returns whether
+	 *  editing ended; a save that cannot upload yet keeps it going until it does.
+	 */
+	sftpEditStop: (editId: string, upload: boolean) => __TAURI_INVOKE<boolean>("sftp_edit_stop", { editId, upload }),
+	/**  SFTP-05: the files being edited. */
+	sftpEditList: () => __TAURI_INVOKE<RemoteEditView[]>("sftp_edit_list"),
 	syncStatus: () => __TAURI_INVOKE<SyncStatus>("sync_status"),
 	/**  Wizard "Test connection": Worker `/v1/health`, or (D1 mode) token check + database list. */
 	syncTest: (config: SyncConfigInput) => __TAURI_INVOKE<SyncTestResult>("sync_test", { config }),
@@ -583,6 +606,7 @@ export const events = {
 	appLaunch: makeEvent<LaunchEvent>("app://launch"),
 	appNotificationClick: makeEvent<NotificationTarget>("app://notification-click"),
 	cliActivity: makeEvent<CliActivityEvent>("cli://activity"),
+	sftpEdit: makeEvent<RemoteEditEvent>("sftp://edit"),
 	sshAuthPrompt: makeEvent<AuthPrompt>("ssh://auth-prompt"),
 	sshConnections: makeEvent<ConnectionsEvent>("ssh://connections"),
 	sshForwardsLost: makeEvent<ForwardsLostEvent>("ssh://forwards-lost"),
@@ -1637,7 +1661,9 @@ export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "
  */
 "ai" | 
 /**  A downloaded update does not carry a valid signature from the release key (spec §11). */
-"update_signature" | "cancelled" | "io" | "internal";
+"update_signature" | 
+/**  SFTP-05: no editor opened the copy of a remote file. */
+"editor" | "cancelled" | "io" | "internal";
 
 /**
  *  A forward that failed to start on its host's connection, until it starts or stops: a port in
@@ -2002,6 +2028,11 @@ export type LocalPrefs = {
 	 *  while `None` or when the shell is gone.
 	 */
 	local_shell: string | null,
+	/**
+	 *  SFTP-05: the program that edits remote files on this device; the app the system opens each
+	 *  kind of file with while `None`.
+	 */
+	sftp_editor: string | null,
 };
 
 /**  What kind of shell a local tab runs (§7.5). */
@@ -2259,6 +2290,41 @@ export type QuickTarget = {
 	address: string,
 	port: number,
 	username: string,
+};
+
+/**  `edit` is `None` once editing has ended and the copy is gone. */
+export type RemoteEditEvent = {
+	edit_id: string,
+	edit: RemoteEditView | null,
+};
+
+/**  SFTP-05: where the copy of a file edited in a local editor stands. */
+export type RemoteEditState = 
+/**  The server has the copy's content. */
+"saved" | 
+/**  A save waits to upload: until the file settles, or until the tab connects again. */
+"pending" | "uploading" | 
+/**  The last upload failed (`error`), or was cancelled (no `error`). */
+"failed" | 
+/**  The file changed on the server since it was downloaded or uploaded. */
+"conflict";
+
+/**  SFTP-05: a remote file being edited in a local editor. */
+export type RemoteEditView = {
+	edit_id: string,
+	/**  The terminal tab it was opened from, whose connection it uploads over. */
+	tab_id: string,
+	/**  The name it was opened as, which the copy keeps. */
+	name: string,
+	/**  The file written back: the path opened, or a symlink's target. */
+	remote_path: string,
+	state: RemoteEditState,
+	error: string | null,
+	/**
+	 *  The vault locked before the last save uploaded: editing ended, and the copy waits until
+	 *  the user uploads or discards it.
+	 */
+	held: boolean,
 };
 
 export type RightClick = "copy_paste" | "menu";

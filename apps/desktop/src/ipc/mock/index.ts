@@ -29,6 +29,7 @@ import { createAiExtensionsMock } from "./aiExtensions";
 import { createAiMemoryMock } from "./aiMemory";
 import { createAiSettingsMock } from "./aiSettings";
 import { createDashboardMock } from "./dashboard";
+import { createEditsMock } from "./edits";
 import * as D from "./data";
 import { mockStats } from "./data";
 import { applyPatch } from "./patch";
@@ -64,6 +65,7 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  *   ?ssh=timeout | refused | dns | unreachable | auth_failed | disconnected | proxy_unreachable | proxy_auth | proxy
  *   ?launch=<command line>                  ?cli=offpath
  *   ?close=prompt                           ?hello=off   ?pin=on | persist
+ *   ?edit=conflict | fail | held            (SFTP-05, see `createEditsMock`)
  *   ?biometric=unavailable | stale | cancelled   (how Windows Hello or Touch ID fails)
  *   ?lang=en | zh-CN | zh-TW | ja
  * Quick connect (HOST-12) asks to trust a new host key once per address, then for the password
@@ -271,6 +273,7 @@ export function createMockApi(): HatobaApi {
     null;
   const listeners = new Map<string, Set<(p: unknown) => void>>();
   const shells = new Map<string, FakeShell>();
+  const { lock: lockEdits, ...edits } = createEditsMock(emit, startTransfer, q.get("edit"));
   const dashboard = createDashboardMock({
     host: (hid) => hosts.find((h) => h.id === hid),
     unlocked: () => vaultState === "unlocked",
@@ -544,6 +547,7 @@ export function createMockApi(): HatobaApi {
     vault_lock: async () => {
       vaultState = "locked";
       dashboard.stopAll();
+      lockEdits();
     },
     vault_verify_password: async (password) => password.length >= 4,
     vault_change_password: async (current) => {
@@ -1221,6 +1225,7 @@ export function createMockApi(): HatobaApi {
     transfer_cancel: async (tid) => {
       transfers.get(tid)?.();
     },
+    ...edits,
 
     sync_status: async () => sync,
     sync_test: async (config) => {

@@ -131,6 +131,13 @@ export function createTauriApi(): HatobaApi {
     sftp_remove: (sessionId, path, isDir) => done(commands.sftpRemove(sessionId, path, isDir)),
     sftp_mkdir: (sessionId, path) => done(commands.sftpMkdir(sessionId, path)),
     transfer_cancel: (transferId) => commands.transferCancel(transferId),
+    sftp_edit_open: (tabId, sessionId, path) => commands.sftpEditOpen(tabId, sessionId, path),
+    sftp_edit_reopen: (editId) => done(commands.sftpEditReopen(editId)),
+    sftp_edit_session: (tabId, sessionId) => commands.sftpEditSession(tabId, sessionId),
+    sftp_edit_upload: (editId, overwrite) => done(commands.sftpEditUpload(editId, overwrite)),
+    sftp_edit_discard: (editId) => done(commands.sftpEditDiscard(editId)),
+    sftp_edit_stop: (editId, upload) => commands.sftpEditStop(editId, upload),
+    sftp_edit_list: () => commands.sftpEditList(),
 
     sync_status: () => commands.syncStatus(),
     sync_test: (config) => commands.syncTest(config),

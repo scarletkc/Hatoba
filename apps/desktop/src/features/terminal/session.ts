@@ -10,6 +10,7 @@ import { isAppShortcut } from "@/app/shortcuts";
 import { useApp } from "@/app/store";
 import { useTabs, type LocalShell, type TabSource, type TabStatus } from "@/app/tabs";
 import { useRecentTargets } from "@/features/hosts/recent";
+import { editSessionChanged } from "@/features/sftp/edits";
 import { useTransfers } from "@/features/sftp/transfers";
 import { t } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
@@ -403,6 +404,8 @@ export class LiveSession {
     bySession.set(sid, this);
     this.setStatus("connected");
     if (!this.local) {
+      // SFTP-05: saves of the tab's edited files that waited for the connection upload.
+      editSessionChanged(this.tabId, sid);
       // A saved host's last connected time and server OS; a quick connection's recent targets.
       if (this.target) void useRecentTargets.getState().load();
       else

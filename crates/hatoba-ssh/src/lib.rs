@@ -55,4 +55,4 @@ pub use session::{
     AuthMethod, ConnectConfig, ExecOutput, JumpHop, MountStats, ServerStats, ShellEvent,
     ShellHandle, ShellOptions, SshSession, StatsEvent, StatsHandle, connect,
 };
-pub use sftp::{FileEntry, SftpClient, TransferDirection, TransferProgress};
+pub use sftp::{FileEntry, RemoteStat, SftpClient, TransferDirection, TransferProgress};

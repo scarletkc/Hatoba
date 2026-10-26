@@ -19,6 +19,8 @@ import { formatBytes, formatDate, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AppError, FileEntry } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { EditList } from "./EditList";
+import { editFile } from "./edits";
 import { pickSavePath, pickUploadFiles } from "./native";
 import { joinPath, parentPath, splitLastSegment } from "./paths";
 import { TransferList } from "./TransferList";
@@ -64,14 +66,16 @@ function fileIcon(e: FileEntry): { name: string; fill: boolean; color: string } 
 }
 
 interface Props {
+  /** The terminal tab, whose edited files (SFTP-05) outlive a reconnect. */
+  tabId: string;
   sessionId: string;
   hostName: string;
   /** Only the visible tab's panel reacts to native file drops. */
   active: boolean;
 }
 
-/** Remote file browser to the right of a terminal (SFTP-01..04). */
-export function SftpPanel({ sessionId, hostName, active }: Props) {
+/** Remote file browser to the right of a terminal (SFTP-01..05). */
+export function SftpPanel({ tabId, sessionId, hostName, active }: Props) {
   const t = useT();
   const rootRef = useRef<HTMLDivElement>(null);
   const requestSeq = useRef(0);
@@ -229,6 +233,15 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
         entry.is_dir
           ? { label: t("sftp.menu.open"), icon: "folder-open", onSelect: () => open(entry) }
           : { label: t("sftp.menu.download"), icon: "download-simple", onSelect: () => void download(entry) },
+        ...(entry.is_dir
+          ? []
+          : [
+              {
+                label: t("sftp.menu.edit"),
+                icon: "note-pencil",
+                onSelect: () => void editFile(tabId, sessionId, entry.path, entry.name),
+              },
+            ]),
         { label: t("sftp.menu.rename"), icon: "pencil-simple", onSelect: () => setRenaming(entry.path) },
         { label: t("sftp.menu.delete"), icon: "trash", danger: true, onSelect: () => void remove(entry) },
         { kind: "separator" },
@@ -388,6 +401,7 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
         {!loading && !error && entries.length === 0 && !creating && <div className={s.message}>{t("sftp.empty")}</div>}
       </div>
 
+      <EditList tabId={tabId} />
       <TransferList sessionId={sessionId} />
 
       {dragging && (
