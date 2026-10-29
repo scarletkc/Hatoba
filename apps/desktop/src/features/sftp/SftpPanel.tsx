@@ -80,6 +80,8 @@ export function SftpPanel({ tabId, sessionId, hostName, active }: Props) {
   const t = useT();
   const rootRef = useRef<HTMLDivElement>(null);
   const requestSeq = useRef(0);
+  /** The folder of the latest load, which the unlock retries when the lock refused it. */
+  const requested = useRef<string | null>(null);
   const [cwd, setCwd] = useState<string | null>(null);
   const cwdRef = useRef<string | null>(null);
   const [entries, setEntries] = useState<FileEntry[]>([]);
@@ -95,6 +97,7 @@ export function SftpPanel({ tabId, sessionId, hostName, active }: Props) {
   const load = useCallback(
     async (path: string | null) => {
       const seq = ++requestSeq.current;
+      requested.current = path;
       setLoading(true);
       setError(null);
       try {
@@ -137,8 +140,8 @@ export function SftpPanel({ tabId, sessionId, hostName, active }: Props) {
   // after the unlock.
   const unlocked = useApp((st) => st.phase === "unlocked");
   useEffect(() => {
-    if (unlocked && error?.code === "locked") refresh();
-  }, [unlocked, error, refresh]);
+    if (unlocked && error?.code === "locked") void load(requested.current);
+  }, [unlocked, error, load]);
 
   const fail = (e: unknown) => toast(errorMessage(t, e), "error");
 
