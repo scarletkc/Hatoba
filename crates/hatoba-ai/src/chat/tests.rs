@@ -1156,6 +1156,20 @@ fn retry_conditions() {
     )));
     assert!(!rejects_replayed_raw(&http(401, "signature")));
     assert!(!rejects_replayed_raw(&http(400, "max_tokens too large")));
+
+    // About the replayed blocks alone, or also about the display, its header or the level.
+    assert!(rejects_only_replayed_raw(&http(
+        400,
+        "messages.1.content.0: Invalid `signature` in `thinking` block"
+    )));
+    for message in [
+        "thinking.display: Input should be 'summarized' or 'omitted'",
+        "Unexpected value(s) `thinking-display-updates-2026-08-18` for the `anthropic-beta` header",
+        "thinking.type: Input tag 'adaptive' found using 'type' does not match any of the expected tags",
+    ] {
+        assert!(rejects_replayed_raw(&http(400, message)), "{message}");
+        assert!(!rejects_only_replayed_raw(&http(400, message)), "{message}");
+    }
 }
 
 fn assistant_with(calls: &[(&str, &str)], text: &str) -> AiEntry {
@@ -3187,6 +3201,51 @@ async fn an_unrelated_refusal_keeps_progress_updates() {
     let requests = server.received_requests().await.unwrap();
     assert_eq!(requests.len(), 4);
     assert!(requests[2].headers.get("anthropic-beta").is_some());
+}
+
+#[tokio::test]
+async fn replayed_thinking_that_no_longer_binds_keeps_progress_updates() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(body_string_contains(r#""type":"thinking""#))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "type": "error",
+            "error": {"type": "invalid_request_error",
+                      "message": "messages.1.content.0: Invalid `signature` in `thinking` block"}
+        })))
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .respond_with(sse(ANTHROPIC_PROGRESS))
+        .mount(&server)
+        .await;
+    let p = provider(&server, Protocol::Anthropic);
+    let model = ModelSpec::new("claude-opus-5-5@rebinds");
+    let earlier = AssistantEntry {
+        model_id: model.id.clone(),
+        ..thinking_entry()
+    };
+    let entries = vec![
+        AiEntry::user(1, "Is the disk full?"),
+        AiEntry::assistant(2, earlier),
+        AiEntry::tool(3, "toolu_01AbCdEf", ToolStatus::Ok, "42%"),
+    ];
+    let tools = terminal_tools();
+    let req = request(&model, &entries, &tools);
+    let (result, _) = run(&p, &req).await;
+    let entry = result.unwrap();
+    // The retry rebuilds the entries and still asks for progress updates, so no reasoning shows.
+    assert_eq!(entry.reasoning, None);
+    let requests = server.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 2);
+    assert!(sent_beta(&server, 1).await);
+    let sent = bodies(&server).await;
+    assert_eq!(
+        sent[1]["thinking"],
+        json!({"type": "adaptive", "display": "updates"})
+    );
+    assert!(!sent[1].to_string().contains(r#""type":"thinking""#));
 }
 
 /// Whether request `i` of `server` carried the progress-updates beta header.
