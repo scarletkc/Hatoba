@@ -106,6 +106,21 @@ fn own_commands(exe: &str) -> String {
     )
 }
 
+/// The `hatoba` that Git Bash and WSL run, which runs `exe` from the same folder. Git Bash turns
+/// each argument that starts with `/` into a Windows path when it starts a Windows program. The
+/// command's own commands (HOST-15) turn that off, so remote paths and commands reach the host as
+/// typed, and `hatoba cp` finds the Windows path of a local one itself. Other command lines keep
+/// it: the app they may start would pass the variables on to every local terminal it opens. From
+/// WSL, the variables stay on the Linux side.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn git_bash_launcher(exe: &str) -> String {
+    format!(
+        "#!/bin/sh\n# {COMMENT}\ncase \"$1\" in\n  {}) export MSYS_NO_PATHCONV=1 \
+         MSYS2_ARG_CONV_EXCL='*' ;;\nesac\nexec \"$(dirname \"$0\")/{exe}\" \"$@\"\n",
+        hatoba_cli::COMMANDS.join("|")
+    )
+}
+
 #[cfg(windows)]
 mod imp {
     use std::path::{Path, PathBuf};
@@ -113,7 +128,7 @@ mod imp {
     use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_EXPAND_SZ, REG_SZ};
     use winreg::{RegKey, RegValue};
 
-    use super::{COMMENT, path_with, path_without, write_if_changed};
+    use super::{git_bash_launcher, path_with, path_without, write_if_changed};
     use crate::error::{AppError, AppResult, ErrorCode};
 
     /// The console program installed beside the executable, and its copy in `bin`.
@@ -144,10 +159,7 @@ mod imp {
         }
         std::fs::create_dir_all(&bin)?;
         replace_if_changed(&console, &bin.join(COMMAND))?;
-        write_if_changed(
-            &bin.join("hatoba"),
-            &format!("#!/bin/sh\n# {COMMENT}\nexec \"$(dirname \"$0\")/{COMMAND}\" \"$@\"\n"),
-        )?;
+        write_if_changed(&bin.join("hatoba"), &git_bash_launcher(COMMAND))?;
         remove(&bin.join("hatoba.cmd"))?;
         edit_path(|path| path_with(path, &bin.to_string_lossy()))
     }
@@ -578,5 +590,17 @@ mod tests {
             "case \"$1\" in\n  hosts|exec|cp|help|-h|--help|--version) \
              exec '/home/me/Apps/Hatoba.AppImage' \"$@\" ;;\nesac\n"
         ));
+    }
+
+    /// HOST-15: from Git Bash, the command's own commands get their arguments as typed.
+    #[test]
+    fn the_git_bash_launcher_passes_the_own_commands_arguments_as_typed() {
+        let launcher = git_bash_launcher("hatoba.exe");
+        assert!(launcher.starts_with("#!/bin/sh\n# Hatoba command line launcher."));
+        assert!(launcher.contains(
+            "\ncase \"$1\" in\n  hosts|exec|cp|help|-h|--help|--version) \
+             export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' ;;\nesac\n"
+        ));
+        assert!(launcher.ends_with("\nexec \"$(dirname \"$0\")/hatoba.exe\" \"$@\"\n"));
     }
 }
