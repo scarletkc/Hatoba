@@ -1,6 +1,6 @@
 ---
 name: hatoba-cli
-description: "Work on the SSH hosts saved in Hatoba with the `hatoba` command: list them, run commands on them, and copy files to and from them, signed in with the credentials Hatoba keeps. Use it whenever a task needs a remote server, a host, ssh or scp and `hatoba` is on the PATH; the servers the user names are usually saved there."
+description: "Work on the SSH hosts saved in Hatoba with the `hatoba` command: list them, run commands on them, and copy files to and from them, signed in with the credentials Hatoba keeps. Use it whenever a task needs a remote server, a host, ssh or scp: the servers the user names are usually saved in Hatoba."
 ---
 
 # Hatoba hosts
@@ -17,7 +17,7 @@ hatoba hosts --json
 
 Each entry has `id`, `name`, `address`, `port`, `username`, `auth` (`password`, `key`, `agent`, or `ask` for a password Hatoba asks for), `group`, `tags`, `jump` and, when the user wrote some, `ai_notes`. Match the user's words against the name, address, group and tags, and name the host by its `name` (quoted when it has spaces) or its `id` in the commands below. `ai_notes` is what the user wants assistants to know about the host, such as what runs there or what to leave alone.
 
-Use `ssh` and `scp` only for a machine that isn't listed. If the shell can't find `hatoba`, work as you would without it.
+A machine that isn't listed isn't saved in Hatoba: tell the user, and use `ssh` and `scp` for it only if they want that. When the shell can't find `hatoba`, or `hatoba` fails before it reaches the host, don't fall back to `ssh` either: find the message in [references/troubleshooting.md](references/troubleshooting.md) and tell the user how to fix it.
 
 ## Run a command
 
@@ -43,4 +43,4 @@ One side is `<host>:<path>` and the other a local path: `hatoba cp dist/app.tar.
 ## When Hatoba needs the user
 
 - A host key Hatoba doesn't trust yet, a password it doesn't keep (`auth` is `ask`), or a code the server asks for is asked in the Hatoba window, and the command prints what it waits for and waits. Tell the user to answer it in Hatoba. `--no-prompt` fails at once instead, which suits a script nobody watches.
-- A message about Hatoba itself, such as that it can't be reached, is locked or needs a setting turned on, says what the user has to do. Tell them, and run the command again once they have; `ssh` doesn't have the saved credentials either.
+- Any other `hatoba:` error, such as Hatoba being closed, locked or switched off, a host name that matches no host or several, or a connection that fails, is in [references/troubleshooting.md](references/troubleshooting.md) with what to tell the user.
