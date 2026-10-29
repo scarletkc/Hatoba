@@ -132,7 +132,7 @@ Do this once. Until then, the winget job fails after the release is published, w
 
 ## Retry a failed release
 
-On the page of the failed run, choose **Re-run failed jobs**. The rerun uses the same commit and keeps the artifacts of the jobs that passed, and the **Publish** job waits for approval again. When the release already exists, the workflow keeps its notes and uploads only the files it is missing. It stops before publishing when:
+On the page of the failed run, choose **Re-run failed jobs**. The rerun uses the same commit and keeps the artifacts of the jobs that passed, and the **Publish** job waits for approval again. Published releases are immutable, so their files and tag can't change: a release that already has every file is left as it is, and one that is missing a file can't get it, so prepare the next version instead. It stops before publishing when:
 
 - `vX.Y.Z` already points to another commit. Bump to a new version instead of moving the tag.
 - A draft release uses the tag. Review the draft on GitHub, delete or publish it, and rerun the job.
