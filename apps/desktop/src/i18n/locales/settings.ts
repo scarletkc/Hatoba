@@ -74,6 +74,8 @@ export default defineMessages({
     "settings.cliAccess": "允许其他程序使用已保存的主机",
     "settings.cliAccess.hint":
       "Claude Code、Codex 等编程 agent 和脚本可以用 hatoba exec 在主机上运行命令，用 hatoba cp 复制文件，密码和密钥留在 Hatoba 中。运行 hatoba --help 查看用法。",
+    "settings.cliAccess.skill": "编程 agent 技能",
+    "settings.cliAccess.skill.hint": "教 Claude Code、Codex 等编程 agent 使用你保存的主机。用这条命令安装：",
     "settings.cliAccess.activity": "最近使用",
     "settings.cliAccess.activity.hint": "共 {n} 条，锁定时清空。",
     "settings.cliAccess.activity.details": "详情",
@@ -293,6 +295,9 @@ export default defineMessages({
     "settings.cliAccess": "Let other programs use saved hosts",
     "settings.cliAccess.hint":
       "Coding agents such as Claude Code and Codex, and scripts, can run commands on your hosts with hatoba exec and copy files with hatoba cp. Passwords and keys stay in Hatoba. Run hatoba --help to see how.",
+    "settings.cliAccess.skill": "Skill for coding agents",
+    "settings.cliAccess.skill.hint":
+      "Teaches Claude Code, Codex, and other coding agents to use your saved hosts. Install it with this command:",
     "settings.cliAccess.activity": "Recent use",
     "settings.cliAccess.activity.hint": "{n} so far, cleared when Hatoba locks.",
     "settings.cliAccess.activity.details": "Details",
@@ -520,6 +525,9 @@ export default defineMessages({
     "settings.cliAccess": "他のプログラムに保存済みのホストを使わせる",
     "settings.cliAccess.hint":
       "Claude Code や Codex などのコーディングエージェントやスクリプトが、hatoba exec でホストのコマンドを実行し、hatoba cp でファイルをコピーできます。パスワードと鍵は Hatoba から出ません。使い方は hatoba --help で確認できます。",
+    "settings.cliAccess.skill": "コーディングエージェント用スキル",
+    "settings.cliAccess.skill.hint":
+      "Claude Code や Codex などのコーディングエージェントに、保存済みのホストの使い方を教えます。次のコマンドでインストールします：",
     "settings.cliAccess.activity": "最近の利用",
     "settings.cliAccess.activity.hint": "{n} 件。ロックすると消去されます。",
     "settings.cliAccess.activity.details": "詳細",
@@ -744,6 +752,8 @@ export default defineMessages({
     "settings.cliAccess": "允許其他程式使用已儲存的主機",
     "settings.cliAccess.hint":
       "Claude Code、Codex 等程式設計 agent 和指令碼可以用 hatoba exec 在主機上執行命令，用 hatoba cp 複製檔案，密碼和金鑰留在 Hatoba 中。執行 hatoba --help 檢視用法。",
+    "settings.cliAccess.skill": "程式設計 agent 技能",
+    "settings.cliAccess.skill.hint": "教 Claude Code、Codex 等程式設計 agent 使用你儲存的主機。用這條命令安裝：",
     "settings.cliAccess.activity": "最近使用",
     "settings.cliAccess.activity.hint": "共 {n} 筆，鎖定時清空。",
     "settings.cliAccess.activity.details": "詳細資訊",

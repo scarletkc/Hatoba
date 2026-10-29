@@ -16,6 +16,7 @@ import { useApp } from "@/app/store";
 import { formatDateTime, formatRelative, useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { CliActivity, CliCommandView, CloseAction, Language } from "@/ipc/types";
+import { copyText } from "@/features/keys/clipboard";
 import { cx } from "@/lib/cx";
 import { pickSavePath } from "@/lib/native";
 import { Pane, Section, SettingRow, usePrefs } from "./shared";
@@ -189,9 +190,12 @@ function LanguageRow() {
   );
 }
 
+/** Installs the repository's `skills/hatoba-cli` for the user's coding agents (HOST-15). */
+const SKILL_INSTALL = "npx skills add scarletkc/Hatoba --skill hatoba-cli -g";
+
 /**
- * HOST-13: the `hatoba` command, and under it HOST-15's switch and what programs did through it. The
- * command lives in the system, so the rows ask the backend for its state.
+ * HOST-13: the `hatoba` command, and under it HOST-15's switch, the agent skill and what programs did
+ * through it. The command lives in the system, so the rows ask the backend for its state.
  */
 function CliCommandRows() {
   const t = useT();
@@ -229,6 +233,15 @@ function CliCommandRows() {
       toast(message, "error");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const copySkillInstall = async () => {
+    try {
+      await copyText(SKILL_INSTALL);
+      toast(t("btn.copied"), "success");
+    } catch {
+      toast(t("err.internal"), "error");
     }
   };
 
@@ -275,6 +288,20 @@ function CliCommandRows() {
             disabled={busy}
             onChange={(on) => void toggle(() => api.cli_access_set(on))}
           />
+        </SettingRow>
+      )}
+      {cli?.enabled && cli.access && (
+        <SettingRow
+          label={t("settings.cliAccess.skill")}
+          hint={
+            <>
+              {t("settings.cliAccess.skill.hint")}
+              <br />
+              <span className={cx(s.command, "selectable")}>{SKILL_INSTALL}</span>
+            </>
+          }
+        >
+          <Button onClick={() => void copySkillInstall()}>{t("settings.about.copyCommand")}</Button>
         </SettingRow>
       )}
       {cli?.enabled && cli.access && <CliActivityList />}

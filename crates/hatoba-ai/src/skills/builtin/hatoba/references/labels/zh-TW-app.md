@@ -273,6 +273,8 @@ The labels that these files name in English, as the interface shows them in Trad
 | en | zh-TW |
 |---|---|
 | Let other programs use saved hosts | 允許其他程式使用已儲存的主機 |
+| Skill for coding agents | 程式設計 agent 技能 |
+| Copy Command | 複製命令 |
 | Recent use | 最近使用 |
 | Details | 詳細資訊 |
 

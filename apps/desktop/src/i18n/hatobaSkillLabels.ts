@@ -234,7 +234,13 @@ export const AREAS: Area[] = [
       },
       "references/command-line.md": {
         "Opening hosts": ["settings.cli"],
-        "Other programs": ["settings.cliAccess", "settings.cliAccess.activity", "settings.cliAccess.activity.details"],
+        "Other programs": [
+          "settings.cliAccess",
+          "settings.cliAccess.skill",
+          "settings.about.copyCommand",
+          "settings.cliAccess.activity",
+          "settings.cliAccess.activity.details",
+        ],
       },
       "references/shortcuts.md": {
         "App shortcuts": [
