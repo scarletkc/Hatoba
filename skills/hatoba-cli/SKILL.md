@@ -25,12 +25,12 @@ Use `ssh` and `scp` only for a machine that isn't listed. If the shell can't fin
 hatoba exec [--cwd <dir>] [--no-prompt] <host> <command>
 ```
 
-- The command runs with the host's login shell, as `ssh <host> '<command>'` would. Quote it as one argument when it has pipes, `&&`, redirections or quotes of its own: `hatoba exec web 'cd /srv/app && git log -3 --oneline'`.
+- The command runs with the host's login shell, as `ssh <host> '<command>'` would. Pass it as one quoted argument when it has pipes, `&&`, redirections or quotes of its own: `hatoba exec web 'cd /srv/app && git log -3 --oneline'` in sh or PowerShell, with double quotes in cmd.exe.
 - It exits with the command's exit status. 255 with a `hatoba:` line on stderr means Hatoba couldn't run it.
 - Every call is a new shell, so `cd` and `export` don't carry over. Chain the steps in one command, or pass `--cwd` with a directory that is absolute or from the home directory. Windows hosts run commands with cmd.exe or PowerShell and refuse `--cwd`; change the directory in the command there.
 - There is no terminal and stdin is empty, so nothing interactive works. Use the batch form: `top -bn1`, `systemctl status nginx --no-pager`, `journalctl -u nginx -n 200 --no-pager`, `git --no-pager log`, `docker exec` without `-t`, `apt-get -y`. Change a file with `sed -i` or a heredoc in the command, or edit a local copy and `hatoba cp` it back.
 - `sudo` can't ask for a password. Use `sudo -n`, and when it says a password is required, ask the user to run that step themselves: `hatoba <host>` opens a terminal on the host in Hatoba.
-- Ending `hatoba exec`, as a tool timeout does, ends the command and everything it started on the host. For work that has to outlive the call, such as a long build or a restart that drops the connection, start it in the background with its output in a file, like `nohup ./deploy.sh > deploy.log 2>&1 &`, and read the log in later calls. What a command leaves in the background keeps running after the command ends.
+- Ending `hatoba exec`, as a tool timeout does, ends the command and everything it started on the host. Where Hatoba can't be sure of that, as on Windows hosts, the error says the command may still be running: check before you run it again. For work that has to outlive the call, such as a long build or a restart that drops the connection, start it in the background with its output in a file, like `nohup ./deploy.sh > deploy.log 2>&1 &`, and read the log in later calls. What a command leaves in the background keeps running after the command ends.
 
 ## Copy a file
 
@@ -38,7 +38,7 @@ hatoba exec [--cwd <dir>] [--no-prompt] <host> <command>
 hatoba cp [--no-prompt] <source> <target>
 ```
 
-One side is `<host>:<path>` and the other a local path: `hatoba cp dist/app.tar.gz web:/tmp/` uploads, and `hatoba cp web:logs/error.log ./` downloads. A remote path is from the home directory unless it starts with `/`, and a target that is a folder or ends with `/` gets the file under its own name. Start a local path that contains `:` with `./`. `hatoba cp` copies one file: for a folder, `tar` it on one side, copy the archive, and unpack it on the other. It exits with 1 when the copy fails.
+One side is `<host>:<path>` and the other a local path: `hatoba cp dist/app.tar.gz web:/tmp/` uploads, and `hatoba cp web:logs/error.log ./` downloads. A remote path is from the home directory unless it starts with `/`, and a target that is a folder or ends with `/` gets the file under its own name. Absolute local paths, Windows drive paths included, are always local; start a relative one that contains `:` with `./`. `hatoba cp` copies one file: for a folder, `tar` it on one side, copy the archive, and unpack it on the other. It exits with 1 when the copy fails.
 
 ## When Hatoba needs the user
 
