@@ -30,6 +30,14 @@ impl DroppedPaths {
         *self.0.lock().unwrap_or_else(PoisonError::into_inner) = paths.to_vec();
     }
 
+    /// Forgets the recorded paths, so none outlives the unlocked vault.
+    pub fn clear(&self) {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
+    }
+
     /// The recorded paths `requested` names, which are then forgotten (each is read once).
     /// `None`, and nothing forgotten, when any of them is not a path of the recorded drop.
     pub fn take(&self, requested: &[String]) -> Option<Vec<PathBuf>> {
@@ -183,6 +191,9 @@ mod tests {
         dropped.record(std::slice::from_ref(&elsewhere));
         assert_eq!(dropped.take(&strings(&[&b])), None);
         assert_eq!(dropped.take(&[]), Some(Vec::new()));
+        // The lock forgets the drop.
+        dropped.clear();
+        assert_eq!(dropped.take(&strings(&[&elsewhere])), None);
     }
 
     #[test]

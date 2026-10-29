@@ -78,8 +78,9 @@ export function AiPanel({ slotId }: { slotId: string }) {
   const model = conversationModel(slot.entries, catalog.providers, catalog.settings, slot.model);
   const ready = catalog.loaded && hasModels(catalog.providers);
   const busy = !!slot.turn || slot.remoteRunning;
-  // AI-35: text files dropped on the panel go with the next message.
-  const drop = usePanelFileDrop(panelRef, ready, {
+  // AI-35: text files dropped on the panel go with the next message; none behind the lock screen (SEC-03).
+  const unlocked = useApp((st) => st.phase === "unlocked");
+  const drop = usePanelFileDrop(panelRef, ready && unlocked, {
     onFiles: (files) => void attachFiles(slotId, files),
     onPaths: (paths) => void attachDroppedPaths(slotId, paths),
   });

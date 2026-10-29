@@ -380,9 +380,12 @@ pub fn run() {
                     let _ = tauri_specta::Event::emit(&zoom, app);
                 }
             }
-            // AI-35: the AI panel may read the files of the last drop, and no others.
+            // AI-35: the AI panel may read the files of the last drop, and no others. Nothing
+            // takes drops behind the lock screen (SEC-03).
             tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
-                if let Some(state) = window.app_handle().try_state::<state::AppState>() {
+                if let Some(state) = window.app_handle().try_state::<state::AppState>()
+                    && state.vault().is_unlocked()
+                {
                     state.dropped.record(paths);
                 }
             }
