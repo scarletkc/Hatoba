@@ -11,7 +11,7 @@ export interface ToolOutcome {
   content: string;
 }
 
-/** `send_input` returns once the output has been quiet this long (AI-13). */
+/** `send_input` returns, and a waiting `read_terminal` reads, once the output has been quiet this long (AI-11, AI-13). */
 const QUIET_MS = 1000;
 const POLL_MS = 100;
 
@@ -37,12 +37,82 @@ function describeScreen(s: ScreenText): string {
   return `${head}\n\n${s.text || "(the terminal is empty)"}`;
 }
 
-/** AI-11: the terminal's last `lines` lines as plain text. */
-export function readTerminal(session: LiveSession, json: string): ToolOutcome {
+/**
+ * AI-11: the terminal's last `lines` lines as plain text. With `wait_seconds` it first waits until new output has come
+ * and been quiet for 1 s, or that time passed, and says which. Resolves to null when `signal` aborts (the turn was
+ * stopped; Rust stores a cancelled result).
+ */
+export async function readTerminal(
+  session: LiveSession,
+  json: string,
+  signal: AbortSignal,
+): Promise<ToolOutcome | null> {
   const args = parseReadTerminal(json);
   if (!args.ok) return { status: "error", content: `Invalid arguments: ${args.error}` };
   if (session.status !== "connected") return { status: "error", content: DISCONNECTED };
-  return { status: "ok", content: describeScreen(screenText(session, args.value.lines)) };
+  const { lines, waitSeconds } = args.value;
+  let waited = "";
+  if (waitSeconds > 0) {
+    const watch = watchOutput(session);
+    let ending: Ending | null;
+    try {
+      ending = await waitQuiet(session, watch, waitSeconds, signal, true);
+    } finally {
+      watch.off();
+    }
+    if (ending === null) return null;
+    if (ending === "disconnected") return { status: "error", content: DISCONNECTED };
+    await flush(session);
+    if (signal.aborted) return null;
+    waited =
+      ending === "quiet"
+        ? "New output came, and it has been quiet for 1 s.\n\n"
+        : watch.capture.empty
+          ? `No new output within ${waitSeconds} s.\n\n`
+          : `The output did not go quiet within ${waitSeconds} s, so a command may still be running.\n\n`;
+  }
+  return { status: "ok", content: waited + describeScreen(screenText(session, lines)) };
+}
+
+/** How a wait for the output ended: quiet for {@link QUIET_MS}, out of time, or with the tab disconnected. */
+type Ending = "quiet" | "timeout" | "disconnected";
+
+/** The terminal's output from now on, and when its last chunk came, until `off`. */
+interface OutputWatch {
+  capture: OutputCapture;
+  last: number;
+  off: () => void;
+}
+
+function watchOutput(session: LiveSession): OutputWatch {
+  const watch: OutputWatch = { capture: new OutputCapture(), last: Date.now(), off: () => {} };
+  watch.off = session.onOutput((chunk) => {
+    watch.capture.push(chunk);
+    watch.last = Date.now();
+  });
+  return watch;
+}
+
+/**
+ * Waits from now until the output has been quiet for {@link QUIET_MS}, only after some output came when `afterOutput`,
+ * or `waitSeconds` passed, or the tab disconnected. Null when `signal` aborts.
+ */
+async function waitQuiet(
+  session: LiveSession,
+  watch: OutputWatch,
+  waitSeconds: number,
+  signal: AbortSignal,
+  afterOutput: boolean,
+): Promise<Ending | null> {
+  const started = Date.now();
+  watch.last = started;
+  for (;;) {
+    if (!(await sleep(POLL_MS, signal))) return null;
+    const now = Date.now();
+    if (session.status !== "connected") return "disconnected";
+    if ((!afterOutput || !watch.capture.empty) && now - watch.last >= QUIET_MS) return "quiet";
+    if (now - started >= waitSeconds * 1000) return "timeout";
+  }
 }
 
 /** Resolves after `ms`, or with false as soon as `signal` aborts. */
@@ -96,13 +166,8 @@ export async function sendInput(
   if (session.status !== "connected") return { status: "error", content: DISCONNECTED };
   const { text, keys, waitSeconds } = parsed.value;
 
-  const capture = new OutputCapture();
-  let lastOutput: number;
-  const off = session.onOutput((chunk) => {
-    capture.push(chunk);
-    lastOutput = Date.now();
-  });
-  let ending: "quiet" | "timeout" | "disconnected" = "quiet";
+  const watch = watchOutput(session);
+  let ending: Ending | null;
   try {
     const data = text + keys.map((key) => keySequence(key, session.term.modes.applicationCursorKeysMode)).join("");
     const untype = onType();
@@ -112,30 +177,18 @@ export async function sendInput(
       untype();
       return { status: "error", content: `The input could not be sent: ${toAppError(e).detail}` };
     }
-    const started = Date.now();
-    lastOutput = started;
-    for (;;) {
-      if (!(await sleep(POLL_MS, signal))) return null;
-      const now = Date.now();
-      if (session.status !== "connected") {
-        ending = "disconnected";
-        break;
-      }
-      if (now - lastOutput >= QUIET_MS) break;
-      if (now - started >= waitSeconds * 1000) {
-        ending = "timeout";
-        break;
-      }
-    }
+    ending = await waitQuiet(session, watch, waitSeconds, signal, false);
   } finally {
-    off();
+    watch.off();
   }
+  if (ending === null) return null;
 
   await flush(session);
   if (signal.aborted) return null;
   if (ending !== "disconnected" && session.term.buffer.active.type === "alternate") {
     return { status: "ok", content: describeScreen(screenText(session, 0)) };
   }
+  const { capture } = watch;
   const output = capture.empty ? "(no output)" : capture.text() || "(no visible output)";
   switch (ending) {
     case "quiet":

@@ -161,19 +161,29 @@ describe("permission modes (§13.5)", () => {
 
 describe("read_terminal arguments (AI-11)", () => {
   it("leaves an absent count to the default and clamps to 1..1000", () => {
-    expect(parseReadTerminal("{}")).toEqual({ ok: true, value: { lines: null } });
-    expect(parseReadTerminal("")).toEqual({ ok: true, value: { lines: null } });
-    expect(parseReadTerminal('{"lines": 5000}')).toEqual({ ok: true, value: { lines: 1000 } });
-    expect(parseReadTerminal('{"lines": -3}')).toEqual({ ok: true, value: { lines: 1 } });
-    expect(parseReadTerminal('{"lines": 0}')).toEqual({ ok: true, value: { lines: 1 } });
-    expect(parseReadTerminal('{"lines": "40"}')).toEqual({ ok: true, value: { lines: 40 } });
-    expect(parseReadTerminal('{"lines": 12.7}')).toEqual({ ok: true, value: { lines: 12 } });
+    expect(parseReadTerminal("{}")).toEqual({ ok: true, value: { lines: null, waitSeconds: 0 } });
+    expect(parseReadTerminal("")).toEqual({ ok: true, value: { lines: null, waitSeconds: 0 } });
+    expect(parseReadTerminal('{"lines": 5000}')).toEqual({ ok: true, value: { lines: 1000, waitSeconds: 0 } });
+    expect(parseReadTerminal('{"lines": -3}')).toEqual({ ok: true, value: { lines: 1, waitSeconds: 0 } });
+    expect(parseReadTerminal('{"lines": 0}')).toEqual({ ok: true, value: { lines: 1, waitSeconds: 0 } });
+    expect(parseReadTerminal('{"lines": "40"}')).toEqual({ ok: true, value: { lines: 40, waitSeconds: 0 } });
+    expect(parseReadTerminal('{"lines": 12.7}')).toEqual({ ok: true, value: { lines: 12, waitSeconds: 0 } });
+  });
+
+  it("waits at most 120 s, and not at all by default", () => {
+    expect(parseReadTerminal('{"wait_seconds": 30}')).toEqual({ ok: true, value: { lines: null, waitSeconds: 30 } });
+    expect(parseReadTerminal('{"lines": 5, "wait_seconds": 500}')).toEqual({
+      ok: true,
+      value: { lines: 5, waitSeconds: 120 },
+    });
+    expect(parseReadTerminal('{"wait_seconds": -1}')).toEqual({ ok: true, value: { lines: null, waitSeconds: 0 } });
   });
 
   it("rejects malformed arguments", () => {
     expect(parseReadTerminal("[1]").ok).toBe(false);
     expect(parseReadTerminal("{oops").ok).toBe(false);
     expect(parseReadTerminal('{"lines": "many"}').ok).toBe(false);
+    expect(parseReadTerminal('{"wait_seconds": "soon"}').ok).toBe(false);
   });
 });
 

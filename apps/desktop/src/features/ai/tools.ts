@@ -477,16 +477,21 @@ export const READ_TERMINAL_MAX_LINES = 1000;
 export interface ReadTerminalArgs {
   /** Lines to read, counted back from the last line with text; null when the call leaves it to the default. */
   lines: number | null;
+  /** How long to wait for new output to come and go quiet before reading, in seconds; 0 reads at once. */
+  waitSeconds: number;
 }
 
-/** AI-11: `{ lines?: integer }`, at most 1,000. */
+/** AI-11: `{ lines?: integer, wait_seconds?: integer }`, at most 1,000 lines and 120 s. */
 export function parseReadTerminal(json: string): Parsed<ReadTerminalArgs> {
   const args = parseArgs(json);
   if (!args) return { ok: false, error: "The arguments are not a JSON object." };
-  if (args.lines === undefined || args.lines === null || args.lines === "") return { ok: true, value: { lines: null } };
+  const waitSeconds = intArg(args.wait_seconds, 0, 0, SEND_INPUT_MAX_WAIT);
+  if (waitSeconds === null) return { ok: false, error: '"wait_seconds" must be an integer.' };
+  if (args.lines === undefined || args.lines === null || args.lines === "")
+    return { ok: true, value: { lines: null, waitSeconds } };
   const lines = intArg(args.lines, 1, 1, READ_TERMINAL_MAX_LINES);
   if (lines === null) return { ok: false, error: '"lines" must be an integer.' };
-  return { ok: true, value: { lines } };
+  return { ok: true, value: { lines, waitSeconds } };
 }
 
 export const SEND_INPUT_DEFAULT_WAIT = 10;
@@ -522,7 +527,12 @@ export function parseSendInput(json: string): Parsed<SendInputArgs> {
       keys.push(key);
     }
   }
-  if (!text && !keys.length) return { ok: false, error: 'Nothing to send: give "text", "keys", or both.' };
+  if (!text && !keys.length)
+    return {
+      ok: false,
+      error:
+        'Nothing to send: give "text", "keys", or both. To wait for more output, call read_terminal with wait_seconds.',
+    };
   const waitSeconds = intArg(args.wait_seconds, SEND_INPUT_DEFAULT_WAIT, 1, SEND_INPUT_MAX_WAIT);
   if (waitSeconds === null) return { ok: false, error: '"wait_seconds" must be an integer.' };
   return { ok: true, value: { text, keys, waitSeconds } };

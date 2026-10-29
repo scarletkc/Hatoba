@@ -682,12 +682,11 @@ export class TurnRunner {
         return this.report(convId, call.id, error(DISCONNECTED));
     }
     try {
-      if (kind === "read_terminal")
-        return this.report(convId, call.id, {
-          ...readTerminal(target!.session!, args),
-          edited_arguments: edited,
-          judged,
-        });
+      if (kind === "read_terminal") {
+        const result = await readTerminal(target!.session!, args, this.abort.signal);
+        if (!result || !this.active) return;
+        return this.report(convId, call.id, { ...result, edited_arguments: edited, judged });
+      }
       if (kind === "send_input") {
         // Another turn may have taken the terminal while this call waited for approval. This turn takes it once it
         // types, so a call that types nothing (invalid arguments, a write that failed) leaves it as it was.

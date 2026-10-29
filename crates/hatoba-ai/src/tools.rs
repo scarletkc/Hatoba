@@ -147,8 +147,10 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
              text across the visible screen and the scrollback, as plain text with soft-wrapped \
              lines joined, with how many lines the terminal has in all and whether the alternate \
              screen (vim, htop, less and so on) is active. \
-             Use it to see the prompt, earlier output or a full-screen program. It runs without \
-             asking."
+             Use it to see the prompt, earlier output or a full-screen program. With \
+             wait_seconds, it first waits until new output has come and been quiet for 1 second, \
+             or wait_seconds has passed, so it can wait for a command that is still running. It \
+             runs without asking."
                 .to_owned(),
             json!({
                 "type": "object",
@@ -158,6 +160,11 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                         "description": "How many lines to return, counted back from the last \
                                         line with text (at most 1000). Without it: 20, or the \
                                         whole screen while the alternate screen is active."
+                    },
+                    "wait_seconds": {
+                        "type": "integer",
+                        "description": "Longest wait for new output before reading (at most \
+                                        120). Without it, the screen is read at once."
                     }
                 }
             }),
@@ -229,6 +236,8 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
              \"n\"] leaves nano without saving. Then wait until the output has been quiet for 1 second \
              or wait_seconds has passed (default 10, at most 120), and return the output that \
              appeared after the input, or the whole screen when a full-screen program is active. \
+             A quiet second does not mean a command has finished, since many commands pause \
+             while they work: to wait for more output, call read_terminal with wait_seconds. \
              The text goes to the shell itself, so commands use its working directory, \
              environment and sudo session, and can be interactive or ask for input. A command \
              started this way keeps running in the shell when the turn stops."
