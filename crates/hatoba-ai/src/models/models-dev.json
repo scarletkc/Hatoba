@@ -1116,34 +1116,10 @@
           }
         ]
       },
-      "gemini-3-pro-image-preview": {
-        "limit": {
-          "context": 131072,
-          "output": 32768
-        },
-        "reasoning": true,
-        "reasoning_options": []
-      },
       "gemini-3.1-flash-image": {
         "limit": {
           "context": 131072,
           "output": 32768
-        },
-        "reasoning": true,
-        "reasoning_options": [
-          {
-            "type": "effort",
-            "values": [
-              "minimal",
-              "high"
-            ]
-          }
-        ]
-      },
-      "gemini-3.1-flash-image-preview": {
-        "limit": {
-          "context": 65536,
-          "output": 65536
         },
         "reasoning": true,
         "reasoning_options": [
@@ -2362,6 +2338,27 @@
           {
             "type": "effort",
             "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      },
+      "gpt-6.1-terra": {
+        "limit": {
+          "context": 1050000,
+          "input": 922000,
+          "output": 128000
+        },
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
               "low",
               "medium",
               "high",
