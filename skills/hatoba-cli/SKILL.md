@@ -27,19 +27,11 @@ Each entry of `hatoba hosts --json` has `id`, `name`, `address`, `port`, `userna
 
 ## Run a command
 
-- The command runs with the host's login shell, as `ssh <host> '<command>'` would. Pass it as one quoted argument, so your shell leaves its `$`, `~`, `*`, pipes, `&&`, redirections and quotes to the host: `hatoba exec web 'cd /srv/app && git log -3 --oneline'` in sh or PowerShell, with double quotes in cmd.exe. Windows PowerShell 5.1 (`powershell.exe`) drops the `"` inside such an argument: write each as `\"` there, but not in PowerShell 7 (`pwsh`), which passes them as they are.
-- In Git Bash on Windows, put `MSYS_NO_PATHCONV=1` before `hatoba exec` so that arguments starting with `/` reach the host as written. Git Bash may otherwise turn them into Windows paths: `--cwd /srv/app` would arrive as `C:/Program Files/Git/srv/app`. Don't do this for `hatoba cp`, whose local paths, such as `/c/Users/...`, need that conversion.
-- It exits with the command's exit status; on hosts with sh, a command ended by a signal exits with 128 plus the signal's number, such as 137 or 143. 255 with a `hatoba:` line on stderr is Hatoba's own error, which may come after the command started, as when Hatoba locks or the connection drops: find the line in [references/troubleshooting.md](references/troubleshooting.md) before you run the command again.
-- Every call is a new shell, so `cd` and `export` don't carry over. Chain the steps in one command, or pass `--cwd` with a directory that is absolute or from the home directory (`app`, or `'~/app'` quoted so your shell leaves `~` alone). Windows hosts and hosts without sh refuse `--cwd`: change the directory in the command there.
-- There is no terminal and stdin is empty, so nothing interactive works. Use the batch form: `top -bn1`, `systemctl status nginx --no-pager`, `journalctl -u nginx -n 200 --no-pager`, `git --no-pager log`, `docker exec` without `-t`, `apt-get -y`.
-- `sudo` can't ask for a password. Use `sudo -n`, and when it says a password is required, hand that step to the user (below).
-- Change a file with `sed -i` or a heredoc in the command, or edit a local copy and `hatoba cp` it back. For a file the login user can't write, use `sudo -n sed -i`, or `hatoba cp` the new version to the home directory and put it in place with `sudo -n cp <file> <path>`, which keeps the file's owner and mode.
-
-## Long-running commands
-
-- When your tool's timeout ends `hatoba exec`, or you stop it, Hatoba prints nothing more. On hosts with sh it stops the command and everything the command started; on Windows hosts and hosts without sh the command may keep running. Either way, check what it got done before you run it again.
-- A command that ends by itself leaves what it put in the background running. So on a host with sh, start work that may outlast your timeout, such as a long build or a restart that drops the connection, in the background with its output and exit status in a log: `hatoba exec web 'nohup sh -c "./deploy.sh; echo exit \$?" > deploy.log 2>&1 &'`. The call returns at once; read `deploy.log` in later calls until it ends with `exit <status>`.
-- Windows hosts run commands with cmd.exe or PowerShell, which have no `nohup`. Keep the call within your timeout, or hand longer work to the user in a Hatoba terminal (below).
+- The command runs with the host's login shell, as `ssh <host> '<command>'` would, so quote it the same way.
+- It exits with the command's exit status. 255 with a `hatoba:` line on stderr is Hatoba's own error, which may come after the command started, as when Hatoba locks or the connection drops: find the line in [references/troubleshooting.md](references/troubleshooting.md) before you run the command again.
+- `--cwd` starts the command in a directory that is absolute or from the home directory. Windows hosts and hosts without sh refuse it: change the directory in the command there.
+- There is no terminal and stdin is empty, so interactive programs and a `sudo` that asks for a password don't work; hand such a step to the user (below).
+- When your tool's timeout ends `hatoba exec`, or you stop it, Hatoba prints nothing more. On hosts with sh it stops the command and everything the command started; on Windows hosts and hosts without sh the command may keep running. Either way, check what it got done before you run it again. On hosts with sh, a command that ends by itself leaves what it put in the background running, so start work that may outlast your timeout in the background with its output in a log, and read the log in later calls.
 
 ## Copy a file
 
@@ -47,8 +39,8 @@ One side is `<host>:<path>` and the other a local path: `hatoba cp dist/app.tar.
 
 - A remote path is from the home directory unless it starts with `/`; `~` and `~/…` work too. A target that is a folder gets the file under its own name.
 - Absolute local paths, Windows drive paths included, are always local; start a relative one that contains `:` with `./`.
-- A copy replaces a file that is already at the target, on either side. An uploaded file belongs to the login user with default permissions, so `chmod +x` a script again. A copy that fails or is stopped, as by a timeout, leaves the old file as it was.
-- `hatoba cp` copies one file: for a folder, `tar` it on one side, copy the archive, and unpack it on the other.
+- A copy replaces a file that is already at the target, on either side. An uploaded file belongs to the login user with default permissions. A copy that fails or is stopped, as by a timeout, leaves the old file as it was.
+- `hatoba cp` copies one file, so archive a folder first.
 
 ## When Hatoba needs the user
 

@@ -11,7 +11,7 @@ When `hatoba` can't be found or fails, find what you see below and tell the user
 
 The note under the first switch says where the command went:
 
-- **Windows**: a `bin` folder beside Hatoba, added to the user's `PATH`. A program started before that keeps its old `PATH`, so the user has to restart you, or the editor or terminal you run in. Until then, find the folder yourself: `powershell -NoProfile -c "[Environment]::GetEnvironmentVariable('Path','User')"` lists the user's `PATH`, which ends with Hatoba's `bin` folder unless something was added after it. Run `hatoba.exe` from there by its full path.
+- **Windows**: a `bin` folder beside Hatoba, added to the user's `PATH`. A program started before that keeps its old `PATH`, so the user has to restart you, or the editor or terminal you run in. Until then, run `hatoba.exe` from that folder by its full path; the folder is in the user's `PATH` as the system keeps it, which your process hasn't picked up yet.
 - **Linux**: `~/.local/bin/hatoba`. When the note says `~/.local/bin` isn't on the `PATH`, the user signs out and back in, or adds it to their shell profile. Until then, run `~/.local/bin/hatoba`.
 - **macOS**: `/usr/local/bin/hatoba`, added once the user enters an administrator password when macOS asks.
 
@@ -54,5 +54,5 @@ When the user says turning on the first switch showed an error:
 
 - `<host> runs commands with cmd.exe or PowerShell, so --cwd cannot start one in another directory. …` (Windows hosts) or `this host has no sh to start the command in workdir: leave out workdir and change the directory in the command` (hosts without sh, such as routers and some Windows servers): leave out `--cwd` and change the directory in the command.
 - `the command ended without an exit status, as when a signal ends it`: the host closed the command without reporting how it ended. The connection dropped or the shell running the command was killed, or, on a Windows host or a host without sh, a signal ended the command. Check what it got done before you run it again.
-- `can't copy files with <host>: <reason>`: the host didn't start SFTP, which `hatoba cp` copies over; some routers and minimal servers don't have it. Tell the user. A small text file can still be read with `cat` in `hatoba exec`, or written with a heredoc in the command.
-- `<path> is a folder. hatoba cp copies one file at a time.` (a local folder) or `download <path>: is a directory` (a remote one): archive the folder with `tar`, copy the archive, and unpack it on the other side.
+- `can't copy files with <host>: <reason>`: the host didn't start SFTP, which `hatoba cp` copies over; some routers and minimal servers don't have it. Tell the user.
+- `<path> is a folder. hatoba cp copies one file at a time.` (a local folder) or `download <path>: is a directory` (a remote one): copy an archive of the folder instead.
