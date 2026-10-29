@@ -15,7 +15,7 @@ Before reaching for `ssh` or `scp`, list the hosts:
 hatoba hosts --json
 ```
 
-Each entry has `id`, `name`, `address`, `port`, `username`, `auth` (`password`, `key`, `agent`, or `ask` for a password Hatoba asks for), `group`, `tags`, `jump` and, when the user wrote some, `ai_notes`. Match the user's words against the name, address, group and tags, and name the host by its `name` (quoted when it has spaces) or its `id` in the commands below. `ai_notes` is what the user wants assistants to know about the host, such as what runs there or what to leave alone.
+Each entry has `id`, `name`, `address`, `port`, `username`, `auth` (`password`, `key`, `agent`, or `ask` for a password Hatoba asks for), `group`, `tags`, `jump` and, when the user wrote some, `ai_notes`. Match the user's words against the name, address, group and tags, and name the host by its `name` (quoted when it has spaces) or its `id` in the commands below. When the user means one machine and their words fit several hosts, ask which one; when they ask about a group or a tag, such as "all the prod servers", work on every host in it. `ai_notes` is what the user wants assistants to know about the host, such as what runs there or what to leave alone.
 
 A machine that isn't listed isn't saved in Hatoba: tell the user, and use `ssh` and `scp` for it only if they want that. When the shell can't find `hatoba`, or `hatoba` fails before it reaches the host, don't fall back to `ssh` either: find the message in [references/troubleshooting.md](references/troubleshooting.md) and tell the user how to fix it.
 
