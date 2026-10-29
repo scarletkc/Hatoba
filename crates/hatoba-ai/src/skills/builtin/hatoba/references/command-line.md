@@ -16,3 +16,4 @@ Settings → General → **Use the hatoba command in terminals** (off by default
 - Ending the command (Ctrl+C, or a timeout of the program that ran it) stops what it started on the host. Locking Hatoba stops every command and copy and closes their connections.
 - **Recent use**, below the switch, counts what other programs ran until Hatoba locks, and **Details** beside it lists each one, on which host and how it ended.
 - Only programs that run as you on this computer can reach Hatoba this way. `hatoba --help` lists the commands and options.
+- The [hatoba-cli skill](https://github.com/scarletkc/Hatoba/tree/main/skills/hatoba-cli) tells coding agents to use these commands for the hosts you name instead of `ssh`, and how to work without a terminal. `npx skills add scarletkc/Hatoba --skill hatoba-cli -g` installs it for Claude Code, Codex, Cursor and other agents that read skills.

@@ -43,6 +43,10 @@ between your devices, and puts an AI assistant beside each terminal.
 - **Hosts**: groups, tags, fuzzy search, `~/.ssh/config` import, ProxyJump, and
   proxies. Type `ssh user@host` in the search box to connect without saving a
   host.
+- **Coding agents**: Claude Code, Codex, and scripts run commands and copy
+  files on your saved hosts with the `hatoba` command, while passwords and keys
+  stay in Hatoba. The [hatoba-cli skill](skills/hatoba-cli/SKILL.md) shows
+  agents how.
 - **Resource usage**: the CPU, memory, disks, and network of every saved host,
   read over SSH with nothing to install on the servers.
 - **Terminal**: tabs, truecolor, CJK input methods, search, and clickable
