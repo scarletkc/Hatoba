@@ -1,6 +1,6 @@
 ---
 name: hatoba-cli
-description: "Run commands on and copy files to and from the SSH hosts saved in Hatoba with the `hatoba` command, signed in with the credentials Hatoba keeps. Use it whenever a task touches a remote server, such as checking logs or disk space, restarting a service or deploying, or anything you would otherwise do with ssh or scp, even when the user only names the server: the servers they name are usually saved in Hatoba. Not for SSH keys, git over SSH, or ssh config on this computer."
+description: "Run commands on and copy files to and from the SSH hosts saved in Hatoba with the `hatoba` command, signed in with the credentials Hatoba keeps. Use it whenever a task touches a remote server, such as checking logs or disk space, restarting a service or deploying, or anything you would otherwise do with ssh or scp, even when the user only names the server: the servers they name are usually saved in Hatoba. Not for this computer's own SSH keys, ssh config or git over SSH."
 ---
 
 # Hatoba hosts
