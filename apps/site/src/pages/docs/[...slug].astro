@@ -74,9 +74,12 @@ const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
   const copy = document.querySelector("#code-block button")!;
   for (const block of document.querySelectorAll(".prose .code-block")) block.append(copy.cloneNode(true));
 
-  // On a narrow screen the contents start closed, so the page starts with the article.
-  const contents = document.querySelector<HTMLDetailsElement>(".sidebar details");
-  if (contents && matchMedia("(max-width: 900px)").matches) contents.open = false;
+  // On a narrow screen the contents start closed, so the page starts with the article. A wide
+  // screen has no summary to open them with, so widening the window opens them again.
+  const contents = document.querySelector<HTMLDetailsElement>(".sidebar details")!;
+  const narrow = matchMedia("(max-width: 900px)");
+  contents.open = !narrow.matches;
+  narrow.addEventListener("change", () => (contents.open = !narrow.matches));
 </script>
 
 <style>
@@ -93,6 +96,9 @@ const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
     align-self: start;
     max-height: calc(100vh - 48px);
     overflow-y: auto;
+    /* The scroll box would clip the link highlights that reach past the text on the left. */
+    margin-left: calc(-1 * var(--space-10));
+    padding-left: var(--space-10);
     font-size: var(--text-md);
   }
 
@@ -218,6 +224,9 @@ const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
     .sidebar {
       position: static;
       max-height: none;
+      overflow: visible;
+      margin-left: 0;
+      padding-left: 0;
       padding-bottom: var(--space-16);
       border-bottom: 1px solid var(--line);
     }
