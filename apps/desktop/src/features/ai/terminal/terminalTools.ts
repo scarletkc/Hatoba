@@ -54,22 +54,22 @@ export async function readTerminal(
   let waited = "";
   if (waitSeconds > 0) {
     const watch = watchOutput(session);
-    let ending: Ending | null;
     try {
-      ending = await waitQuiet(session, watch, waitSeconds, signal, true);
+      const ending = await waitQuiet(session, watch, waitSeconds, signal, true);
+      if (ending === null) return null;
+      if (ending === "disconnected") return { status: "error", content: DISCONNECTED };
+      // Output that comes while xterm catches up shows on the screen, so it counts as having come.
+      await flush(session);
+      if (signal.aborted) return null;
+      waited =
+        ending === "quiet"
+          ? "New output came, and it has been quiet for 1 s.\n\n"
+          : watch.capture.empty
+            ? `No new output within ${waitSeconds} s.\n\n`
+            : `The output did not go quiet within ${waitSeconds} s, so a command may still be running.\n\n`;
     } finally {
       watch.off();
     }
-    if (ending === null) return null;
-    if (ending === "disconnected") return { status: "error", content: DISCONNECTED };
-    await flush(session);
-    if (signal.aborted) return null;
-    waited =
-      ending === "quiet"
-        ? "New output came, and it has been quiet for 1 s.\n\n"
-        : watch.capture.empty
-          ? `No new output within ${waitSeconds} s.\n\n`
-          : `The output did not go quiet within ${waitSeconds} s, so a command may still be running.\n\n`;
   }
   return { status: "ok", content: waited + describeScreen(screenText(session, lines)) };
 }

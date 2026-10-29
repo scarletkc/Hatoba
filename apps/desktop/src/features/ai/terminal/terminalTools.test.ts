@@ -4,20 +4,28 @@ import { readTerminal, sendInput } from "./terminalTools";
 
 afterEach(() => vi.useRealTimers());
 
-/** A connected session whose screen shows `$ ` and whose output the test writes with `emit`. */
-function liveScreen() {
+/**
+ * A connected session whose screen shows `$ ` and whose output the test writes with `emit`; `whileCatchingUp` comes
+ * while xterm parses what was written so far.
+ */
+function liveScreen(whileCatchingUp = "") {
   let listener: (chunk: string) => void = () => {};
   const line = { isWrapped: false, translateToString: () => "$ " };
   const live = {
     status: "connected",
     onOutput: vi.fn((fn: (chunk: string) => void) => {
       listener = fn;
-      return vi.fn();
+      return () => {
+        listener = () => {};
+      };
     }),
     term: {
       rows: 24,
       buffer: { active: { type: "normal", length: 1, baseY: 0, getLine: (y: number) => (y === 0 ? line : undefined) } },
-      write: (_text: string, done: () => void) => done(),
+      write: (_text: string, done: () => void) => {
+        if (whileCatchingUp) listener(whileCatchingUp);
+        done();
+      },
     },
   } as unknown as LiveSession;
   return { live, emit: (chunk: string) => listener(chunk) };
@@ -62,6 +70,14 @@ describe("read_terminal waiting for output (AI-11)", () => {
     expect((await pending)?.content).toBe(
       `The output did not go quiet within 2 s, so a command may still be running.\n\n${screen}`,
     );
+  });
+
+  it("counts output that comes while the screen catches up, which the screen shows", async () => {
+    vi.useFakeTimers();
+    const { live } = liveScreen("done\r\n$ ");
+    const pending = readTerminal(live, '{"wait_seconds": 2}', new AbortController().signal);
+    await vi.advanceTimersByTimeAsync(2200);
+    expect((await pending)?.content).not.toContain("No new output");
   });
 
   it("resolves to null when the turn stops while it waits", async () => {
