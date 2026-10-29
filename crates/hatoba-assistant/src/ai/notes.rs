@@ -9,15 +9,15 @@ use hatoba_core::model::{AiConversation, Item};
 use hatoba_core::{SnapshotState, Vault};
 
 use super::blocks::{
-    FILE_REVERT, INTERRUPTED, MCP_CHANGE, MCP_TOOLS, MEMORY, MODEL_CHANGE, PERMISSION_MODE,
-    TERMINAL_CHANGE, TERMINAL_STATE, attribute_text, has_note, leading_block, leading_blocks,
-    note_attr, note_block,
+    FILE_REVERT, HOST_CHANGE, INTERRUPTED, MCP_CHANGE, MCP_TOOLS, MEMORY, MODEL_CHANGE,
+    PERMISSION_MODE, SHELL_CHANGE, TERMINAL_CHANGE, TERMINAL_STATE, attribute_text, has_note,
+    leading_block, leading_blocks, note_attr, note_block,
 };
 use super::compact::estimate_tokens;
 use super::entries::Entries;
 use super::places::{
     conversation_memory_place, host_name, local_name, memory_place, moved_from, moves_to,
-    tab_local, tab_target, target_name,
+    tab_local, tab_shell, tab_target, target_name,
 };
 use super::request::{builtin_tools, resolve_model};
 use super::{files, memory};
@@ -243,6 +243,9 @@ fn stored_model_label(v: &Vault, provider_id: &str, model_id: &str) -> String {
 /// - `terminal_change` (AI-09) when the message's requests offer the terminal tools and, as far as
 ///   `earlier` tells the model, there was none before, or the other way round
 ///   ([`terminal_before`]).
+/// - `shell_change` (§7.5) when the message's requests offer the terminal tools of a local tab
+///   whose shell is not the one the model was last told of ([`shell_before`]), and the message
+///   notes no move to another host or computer, which says where the earlier output came from.
 /// - `model_change` (AI-05) when the message goes to another model ID than the newest reply in
 ///   `earlier` (the entries before the message) came from. A switch an earlier message noted
 ///   already, which got no reply (a failed request, say), is not noted again.
@@ -288,13 +291,17 @@ pub(super) fn notes_before(
             EntryBody::User { .. } | EntryBody::Tool { .. } => {}
         }
     }
-    if let (Some(from), Some(to)) = (came_from, host_now)
-        && from != to
-    {
+    let moved = matches!((came_from, host_now), (Some(from), Some(to)) if from != to);
+    if let (true, Some(from), Some(to)) = (moved, came_from, host_now) {
         notes.push_str(&tools::host_change_block(from, to));
     }
     if terminal_before(earlier) == Some(!context.tab) {
         notes.push_str(&tools::terminal_change_block(context.tab));
+    }
+    if let (false, Some(from), Some(to)) = (moved, shell_before(earlier), tab_shell(context))
+        && from != to
+    {
+        notes.push_str(&tools::shell_change_block(&from, &to));
     }
     let to = stored_model_label(v, &context.provider_id, &context.model_id);
     for entry in earlier.iter().rev() {
@@ -455,6 +462,34 @@ pub(super) fn response_with_call(entries: &[AiEntry], tool_call_id: &str) -> Opt
         EntryBody::Assistant(a) => a.tool_calls.iter().any(|c| c.id == tool_call_id),
         _ => false,
     })
+}
+
+/// §7.5: the local shell the model was last told the terminal runs, as far as `earlier` (the
+/// entries before a new message) tells it: what the newest reply whose request offered the
+/// terminal tools recorded, or what a `shell_change` note says on a newer message that got no
+/// reply. `None` when that terminal was a host's, the reply is from before replies recorded it, or
+/// a `host_change` note or a summary came after it.
+fn shell_before(earlier: &[AiEntry]) -> Option<String> {
+    for entry in earlier.iter().rev() {
+        match &entry.body {
+            EntryBody::Assistant(a) => match a.terminal {
+                Some(true) => return a.shell.clone(),
+                Some(false) => {}
+                None => return None,
+            },
+            EntryBody::User { text, .. } => {
+                if let Some(to) = note_attr(text, SHELL_CHANGE, "to") {
+                    return Some(to);
+                }
+                if has_note(text, HOST_CHANGE) {
+                    return None;
+                }
+            }
+            EntryBody::Summary { .. } => return None,
+            EntryBody::Tool { .. } => {}
+        }
+    }
+    None
 }
 
 /// Whether a terminal was attached as far as `earlier` (the entries before a new message) tells

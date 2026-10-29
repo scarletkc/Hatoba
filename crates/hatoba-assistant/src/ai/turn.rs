@@ -24,7 +24,8 @@ use super::notes::{
 };
 use super::places::{
     Place, conversation_memory_place, entry_place, host_name, host_target, local_name,
-    memory_place, moved_from, moves_to, names_server, tab_local, tab_target, target_name,
+    memory_place, moved_from, moves_to, names_server, tab_local, tab_shell, tab_target,
+    target_name,
 };
 use super::request::{core_effort, nothing_to_send, prepare, turn_server_id};
 use super::side::SideRequest;
@@ -644,6 +645,7 @@ impl AiManager {
                 model_id: request.model.id.clone(),
                 text: String::new(),
                 tool_calls: Vec::new(),
+                shell: tab_shell(&turn.context),
                 mcp_servers: mcp_servers.clone(),
             });
             let result = {
@@ -732,9 +734,11 @@ fn store_response(
     turn: &Turn,
     response: AssistantEntry,
 ) -> Result<String, Halt> {
-    // AI-09: the next message is noted when it has the other set of tools.
+    // AI-09, §7.5: the next message is noted when it has the other set of tools, or another
+    // local shell.
     let response = AssistantEntry {
         terminal: Some(turn.context.tab),
+        shell: tab_shell(&turn.context),
         ..response
     };
     let finish = response.finish;

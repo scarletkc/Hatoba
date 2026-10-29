@@ -859,6 +859,64 @@ async fn another_computers_local_tab_is_a_move() {
     assert!(system.contains("Ubuntu is a WSL distribution"), "{system}");
 }
 
+#[tokio::test]
+async fn another_shell_of_the_same_computer_is_noted() {
+    use crate::dto::LocalShellKind;
+    use hatoba_ai::tools::{shell_change_block, terminal_change_block};
+
+    let f = Fixture::new((0..5).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    let wsl = f.local("DEMO-PC", "Ubuntu", LocalShellKind::Wsl);
+    let pwsh = f.local("DEMO-PC", "PowerShell", LocalShellKind::Powershell);
+    let home = AiTurnContext {
+        tab: false,
+        local: Some(crate::dto::AiLocalTab {
+            device: "DEMO-PC".into(),
+            shell: None,
+            kind: None,
+        }),
+        ..f.context()
+    };
+    let (conv, _) = f.exchange(None, "clone it here", wsl.clone()).await;
+    // Another shell of the same computer is no move, but the earlier output came from Ubuntu.
+    f.exchange(Some(&conv), "why?", pwsh.clone()).await;
+    f.exchange(Some(&conv), "and now?", pwsh).await;
+    // Without a terminal between, the reply with one before decides.
+    f.exchange(Some(&conv), "away", home).await;
+    f.exchange(Some(&conv), "back", wsl).await;
+    assert_eq!(
+        f.user_texts(&conv),
+        [
+            manual("clone it here"),
+            format!("{}why?", shell_change_block("Ubuntu", "PowerShell")),
+            "and now?".to_owned(),
+            format!("{}away", terminal_change_block(false)),
+            format!(
+                "{}{}back",
+                terminal_change_block(true),
+                shell_change_block("PowerShell", "Ubuntu")
+            ),
+        ]
+    );
+    let shells: Vec<Option<String>> = f
+        .entries(&conv)
+        .into_iter()
+        .filter_map(|e| match e.body {
+            EntryBody::Assistant(a) => Some(a.shell),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        shells,
+        [
+            Some("Ubuntu".to_owned()),
+            Some("PowerShell".to_owned()),
+            Some("PowerShell".to_owned()),
+            None,
+            Some("Ubuntu".to_owned()),
+        ]
+    );
+}
+
 #[test]
 fn a_note_from_a_local_terminal_names_its_computer() {
     let (place, origin) =

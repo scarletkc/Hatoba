@@ -35,6 +35,16 @@ pub(super) fn tab_local(context: &AiTurnContext) -> Option<String> {
         .map(|l| l.device.clone())
 }
 
+/// The shell of a local tab (§7.5) whose terminal tools a turn offers, as the system prompt names
+/// it, which a reply records so that the next message on another shell is noted.
+pub(super) fn tab_shell(context: &AiTurnContext) -> Option<String> {
+    context
+        .local
+        .as_ref()
+        .filter(|_| context.tab && context.host_id.is_none() && context.target.is_none())
+        .and_then(|l| l.shell.clone())
+}
+
 /// What a local tab's computer (§7.5) is called where a host's display name would be: in notes,
 /// the judge's state and the system prompt of a conversation without a terminal.
 pub(super) fn local_name(device: &str) -> String {

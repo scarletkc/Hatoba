@@ -13,6 +13,9 @@ pub(super) const HOST_CHANGE: &str = "host_change";
 /// The tag of the note Hatoba puts before a message whose requests offer the terminal tools when
 /// the newest reply's did not, or the other way round (AI-09).
 pub(super) const TERMINAL_CHANGE: &str = "terminal_change";
+/// The tag of the note Hatoba puts before a message on a local terminal tab of the same computer
+/// that runs another shell than the newest reply's (§7.5).
+pub(super) const SHELL_CHANGE: &str = "shell_change";
 /// The tag of the note Hatoba puts before the first message to another model (AI-05).
 pub(super) const MODEL_CHANGE: &str = "model_change";
 /// The tag of the note Hatoba puts before a message sent in another permission mode than the
@@ -95,6 +98,13 @@ const ATTACHMENTS: &[AttachmentKind] = &[
         title: |_| String::new(),
         placeholder: |_| String::new(),
         attributes: |attrs| matches!(attrs, [("to", "attached" | "detached")]),
+    },
+    AttachmentKind {
+        tag: SHELL_CHANGE,
+        note: true,
+        title: |_| String::new(),
+        placeholder: |_| String::new(),
+        attributes: |attrs| matches!(attrs, [("from", _), ("to", _)]),
     },
     AttachmentKind {
         tag: MODEL_CHANGE,

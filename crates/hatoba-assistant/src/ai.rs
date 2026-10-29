@@ -283,6 +283,9 @@ struct Streamed {
     text: String,
     /// Calls whose arguments are complete; a call still streaming has sent nothing yet.
     tool_calls: Vec<ToolCall>,
+    /// The local shell (§7.5) whose terminal tools the request offered, as a stored response
+    /// records it.
+    shell: Option<String>,
     /// The servers whose MCP tools the request offered directly (AI-30), as a stored response
     /// records them.
     mcp_servers: Option<Vec<String>>,
@@ -307,6 +310,7 @@ impl Streamed {
             },
             tool_calls: self.tool_calls,
             terminal: Some(terminal),
+            shell: self.shell,
             mcp_servers: self.mcp_servers,
             interrupted: true,
             ..AssistantEntry::default()

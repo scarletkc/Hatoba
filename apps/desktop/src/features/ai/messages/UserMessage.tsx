@@ -95,6 +95,7 @@ export function UserMessage({
 const NOTE_ICONS = {
   interrupted: "stop-circle",
   host_change: "arrows-left-right",
+  shell_change: "arrows-left-right",
   model_change: "swap",
   file_revert: "arrow-counter-clockwise",
   terminal_state: "terminal-window",
@@ -105,7 +106,8 @@ const NOTE_ICONS = {
 
 /**
  * A note Hatoba stored before a message: the user stopped the reply before it, the conversation moved
- * to another host, a terminal became attached or went away, it went to another model, the user
+ * to another host, a terminal became attached or went away, it moved to another shell of the same
+ * computer (§7.5), it went to another model, the user
  * reverted a file tool's change, it listed the deferred MCP tools (AI-45), or MCP servers' tools came
  * or went (AI-30).
  */

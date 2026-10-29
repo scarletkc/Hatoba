@@ -652,6 +652,7 @@ fn into_entry(
         raw: assembled.raw,
         // The shell knows which tools the request offered and records it when it stores the entry.
         terminal: None,
+        shell: None,
         mcp_servers: None,
         interrupted: false,
     }

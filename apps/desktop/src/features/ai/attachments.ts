@@ -13,11 +13,11 @@
  *   the typed text
  *
  * Before them, Rust stores the notes Hatoba writes itself when a message follows a reply the user
- * stopped, moves the conversation to another host, changes whether a terminal is attached, goes to
- * another model, is sent in another permission mode than the model was told of, starts a conversation
+ * stopped, moves the conversation to another host, changes whether a terminal is attached, moves it to
+ * another shell of the same computer, goes to another model, is sent in another permission mode than the model was told of, starts a conversation
  * with the memories, follows a revert of a file tool's change, is sent with a connected terminal, comes
  * with another list of deferred MCP tools, or has other MCP servers' tools (`interrupted`, `host_change`,
- * `terminal_change`, `model_change`, `permission_mode`, `memory`, `file_revert`, `terminal_state`,
+ * `terminal_change`, `shell_change`, `model_change`, `permission_mode`, `memory`, `file_revert`, `terminal_state`,
  * `mcp_tools`, `mcp_change`); the panel
  * shows the terminal's screen as a collapsed block, hides the memories, and shows the others as dividers. The block
  * format and its escaping are specified once, in docs/hatoba-spec.md §13.3
@@ -301,7 +301,8 @@ export function blockTitle(a: Attachment): string {
 /**
  * A note Hatoba writes before a message (§13.1, AI-05, AI-09, AI-41), never the user: the reply before
  * it was stopped by the user, or with this message the conversation moved to another host, a terminal
- * became attached or stopped being attached, it went to another model, the permission mode the model
+ * became attached or stopped being attached, it moved to another shell of the same computer (§7.5), it
+ * went to another model, the permission mode the model
  * works in changed (AI-16), or the user reverted the change a file tool call made, or this message
  * shows the attached terminal's screen (AI-46), lists the deferred MCP tools (AI-45), or names the MCP servers whose
  * tools became available or stopped being available (AI-30). `from` of a host change is empty when the earlier host no longer exists;
@@ -311,7 +312,7 @@ export function blockTitle(a: Attachment): string {
  */
 export type Note =
   | { kind: "interrupted" }
-  | { kind: "host_change" | "model_change"; from: string; to: string }
+  | { kind: "host_change" | "shell_change" | "model_change"; from: string; to: string }
   | { kind: "terminal_change"; to: "attached" | "detached" }
   | { kind: "permission_mode"; mode: AiPermissionMode }
   | { kind: "memory"; entries: number; host?: string; body: string }
@@ -325,6 +326,7 @@ const NOTE_ORDER = [
   "interrupted",
   "host_change",
   "terminal_change",
+  "shell_change",
   "model_change",
   "permission_mode",
   "memory",
@@ -461,7 +463,7 @@ const INTERRUPTED_BODY =
   "The user stopped your previous reply before it was finished. It ends where it was cut off; anything you were still writing, tool calls included, was not kept.";
 
 /**
- * A note as Rust writes it (`interrupted_block`, `host_change_block`, `terminal_change_block`,
+ * A note as Rust writes it (`interrupted_block`, `host_change_block`, `terminal_change_block`, `shell_change_block`,
  * `model_change_block`, `permission_mode_block`, `memory_block`, `file_revert_block`, `terminal_state_block`,
  * `deferred::list_block` and `change::block` in crates/hatoba-ai). The panel never sends one; Rust adds them when it stores a message, and the mock
  * does the same.
@@ -528,7 +530,9 @@ export function noteBlock(n: Note): string {
   const body =
     n.kind === "model_change"
       ? "Earlier replies in this conversation came from another model."
-      : `The conversation moved to another host. Screens and command output before this message came from ${from ? `"${from}"` : "another host"}.`;
+      : n.kind === "shell_change"
+        ? `The conversation moved to another local terminal on the same computer, which runs "${noteText(n.to)}". Screens and command output before this message came from "${from}".`
+        : `The conversation moved to another host. Screens and command output before this message came from ${from ? `"${from}"` : "another host"}.`;
   return writeBlock(
     n.kind,
     [
@@ -604,7 +608,7 @@ export interface MessageParts {
 }
 
 const OPEN =
-  /^<(interrupted|host_change|terminal_change|model_change|permission_mode|memory|file_revert|terminal_state|mcp_tools|mcp_change|terminal_selection|connection_diagnostics|pasted_text|file|host_file|host_directory|mcp_resource|skill|mcp_prompt)((?: [a-z_]+="[^"]*")*)>\n/;
+  /^<(interrupted|host_change|terminal_change|shell_change|model_change|permission_mode|memory|file_revert|terminal_state|mcp_tools|mcp_change|terminal_selection|connection_diagnostics|pasted_text|file|host_file|host_directory|mcp_resource|skill|mcp_prompt)((?: [a-z_]+="[^"]*")*)>\n/;
 const DIGITS = /^\d+$/;
 
 type Block = { kind: "note"; note: Note } | { kind: "attachment"; attachment: Attachment };
@@ -618,6 +622,7 @@ function blockOf(tag: string, attrs: [string, string][], body: string): Block | 
     case "interrupted":
       return names === "" ? { kind: "note", note: { kind: tag } } : null;
     case "host_change":
+    case "shell_change":
     case "model_change":
       return names === "from,to" ? { kind: "note", note: { kind: tag, from: value(0), to: value(1) } } : null;
     case "terminal_change": {

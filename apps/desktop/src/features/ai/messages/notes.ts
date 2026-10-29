@@ -7,8 +7,8 @@ type Tr = (key: MessageKey, params?: Params) => string;
 /**
  * What a note Hatoba stored before a message says in the panel, where it is a divider above the
  * message, and in an export (§13.1, AI-05, AI-09, AI-41): that the user stopped the reply before it,
- * where the conversation moved, whether a terminal became attached or went away, which model it went
- * to, and what came before, the permission mode it was sent in when it changed (AI-16), which file's
+ * where the conversation moved, whether a terminal became attached or went away, which shell of the
+ * same computer it moved to (§7.5), which model it went to, and what came before, the permission mode it was sent in when it changed (AI-16), which file's
  * change the user reverted, how many memories it started with (AI-53), how many lines of the terminal's
  * screen it showed (AI-46, the title of its collapsed block), how many MCP tools it listed (AI-45), or
  * which MCP servers' tools became available or stopped being available (AI-30). A host that no longer
@@ -25,6 +25,8 @@ export function noteLabel(t: Tr, note: Note, device = ""): string {
       });
     case "terminal_change":
       return t(note.to === "attached" ? "ai.note.terminalAttached" : "ai.note.terminalDetached");
+    case "shell_change":
+      return t("ai.note.shellChange", { to: note.to, from: note.from });
     case "model_change":
       return t("ai.note.modelChange", { to: modelName(note.to), from: modelName(note.from) });
     case "permission_mode":

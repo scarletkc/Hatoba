@@ -236,6 +236,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   const compacting = new Set<string>();
   /** By reply entry id: whether its request offered the terminal tools (AI-09). */
   const replyTerminal = new Map<string, boolean>();
+  /** By reply entry id: the local shell whose terminal tools its request offered (§7.5). */
+  const replyShell = new Map<string, string>();
   /** By reply entry id: the servers whose MCP tools its request offered directly (AI-30). */
   const replyServers = new Map<string, string[]>();
   /** By user entry id: where the entries before it came from (`Recorded`). */
@@ -337,6 +339,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         usage: null,
       };
       replyTerminal.set(entry.entry_id, turn.context.tab);
+      recordShell(entry.entry_id, turn.context);
       if (part.servers) replyServers.set(entry.entry_id, part.servers);
       interrupted.add(entry.entry_id);
       store(c, entry);
@@ -1193,8 +1196,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       finish: p.finish,
       usage,
     };
-    // Like Rust's `AssistantEntry.terminal` (AI-09) and `mcp_servers` (AI-30), which the view does not carry.
+    // Like Rust's `AssistantEntry.terminal` (AI-09), `shell` (§7.5) and `mcp_servers` (AI-30), which the view does not carry.
     replyTerminal.set(entry.entry_id, turn.context.tab);
+    recordShell(entry.entry_id, turn.context);
     if (servers) replyServers.set(entry.entry_id, servers);
     turn.streamed = null;
     store(c, entry);
@@ -1290,7 +1294,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
    * came from another host than the one the conversation is on with it (`move`'s, or its own when `move` is
    * `null`; `cameFrom` names the other, `null` without a move), a
    * `terminal_change` note when the message has the terminal tools and `terminalBefore` says there was
-   * none, or the other way round, and a `model_change` note when the newest reply came from another
+   * none, or the other way round, a `shell_change` note when it has a local tab's tools on another shell than
+   * `shellBefore` says and notes no move, and a `model_change` note when the newest reply came from another
    * model, unless a message without a reply noted that switch already, then the screen (`screenNote`), also
    * before a conversation's first message. Returned as the text that goes before the message.
    */
@@ -1325,10 +1330,14 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const to =
       hosts.find((h) => h.id === place.host_id)?.name ??
       (place.quick_target ? formatTarget(place.quick_target) : place.local ? localName(place.local) : undefined);
-    if (cameFrom !== null && to !== undefined && cameFrom !== to)
-      notes.push({ kind: "host_change", from: cameFrom, to });
+    const moved = cameFrom !== null && to !== undefined && cameFrom !== to;
+    if (moved) notes.push({ kind: "host_change", from: cameFrom, to });
     if (terminalBefore(earlier) === !context.tab)
       notes.push({ kind: "terminal_change", to: context.tab ? "attached" : "detached" });
+    const shellFrom = shellBefore(earlier);
+    const shellTo = tabShell(context);
+    if (!moved && shellFrom && shellTo && shellFrom !== shellTo)
+      notes.push({ kind: "shell_change", from: shellFrom, to: shellTo });
     const providers = await deps.providers();
     const label = (providerId: string, modelId: string) => {
       const name = (
@@ -1449,6 +1458,39 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       if (note?.kind === "mcp_change") notes.push(note);
     }
     return undefined;
+  }
+
+  /** Like Rust's `tab_shell` (§7.5): the shell of a local tab whose terminal tools the request offers. */
+  function tabShell(context: AiTurnContext): string | null {
+    if (!context.tab || context.host_id || context.target) return null;
+    return context.local?.shell ?? null;
+  }
+
+  function recordShell(entryId: string, context: AiTurnContext) {
+    const shell = tabShell(context);
+    if (shell) replyShell.set(entryId, shell);
+  }
+
+  /**
+   * Like Rust's `shell_before` (§7.5): the shell of the newest reply that had the terminal tools, or what a
+   * `shell_change` note says on a newer message without a reply; null after a `host_change` note or a summary.
+   */
+  function shellBefore(earlier: AiEntryView[]): string | null {
+    for (const e of [...earlier].reverse()) {
+      if (e.role === "assistant") {
+        const terminal = replyTerminal.get(e.entry_id);
+        if (terminal === undefined) return null;
+        if (terminal) return replyShell.get(e.entry_id) ?? null;
+        continue;
+      }
+      if (e.role === "summary") return null;
+      if (e.role !== "user") continue;
+      const notes = parseMessage(e.text).notes;
+      const shell = notes.find((n) => n.kind === "shell_change");
+      if (shell?.kind === "shell_change") return shell.to;
+      if (notes.some((n) => n.kind === "host_change")) return null;
+    }
+    return null;
   }
 
   /**
@@ -2603,6 +2645,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         const entry_id = newId();
         const terminal = replyTerminal.get(e.entry_id);
         if (terminal !== undefined) replyTerminal.set(entry_id, terminal);
+        const shell = replyShell.get(e.entry_id);
+        if (shell !== undefined) replyShell.set(entry_id, shell);
         const servers = replyServers.get(e.entry_id);
         if (servers) replyServers.set(entry_id, servers);
         if (interrupted.has(e.entry_id)) interrupted.add(entry_id);

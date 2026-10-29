@@ -345,11 +345,12 @@ describe("Hatoba's notes (AI-05, AI-09)", () => {
     to: "Claude Opus 5.5 (claude-opus-5-5)",
   };
   const attached: Note = { kind: "terminal_change", to: "attached" };
+  const shell: Note = { kind: "shell_change", from: "Ubuntu", to: "PowerShell" };
   const stopped: Note = { kind: "interrupted" };
 
   it("are written exactly as Rust writes them", () => {
-    // interrupted_block, host_change_block, terminal_change_block and model_change_block in
-    // crates/hatoba-ai/src/tools.rs.
+    // interrupted_block, host_change_block, terminal_change_block, shell_change_block and
+    // model_change_block in crates/hatoba-ai/src/tools.rs.
     expect(noteBlock(stopped)).toBe(
       "<interrupted>\nThe user stopped your previous reply before it was finished. It ends where it was cut off; anything you were still writing, tool calls included, was not kept.\n</interrupted>",
     );
@@ -371,20 +372,24 @@ describe("Hatoba's notes (AI-05, AI-09)", () => {
     expect(noteBlock({ kind: "terminal_change", to: "detached" })).toBe(
       '<terminal_change to="detached">\nNo terminal is attached from this message on. Screens and command output before this message came from the terminal that was attached then.\n</terminal_change>',
     );
+    expect(noteBlock(shell)).toBe(
+      '<shell_change from="Ubuntu" to="PowerShell">\nThe conversation moved to another local terminal on the same computer, which runs "PowerShell". Screens and command output before this message came from "Ubuntu".\n</shell_change>',
+    );
   });
 
-  it("come first, the stop's, the host's, the terminal's, then the model's, then the attachments and the typed text", () => {
+  it("come first, the stop's, the host's, the terminal's, the shell's, then the model's, then the attachments and the typed text", () => {
     const d = diag();
     const s = att("$ psql");
     const p = paste("a long paste");
-    const stored = composeMessage("Why is it slow?", [p, s, d], [switched, attached, moved, stopped]);
+    const stored = composeMessage("Why is it slow?", [p, s, d], [switched, shell, attached, moved, stopped]);
     expect(stored.indexOf("<interrupted>")).toBe(0);
     expect(stored.indexOf("<host_change")).toBeGreaterThan(0);
     expect(stored.indexOf("<terminal_change")).toBeGreaterThan(stored.indexOf("<host_change"));
-    expect(stored.indexOf("<terminal_change")).toBeLessThan(stored.indexOf("<model_change"));
+    expect(stored.indexOf("<shell_change")).toBeGreaterThan(stored.indexOf("<terminal_change"));
+    expect(stored.indexOf("<shell_change")).toBeLessThan(stored.indexOf("<model_change"));
     expect(stored.indexOf("<model_change")).toBeLessThan(stored.indexOf("<connection_diagnostics"));
     expect(parseMessage(stored)).toEqual({
-      notes: [stopped, moved, attached, switched],
+      notes: [stopped, moved, attached, shell, switched],
       attachments: [d, s, p],
       typed: "Why is it slow?",
     });
