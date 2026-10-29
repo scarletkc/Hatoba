@@ -15,7 +15,10 @@ use crate::error::{AppError, AppResult};
 use crate::remote_edit;
 use crate::state::{AppState, state as app_state};
 
+/// The session's SFTP client. SEC-03: sessions stay connected behind the lock screen, but take no
+/// input until unlocked, so every SFTP command fails while locked.
 pub(crate) async fn client(state: &AppState, session_id: &str) -> AppResult<SftpClient> {
+    state.with_unlocked(|_| Ok(()))?;
     let live = state.ssh.get(session_id)?;
     let client = live.sftp.get_or_try_init(|| live.session.sftp()).await?;
     Ok(client.clone())
@@ -394,4 +397,28 @@ pub fn sftp_edit_quit(app: AppHandle, state: State<'_, AppState>) {
 fn editor(vault: &hatoba_core::vault::Vault) -> Option<String> {
     let json = vault.local_prefs().ok().flatten()?;
     LocalPrefs::from_stored(&json).sftp_editor
+}
+
+#[cfg(test)]
+mod tests {
+    use hatoba_core::{KdfParams, Vault};
+
+    use super::client;
+    use crate::error::ErrorCode;
+    use crate::state::AppState;
+
+    #[tokio::test]
+    async fn sftp_commands_fail_behind_the_lock_screen() {
+        let mut vault = Vault::open_in_memory().unwrap();
+        vault
+            .create_with_params("correct horse battery staple", KdfParams::for_tests())
+            .unwrap();
+        let state = AppState::new(vault, false);
+        let unlocked = client(&state, "s1").await.err().unwrap();
+        assert_ne!(unlocked.code, ErrorCode::Locked);
+
+        state.vault().lock();
+        let locked = client(&state, "s1").await.err().unwrap();
+        assert_eq!(locked.code, ErrorCode::Locked);
+    }
 }

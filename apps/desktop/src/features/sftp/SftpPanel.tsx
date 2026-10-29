@@ -14,6 +14,7 @@ import {
   type MenuEntry,
 } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
+import { useApp } from "@/app/store";
 import { formatBytes, formatDate, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AppError, FileEntry } from "@/ipc/types";
@@ -70,7 +71,7 @@ interface Props {
   tabId: string;
   sessionId: string;
   hostName: string;
-  /** Only the visible tab's panel reacts to native file drops. */
+  /** Only the visible tab's panel reacts to native file drops, and only while unlocked. */
   active: boolean;
 }
 
@@ -131,6 +132,13 @@ export function SftpPanel({ tabId, sessionId, hostName, active }: Props) {
       refresh();
     }
   }, [uploadsDone, refresh]);
+
+  // SEC-03: nothing reaches the server behind the lock screen; a load refused there runs again
+  // after the unlock.
+  const unlocked = useApp((st) => st.phase === "unlocked");
+  useEffect(() => {
+    if (unlocked && error?.code === "locked") refresh();
+  }, [unlocked, error, refresh]);
 
   const fail = (e: unknown) => toast(errorMessage(t, e), "error");
 
@@ -211,7 +219,7 @@ export function SftpPanel({ tabId, sessionId, hostName, active }: Props) {
 
   const pickAndUpload = async () => upload(await pickUploadFiles());
 
-  const { dragging, html5 } = useFileDrop(rootRef, active, (paths) => void upload(paths));
+  const { dragging, html5 } = useFileDrop(rootRef, active && unlocked, (paths) => void upload(paths));
 
   const showMenu = (e: MouseEvent, entry: FileEntry | null) => {
     e.preventDefault();
