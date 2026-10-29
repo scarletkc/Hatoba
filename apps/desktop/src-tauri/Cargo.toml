@@ -67,7 +67,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 # and Xshell's `.xts` exports, which are zip files. Versions match hatoba-ai's own.
 encoding_rs = "0.8"
 serde_yaml_ng = "0.10"
-zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip = { version = "9.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 # SecureCRT's XML export. The version tauri already builds.
 quick-xml = "0.42"
 
