@@ -3232,11 +3232,13 @@ async fn replayed_thinking_that_no_longer_binds_keeps_progress_updates() {
         AiEntry::tool(3, "toolu_01AbCdEf", ToolStatus::Ok, "42%"),
     ];
     let tools = terminal_tools();
-    let req = request(&model, &entries, &tools);
-    let (result, _) = run(&p, &req).await;
+    let req = with_effort(request(&model, &entries, &tools), Some(High));
+    let (result, events) = run(&p, &req).await;
     let entry = result.unwrap();
-    // The retry rebuilds the entries and still asks for progress updates, so no reasoning shows.
+    // The retry rebuilds the entries and still asks for progress updates at the same level, so
+    // no reasoning shows.
     assert_eq!(entry.reasoning, None);
+    assert!(!events.contains(&StreamEvent::EffortIgnored));
     let requests = server.received_requests().await.unwrap();
     assert_eq!(requests.len(), 2);
     assert!(sent_beta(&server, 1).await);
@@ -3245,6 +3247,7 @@ async fn replayed_thinking_that_no_longer_binds_keeps_progress_updates() {
         sent[1]["thinking"],
         json!({"type": "adaptive", "display": "updates"})
     );
+    assert_eq!(sent[1]["output_config"], json!({"effort": "high"}));
     assert!(!sent[1].to_string().contains(r#""type":"thinking""#));
 }
 
