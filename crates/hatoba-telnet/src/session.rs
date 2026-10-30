@@ -34,6 +34,7 @@ pub enum TelnetEvent {
 enum Command {
     Input(Vec<u8>),
     Resize { cols: u16, rows: u16 },
+    StopLogin,
     Close,
 }
 
@@ -73,6 +74,12 @@ impl TelnetSession {
     /// Tells the server the terminal's new size, when it asked for it (NAWS).
     pub fn resize(&self, cols: u16, rows: u16) {
         let _ = self.commands.send(Command::Resize { cols, rows });
+    }
+
+    /// Stops typing the saved login and wipes it, as when the vault locks (SEC-03); the
+    /// connection stays.
+    pub fn stop_login(&self) {
+        let _ = self.commands.send(Command::StopLogin);
     }
 
     /// Closes the connection.
@@ -144,6 +151,7 @@ async fn run<S>(
                         let _ = out.send(naws);
                     }
                 }
+                Some(Command::StopLogin) => login.stop(),
                 Some(Command::Close) | None => break None,
             },
             written = &mut write_task => {
@@ -271,6 +279,26 @@ mod tests {
             other => panic!("expected Closed, got {other:?}"),
         }
         assert!(session.write(b"x".to_vec()).is_err());
+    }
+
+    #[tokio::test]
+    async fn a_stopped_login_types_nothing_at_the_prompts() {
+        let (client, mut server) = duplex(4096);
+        let login = AutoLogin::new(Some("admin".into()), Some("pw".into()));
+        let (session, mut events) = TelnetSession::start(client, 80, 24, login);
+        read_some(&mut server).await;
+        session.stop_login();
+        // Commands run in order, so the stop has been handled once this input arrives.
+        session.write(b"x".to_vec()).unwrap();
+        assert_eq!(read_some(&mut server).await, b"x");
+
+        server.write_all(b"login: ").await.unwrap();
+        assert_eq!(next_data(&mut events).await, b"login: ");
+        server.write_all(b"\r\nPassword: ").await.unwrap();
+        next_data(&mut events).await;
+        let mut buf = [0u8; 64];
+        let typed = tokio::time::timeout(Duration::from_millis(300), server.read(&mut buf)).await;
+        assert!(typed.is_err(), "the client typed {:?}", typed);
     }
 
     #[tokio::test]

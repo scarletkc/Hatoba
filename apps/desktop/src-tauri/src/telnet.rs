@@ -71,6 +71,13 @@ impl TelnetManager {
         lock(&self.sessions).remove(id)
     }
 
+    /// SEC-03: the vault locked, so no tab types its saved login any more, also one kept open.
+    pub fn stop_logins(&self) {
+        for live in lock(&self.sessions).values() {
+            live.session.stop_login();
+        }
+    }
+
     /// SEC-03 "lock disconnects sessions", and quitting: takes every session out.
     pub fn take_all(&self) -> Vec<Arc<TelnetLive>> {
         lock(&self.sessions).drain().map(|(_, live)| live).collect()

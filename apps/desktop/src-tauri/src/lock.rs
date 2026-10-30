@@ -103,6 +103,9 @@ pub async fn lock_vault(app: &AppHandle, reason: LockReason) {
     state.edits.lock();
     // AI-35: files dropped before the lock cannot be read after the unlock.
     state.dropped.clear();
+    // TELNET-03: a Telnet tab kept open types no saved login behind the lock screen. A tab that
+    // connects later fails, as `telnet_open` checks the vault where it registers the session.
+    state.telnet.stop_logins();
     let disconnect = async {
         if disconnects_on_lock(&state) {
             // The sessions open now: one opened after an unlock in the meantime stays.

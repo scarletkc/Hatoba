@@ -77,10 +77,10 @@ function initialForm(host: TelnetHostView | undefined, groupId: string | null, d
     forget: false,
     groupId: host ? host.group_id : groupId,
     tags: host?.tags ?? draft?.tags ?? [],
-    proxyMode: host?.proxy_mode ?? "device_default",
-    proxyId: host?.proxy_id ?? null,
+    proxyMode: host?.proxy_mode ?? draft?.proxyMode ?? "device_default",
+    proxyId: host?.proxy_id ?? draft?.proxyId ?? null,
     note: host?.note ?? draft?.note ?? "",
-    aiNotes: host?.ai_notes ?? "",
+    aiNotes: host?.ai_notes ?? draft?.aiNotes ?? "",
     favorite: host?.favorite ?? draft?.favorite ?? false,
   };
 }
@@ -275,7 +275,10 @@ export function TelnetEditPage({
         port: form.port.trim() === "23" ? undefined : form.port,
         username: form.username,
         tags: form.tags,
+        proxyMode: form.proxyMode,
+        proxyId: form.proxyId,
         note: form.note,
+        aiNotes: form.aiNotes,
         favorite: form.favorite,
       },
     });

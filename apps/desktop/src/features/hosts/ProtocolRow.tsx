@@ -1,5 +1,6 @@
 import { FormRow, Segmented } from "@hatoba/ui";
 import { useT } from "@/i18n";
+import type { ProxyMode } from "@/ipc/types";
 
 export type HostProtocol = "ssh" | "telnet";
 
@@ -11,7 +12,10 @@ export interface HostDraft {
   port?: string;
   username: string;
   tags: string[];
+  proxyMode: ProxyMode;
+  proxyId: string | null;
   note: string;
+  aiNotes: string;
   favorite: boolean;
 }
 
