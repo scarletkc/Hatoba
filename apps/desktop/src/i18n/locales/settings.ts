@@ -182,6 +182,7 @@ export default defineMessages({
     "settings.about.source": "源代码",
     "settings.about.license": "MIT 许可证",
     "settings.about.report": "反馈问题",
+    "settings.about.sponsor": "赞助",
 
     // proxies (SSH-13)
     "settings.tab.proxies": "代理",
@@ -408,6 +409,7 @@ export default defineMessages({
     "settings.about.source": "Source Code",
     "settings.about.license": "MIT License",
     "settings.about.report": "Report a Problem",
+    "settings.about.sponsor": "Sponsor",
 
     // proxies (SSH-13)
     "settings.tab.proxies": "Proxies",
@@ -639,6 +641,7 @@ export default defineMessages({
     "settings.about.source": "ソースコード",
     "settings.about.license": "MIT ライセンス",
     "settings.about.report": "問題を報告",
+    "settings.about.sponsor": "スポンサー",
 
     // proxies (SSH-13)
     "settings.tab.proxies": "プロキシ",
@@ -860,6 +863,7 @@ export default defineMessages({
     "settings.about.source": "原始碼",
     "settings.about.license": "MIT 授權條款",
     "settings.about.report": "回報問題",
+    "settings.about.sponsor": "贊助",
 
     // proxies (SSH-13)
     "settings.tab.proxies": "代理",

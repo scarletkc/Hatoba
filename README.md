@@ -135,6 +135,14 @@ connecting Hatoba, and covers upgrades, resets, and backups.
 - [Contributing](CONTRIBUTING.md): issues, branches, commits, and pull requests
 - [Security policy](SECURITY.md): reporting a vulnerability privately
 
+## Sponsors
+
+Thanks to everyone who has sponsored Hatoba.
+
+<a href="https://github.com/kleedaisuki"><img src="https://github.com/kleedaisuki.png?size=96" width="48" height="48" alt="kleedaisuki" /></a>
+
+[Sponsor Hatoba on GitHub](https://github.com/sponsors/scarletkc)
+
 ## License
 
 Hatoba is licensed under [MIT](LICENSE).

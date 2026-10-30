@@ -100,6 +100,7 @@ export const ja: Messages = {
     security: "セキュリティポリシー",
     privacy: "プライバシーポリシー",
     contributing: "コントリビュート",
+    sponsor: "スポンサー",
     license: "Hatoba は MIT ライセンスで公開しています。",
   },
   download: {

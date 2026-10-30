@@ -96,6 +96,7 @@ export const zh: Messages = {
     security: "安全策略",
     privacy: "隐私政策",
     contributing: "参与贡献",
+    sponsor: "赞助",
     license: "Hatoba 以 MIT 许可证发布。",
   },
   download: {

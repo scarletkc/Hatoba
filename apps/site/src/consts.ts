@@ -10,6 +10,7 @@ export const SECURITY_URL = `${REPO_URL}/security/policy`;
 export const PRIVACY_URL = `${REPO_URL}/blob/main/PRIVACY.md`;
 export const CONTRIBUTING_URL = `${REPO_URL}/blob/main/CONTRIBUTING.md`;
 export const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
+export const SPONSOR_URL = "https://github.com/sponsors/scarletkc";
 export const SECURITY_MODEL_URL = `${REPO_URL}/blob/main/docs/hatoba-spec.md#4-security-model-and-encryption`;
 export const BUILD_FROM_SOURCE_URL = `${REPO_URL}/blob/main/docs/development.md#build`;
 
