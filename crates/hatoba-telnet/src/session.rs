@@ -6,6 +6,7 @@
 //! the output.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use bytes::{Bytes, BytesMut};
@@ -41,6 +42,9 @@ enum Command {
 /// A running Telnet connection. Dropping it, or [`close`](Self::close), closes the connection.
 pub struct TelnetSession {
     commands: mpsc::UnboundedSender<Command>,
+    /// Set by [`stop_login`](Self::stop_login). The task reads it before it types, so output
+    /// it reads after the stop gets nothing typed, even before the command arrives.
+    login_stopped: Arc<AtomicBool>,
 }
 
 impl TelnetSession {
@@ -57,8 +61,23 @@ impl TelnetSession {
     {
         let (commands, commands_rx) = mpsc::unbounded_channel();
         let (events_tx, events_rx) = mpsc::channel(EVENT_CAPACITY);
-        tokio::spawn(run(stream, cols, rows, login, commands_rx, events_tx));
-        (Arc::new(Self { commands }), events_rx)
+        let login_stopped = Arc::new(AtomicBool::new(false));
+        tokio::spawn(run(
+            stream,
+            cols,
+            rows,
+            login,
+            login_stopped.clone(),
+            commands_rx,
+            events_tx,
+        ));
+        (
+            Arc::new(Self {
+                commands,
+                login_stopped,
+            }),
+            events_rx,
+        )
     }
 
     /// Sends the terminal's input to the server, in order with earlier input.
@@ -79,6 +98,8 @@ impl TelnetSession {
     /// Stops typing the saved login and wipes it, as when the vault locks (SEC-03); the
     /// connection stays.
     pub fn stop_login(&self) {
+        self.login_stopped.store(true, Ordering::SeqCst);
+        // The command wipes the credentials, also while the server sends nothing.
         let _ = self.commands.send(Command::StopLogin);
     }
 
@@ -99,6 +120,7 @@ async fn run<S>(
     cols: u16,
     rows: u16,
     mut login: AutoLogin,
+    login_stopped: Arc<AtomicBool>,
     mut commands: mpsc::UnboundedReceiver<Command>,
     events: mpsc::Sender<TelnetEvent>,
 ) where
@@ -124,7 +146,7 @@ async fn run<S>(
                     if !received.reply.is_empty() {
                         let _ = out.send(received.reply);
                     }
-                    if Instant::now() >= login_until {
+                    if Instant::now() >= login_until || login_stopped.load(Ordering::SeqCst) {
                         login.stop();
                     }
                     if let Some(answer) = login.output(&received.data) {
@@ -287,11 +309,8 @@ mod tests {
         let login = AutoLogin::new(Some("admin".into()), Some("pw".into()));
         let (session, mut events) = TelnetSession::start(client, 80, 24, login);
         read_some(&mut server).await;
+        // The prompt comes right after the stop, before the task can have read its command.
         session.stop_login();
-        // Commands run in order, so the stop has been handled once this input arrives.
-        session.write(b"x".to_vec()).unwrap();
-        assert_eq!(read_some(&mut server).await, b"x");
-
         server.write_all(b"login: ").await.unwrap();
         assert_eq!(next_data(&mut events).await, b"login: ");
         server.write_all(b"\r\nPassword: ").await.unwrap();
