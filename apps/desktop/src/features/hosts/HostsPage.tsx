@@ -57,7 +57,6 @@ import {
 } from "@/features/dashboard/views";
 import { durationLabel } from "@/features/settings/durations";
 import { usePrefs } from "@/features/settings/shared";
-import { useDocumentVisible } from "@/features/terminal/stats";
 import { formatRelative, useT, type Locale, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { GroupView, HostView, ImportSource, LocalPrefs, QuickTarget } from "@/ipc/types";
@@ -134,7 +133,6 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   const view = prefs.hosts_view;
   const stats = prefs.hosts_stats;
   const readouts = useReadoutMap();
-  const docVisible = useDocumentVisible();
 
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
@@ -243,7 +241,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
     () => filtered.filter((h) => shownOnDashboard(h, groupMap)).map((h) => h.id),
     [filtered, groupMap],
   );
-  useDashboardWatch(watched, interval, stats && docVisible);
+  useDashboardWatch(watched, interval, stats);
   const { dashboard_cpu_alert: cpuAlert, dashboard_mem_alert: memAlert, dashboard_disk_alert: diskAlert } = prefs;
   const alerts: Alerts = useMemo(
     () => ({ cpu: cpuAlert, mem: memAlert, disk: diskAlert }),
