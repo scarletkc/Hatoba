@@ -1,4 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { Icon, Menu, useMenu, type MenuEntry } from "@hatoba/ui";
 import { AiPanelButton } from "@/features/ai/AiPanel";
 import { tabActivity, useAi } from "@/features/ai/store";
@@ -11,6 +19,7 @@ import { cx } from "@/lib/cx";
 import { motion } from "@/lib/motion";
 import { openLocalTerminal } from "@/session/connect";
 import { loadLocalShells, preferredShell, shellName } from "@/session/localShells";
+import { getSession } from "@/session/session";
 import { useVaultData } from "./data";
 import { useApp } from "./store";
 import { useTabDrag } from "./tabDrag";
@@ -263,16 +272,33 @@ export function TabBar({ onNewTab, onCloseTab }: { onNewTab: () => void; onClose
   const list = useRef<HTMLDivElement>(null);
   useOpenNewTabs(list, tabs);
 
+  // Left and Right select the tab beside, and the focus follows it there; Tab reaches only the selected tab.
+  const onTabKey = (e: KeyboardEvent) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    e.preventDefault();
+    const ids = ["home", ...tabs.map((tab) => tab.id)];
+    const i = ids.indexOf(active);
+    const next = ids[(i + (e.key === "ArrowRight" ? 1 : ids.length - 1)) % ids.length];
+    activate(next);
+    // After the tab's terminal took the focus as it showed. The tabs are in the order of `ids`.
+    requestAnimationFrame(() =>
+      list.current?.querySelectorAll<HTMLElement>(':scope > [role="tab"]')[ids.indexOf(next)]?.focus(),
+    );
+  };
+
   return (
     <div className={s.tabbar} data-tauri-drag-region>
-      <div ref={list} className={s.tabs} role="tablist">
+      <div ref={list} className={s.tabs} role="tablist" onKeyDown={onTabKey}>
         <button
           type="button"
           role="tab"
           aria-selected={active === "home"}
           aria-label={t("tabs.home")}
           title={t("tabs.home")}
+          tabIndex={active === "home" ? 0 : -1}
           className={cx(s.tab, s.homeTab, active === "home" && s.tabActive)}
+          // A press leaves the focus where it is, as with browser tabs; a session tab gives it to its terminal.
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => activate("home")}
         >
           <Icon name="house" className={s.tabIcon} />
@@ -286,9 +312,15 @@ export function TabBar({ onNewTab, onCloseTab }: { onNewTab: () => void; onClose
             role="tab"
             data-tab-id={tab.id}
             aria-selected={active === tab.id}
+            tabIndex={active === tab.id ? 0 : -1}
             className={cx(s.tab, active === tab.id && s.tabActive)}
             onPointerDown={(e) => drag.down(e, tab.id)}
-            onClick={() => activate(tab.id)}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              activate(tab.id);
+              // Typing goes to the terminal, even after a click on the tab already selected or Enter on it.
+              getSession(tab.id)?.focus();
+            }}
             onAuxClick={(e) => {
               if (e.button === 1) onCloseTab(tab.id);
             }}
