@@ -63,6 +63,26 @@ export async function call(path: string, opts: CallOptions = {}): Promise<ApiRes
   return { status: response.status, headers: response.headers, body: isJson ? JSON.parse(text) : text };
 }
 
+/**
+ * `env.DB` for one request (pass it as `call(..., { env: { DB } })`) whose first `batch()` waits
+ * for `meanwhile`, so another request runs after the handler's checks and before its writes.
+ */
+export function pausedBeforeBatch(meanwhile: () => Promise<void>): D1Database {
+  let pending: (() => Promise<void>) | null = meanwhile;
+  return {
+    prepare: (query: string) => env.DB.prepare(query),
+    batch: async (statements: D1PreparedStatement[]) => {
+      const run = pending;
+      pending = null;
+      if (run) await run();
+      return env.DB.batch(statements);
+    },
+  } as unknown as D1Database;
+}
+
+export const changePassword = (token: string, json: unknown) =>
+  call("/v1/vault/password", { method: "PUT", token, json });
+
 export const setupPayload = (overrides: Record<string, unknown> = {}) => ({
   schema_version: 1,
   kdf_salt: KDF_SALT,

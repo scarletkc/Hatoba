@@ -10,11 +10,13 @@ import {
   NEW_RECOVERY_AUTH,
   RECOVERY_AUTH,
   call,
+  changePassword,
   envelope,
   key32,
   login,
   loggedIn,
   passwordChange,
+  pausedBeforeBatch,
   setupVault,
 } from "./helpers";
 
@@ -128,6 +130,39 @@ describe("POST /v1/login", () => {
     const text = await call("/v1/login", { body: "auth_key=x", headers: { "Content-Type": "text/plain" } });
     expect(text.status).toBe(415);
   });
+
+  it("creates no session when the password changes after the credential check", async () => {
+    await setupVault();
+    const owner = await login("device-a");
+    const res = await call("/v1/login", {
+      json: { auth_key: AUTH_KEY, device_id: "device-b", device_name: envelope() },
+      env: {
+        DB: pausedBeforeBatch(async () => {
+          expect((await changePassword(owner.session_token, passwordChange())).status).toBe(200);
+        }),
+      },
+    });
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe("invalid_credentials");
+    expect((await sessionRows()).map((row) => row.device_id)).toEqual(["device-a"]);
+  });
+
+  it("keeps the device's newer session when its login with the old password fails", async () => {
+    await setupVault();
+    const owner = await login("device-a");
+    let newer = "";
+    const res = await call("/v1/login", {
+      json: { auth_key: AUTH_KEY, device_id: "device-b", device_name: envelope() },
+      env: {
+        DB: pausedBeforeBatch(async () => {
+          await changePassword(owner.session_token, passwordChange());
+          newer = (await login("device-b", NEW_AUTH_KEY)).session_token;
+        }),
+      },
+    });
+    expect(res.status).toBe(401);
+    expect((await call("/v1/vault", { token: newer })).status).toBe(200);
+  });
 });
 
 describe("session handling", () => {
@@ -208,6 +243,37 @@ describe("POST /v1/recover", () => {
   it("does not accept the login auth_key as recovery proof", async () => {
     await setupVault();
     expect((await recover(AUTH_KEY)).status).toBe(401);
+  });
+
+  it("creates no session when the recovery code is rotated after the check", async () => {
+    await setupVault();
+    const owner = await login("device-a");
+    const rotate = passwordChange({ recovery_vault_key: envelope("rvk2"), recovery_auth: NEW_RECOVERY_AUTH });
+    const res = await call("/v1/recover", {
+      json: { recovery_auth: RECOVERY_AUTH, device_id: "device-r", device_name: envelope("r") },
+      env: {
+        DB: pausedBeforeBatch(async () => {
+          expect((await changePassword(owner.session_token, rotate)).status).toBe(200);
+        }),
+      },
+    });
+    expect(res.status).toBe(401);
+    expect((await sessionRows()).map((row) => row.scope)).toEqual(["full"]);
+  });
+
+  it("still issues the session when the password changes but the recovery code does not", async () => {
+    await setupVault();
+    const owner = await login("device-a");
+    const res = await call("/v1/recover", {
+      json: { recovery_auth: RECOVERY_AUTH, device_id: "device-r", device_name: envelope("r") },
+      env: {
+        DB: pausedBeforeBatch(async () => {
+          await changePassword(owner.session_token, passwordChange());
+        }),
+      },
+    });
+    expect(res.status).toBe(200);
+    expect((await sessionRows()).map((row) => row.scope).sort()).toEqual(["full", "recovery"]);
   });
 
   it("returns the recovery key material and a 15 minute restricted session", async () => {
