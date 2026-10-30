@@ -46,7 +46,8 @@ export class FakeTelnet {
     this.write("Password: ");
     if (this.host.has_password)
       setTimeout(() => {
-        if (this.stage !== "password") return;
+        // The user is typing a password of their own.
+        if (this.stage !== "password" || this.line) return;
         this.write("\r\n");
         this.stage = "exec";
         this.prompt();

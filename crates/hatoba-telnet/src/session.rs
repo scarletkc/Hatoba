@@ -168,6 +168,7 @@ async fn run<S>(
                     pending.extend_from_slice(&received.data);
                     if flush_at.is_none() || pending.len() >= FLUSH_BYTES {
                         if !send_pending(&mut pending, &events).await {
+                            write_task.abort();
                             return;
                         }
                         flush_at = Some(Instant::now() + FLUSH_INTERVAL);
@@ -195,6 +196,7 @@ async fn run<S>(
                     flush_at = None;
                 } else {
                     if !send_pending(&mut pending, &events).await {
+                        write_task.abort();
                         return;
                     }
                     flush_at = Some(Instant::now() + FLUSH_INTERVAL);
