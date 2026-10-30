@@ -143,6 +143,15 @@ Thanks to everyone who has sponsored Hatoba's author.
 
 [Sponsor Hatoba on GitHub](https://github.com/sponsors/scarletkc)
 
+## Star History
+
+<a href="https://www.star-history.com/#scarletkc/hatoba&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=scarletkc/hatoba&type=Date&theme=dark" />
+    <img src="https://api.star-history.com/svg?repos=scarletkc/hatoba&type=Date" alt="Star history chart" />
+  </picture>
+</a>
+
 ## License
 
 Hatoba is licensed under [MIT](LICENSE).
