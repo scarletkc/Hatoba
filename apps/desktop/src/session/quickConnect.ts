@@ -149,6 +149,8 @@ export function parseTelnet(input: string): { target: TelnetTarget; search: stri
   let address: string;
   let portText: string | undefined;
   const url = /^telnet:\/\/([^/@\s]+)\/?$/i.exec(text);
+  // `telnet://host:` names no port.
+  if (url?.[1].endsWith(":")) return null;
   if (url) {
     const dest = parseDestination(url[1]);
     if (!dest || dest.username !== null) return null;
@@ -161,6 +163,8 @@ export function parseTelnet(input: string): { target: TelnetTarget; search: stri
     portText = words[2];
     if (!(address.includes(":") ? IPV6 : HOSTNAME).test(address)) return null;
   }
+  // An IPv6 address has a digit: `:` and `::` name no server.
+  if (address.includes(":") && !/[0-9a-f]/i.test(address)) return null;
   const port = portText === undefined ? 23 : parsePort(portText);
   if (Number.isNaN(port)) return null;
   return { target: { address, port }, search: address };

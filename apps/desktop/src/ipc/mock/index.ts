@@ -361,6 +361,8 @@ export function createMockApi(): HatobaApi {
   async function openTelnet(host: TelnetHostView, hostId: string | null, onFrame: FrameHandler): Promise<string> {
     needUnlocked();
     await delay(300);
+    // The vault may have locked while connecting.
+    needUnlocked();
     if (hostId && D.PROBE[hostId] === false)
       fail("ssh", `connect to ${host.address}:${host.port}: connection refused`, { ssh_kind: "refused" });
     const sid = id("t");
@@ -537,6 +539,7 @@ export function createMockApi(): HatobaApi {
       if (password.length < 8) fail("invalid_input", "password too short", { field: "password" });
       vaultState = "unlocked";
       hosts = [];
+      telnetHosts = [];
       groups = [];
       keys = [];
       sync = {

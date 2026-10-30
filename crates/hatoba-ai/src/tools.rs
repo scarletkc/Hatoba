@@ -156,11 +156,27 @@ fn read_terminal_tool() -> ToolDef {
     )
 }
 
-/// `send_input` (AI-09).
-fn send_input_tool() -> ToolDef {
+/// `send_input` (AI-09). On a Telnet tab (TELNET-04) the text goes to a device's command line,
+/// which has no shell state to describe.
+fn send_input_tool(telnet: bool) -> ToolDef {
+    let (into, goes_to) = if telnet {
+        (
+            "the terminal tab",
+            "The text goes to the device's command line, as the user's typing does, and can \
+             answer its prompts.",
+        )
+    } else {
+        (
+            "the terminal tab's shell",
+            "The text goes to the shell itself, so commands use its working directory, \
+             environment and sudo session, and can be interactive or ask for input. A command \
+             started this way keeps running in the shell when the turn stops.",
+        )
+    };
     tool(
         SEND_INPUT,
-        "Type text into the terminal tab's shell, the same way the keyboard does, then press \
+        format!(
+            "Type text into {into}, the same way the keyboard does, then press \
          `keys` in order. The text is sent as it is, without a newline: to run a command, send \
          its text with keys [\"enter\"]. Keys work in full-screen programs too: [\"ctrl+x\", \
          \"n\"] leaves nano without saving. Then wait until the output has been quiet for 1 second \
@@ -168,10 +184,8 @@ fn send_input_tool() -> ToolDef {
          appeared after the input, or the whole screen when a full-screen program is active. \
          A quiet second does not mean a command has finished, since many commands pause \
          while they work: to wait for more output, call read_terminal with wait_seconds. \
-         The text goes to the shell itself, so commands use its working directory, \
-         environment and sudo session, and can be interactive or ask for input. A command \
-         started this way keeps running in the shell when the turn stops."
-            .to_owned(),
+         {goes_to}"
+        ),
         json!({
             "type": "object",
             "properties": {
@@ -215,7 +229,7 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
     if set.terminal && place == ToolPlace::Telnet {
         // A Telnet device has no exec channel and no files to reach: only its screen.
         tools.push(read_terminal_tool());
-        tools.push(send_input_tool());
+        tools.push(send_input_tool(true));
     } else if set.terminal {
         tools.push(read_terminal_tool());
         let (runs, apart, shared) = match place {
@@ -277,7 +291,7 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                 "required": ["command"]
             }),
         ));
-        tools.push(send_input_tool());
+        tools.push(send_input_tool(false));
         tools.push(tool(
             READ_FILE,
             format!(
@@ -1507,6 +1521,12 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
                  request that failed. When edit_file or write_file succeeds, the file holds what \
                  the call wrote, so do not read it back to check that. Say what you checked, or \
                  that you could not check it.\n",
+            );
+        } else {
+            out.push_str(
+                "- After a change, check that it worked before you call it done, such as with the \
+                 device's show commands, and say what you checked, or that you could not check \
+                 it.\n",
             );
         }
     }

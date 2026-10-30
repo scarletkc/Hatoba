@@ -177,10 +177,7 @@ export function AiPanel({ slotId }: { slotId: string }) {
           <span className={s.title} title={title}>
             {title}
           </span>
-          <span
-            className={s.host}
-            title={tabHost ? `${tabHost.username}@${tabHost.address}:${tabHost.port}` : undefined}
-          >
+          <span className={s.host} title={hostInfo(tabHost)?.target}>
             {hostLabel}
           </span>
         </div>

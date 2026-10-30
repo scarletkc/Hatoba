@@ -28,6 +28,9 @@ describe("parseTelnet (TELNET-05)", () => {
       "telnet host 0",
       "telnet host 70000",
       "telnet://u@host",
+      "telnet://router:",
+      "telnet :",
+      "telnet ::",
       "telnetd host",
       "ssh host",
     ])

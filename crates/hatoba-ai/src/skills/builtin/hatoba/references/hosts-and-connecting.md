@@ -54,11 +54,11 @@ Other labels: **Select All**, **Select None**.
 
 ## The host editor
 
-**New Host**, **Edit** in the row menu, or **Edit Host** (a terminal tab's **More actions**, or the connection-failed card) opens the editor on the home tab. **Save** (or Ctrl+S, or Enter in a text field) saves, **Cancel** or the back arrow leaves, and Esc leaves an untouched form. The star in the header toggles the favorite. The address is required (it is the default name), and the port must be 1 to 65535.
+**New Host**, **Edit** in the row menu, or **Edit Host** (a terminal tab's **More actions**, or the connection-failed card) opens the editor on the home tab. **Save** (or Ctrl+S, or Enter in a text field) saves, **Cancel** or the back arrow leaves, and Esc leaves an untouched form. The star in the header toggles the favorite. The address is required (it is the default name), and the port must be 1 to 65535. A Telnet host's editor: `references/terminal.md`.
 
 Other labels: **Username**, **Organization & Network**.
 
-- **Test Connection** connects with the current form values (saved or not), authenticates, checks the host key (you may be asked to trust it), shows the latency, and disconnects, without saving the host.
+- **Test Connection** connects with the form's values (saved or not), authenticates, checks the host key (you may be asked to trust it), shows the latency, and disconnects, without saving the host.
 - **Delete Host** is at the bottom of the editor for an existing host.
 - **Notes** are for you only. **AI Notes** go to the AI assistant in every request of a conversation on the host; see `references/ai-instructions.md`.
 - A host's port forwards are on the **Port Forwarding** page (**Forwards** in the navigation rail), not in the editor; see `references/port-forwarding.md`.

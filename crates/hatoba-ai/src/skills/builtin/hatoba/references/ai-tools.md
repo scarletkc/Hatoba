@@ -30,7 +30,7 @@ In a local terminal tab (a shell of this computer, see `references/terminal.md`)
 
 ## On a Telnet tab
 
-A Telnet device has no exec channel and no files Hatoba can reach, so in a Telnet tab the assistant offers only **Read terminal** and **Type in terminal**: it reads the screen and types into the device's own command line, with the same approvals as elsewhere. Commands, file and search tools are not offered. A saved Telnet host's AI notes and host memories work as an SSH host's.
+A Telnet device has no exec channel and no files Hatoba can reach, so in a Telnet tab its terminal tools are only **Read terminal** and **Type in terminal**: it reads the screen and types into the device's own command line, with the same approvals as elsewhere. Commands, file and search tools are not offered; web search, reading pages, skills and memory work as in any tab. A saved Telnet host's AI notes and host memories work as an SSH host's.
 
 ## Permission mode
 

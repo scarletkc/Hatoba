@@ -40,9 +40,10 @@ between your devices, and puts an AI assistant beside each terminal.
   your own computer, and searches the web. You approve its actions, or let Auto
   mode approve the safe ones. It works with an OpenAI-compatible or Anthropic
   API key or a ChatGPT plan, and supports skills and MCP servers.
-- **Hosts**: SSH and Telnet hosts with groups, tags, fuzzy search,
-  `~/.ssh/config` import, ProxyJump, and proxies. Type `ssh user@host` or
-  `telnet host` in the search box to connect without saving a host.
+- **Hosts**: SSH and Telnet hosts with groups, tags, fuzzy search, and
+  proxies, plus `~/.ssh/config` import and ProxyJump for SSH. Type
+  `ssh user@host` or `telnet host` in the search box to connect without saving
+  a host.
 - **Coding agents**: Claude Code, Codex, and scripts run commands and copy
   files on your saved hosts with the `hatoba` command, while passwords and keys
   stay in Hatoba. The [hatoba-cli skill](skills/hatoba-cli/SKILL.md) shows

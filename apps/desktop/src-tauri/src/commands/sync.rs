@@ -522,6 +522,14 @@ fn targets(item: &Item) -> Vec<(&'static str, String)> {
                 },
             ),
         ],
+        Item::TelnetHost(h) => vec![(
+            "proxy",
+            match &h.proxy {
+                HostProxy::DeviceDefault => "device_default".to_owned(),
+                HostProxy::Direct => "direct".to_owned(),
+                HostProxy::Proxy { proxy_id } => format!("proxy:{proxy_id}"),
+            },
+        )],
         _ => Vec::new(),
     }
 }

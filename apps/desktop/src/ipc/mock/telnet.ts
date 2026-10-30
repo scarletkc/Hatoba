@@ -31,20 +31,26 @@ export class FakeTelnet {
 
   start() {
     this.write("\r\n\r\nUser Access Verification\r\n\r\nUsername: ");
-    if (this.host.username) {
-      // What the client types for a saved login, as the device echoes it.
+    // What the client types for a saved login, as the device echoes it, unless the user typed first.
+    if (this.host.username)
       setTimeout(() => {
-        this.write(`${this.host.username}\r\nPassword: `);
-        this.stage = "password";
-        if (this.host.has_password) {
-          setTimeout(() => {
-            this.write("\r\n");
-            this.stage = "exec";
-            this.prompt();
-          }, 150);
-        }
+        if (this.stage !== "user") return;
+        this.write(`${this.host.username}\r\n`);
+        this.askPassword();
       }, 200);
-    }
+  }
+
+  /** The password prompt, where the client types a saved password, also after a user name typed by hand. */
+  private askPassword() {
+    this.stage = "password";
+    this.write("Password: ");
+    if (this.host.has_password)
+      setTimeout(() => {
+        if (this.stage !== "password") return;
+        this.write("\r\n");
+        this.stage = "exec";
+        this.prompt();
+      }, 150);
   }
 
   stop() {
@@ -70,8 +76,7 @@ export class FakeTelnet {
 
   private enter(line: string) {
     if (this.stage === "user") {
-      this.stage = "password";
-      this.write("Password: ");
+      this.askPassword();
       return;
     }
     if (this.stage === "password") {

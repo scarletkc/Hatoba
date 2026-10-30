@@ -414,8 +414,10 @@ pub async fn telnet_write_bytes(
 }
 
 fn write(state: &AppState, session_id: &str, data: Vec<u8>) -> AppResult<()> {
-    // SEC-03: like SSH sessions, Telnet tabs take no input behind the lock screen.
-    if !state.vault().is_unlocked() {
+    // SEC-03: like SSH sessions, Telnet tabs take no input behind the lock screen. The vault's
+    // guard is held until the input is queued, so a lock cannot slip in between.
+    let vault = state.vault();
+    if !vault.is_unlocked() {
         return Err(AppError::locked());
     }
     state

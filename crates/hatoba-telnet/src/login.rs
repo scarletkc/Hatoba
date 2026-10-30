@@ -43,6 +43,8 @@ enum Escape {
     Csi,
     /// In an OSC or other string sequence, until BEL or ST.
     String,
+    /// After ESC in a string sequence: a backslash ends it (ST).
+    StringEsc,
 }
 
 impl AutoLogin {
@@ -151,10 +153,17 @@ impl AutoLogin {
                     self.escape = Escape::None;
                 }
             }
-            Escape::String => {
-                if byte == 0x07 || byte == b'\\' {
-                    self.escape = Escape::None;
-                }
+            Escape::String => match byte {
+                0x07 => self.escape = Escape::None,
+                0x1b => self.escape = Escape::StringEsc,
+                _ => {}
+            },
+            Escape::StringEsc => {
+                self.escape = match byte {
+                    b'\\' => Escape::None,
+                    0x1b => Escape::StringEsc,
+                    _ => Escape::String,
+                };
             }
         }
     }
@@ -192,6 +201,17 @@ mod tests {
         );
         assert_eq!(
             typed(l.output(b"\r\n\x1b]0;title\x07PASSWORD:")),
+            Some("pw\r".into())
+        );
+    }
+
+    #[test]
+    fn a_backslash_inside_a_title_does_not_end_it() {
+        let mut l = login("admin", "pw");
+        // The title holds a prompt's text, which is not on screen.
+        assert_eq!(typed(l.output(b"\x1b]0;a\\Password:\x07")), None);
+        assert_eq!(
+            typed(l.output(b"\x1b]0;b\x1b\\Password:")),
             Some("pw\r".into())
         );
     }
