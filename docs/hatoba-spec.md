@@ -26,7 +26,7 @@ Individual developers, indie developers, and operators who manage several VPSs.
 
 ### 1.2 Out of scope
 
-Team sharing and multi-user vaults, mobile apps (the architecture leaves room for them, §3.4), and a sync service hosted by Hatoba. Hosts connect only over SSH: Telnet, Serial, and Mosh are proposed in [#60](https://github.com/scarletkc/Hatoba/issues/60), and RDP, VNC, and FTP are not planned.
+Team sharing and multi-user vaults, mobile apps (the architecture leaves room for them, §3.4), and a sync service hosted by Hatoba. Hosts connect only over SSH, and RDP, VNC, and FTP are not planned; [#60](https://github.com/scarletkc/Hatoba/issues/60) tracks Telnet, Serial, and Mosh.
 
 ---
 
@@ -41,10 +41,11 @@ Team sharing and multi-user vaults, mobile apps (the architecture leaves room fo
 | Backend runtime | Rust stable + tokio | |
 | SSH | `russh` | Connections, authentication, PTY, direct-tcpip (jump hosts and port forwarding) |
 | SFTP | `russh-sftp` | |
+| Local terminal | `portable-pty` | ConPTY on Windows (§7.5) |
 | Key parsing and generation | russh's `keys` module (`ssh-key`) | OpenSSH and PEM formats, including passphrase-protected keys. `crates/hatoba-ssh/src/ppk.rs` parses PuTTY `.ppk` |
-| Cryptography | `argon2`, `hkdf`, `sha2`, `aes-gcm`, `rand`, `zeroize` | All in Rust |
+| Cryptography | `argon2`, `hkdf`, `sha2`, `aes-gcm`, `getrandom`, `subtle`, `zeroize` | All in Rust |
 | Local storage | `rusqlite` (bundled) | |
-| System credential store | `keyring` (Windows Credential Manager, macOS Keychain) | Windows Hello uses the `windows` crate, Touch ID `security-framework` and `objc2-local-authentication` |
+| System credential store | `keyring` (Windows Credential Manager, macOS Keychain, Secret Service on Linux) | Windows Hello uses the `windows` crate, Touch ID `security-framework` and `objc2-local-authentication` |
 | Windows window effects | `window-vibrancy` | Mica backdrop on Windows 11 |
 | HTTP | `reqwest` (rustls) | |
 | MCP client | `rmcp`, the official Rust SDK | Client features only, used inside `hatoba-ai` (§13.9) |
@@ -67,6 +68,7 @@ flowchart LR
       SSH["hatoba-ssh<br/>sessions · sftp · forwarding"]
       ASSIST["hatoba-assistant<br/>turns · tools · MCP servers"]
       AI["hatoba-ai<br/>model providers · web tools · MCP"]
+      LOCAL["hatoba-local<br/>local shells · PTY · tools"]
       DB[("Local SQLite<br/>ciphertext only")]
       KC["System credential store"]
     end
@@ -79,7 +81,9 @@ flowchart LR
   CMD --> CORE
   CMD --> SSH
   CMD --> ASSIST
+  CMD --> LOCAL
   ASSIST --> AI
+  ASSIST --> LOCAL
   AI -->|HTTPS or HTTP| Providers["User-configured model<br/>and search providers"]
   AI -->|stdio or HTTP| MCP["User-configured<br/>MCP servers"]
   CORE --> DB
@@ -105,7 +109,7 @@ hatoba/
 ├── apps/desktop/
 │   ├── src/                  # Frontend
 │   │   ├── app/              # Layout, routing
-│   │   ├── features/         # onboarding, unlock, hosts, terminal, sftp, keys, sync, settings, ai
+│   │   ├── features/         # onboarding, unlock, hosts, dashboard, terminal, sftp, keys, sync, settings, ai
 │   │   ├── session/          # Live sessions, connections, forwards, and transfers, shared by the features
 │   │   ├── lib/              # Helpers and small components shared by the features
 │   │   ├── styles/           # The app's own tokens: window chrome, terminal, server logos
@@ -113,15 +117,19 @@ hatoba/
 │   │   └── ipc/              # tauri-specta bindings, frontend contract, browser mock backend
 │   ├── src-tauri/            # Tauri shell: commands, channels, capabilities
 │   └── e2e/                  # WebDriver end-to-end smoke test
+├── apps/site/                # The website: product pages, downloads, and the docs from the built-in skill
 ├── packages/ui/              # @hatoba/ui: shared components and design tokens (CSS variables, light and dark)
 ├── crates/
 │   ├── hatoba-ai/            # Model provider adapters, MCP client, web search, URL fetching
 │   ├── hatoba-assistant/     # The AI assistant's runtime: turns, tools, MCP servers, skills, its DTOs
+│   ├── hatoba-cli/           # The `hatoba` command's own commands (HOST-15)
 │   ├── hatoba-core/          # Crypto, vault, data model, local store, sync engine
 │   ├── hatoba-ipc/           # AppError and the DTOs the desktop app's crates share
 │   ├── hatoba-local/         # Local terminal tabs: this computer's shells, PTY, the AI's tools here
 │   └── hatoba-ssh/           # SSH sessions, PTY, SFTP, port forwarding, known_hosts
 ├── workers/sync/             # Cloudflare Worker source, D1 migrations, deployment guide
+├── scripts/                  # CI, release, Worker bundle, and media scripts
+├── skills/hatoba-cli/        # The coding agents' skill for the `hatoba` command (HOST-15)
 └── docs/
 ```
 
@@ -225,7 +233,7 @@ All item IDs are UUIDv7. Reading plaintext tolerates unknown and missing fields,
 type Item =
   | Host | Group | SshKey | KnownHost | PortForward | Snippet | Proxy
   | AiProvider | SearchProvider | AiConversation | AiMessage
-  | Skill | SkillFile | McpServer
+  | Skill | SkillFile | McpServer | AiMemory
   | Settings;
 
 interface Host {
@@ -331,6 +339,7 @@ interface AiProvider {           // P1, §13.2
     efforts?: ("low" | "medium" | "high" | "xhigh" | "max")[];  // AI-05, lowest first; absent when unknown
     adaptive_thinking?: boolean;       // AI-05, from Anthropic's model list or models.dev (AI-03); absent when unknown
   }[];
+  chatgpt?: { client_id: string; subject: string; email: string };  // AI-52, the ChatGPT account it signs in with instead of a key; absent for a key provider
   updated_at: number;
 }
 
@@ -449,7 +458,7 @@ The database holds device-local data (the device ID, the sync cursor, the local 
 
 `MIGRATIONS` in `crates/hatoba-core/src/store.rs` defines the tables, `LOCAL_COLUMNS` and `LOCAL_TABLES` in the same file add device-local columns and tables without changing the schema version (which the synced vault shares), and the `meta` module in the same file lists the keys of the `meta` table. The tables hold:
 
-- `meta`: key-value pairs for the KDF parameters, the wrapped vault key, the device ID, the sync cursor, and so on. The recent quick-connect targets (HOST-12) and the AI approvals saved on this device (AI-19) are sealed under the vault key here, because they name hosts and the database holds no host name in plaintext (§12). The logs do name the hosts connected to (SEC-04).
+- `meta`: key-value pairs for the KDF parameters, the wrapped vault key, the device ID, the sync cursor, and so on. The recent quick-connect targets (HOST-12) and the AI approvals saved on this device (AI-19) are sealed under the vault key here, because they name hosts and the database holds no host name in plaintext (§12), and so are this device's ChatGPT sessions (AI-52), because they hold tokens. The logs do name the hosts connected to (SEC-04).
 - `items`: one row per item. `envelope` holds only the §4.2 envelope and becomes NULL after deletion (a tombstone). `revision` is the version the server has confirmed, 0 for items that were never synced. `dirty` marks local changes that have not been pushed yet.
 - `local_state`: device-local data that is not synced, such as the last connection time, the server's OS (HOST-11), whether the host's terminals show resource usage (TERM-12), and whether resource usage leaves a host or a group out (HOST-14).
 - `conflict_log`: conflicts resolved automatically under §6.4, kept for item-by-item review and restore.
@@ -475,15 +484,20 @@ The client abstracts the sync backend behind the `SyncBackend` trait, so the syn
 
 ```rust
 #[async_trait]
-pub trait SyncBackend {
+pub trait SyncBackend: Send + Sync {
     async fn health(&self) -> Result<ServerInfo>;
     async fn prelogin(&self) -> Result<KdfInfo>;
     async fn setup(&self, init: VaultInit) -> Result<()>;
-    async fn login(&self, auth_key: &[u8], device: DeviceInfo) -> Result<Session>;
+    async fn login(&self, auth_key: &[u8; 32], device: &DeviceLogin) -> Result<Session>;
+    async fn recover(&self, recovery_auth: &[u8; 32], device: &DeviceLogin) -> Result<Recovered>;
     async fn fetch_vault(&self) -> Result<VaultMeta>;
     async fn pull(&self, since_seq: u64, limit: u32) -> Result<PullPage>;
     async fn push(&self, changes: Vec<Change>) -> Result<Vec<PushResult>>;
     async fn update_vault_meta(&self, update: VaultMetaUpdate) -> Result<()>;
+    async fn devices(&self) -> Result<Vec<RemoteDevice>>;
+    async fn revoke_device(&self, device_id: &str) -> Result<()>;
+    fn set_session(&self, session: Option<Session>);
+    fn forget_credentials(&self);
 }
 ```
 
@@ -541,7 +555,7 @@ Content-Type: application/json
 {
   "schema_version": 1,
   "kdf_salt": "<opaque salt>",
-  "kdf_params": "{\"alg\":\"argon2id\",\"v\":1,...}",
+  "kdf_params": "{\"alg\":\"argon2id\",\"version\":19,\"m_kib\":65536,\"t\":3,\"p\":4}",
   "auth_key": "<base64, 32 bytes>",
   "protected_vault_key": "<envelope>",
   "recovery_vault_key": "<envelope>",
@@ -665,7 +679,7 @@ A failed sync does not affect local use. The UI shows **Offline** or **Signed ou
 1. Default rule: decrypt both versions and keep the one with the newer `updated_at` in the plaintext (last writer wins).
 2. **Key items (`type = "key"`) are never dropped silently.** The losing version is saved as a new item, with a localized conflict-copy suffix added to its name.
 3. When one side deletes an item and the other modifies it, the modification wins (the item comes back), to avoid accidental deletion.
-4. Every automatic resolution is written to the local conflict log, and the sync status page shows the number of conflicts. P1 adds item-by-item review: keep the automatic result, or restore the other version.
+4. Every automatic resolution is written to the local conflict log, and the sync status page shows the number of conflicts, with item-by-item review: keep the automatic result, or restore the other version.
 
 ### 6.5 Tombstones
 
@@ -695,11 +709,11 @@ A failure after `/v1/setup` succeeded, including a lost response, leaves the rem
 3. With the local vault unlocked, the client signs in as in Flow B step 2, under this device's id, and unwraps the cloud vault_key. It then pages through the cloud vault once to read its settings item: settings are a single item that conflicts resolve as a whole (§6.4), so another vault's settings cannot be merged with this device's, and the join takes the cloud's as they stand. It stores the session (and, in D1 mode, the API token) before anything local changes, so a credential store that fails leaves the local vault as it was. A failure up to here changes nothing local.
 4. In one local transaction:
    - **Same vault** (the cloud vault_key opens the local vault check, for example on a device that synced before and was disconnected): every item is marked dirty with revision 0, so the next round reconciles each one per §6.4. Identical items converge without a conflict entry.
-   - **Another vault**: every live item is decrypted with the local vault_key and re-encrypted with the cloud vault_key under the same id, revision 0 and dirty, so it is pushed as a new item. The settings are the exception: the cloud's settings item from step 3 replaces the local one as it is, clean and at the cloud's revision, so the app shows the cloud's settings from the moment the join commits and a later edit builds on them. Only when the cloud has no settings item that the cloud vault_key opens (none yet, as on a cloud whose first device stopped right after setup, or a damaged one, which could not win a conflict either) is the local one queued, dated at the epoch (`updated_at` 0): it is older than the settings of any of the cloud vault's own devices, so under §6.4 theirs win over it whether they arrive before or after it, while an edit made on this device after the join is dated as usual. From then on the settings sync like any other item. Tombstones and items that cannot be decrypted are dropped. The conflict log is cleared. Device-local data sealed with the vault_key (the recent quick-connect targets, the AI approvals saved on this device, and the AI file snapshots) is sealed again with the cloud vault_key.
+   - **Another vault**: every live item is decrypted with the local vault_key and re-encrypted with the cloud vault_key under the same id, revision 0 and dirty, so it is pushed as a new item. The settings are the exception: the cloud's settings item from step 3 replaces the local one as it is, clean and at the cloud's revision, so the app shows the cloud's settings from the moment the join commits and a later edit builds on them. Only when the cloud has no settings item that the cloud vault_key opens (none yet, as on a cloud whose first device stopped right after setup, or a damaged one, which could not win a conflict either) is the local one queued, dated at the epoch (`updated_at` 0): it is older than the settings of any of the cloud vault's own devices, so under §6.4 theirs win over it whether they arrive before or after it, while an edit made on this device after the join is dated as usual. From then on the settings sync like any other item. Tombstones and items that cannot be decrypted are dropped. The conflict log is cleared. Device-local data sealed with the vault_key (the recent quick-connect targets, the AI approvals saved on this device, this device's ChatGPT sessions, and the AI file snapshots) is sealed again with the cloud vault_key.
    - Either way the local meta takes the cloud's salt, KDF parameters, `protected_vault_key`, and `recovery_vault_key`, so the master password and recovery code become the cloud's. `recovery_auth_sealed` stays only when the cloud's `recovery_vault_key` is the one stored here (the same vault and recovery code, as on a device that reconnects), and is deleted otherwise. The sync configuration is recorded, and `sync_cursor` is reset.
 5. The client runs an ordinary round, which pulls the cloud's items and pushes the local ones. An interrupted round resumes like any other. When the vault_key changed, biometric unlock and the PIN, which wrap the old key, are turned off. Once the transaction has committed the join counts as done: if reloading the items then fails, the vault locks instead of keeping the old key, and unlocking with the cloud's master password starts sync.
 
-**Worker deployment**: the steps are in [Deploy the sync Worker](../workers/sync/README.md), and the in-app sync wizard links to it. One-click deployment inside the app through the Cloudflare API (§6.7) and a Deploy to Cloudflare button are both P1.
+**Worker deployment**: the steps are in [Deploy the sync Worker](../workers/sync/README.md), and the in-app sync wizard links to it. The wizard can also deploy the Worker itself through the Cloudflare API (§6.7), or open the Deploy to Cloudflare page.
 
 ### 6.7 In-app deployment
 
@@ -878,7 +892,7 @@ Without a token, nothing changes on the Worker. While it is at or above the mini
 | TERM-09 | Split panes | P2 |
 | TERM-10 | Save session logs to local files | P2 |
 | TERM-11 | Snippets (saved commands) | P2 |
-| TERM-12 | The resource usage of a Linux or macOS server in the status bar: CPU, memory, and network rates, which open a popover with CPU and network over the last 3 minutes, memory and swap, the root filesystem, the load averages, and uptime. Pointing at a chart shows every value as it was at that reading. Off until turned on; the choice is remembered per host as device-local data like HOST-06, and a quick connection (HOST-12) keeps it for the tab. The readings come from `/proc` over the session's own connection: `SshSession::open_stats` in `crates/hatoba-ssh/src/stats.rs` runs `sh -s` on an exec channel and sends it the script `stats.sh` on stdin, which prints a block every 2 seconds, so nothing is installed on the server and the login shell only has to start `sh`. On macOS the script prints the same readings in the same format from `iostat` (CPU and load), `vm_stat` and `sysctl` (memory and swap, with memory in use counted as Activity Monitor does: app memory, wired and compressed), `netstat` and `route`, and `df`, where the space used on an APFS volume is its size less what is available, its container's use as Finder shows it. Each block also carries the traffic totals of the counted interfaces. For resource usage on the hosts page (HOST-14), the script also lists every filesystem every fifth block: `df -kP`, bounded by `timeout` where the server has it (on a Mac without it, by perl's `alarm`), with each filesystem's type from `/proc/self/mounts`. The list leaves out memory-backed and kernel filesystems, container layers, read-only images, and the files a container runtime mounts, and names each device, each ZFS pool and each APFS container once; on macOS it lists the filesystems Finder shows (not those mounted `nobrowse`, such as the system's other volumes) and `/`, without the read-only ones; the terminal's readout does not ask for it, so a network filesystem that stopped answering cannot slow it down. The script runs as a process on the server while the readout is sampled, which is only while the tab is in front, the window is shown, and the vault is unlocked. A server whose identification string names another system (HOST-11) is not asked; any other server that runs neither Linux nor macOS or has no `sh` shows that resource usage needs Linux or macOS | P2 |
+| TERM-12 | The resource usage of a Linux or macOS server in the status bar: CPU, memory, and network rates, which open a popover with CPU and network over the last 3 minutes, memory and swap, the root filesystem, the load averages, and uptime. Pointing at a chart shows every value as it was at that reading. Off until turned on; the choice is remembered per host as device-local data like HOST-06, and a quick connection (HOST-12) keeps it for the tab. The readings come from `/proc` over the session's own connection: `SshSession::open_stats` (`crates/hatoba-ssh/src/session.rs`, with the script in `stats.rs`) runs `sh -s` on an exec channel and sends it the script `stats.sh` on stdin, which prints a block every 2 seconds, so nothing is installed on the server and the login shell only has to start `sh`. On macOS the script prints the same readings in the same format from `iostat` (CPU and load), `vm_stat` and `sysctl` (memory and swap, with memory in use counted as Activity Monitor does: app memory, wired and compressed), `netstat` and `route`, and `df`, where the space used on an APFS volume is its size less what is available, its container's use as Finder shows it. Each block also carries the traffic totals of the counted interfaces. For resource usage on the hosts page (HOST-14), the script also lists every filesystem every fifth block: `df -kP`, bounded by `timeout` where the server has it (on a Mac without it, by perl's `alarm`), with each filesystem's type from `/proc/self/mounts`. The list leaves out memory-backed and kernel filesystems, container layers, read-only images, and the files a container runtime mounts, and names each device, each ZFS pool and each APFS container once; on macOS it lists the filesystems Finder shows (not those mounted `nobrowse`, such as the system's other volumes) and `/`, without the read-only ones; the terminal's readout does not ask for it, so a network filesystem that stopped answering cannot slow it down. The script runs as a process on the server while the readout is sampled, which is only while the tab is in front, the window is shown, and the vault is unlocked. A server whose identification string names another system (HOST-11) is not asked; any other server that runs neither Linux nor macOS or has no `sh` shows that resource usage needs Linux or macOS | P2 |
 
 ### 7.3 SFTP
 
@@ -908,7 +922,7 @@ A local terminal tab runs a shell of this computer, next to the SSH tabs, so loc
 | ID | Requirement | Priority |
 |---|---|---|
 | LOCAL-01 | A local terminal tab runs a shell in a PTY, opened from the menu beside **New Tab** in the tab bar, which lists the shells (LOCAL-02), or with Ctrl+Shift+` (⌃⇧` on macOS), which opens the shell chosen for new tabs. It uses the terminal settings, search, links, copy and paste, and paste confirmation of SSH tabs (TERM-02…08); its status bar shows **This Computer** and the shell, without resource usage, port forwarding or SFTP, and its tab shows a terminal icon. The shell starts in the home directory with `TERM=xterm-256color`, `COLORTERM=truecolor` and `TERM_PROGRAM=Hatoba`, and on macOS and Linux with a UTF-8 `LANG` from the system's language when none is set, since an app started from the Dock or a launcher may have none; on macOS it is a login shell, as Terminal and VS Code start it. A shell that exits with status 0 closes its tab, as in other terminals; one that exits otherwise leaves the tab with its exit status and **Restart**, and one that cannot start shows why with **Retry**. Like SSH sessions (SEC-03), local shells take no input while the vault is locked, end on lock when the user chose to disconnect sessions then, and end when Hatoba quits; closing a tab ends its shell and the console programs it started | P1 |
-| LOCAL-02 | The shells: on Windows PowerShell 7 (`pwsh`, from its installer's folder or `PATH`), Windows PowerShell, Command Prompt, Git Bash (the `bash.exe` of Git for Windows, from the folder its installer records or the usual ones) and each installed WSL distribution (`wsl.exe -d <name>`, from the registry key `wsl.exe` keeps them in, without Docker Desktop's and Rancher Desktop's own, as Windows Terminal leaves them out); on macOS and Linux the login shell (`$SHELL`) and the shells `/etc/shells` lists that exist, each name once, without `nologin`, `false`, `rbash` and `git-shell`. The system default is PowerShell 7, else Windows PowerShell, on Windows, and the login shell elsewhere. They are found each time the menu or Settings opens, so a shell installed meanwhile shows up. **Settings → Terminal → Local Terminal Shell** chooses the shell new local tabs run; it is kept in the device-local preferences (`local_shell`), since shells exist only on some devices, and a shell that is gone means the system default | P1 |
+| LOCAL-02 | The shells: on Windows PowerShell 7 (`pwsh`, from its installer's folder or `PATH`), Windows PowerShell, Command Prompt, Git Bash (the `bash.exe` of Git for Windows, from the folder its installer records or the usual ones) and each installed WSL distribution (`wsl.exe -d <name>`, from the registry key `wsl.exe` keeps them in, without Docker Desktop's and Rancher Desktop's own, as Windows Terminal leaves them out); on macOS and Linux the login shell (`$SHELL`) and the shells `/etc/shells` lists that exist, each name once, without `nologin`, `false`, `true`, `rbash` and `git-shell`. The system default is PowerShell 7, else Windows PowerShell, on Windows, and the login shell elsewhere. They are found each time the menu or Settings opens, so a shell installed meanwhile shows up. **Settings → Terminal → Local Terminal Shell** chooses the shell new local tabs run; it is kept in the device-local preferences (`local_shell`), since shells exist only on some devices, and a shell that is gone means the system default | P1 |
 | LOCAL-03 | The AI assistant works in local tabs as in SSH tabs (AI-07…13, AI-38…41, AI-46, AI-48…51), in every permission mode, with the same approvals: approval cards name **This Computer** and the shell, and **Always allow** on a local tab covers this computer's local tabs, saved under the target `local`. How the tools run on this computer is below the table | P1 |
 
 **The assistant's tools on this computer (LOCAL-03).** "The tab's host" of §13.4 is this computer. A tab whose shell has `sh` behind it runs the hosts' own exec scripts with it, so the tools behave as on a host: on macOS and Linux with `/bin/sh`, `run_command` running commands with the tab's shell as `$SHELL` (on macOS with the login shell's `PATH`, as MCP servers get it, AI-32), and for a WSL distribution with its `sh` through `wsl.exe -d <name> -e sh`, so the tools act inside the distribution, on its Linux paths. A Windows shell (PowerShell, Command Prompt, Git Bash) cannot run them, so the file tools, `glob` and `grep` run in Hatoba on Windows paths: `~`, `~/` and a relative path from the home directory, and a Git Bash path such as `/c/Users` as `C:/Users`; results show paths with forward slashes and the drive letter in capitals, which Windows accepts too. They give the results and refusals of the scripts: a write replaces an existing file's content in place, checked against what the card read right before it, a file it creates gets owner-only permission bits until its mode where the system has them, `grep` reads patterns with rg's own regex engine (so `multiline` and Unicode classes always work), a `multiline` search whose pattern can span lines reads each file whole, as rg does, and reports a file larger than 256 MiB as not searched, binary files and `.git` are skipped, and a glob that starts with a drive, such as `C:/Projects/**/*.json`, searches from there. `run_command` runs in the tab's shell, without its profile and without a console window, in `workdir` read as the file tools read paths; a missing directory, or in Command Prompt a network path, which it cannot start in, is refused before anything runs: PowerShell through `-EncodedCommand` with UTF-8 output and no progress bars, ending with a failed last command's own exit status, else 1; Command Prompt one line after `chcp 65001`; Git Bash with the command on stdin, read before the command runs, so the command's own stdin is empty as on a host. The command runs in a Job Object, so a stop or the timeout ends it and every process it started, and the result says they ended; processes a command that ends on its own leaves in the background keep running until Hatoba quits. The system prompt says that the tab is the user's own computer, names the computer, its system, the shell and the user, and for a Windows shell or a WSL distribution where the tools act and which paths they take; the tool definitions say "on this computer" for the tab's host, without the SSH server's identification string.

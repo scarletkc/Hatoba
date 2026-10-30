@@ -1,6 +1,6 @@
 # AI assistant architecture and requirements
 
-This is §13 of the [architecture and requirements](hatoba-spec.md), kept in a file of its own. Its sections keep their numbers, and references to other sections, such as §4.4 or §5.1, are to that document.
+This is §13 of the [architecture and requirements](hatoba-spec.md). Its sections are numbered as part of that document, where the other sections it refers to, such as §4.4 and §5.1, are.
 
 The AI assistant is a chat panel at the right edge of the window that works on a terminal tab. It reads the screen, runs commands, reads and edits files on the host, types into the shell, searches the web, and fetches pages, within the permission mode the user chose (§13.5). It calls a model provider that the user configures with their own API key, or with their ChatGPT account (AI-52), over OpenAI Chat Completions, OpenAI Responses, or Anthropic Messages (§13.2), so it works with any service or local server that offers one of them. Nothing is sent anywhere until the user adds a provider and sends a message.
 
