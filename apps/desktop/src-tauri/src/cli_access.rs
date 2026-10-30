@@ -713,10 +713,10 @@ impl Ctx<'_> {
                 )
             })
             .map_err(|_| LOCKED.to_owned())?;
-        if let Some(password) = saved.filter(|p| kept.as_ref() != Some(p)) {
-            if self.sudo_takes(session, &password, target, what).await? {
-                return Ok(RunAs::Sudo(Some(password)));
-            }
+        if let Some(password) = saved.filter(|p| kept.as_ref() != Some(p))
+            && self.sudo_takes(session, &password, target, what).await?
+        {
+            return Ok(RunAs::Sudo(Some(password)));
         }
         if !self.prompt {
             return Err(format!(
@@ -766,7 +766,7 @@ impl Ctx<'_> {
             Ok(Checked::Accepted) => Ok(true),
             Ok(Checked::Wrong) => Ok(false),
             Ok(Checked::Refused(message)) if message.is_empty() => {
-                Err(format!("sudo on {name} refused to run the command."))
+                Err(format!("sudo on {name} refused."))
             }
             Ok(Checked::Refused(message)) => Err(format!("sudo on {name}: {message}")),
             Err(e) => Err(format!("can't run sudo on {name}: {}", e.message)),
@@ -780,13 +780,9 @@ fn sudo_key(target: &Target) -> String {
     format!("{}\n{}", target.id, target.config)
 }
 
-/// What a request does in Settings' list: `detail`, after `sudo` for `--sudo`.
-fn detail(sudo: bool, detail: String) -> String {
-    if sudo {
-        format!("sudo {detail}")
-    } else {
-        detail
-    }
+/// What a request does in Settings' list: `text`, after `sudo` for `--sudo`.
+fn detail(sudo: bool, text: String) -> String {
+    if sudo { format!("sudo {text}") } else { text }
 }
 
 /// Why a connection could not be set up from the vault.

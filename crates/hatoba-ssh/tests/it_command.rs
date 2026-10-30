@@ -9,6 +9,8 @@ use std::time::{Duration, Instant};
 
 use common::*;
 use hatoba_ssh::remote_command::{self, Output, Stopped};
+use hatoba_ssh::sudo::{self, Access, RunAs};
+use hatoba_ssh::{SshSession, remote_file::RemoteFileError};
 use tokio_util::sync::CancellationToken;
 
 macro_rules! server {
@@ -303,4 +305,115 @@ async fn a_stop_ends_a_streamed_command_whose_output_nobody_reads() {
     .expect("the stop waited for the output to be read")
     .unwrap();
     assert_eq!(run.stopped, Some(Stopped::Ended));
+}
+
+/// Runs `command` as `run_as` and returns its stdout, failing on another exit status than 0.
+async fn as_root(session: &SshSession, run_as: &RunAs, command: &str) -> String {
+    let (tx, rx) = tokio::sync::mpsc::channel(8);
+    let (run, (stdout, stderr)) = tokio::join!(
+        remote_command::run_streaming_as(
+            session,
+            command,
+            Some("~"),
+            run_as,
+            std::future::pending(),
+            tx
+        ),
+        received(rx)
+    );
+    let run = run.unwrap();
+    assert_eq!(
+        run.output.exit_status,
+        Some(0),
+        "{command}: {}",
+        String::from_utf8_lossy(&stderr)
+    );
+    String::from_utf8(stdout).unwrap()
+}
+
+/// HOST-15: `hatoba exec --sudo` and `hatoba cp --sudo` where sudo asks for no password, as on
+/// CI's runners: the command runs as root from the login user's home directory, a stop ends it,
+/// and a copy writes and reads a file that only root can. Skipped where sudo would ask.
+#[tokio::test]
+async fn sudo_runs_the_command_and_the_copy_as_root() {
+    let server = server!();
+    let session = server.connect_key("ed25519", None).await;
+    let run_as = match sudo::access(&session).await {
+        Ok(Access::NoPassword) => RunAs::Sudo(None),
+        Ok(Access::Root) => RunAs::Login,
+        _ => return,
+    };
+    let home = Command::new("sh")
+        .args(["-c", "getent passwd \"$(id -un)\" | cut -d: -f6"])
+        .output()
+        .unwrap();
+    let home = std::path::PathBuf::from(String::from_utf8_lossy(&home.stdout).trim())
+        .canonicalize()
+        .unwrap();
+    assert_eq!(
+        as_root(&session, &run_as, "id -u; pwd -P").await,
+        format!("0\n{}\n", home.display())
+    );
+
+    // A stop ends a command that runs as root.
+    let (tx, rx) = tokio::sync::mpsc::channel(8);
+    let (run, _) = tokio::join!(
+        remote_command::run_streaming_as(
+            &session,
+            "sleep 307",
+            None,
+            &run_as,
+            started("sleep 307"),
+            tx
+        ),
+        received(rx)
+    );
+    assert_eq!(run.unwrap().stopped, Some(Stopped::Ended));
+    assert!(processes("sleep 307").is_empty());
+
+    // A copy into a folder that only root can open, and back.
+    let locked = as_root(
+        &session,
+        &run_as,
+        "d=$(mktemp -d) && chmod 700 \"$d\" && echo \"$d\"",
+    )
+    .await
+    .trim()
+    .to_owned();
+    let dir = sudo::temp_dir(&session).await.unwrap();
+    let staged = sudo::temp_file(&dir);
+    let write = session
+        .exec_output(
+            "sh -c 'IFS= read -r f; printf hello > \"$f\"'",
+            Some(format!("{staged}\n").into_bytes()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(write.exit_status, Some(0));
+    sudo::install(&session, &run_as, &staged, &locked, "conf")
+        .await
+        .unwrap();
+    assert_eq!(
+        as_root(&session, &run_as, &format!("stat -c %u {locked}/conf")).await,
+        "0\n"
+    );
+    assert!(matches!(
+        sudo::install(&session, &run_as, &staged, &format!("{locked}/no/x"), "x").await,
+        Err(RemoteFileError::NoDirectory)
+    ));
+    let emptied = session
+        .exec_output(
+            "sh -c 'IFS= read -r f; : > \"$f\"'",
+            Some(format!("{staged}\n").into_bytes()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(emptied.exit_status, Some(0));
+    sudo::fetch(&session, &run_as, &format!("{locked}/conf"), &staged)
+        .await
+        .unwrap();
+    assert_eq!(std::fs::read(&staged).unwrap(), b"hello");
+    sudo::remove_temp_dir(&session, &dir).await.unwrap();
+    assert!(!std::path::Path::new(&dir).exists());
+    as_root(&session, &run_as, &format!("rm -rf {locked}")).await;
 }

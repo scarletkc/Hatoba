@@ -134,3 +134,22 @@ fn remote_paths_join_with_one_slash() {
     assert_eq!(join_remote("/home/me", "a.txt"), "/home/me/a.txt");
     assert_eq!(join_remote("/tmp/", "a.txt"), "/tmp/a.txt");
 }
+
+#[test]
+fn a_sudo_password_is_kept_for_its_host_until_unused_for_15_minutes() {
+    let cli = CliAccess::default();
+    cli.keep_sudo("h1\nv1".into(), Zeroizing::new("pw".into()));
+    assert_eq!(
+        cli.kept_sudo("h1\nv1").as_deref().map(String::as_str),
+        Some("pw")
+    );
+    // The host connects another way now.
+    assert!(cli.kept_sudo("h1\nv2").is_none());
+    let Some(long_ago) = Instant::now().checked_sub(SUDO_KEPT) else {
+        return;
+    };
+    lock(&cli.sudo).get_mut("h1\nv1").unwrap().used = long_ago;
+    assert!(cli.kept_sudo("h1\nv1").is_none());
+    assert_eq!(detail(true, "ls".into()), "sudo ls");
+    assert_eq!(detail(false, "ls".into()), "ls");
+}
