@@ -1,8 +1,8 @@
 ---
 import { REPO_URL } from "../consts";
 import { LANG, LANGUAGE_NAME, LOCALES, localePath, messages, type Locale } from "../i18n";
-import Icon from "./Icon.astro";
-import Sea from "./Sea.astro";
+import Button from "./Button.astro";
+import NightBand from "./NightBand.astro";
 
 interface Props {
   locale: Locale;
@@ -15,48 +15,82 @@ interface Props {
 const { locale, path, translated, edge } = Astro.props;
 const t = messages(locale);
 const current = Astro.url.pathname;
-const link = (target: string) => ({ href: target, "aria-current": current === target ? "page" : undefined });
+const download = localePath(locale, "/download/");
 ---
 
-<header class:list={["night", "site-header", { edge }]}>
+<NightBand as="header" class="site-header" sea={edge ? "2px" : undefined} room={false} flat>
   <nav class="container bar" aria-label="Hatoba">
     <a class="brand" href={localePath(locale)} aria-label={t.nav.home}>
       <img src="/favicon.svg" alt="" width="32" height="32" />
       <span class="wide">Hatoba</span>
     </a>
     <ul class="links">
-      <li class="features"><a href={`${localePath(locale)}#features`}>{t.nav.features}</a></li>
-      <li><a {...link(localePath(locale, "/download/"))}>{t.nav.download}</a></li>
-      <li><a href="/docs/" aria-current={current.startsWith("/docs/") ? "page" : undefined} hreflang="en">{t.nav.docs}</a></li>
+      <li class="features">
+        <Button variant="night" size="md" href={`${localePath(locale)}#features`}>
+          {t.nav.features}
+        </Button>
+      </li>
       <li>
-        <a class="github" href={REPO_URL} aria-label={t.nav.github}><Icon name="github" size={20} /><span>{t.nav.github}</span></a>
+        <Button variant="night" size="md" href={download} aria-current={current === download ? "page" : undefined}>
+          {t.nav.download}
+        </Button>
+      </li>
+      <li>
+        <Button
+          variant="night"
+          size="md"
+          href="/docs/"
+          hreflang="en"
+          aria-current={current.startsWith("/docs/") ? "page" : undefined}
+        >
+          {t.nav.docs}
+        </Button>
+      </li>
+      <li>
+        <Button
+          variant="night"
+          size="md"
+          class="github"
+          href={REPO_URL}
+          icon="github"
+          iconSize={20}
+          aria-label={t.nav.github}
+        >
+          <span>{t.nav.github}</span>
+        </Button>
       </li>
       <li>
         <details class="lang">
-          <summary aria-label={`${t.nav.language}: ${LANGUAGE_NAME[locale]}`}><Icon name="globe" size={18} /><span>{LANGUAGE_NAME[locale]}</span></summary>
-          <ul>
-            {
-              LOCALES.map((other) => (
-                <li>
-                  <a
-                    href={localePath(other, translated ? path : "/")}
-                    hreflang={LANG[other]}
-                    data-locale={other}
-                    lang={LANG[other]}
-                    aria-current={other === locale ? "true" : undefined}
-                  >
-                    {LANGUAGE_NAME[other]}
-                  </a>
-                </li>
-              ))
-            }
+          <Button
+            as="summary"
+            variant="night"
+            size="md"
+            icon="globe"
+            class="lang-button"
+            aria-label={`${t.nav.language}: ${LANGUAGE_NAME[locale]}`}
+          >
+            <span>{LANGUAGE_NAME[locale]}</span>
+          </Button>
+          <ul class="menu">
+            {LOCALES.map((other) => (
+              <li>
+                <a
+                  href={localePath(other, translated ? path : "/")}
+                  hreflang={LANG[other]}
+                  data-locale={other}
+                  lang={LANG[other]}
+                  aria-current={other === locale ? "true" : undefined}
+                >
+                  {LANGUAGE_NAME[other]}
+                </a>
+              </li>
+            ))}
           </ul>
         </details>
       </li>
     </ul>
   </nav>
-  {edge && <Sea depth="2px" class="header-sea" />}
-</header>
+</NightBand>
 
 <script>
   // Close the language menu when a click or Escape lands outside it.
@@ -73,14 +107,10 @@ const link = (target: string) => ({ href: target, "aria-current": current === ta
 </script>
 
 <style>
-  .site-header {
-    position: relative;
+  /* Over the page, so the language menu can open past the header's sea. */
+  :global(.site-header.night) {
     z-index: 3;
-    background: var(--night);
-  }
-
-  .site-header.edge {
-    padding-bottom: 38px;
+    overflow: visible;
   }
 
   /* Above the strip of sea, which comes later in the header, so the language menu opens over it. */
@@ -90,109 +120,98 @@ const link = (target: string) => ({ href: target, "aria-current": current === ta
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--space-16);
     min-height: 72px;
   }
 
   .brand {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-10);
     text-decoration: none;
     font-weight: 800;
-    font-size: 21px;
+    font-size: var(--text-xl);
     letter-spacing: -0.01em;
   }
 
   .brand img {
-    border-radius: 8px;
+    border-radius: var(--radius-md);
   }
 
   .links {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-4);
     margin: 0;
     padding: 0;
     list-style: none;
-  }
-
-  .links a,
-  .lang summary {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 40px;
-    padding: 0 12px;
-    border-radius: 999px;
-    color: var(--on-night);
-    font-size: 15px;
-    font-weight: 500;
-    text-decoration: none;
-  }
-
-  .links a:hover,
-  .lang summary:hover {
-    background: rgb(227 238 255 / 0.1);
-  }
-
-  .links a[aria-current="page"] {
-    background: rgb(227 238 255 / 0.14);
   }
 
   .lang {
     position: relative;
   }
 
-  .lang summary {
-    cursor: pointer;
-    list-style: none;
+  .lang :global(.lang-button) {
     color: var(--on-night-2);
   }
 
-  .lang summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .lang ul {
+  .menu {
+    --focus-ring: var(--focus-ring-paper);
     position: absolute;
     right: 0;
-    top: calc(100% + 6px);
+    top: calc(100% + var(--space-6));
     min-width: 160px;
     margin: 0;
-    padding: 6px;
+    padding: var(--space-6);
     list-style: none;
     background: var(--paper);
     border: 1px solid var(--line);
-    border-radius: 12px;
-    box-shadow: 0 16px 40px rgb(5 12 40 / 0.28);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-popover);
+    transition: opacity var(--duration-fast) var(--ease-standard);
   }
 
-  .lang ul a {
+  /* The menu fades in as it opens. */
+  @starting-style {
+    .menu {
+      opacity: 0;
+    }
+  }
+
+  .menu a {
     display: flex;
-    width: 100%;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 var(--space-12);
+    border-radius: var(--radius-md);
     color: var(--ink);
-    border-radius: 8px;
+    font-size: var(--text-md);
+    text-decoration: none;
+    transition: background-color var(--duration-fast) var(--ease-standard);
   }
 
-  .lang ul a:hover {
+  .menu a:hover {
     background: var(--mist);
   }
 
-  .lang ul a[aria-current="true"] {
+  .menu a:active {
+    background: var(--line);
+    transition-duration: var(--duration-instant);
+  }
+
+  .menu a[aria-current="true"] {
     font-weight: 700;
   }
 
   @media (max-width: 760px) {
     .features,
-    .github span,
-    .lang summary span {
+    .links :global(.github span),
+    .links :global(.lang-button span) {
       display: none;
     }
 
-    .links a,
-    .lang summary {
-      padding: 0 10px;
+    .links :global(.button) {
+      padding: 0 var(--space-10);
     }
   }
 

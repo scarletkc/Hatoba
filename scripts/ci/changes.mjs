@@ -24,7 +24,8 @@ const RUST_INPUTS = [
 ];
 
 /** Whether a change to the file at `path`, relative to the repository root, needs the Rust jobs. */
-export const affectsRust = (path) => RUST_INPUTS.some((input) => (input.endsWith("/") ? path.startsWith(input) : path === input));
+export const affectsRust = (path) =>
+  RUST_INPUTS.some((input) => (input.endsWith("/") ? path.startsWith(input) : path === input));
 
 function main(argv) {
   if (argv.length !== 1) {
@@ -32,11 +33,16 @@ function main(argv) {
     return 2;
   }
   // Without rename detection, a file moved out of a Rust input counts as a change to it.
-  const changed = execFileSync("git", ["diff", "--name-only", "-z", "--no-renames", argv[0], "HEAD"], { cwd: ROOT, encoding: "utf8" })
+  const changed = execFileSync("git", ["diff", "--name-only", "-z", "--no-renames", argv[0], "HEAD"], {
+    cwd: ROOT,
+    encoding: "utf8",
+  })
     .split("\0")
     .filter(Boolean);
   const rust = changed.filter(affectsRust);
-  console.log(rust.length > 0 ? `Rust inputs changed:\n${rust.map((path) => `  ${path}`).join("\n")}` : "No Rust inputs changed.");
+  console.log(
+    rust.length > 0 ? `Rust inputs changed:\n${rust.map((path) => `  ${path}`).join("\n")}` : "No Rust inputs changed.",
+  );
   const output = `rust=${rust.length > 0}`;
   console.log(output);
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${output}\n`);

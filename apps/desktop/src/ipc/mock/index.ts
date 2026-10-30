@@ -1,4 +1,6 @@
-import type { FrameHandler, HatobaApi, Unlisten } from "../api";
+import { hostPort, reachableAddress } from "@/lib/address";
+import { formatTarget, sameTarget } from "@/session/quickConnect";
+import { appError, type FrameHandler, type HatobaApi, type Unlisten } from "../api";
 import type {
   ConnectionsEvent,
   AppError,
@@ -20,15 +22,15 @@ import type {
 } from "../types";
 import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
 import { ENV_MAX_VARS, envRows, envTooLarge, validateEnvRows } from "@/features/hosts/envVars";
-import { formatTarget, sameTarget } from "@/features/hosts/quickConnect";
-import { hostPort, reachableAddress } from "@/features/hosts/address";
 import { defaultRightClick, defaultTerminalFont } from "@/lib/platform";
+import { ZOOM_STEPS, zoomStep } from "@/lib/zoom";
 import { FRAME_CLOSED, FRAME_DATA, FRAME_SESSION } from "../types";
 import { createAiMock } from "./ai";
 import { createAiExtensionsMock } from "./aiExtensions";
 import { createAiMemoryMock } from "./aiMemory";
 import { createAiSettingsMock } from "./aiSettings";
 import { createDashboardMock } from "./dashboard";
+import { createEditsMock } from "./edits";
 import * as D from "./data";
 import { mockStats } from "./data";
 import { applyPatch } from "./patch";
@@ -40,7 +42,8 @@ import { passedLocale, VISITOR, VISITOR_HOST, visitorPlatform } from "./visitor"
 import { version as appVersion } from "../../../package.json";
 
 /** `?ssh=<kind>`: every connection fails with this SSH error kind and a detail like the real one. */
-const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: number) => string>> & Record<"timeout", (address: string, port: number) => string> = {
+const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: number) => string>> &
+  Record<"timeout", (address: string, port: number) => string> = {
   timeout: (a, p) => `connect to ${a}:${p}: operation timed out`,
   refused: (a, p) => `connect to ${a}:${p}: connection refused`,
   dns: (a) => `failed to lookup address information: ${a}: nodename nor servname provided, or not known`,
@@ -54,7 +57,7 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
 
 /**
  * In-browser stand-in for the Rust backend so the UI can be developed and reviewed with the
- * design's sample data (`pnpm dev`). URL parameters select demo states:
+ * sample data (`pnpm dev`). URL parameters select demo states:
  *   ?state=onboarding | locked | empty      ?sync=none | syncing | offline | conflict | auth | too_large
  *   ?platform=windows | macos | linux       ?update=available | badsig | dropped | offline | error
  *   ?manager=scoop | aur | other            (the package manager that installed Hatoba)
@@ -64,8 +67,9 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  *   ?ssh=timeout | refused | dns | unreachable | auth_failed | disconnected | proxy_unreachable | proxy_auth | proxy
  *   ?launch=<command line>                  ?cli=offpath
  *   ?close=prompt                           ?hello=off   ?pin=on | persist
+ *   ?edit=conflict | fail | held            (SFTP-05, see `createEditsMock`)
  *   ?biometric=unavailable | stale | cancelled   (how Windows Hello or Touch ID fails)
- *   ?lang=en | zh-CN | ja
+ *   ?lang=en | zh-CN | zh-TW | ja
  * Quick connect (HOST-12) asks to trust a new host key once per address, then for the password
  * (anything but "wrong" is accepted); targets whose address contains "timeout" fail with a timeout.
  * Connecting to staging-web-02 always fails with a timeout; with `?ssh`, every host fails with that
@@ -80,6 +84,7 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  * it is unlocked, e.g. `?launch=root@db` or `?launch=ssh -p 2222 deploy@10.0.0.5`. The `hatoba`
  * command starts off; with `?cli=offpath`, its folder is not on the PATH, as on Linux before the
  * next sign-in.
+ * With `?platform=macos`, the page draws the traffic lights where the native window has them.
  * With `?star=due`, the star prompt's day has passed, so it shows after the first connection.
  * With `?close=prompt`, the window's close button asks whether to minimize to the tray (WIN-10),
  * once the window listens for it.
@@ -99,12 +104,18 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
 export function createMockApi(): HatobaApi {
   const q = new URLSearchParams(location.search);
   const platformParam = q.get("platform");
-  const platform = platformParam === "macos" || platformParam === "linux" || platformParam === "windows" ? platformParam : VISITOR ? visitorPlatform() : "windows";
+  const platform =
+    platformParam === "macos" || platformParam === "linux" || platformParam === "windows"
+      ? platformParam
+      : VISITOR
+        ? visitorPlatform()
+        : "windows";
   const demo = q.get("state");
   const syncDemo = q.get("sync");
   const updateDemo = q.get("update");
   const managerParam = q.get("manager");
-  const packageManager = managerParam === "scoop" || managerParam === "aur" || managerParam === "other" ? managerParam : null;
+  const packageManager =
+    managerParam === "scoop" || managerParam === "aur" || managerParam === "other" ? managerParam : null;
   const deployDemo = q.get("deploy");
   const sshDemo = q.get("ssh");
   const workerDemo = q.get("worker");
@@ -122,13 +133,18 @@ export function createMockApi(): HatobaApi {
   settings.terminal.font_family = defaultTerminalFont(platform);
   settings.terminal.right_click = defaultRightClick(platform);
   // The demo keeps prefs only until the page reloads, so a reload starts it over.
-  let prefs: LocalPrefs = VISITOR ? { ...D.PREFS, ai_panel_open: true } : readStoredPrefs(() => localStorage.getItem("hatoba.mock.prefs"));
+  let prefs: LocalPrefs = VISITOR
+    ? { ...D.PREFS, ai_panel_open: true }
+    : readStoredPrefs(() => localStorage.getItem("hatoba.mock.prefs"));
   const lang = passedLocale();
   if (lang) prefs = { ...prefs, language: lang };
   const storePrefs = () => {
     if (!VISITOR) localStorage.setItem("hatoba.mock.prefs", JSON.stringify(prefs));
   };
-  const starPrompt: StarPrompt = { first_seen_at: q.get("star") === "due" ? Date.now() - 2 * 86_400_000 : Date.now(), done: false };
+  const starPrompt: StarPrompt = {
+    first_seen_at: q.get("star") === "due" ? Date.now() - 2 * 86_400_000 : Date.now(),
+    done: false,
+  };
   let conflicts = syncDemo === "conflict" ? [...D.CONFLICTS] : [];
   let devices = [...D.DEVICES];
   let forwards: ForwardView[] = demo === "empty" ? [] : D.FORWARDS.map((f) => ({ ...f }));
@@ -171,6 +187,7 @@ export function createMockApi(): HatobaApi {
   const runForward = (c: MockConnection, f: ForwardView): number => {
     const port = f.bind_port || 49152 + Math.floor(Math.random() * 1000);
     c.forwards.set(f.id, {
+      name: f.name,
       kind: f.kind,
       port,
       address: f.kind === "remote" ? hostPort(f.bind_address, port) : reachableAddress(f.bind_address, port),
@@ -186,7 +203,12 @@ export function createMockApi(): HatobaApi {
     hosts = hosts.map((x) => (x.id === hostId ? { ...x, last_connected_at: Date.now() } : x));
     for (const f of forwards.filter((x) => x.host_id === hostId && x.auto_start)) {
       if (busyDemo) {
-        c.failed.set(f.id, { code: "ssh", ssh_kind: "io", detail: `cannot listen on ${f.bind_address}:${f.bind_port}: address already in use` });
+        c.failed.set(
+          f.id,
+          appError("ssh", `cannot listen on ${f.bind_address}:${f.bind_port}: address already in use`, {
+            ssh_kind: "io",
+          }),
+        );
       } else runForward(c, f);
     }
     if (lostDemo) {
@@ -201,7 +223,7 @@ export function createMockApi(): HatobaApi {
             host_id: hostId,
             state: "disconnected",
             latency_ms: null,
-            error: { code: "ssh", ssh_kind: "disconnected", detail: "keepalive timeout: no reply from the server" },
+            error: appError("ssh", "keepalive timeout: no reply from the server", { ssh_kind: "disconnected" }),
             exit_status: null,
           });
         }
@@ -209,7 +231,7 @@ export function createMockApi(): HatobaApi {
           emit("ssh://forwards-lost", {
             host_id: hostId,
             host_name: c.name,
-            error: { code: "ssh", ssh_kind: "disconnected", detail: "keepalive timeout: no reply from the server" },
+            error: appError("ssh", "keepalive timeout: no reply from the server", { ssh_kind: "disconnected" }),
           });
         }
         connectionsChanged();
@@ -237,7 +259,12 @@ export function createMockApi(): HatobaApi {
   let biometric = q.get("hello") !== "off";
   const biometricRefusal = q.get("biometric");
   const pinDemo = q.get("pin");
-  const pinState = { pin: pinDemo === "on" || pinDemo === "persist" ? "1234" : null as string | null, persist: pinDemo === "persist", armed: true, failures: 0 };
+  const pinState = {
+    pin: pinDemo === "on" || pinDemo === "persist" ? "1234" : (null as string | null),
+    persist: pinDemo === "persist",
+    armed: true,
+    failures: 0,
+  };
   /** Any full unlock arms the PIN again and resets its failures. */
   const armPin = () => {
     pinState.armed = pinState.pin !== null;
@@ -246,11 +273,16 @@ export function createMockApi(): HatobaApi {
   let failed = 0;
   let retryAt: number | null = null;
   let sync: SyncStatus = makeSync();
-  let deployment: { handle: string; failed: boolean; waited: boolean; url: string | null; upgrade: boolean } | null = null;
+  let deployment: { handle: string; failed: boolean; waited: boolean; url: string | null; upgrade: boolean } | null =
+    null;
   const listeners = new Map<string, Set<(p: unknown) => void>>();
   const shells = new Map<string, FakeShell>();
   const telnets = new Map<string, FakeTelnet>();
-  const dashboard = createDashboardMock({ host: (hid) => hosts.find((h) => h.id === hid), unlocked: () => vaultState === "unlocked" });
+  const { unlock: unlockEdits, ...edits } = createEditsMock(emit, startTransfer, q.get("edit"));
+  const dashboard = createDashboardMock({
+    host: (hid) => hosts.find((h) => h.id === hid),
+    unlocked: () => vaultState === "unlocked",
+  });
   /** TERM-12: the mock resource usage of each session that shows it, by the id of its start. */
   const statsTimers = new Map<string, { id: number; timer: ReturnType<typeof setInterval> }>();
   let lastStatsId = 0;
@@ -265,14 +297,19 @@ export function createMockApi(): HatobaApi {
   const cliView = () => ({
     enabled: cliCommand,
     location:
-      platform === "windows" ? "C:\\Users\\demo\\AppData\\Local\\Hatoba\\bin" : platform === "macos" ? "/usr/local/bin/hatoba" : "/home/demo/.local/bin/hatoba",
+      platform === "windows"
+        ? "C:\\Users\\demo\\AppData\\Local\\Hatoba\\bin"
+        : platform === "macos"
+          ? "/usr/local/bin/hatoba"
+          : "/home/demo/.local/bin/hatoba",
     on_path: q.get("cli") !== "offpath",
     access: cliAccess,
   });
 
   function makeSync(): SyncStatus {
     const s = D.syncStatus();
-    if (demo === "empty" || syncDemo === "none") return { ...s, kind: "none", state: "off", endpoint: null, database: null, last_synced_at: null, counts: null };
+    if (demo === "empty" || syncDemo === "none")
+      return { ...s, kind: "none", state: "off", endpoint: null, database: null, last_synced_at: null, counts: null };
     if (syncDemo === "syncing") return { ...s, state: "syncing", pending: 3 };
     if (syncDemo === "offline") return { ...s, state: "offline", pending: 3 };
     if (syncDemo === "auth") return { ...s, state: "auth_failed" };
@@ -288,16 +325,27 @@ export function createMockApi(): HatobaApi {
         ],
       };
     }
-    if (workerDemo === "available") return { ...s, worker_update: { kind: "available", version: "0.1.0", bundled: BUNDLED_WORKER } };
+    if (workerDemo === "available")
+      return { ...s, worker_update: { kind: "available", version: "0.1.0", bundled: BUNDLED_WORKER } };
     if (workerDemo === "required" || workerDemo === "custom")
       return {
         ...s,
         state: "paused",
         pending: 3,
         endpoint: workerDemo === "custom" ? "sync.example.com" : s.endpoint,
-        worker_update: { kind: "required", version: "0.0.9", bundled: deployDemo === "nobundle" ? null : BUNDLED_WORKER },
+        worker_update: {
+          kind: "required",
+          version: "0.0.9",
+          bundled: deployDemo === "nobundle" ? null : BUNDLED_WORKER,
+        },
       };
-    if (workerDemo === "app") return { ...s, state: "paused", pending: 3, worker_update: { kind: "app_required", version: "1.0.0", bundled: BUNDLED_WORKER } };
+    if (workerDemo === "app")
+      return {
+        ...s,
+        state: "paused",
+        pending: 3,
+        worker_update: { kind: "app_required", version: "1.0.0", bundled: BUNDLED_WORKER },
+      };
     return s;
   }
 
@@ -306,25 +354,40 @@ export function createMockApi(): HatobaApi {
   }
 
   function fail(code: AppError["code"], detail: string = code, extra: Partial<AppError> = {}): never {
-    throw { code, detail, ...extra } satisfies AppError;
+    throw appError(code, detail, extra);
   }
 
   /** TELNET-02 in the mock: a fake switch console; a host refused by the probe refuses the connection too. */
   async function openTelnet(host: TelnetHostView, hostId: string | null, onFrame: FrameHandler): Promise<string> {
     needUnlocked();
     await delay(300);
-    if (hostId && D.PROBE[hostId] === false) fail("ssh", `connect to ${host.address}:${host.port}: connection refused`, { ssh_kind: "refused" });
+    if (hostId && D.PROBE[hostId] === false)
+      fail("ssh", `connect to ${host.address}:${host.port}: connection refused`, { ssh_kind: "refused" });
     const sid = id("t");
     const fake = new FakeTelnet(host, (bytes) => onFrame(frame(FRAME_DATA, bytes)));
     telnets.set(sid, fake);
     if (hostId) telnetHosts = telnetHosts.map((h) => (h.id === hostId ? { ...h, last_connected_at: Date.now() } : h));
     setTimeout(() => {
-      emit("ssh://state", { session_id: sid, host_id: hostId, state: "connected", latency_ms: null, error: null, exit_status: null });
+      emit("ssh://state", {
+        session_id: sid,
+        host_id: hostId,
+        state: "connected",
+        latency_ms: null,
+        error: null,
+        exit_status: null,
+      });
       fake.start();
     }, 0);
     fake.onExit = () => {
       onFrame(frame(FRAME_CLOSED, new Uint8Array()));
-      emit("ssh://state", { session_id: sid, host_id: hostId, state: "disconnected", latency_ms: null, error: null, exit_status: null });
+      emit("ssh://state", {
+        session_id: sid,
+        host_id: hostId,
+        state: "disconnected",
+        latency_ms: null,
+        error: null,
+        exit_status: null,
+      });
       telnets.delete(sid);
     };
     return sid;
@@ -346,13 +409,18 @@ export function createMockApi(): HatobaApi {
     return proxies
       .map((p) => ({
         ...p,
-        host_ids: [...hosts, ...telnetHosts].filter((h) => h.proxy_mode === "proxy" && h.proxy_id === p.id).map((h) => h.id),
+        host_ids: [...hosts, ...telnetHosts]
+          .filter((h) => h.proxy_mode === "proxy" && h.proxy_id === p.id)
+          .map((h) => h.id),
       }))
       .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
   }
 
   function keyViews(): KeyView[] {
-    return keys.map((k) => ({ ...k, used_by: hosts.filter((h) => h.auth_kind === "key" && h.key_id === k.id).map((h) => h.id) }));
+    return keys.map((k) => ({
+      ...k,
+      used_by: hosts.filter((h) => h.auth_kind === "key" && h.key_id === k.id).map((h) => h.id),
+    }));
   }
 
   function setSync(patch: Partial<SyncStatus>) {
@@ -396,10 +464,22 @@ export function createMockApi(): HatobaApi {
         const shell = shells.get(sid);
         return shell?.host ? formatTarget(shell.host) : shell ? "local" : null;
       },
-      mcp: { servers: aiExtensions.mcp_servers_list, status: aiExtensions.mcp_server_status, start: aiExtensions.mcp_server_start, toolInfo: aiExtensions.mcp_tool_info },
+      mcp: {
+        servers: aiExtensions.mcp_servers_list,
+        status: aiExtensions.mcp_server_status,
+        start: aiExtensions.mcp_server_start,
+        toolInfo: aiExtensions.mcp_tool_info,
+      },
       memory: memory_tool,
     }),
-    app_info: async () => ({ version, platform, mica: false, local_user: "demo", device_name: platform === "macos" ? "Demo-MacBook" : "DEMO-PC", package_manager: packageManager }),
+    app_info: async () => ({
+      version,
+      platform,
+      mica: false,
+      local_user: "demo",
+      device_name: platform === "macos" ? "Demo-MacBook" : "DEMO-PC",
+      package_manager: packageManager,
+    }),
     launch_take: async () => {
       needUnlocked();
       return launches.splice(0);
@@ -459,7 +539,15 @@ export function createMockApi(): HatobaApi {
       hosts = [];
       groups = [];
       keys = [];
-      sync = { ...sync, kind: "none", state: "off", endpoint: null, database: null, last_synced_at: null, counts: null };
+      sync = {
+        ...sync,
+        kind: "none",
+        state: "off",
+        endpoint: null,
+        database: null,
+        last_synced_at: null,
+        counts: null,
+      };
       return recovery;
     },
     vault_unlock: async (password) => {
@@ -474,6 +562,7 @@ export function createMockApi(): HatobaApi {
       retryAt = null;
       armPin();
       vaultState = "unlocked";
+      unlockEdits();
     },
     vault_unlock_biometric: async () => {
       await delay(700);
@@ -564,11 +653,17 @@ export function createMockApi(): HatobaApi {
     host_save: async (input) => {
       needUnlocked();
       if (!input.address.trim()) fail("invalid_input", "address is required", { field: "address" });
-      if (byteCount(input.ai_notes) > HOST_NOTES_MAX_BYTES) fail("invalid_input", "AI notes are limited to 16 KB", { field: "ai_notes" });
+      if (byteCount(input.ai_notes) > HOST_NOTES_MAX_BYTES)
+        fail("invalid_input", "AI notes are limited to 16 KB", { field: "ai_notes" });
       if (input.proxy_mode === "proxy" && !proxies.some((p) => p.id === input.proxy_id))
         fail("invalid_input", "proxy not found", { field: "proxy_id" });
       const env = input.env.map((v) => ({ name: v.name.trim(), value: v.value }));
-      if (env.length > ENV_MAX_VARS || validateEnvRows(envRows(env)).some(Boolean) || envTooLarge(envRows(env)) || env.some((v) => !v.name))
+      if (
+        env.length > ENV_MAX_VARS ||
+        validateEnvRows(envRows(env)).some(Boolean) ||
+        envTooLarge(envRows(env)) ||
+        env.some((v) => !v.name)
+      )
         fail("invalid_input", "invalid environment variables", { field: "env" });
       const existing = input.id ? hosts.find((h) => h.id === input.id) : undefined;
       const view: HostView = {
@@ -578,7 +673,9 @@ export function createMockApi(): HatobaApi {
         port: input.port || 22,
         username: input.username.trim(),
         auth_kind: input.auth_kind,
-        has_password: input.auth_kind === "password" && (input.password !== null ? input.password.length > 0 : !!existing?.has_password),
+        has_password:
+          input.auth_kind === "password" &&
+          (input.password !== null ? input.password.length > 0 : !!existing?.has_password),
         key_id: input.auth_kind === "key" ? input.key_id : null,
         group_id: input.group_id,
         tags: input.tags,
@@ -615,7 +712,15 @@ export function createMockApi(): HatobaApi {
     host_duplicate: async (hid) => {
       const h = hosts.find((x) => x.id === hid);
       if (!h) fail("not_found");
-      const copy = { ...h, id: id("h"), name: `${h.name}-copy`, favorite: false, last_connected_at: null, os: null, show_stats: false };
+      const copy = {
+        ...h,
+        id: id("h"),
+        name: `${h.name}-copy`,
+        favorite: false,
+        last_connected_at: null,
+        os: null,
+        show_stats: false,
+      };
       hosts = [...hosts, copy];
       touch();
       return copy;
@@ -630,7 +735,8 @@ export function createMockApi(): HatobaApi {
     },
     dashboard_set_shown: async (itemId, shown) => {
       needUnlocked();
-      if (!hosts.some((h) => h.id === itemId) && !groups.some((g) => g.id === itemId)) fail("not_found", "host or group");
+      if (!hosts.some((h) => h.id === itemId) && !groups.some((g) => g.id === itemId))
+        fail("not_found", "host or group");
       hosts = hosts.map((h) => (h.id === itemId ? { ...h, dashboard: shown } : h));
       groups = groups.map((g) => (g.id === itemId ? { ...g, dashboard: shown } : g));
     },
@@ -658,7 +764,9 @@ export function createMockApi(): HatobaApi {
     tags_list: async () => {
       const counts = new Map<string, number>();
       [...hosts, ...telnetHosts].forEach((h) => h.tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1)));
-      return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([name, count]) => ({ name, count }));
+      return [...counts.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([name, count]) => ({ name, count }));
     },
     hosts_probe: async (ids) => {
       await delay(250);
@@ -683,7 +791,13 @@ export function createMockApi(): HatobaApi {
         let groupId: string | null = null;
         if (c.folder) {
           const found = groups.find((g) => !g.parent_id && g.name.toLowerCase() === c.folder?.toLowerCase());
-          const g: GroupView = found ?? { id: id("g"), name: c.folder, parent_id: null, sort: groups.length, dashboard: true };
+          const g: GroupView = found ?? {
+            id: id("g"),
+            name: c.folder,
+            parent_id: null,
+            sort: groups.length,
+            dashboard: true,
+          };
           if (!found) groups.push(g);
           groupId = g.id;
         }
@@ -746,7 +860,9 @@ export function createMockApi(): HatobaApi {
     proxy_delete: async (pid) => {
       if (!proxies.some((p) => p.id === pid)) fail("not_found");
       proxies = proxies.filter((p) => p.id !== pid);
-      hosts = hosts.map((h) => (h.proxy_mode === "proxy" && h.proxy_id === pid ? { ...h, proxy_mode: "device_default", proxy_id: null } : h));
+      hosts = hosts.map((h) =>
+        h.proxy_mode === "proxy" && h.proxy_id === pid ? { ...h, proxy_mode: "device_default", proxy_id: null } : h,
+      );
       if (prefs.default_proxy_id === pid) {
         prefs = { ...prefs, default_proxy_id: null };
         storePrefs();
@@ -763,8 +879,17 @@ export function createMockApi(): HatobaApi {
       const text = input.private_key ?? "";
       if (!input.path && !text.includes("PRIVATE KEY") && !text.includes("PuTTY-User-Key-File"))
         fail("key_parse", "unsupported format", { key_kind: "unsupported_format" });
-      if (text.includes("ENCRYPTED") && !input.passphrase) fail("key_parse", "passphrase required", { key_kind: "passphrase_required" });
-      const k: KeyView = { ...D.KEYS[1], id: id("k"), name: input.name || "imported-key", created_at: Date.now(), updated_at: Date.now(), has_passphrase: !!input.passphrase, used_by: [] };
+      if (text.includes("ENCRYPTED") && !input.passphrase)
+        fail("key_parse", "passphrase required", { key_kind: "passphrase_required" });
+      const k: KeyView = {
+        ...D.KEYS[1],
+        id: id("k"),
+        name: input.name || "imported-key",
+        created_at: Date.now(),
+        updated_at: Date.now(),
+        has_passphrase: !!input.passphrase,
+        used_by: [],
+      };
       keys = [...keys, k];
       touch();
       return k;
@@ -809,18 +934,28 @@ export function createMockApi(): HatobaApi {
       const sid = id("s");
       onFrame(frame(FRAME_SESSION, new TextEncoder().encode(sid)));
       const state = (s: EventMap["ssh://state"]["state"], extra: Partial<EventMap["ssh://state"]> = {}) =>
-        emit("ssh://state", { session_id: sid, host_id: hostId, state: s, latency_ms: null, error: null, exit_status: null, ...extra });
+        emit("ssh://state", {
+          session_id: sid,
+          host_id: hostId,
+          state: s,
+          latency_ms: null,
+          error: null,
+          exit_status: null,
+          ...extra,
+        });
       setTimeout(() => state("connecting"), 0);
       if (D.FAILING_HOSTS.has(hostId) || sshDemo) {
         const enc = new TextEncoder();
         for (let i = 1; i <= 3; i++) {
           await delay(350);
-          onFrame(frame(FRAME_DATA, enc.encode(`\x1b[90mConnecting to ${h.address}:${h.port} (attempt ${i})…\x1b[0m\r\n`)));
+          onFrame(
+            frame(FRAME_DATA, enc.encode(`\x1b[90mConnecting to ${h.address}:${h.port} (attempt ${i})…\x1b[0m\r\n`)),
+          );
         }
         await delay(400);
         const kind = sshDemo && sshDemo in SSH_DEMO_DETAIL ? (sshDemo as SshErrorKind) : "timeout";
         const detail = (SSH_DEMO_DETAIL[kind] ?? SSH_DEMO_DETAIL.timeout)(h.address, h.port);
-        const error: AppError = { code: "ssh", detail, ssh_kind: kind };
+        const error = appError("ssh", detail, { ssh_kind: kind });
         setTimeout(() => state("failed", { error }), 0);
         throw error;
       }
@@ -842,7 +977,7 @@ export function createMockApi(): HatobaApi {
           });
         });
         if (!accepted) {
-          const error: AppError = { code: "ssh", detail: "host key rejected", ssh_kind: "host_key_rejected" };
+          const error = appError("ssh", "host key rejected", { ssh_kind: "host_key_rejected" });
           setTimeout(() => state("failed", { error }), 0);
           throw error;
         }
@@ -873,7 +1008,15 @@ export function createMockApi(): HatobaApi {
       const sid = id("s");
       onFrame(frame(FRAME_SESSION, new TextEncoder().encode(sid)));
       const state = (s: EventMap["ssh://state"]["state"], extra: Partial<EventMap["ssh://state"]> = {}) =>
-        emit("ssh://state", { session_id: sid, host_id: null, state: s, latency_ms: null, error: null, exit_status: null, ...extra });
+        emit("ssh://state", {
+          session_id: sid,
+          host_id: null,
+          state: s,
+          latency_ms: null,
+          error: null,
+          exit_status: null,
+          ...extra,
+        });
       const failWith = (error: AppError): never => {
         setTimeout(() => state("failed", { error }), 0);
         throw error;
@@ -881,7 +1024,7 @@ export function createMockApi(): HatobaApi {
       setTimeout(() => state("connecting"), 0);
       await delay(400);
       if (target.address.includes("timeout"))
-        failWith({ code: "ssh", detail: SSH_DEMO_DETAIL.timeout(target.address, target.port), ssh_kind: "timeout" });
+        failWith(appError("ssh", SSH_DEMO_DETAIL.timeout(target.address, target.port), { ssh_kind: "timeout" }));
       const endpoint = `${target.address}:${target.port}`;
       if (!trustedQuickHosts.has(endpoint)) {
         const accepted = await new Promise<boolean>((resolve) => {
@@ -899,7 +1042,7 @@ export function createMockApi(): HatobaApi {
             known_key_type: null,
           });
         });
-        if (!accepted) failWith({ code: "ssh", detail: "host key rejected", ssh_kind: "host_key_rejected" });
+        if (!accepted) failWith(appError("ssh", "host key rejected", { ssh_kind: "host_key_rejected" }));
         trustedQuickHosts.add(endpoint);
       }
       // No ssh-agent here: the server asks for the password.
@@ -917,11 +1060,22 @@ export function createMockApi(): HatobaApi {
           target: `${target.username}@${host}:${target.port}`,
         });
       });
-      if (!answers) failWith({ code: "ssh", detail: "operation cancelled", ssh_kind: "cancelled" });
+      if (!answers) failWith(appError("ssh", "operation cancelled", { ssh_kind: "cancelled" }));
       if (answers![0] === "wrong")
-        failWith({ code: "ssh", detail: "the server rejected the password (server accepts: publickey, password)", ssh_kind: "auth_failed" });
+        failWith(
+          appError("ssh", "the server rejected the password (server accepts: publickey, password)", {
+            ssh_kind: "auth_failed",
+          }),
+        );
       await delay(300);
-      const shellHost: HostView = { ...D.HOSTS[0], id: "", name: target.address, address: target.address, port: target.port, username: target.username };
+      const shellHost: HostView = {
+        ...D.HOSTS[0],
+        id: "",
+        name: target.address,
+        address: target.address,
+        port: target.port,
+        username: target.username,
+      };
       const shell = new FakeShell(shellHost, (bytes) => onFrame(frame(FRAME_DATA, bytes)));
       shells.set(sid, shell);
       recentTargets = [target, ...recentTargets.filter((r) => !sameTarget(r, target))].slice(0, 8);
@@ -973,12 +1127,26 @@ export function createMockApi(): HatobaApi {
       });
       shells.set(sid, fake);
       setTimeout(() => {
-        emit("ssh://state", { session_id: sid, host_id: null, state: "connected", latency_ms: null, error: null, exit_status: null });
+        emit("ssh://state", {
+          session_id: sid,
+          host_id: null,
+          state: "connected",
+          latency_ms: null,
+          error: null,
+          exit_status: null,
+        });
         fake.start();
       }, 0);
       fake.onExit = () => {
         onFrame(frame(FRAME_CLOSED, new Uint8Array()));
-        emit("ssh://state", { session_id: sid, host_id: null, state: "disconnected", latency_ms: null, error: null, exit_status: 0 });
+        emit("ssh://state", {
+          session_id: sid,
+          host_id: null,
+          state: "disconnected",
+          latency_ms: null,
+          error: null,
+          exit_status: 0,
+        });
         shells.delete(sid);
       };
       return sid;
@@ -999,7 +1167,8 @@ export function createMockApi(): HatobaApi {
     telnet_host_save: async (input) => {
       needUnlocked();
       if (!input.address.trim()) fail("invalid_input", "address is required", { field: "address" });
-      if (byteCount(input.ai_notes) > HOST_NOTES_MAX_BYTES) fail("invalid_input", "AI notes are limited to 16 KB", { field: "ai_notes" });
+      if (byteCount(input.ai_notes) > HOST_NOTES_MAX_BYTES)
+        fail("invalid_input", "AI notes are limited to 16 KB", { field: "ai_notes" });
       if (input.proxy_mode === "proxy" && !proxies.some((p) => p.id === input.proxy_id))
         fail("invalid_input", "proxy not found", { field: "proxy_id" });
       const existing = input.id ? telnetHosts.find((h) => h.id === input.id) : undefined;
@@ -1041,7 +1210,15 @@ export function createMockApi(): HatobaApi {
     },
     telnet_host_copy_password: async () => {},
     telnet_open_target: async (address, port, _options, onFrame: FrameHandler) => {
-      const host: TelnetHostView = { ...D.TELNET_HOSTS[1], id: "", name: address, address, port, username: "", has_password: false };
+      const host: TelnetHostView = {
+        ...D.TELNET_HOSTS[1],
+        id: "",
+        name: address,
+        address,
+        port,
+        username: "",
+        has_password: false,
+      };
       return openTelnet(host, null, onFrame);
     },
     telnet_open: async (hostId, _options, onFrame: FrameHandler) => {
@@ -1071,7 +1248,10 @@ export function createMockApi(): HatobaApi {
       stopStats(sid);
       const sample = mockStats();
       onEvent({ kind: "stats", stats: sample(true) });
-      statsTimers.set(sid, { id: statsId, timer: setInterval(() => onEvent({ kind: "stats", stats: sample(false) }), 2000) });
+      statsTimers.set(sid, {
+        id: statsId,
+        timer: setInterval(() => onEvent({ kind: "stats", stats: sample(false) }), 2000),
+      });
       return statsId;
     },
     ssh_stats_stop: async (sid, statsId) => {
@@ -1080,7 +1260,12 @@ export function createMockApi(): HatobaApi {
     ssh_test: async (input) => {
       await delay(800);
       if (input.address === "172.31.40.8")
-        return { ok: false, latency_ms: null, host_key_verified: false, error: { code: "ssh", detail: "timed out", ssh_kind: "timeout" } };
+        return {
+          ok: false,
+          latency_ms: null,
+          host_key_verified: false,
+          error: appError("ssh", "timed out", { ssh_kind: "timeout" }),
+        };
       return { ok: true, latency_ms: 38, host_key_verified: true, error: null };
     },
     hostkey_respond: async (rid, accept) => {
@@ -1097,11 +1282,18 @@ export function createMockApi(): HatobaApi {
       const f: ForwardView = {
         ...input,
         id: input.id ?? id("f"),
+        name: input.name.trim(),
         bind_address: input.bind_address || (input.kind === "remote" ? "localhost" : "127.0.0.1"),
         ...(input.kind === "dynamic" && { dest_host: "", dest_port: 0 }),
       };
       forwards = input.id ? forwards.map((x) => (x.id === f.id ? f : x)) : [...forwards, f];
       touch();
+      // A running forward takes its rule's name.
+      const running = connections.get(f.host_id)?.forwards.get(f.id);
+      if (running && running.name !== f.name) {
+        running.name = f.name;
+        connectionsChanged();
+      }
       return f;
     },
     forward_delete: async (fid) => {
@@ -1116,7 +1308,8 @@ export function createMockApi(): HatobaApi {
       const f = forwards.find((x) => x.id === fid && x.host_id === hostId) ?? fail("not_found", "forward not found");
       let c = connections.get(hostId);
       if (!c) {
-        if (h.auth_kind === "ask" && !options.password) fail("invalid_input", "a password is required for this host", { field: "password" });
+        if (h.auth_kind === "ask" && !options.password)
+          fail("invalid_input", "a password is required for this host", { field: "password" });
         await delay(600);
         c = openConnection(hostId, h.name);
       }
@@ -1132,7 +1325,15 @@ export function createMockApi(): HatobaApi {
       if (path === "/srv/api") return D.API_FILES;
       if (path === "/home/deploy") return D.HOME_FILES;
       return [
-        { name: "README", path: `${path.replace(/\/$/, "")}/README`, is_dir: false, is_symlink: false, size: 120, modified: Date.now(), permissions: "-rw-r--r--" },
+        {
+          name: "README",
+          path: `${path.replace(/\/$/, "")}/README`,
+          is_dir: false,
+          is_symlink: false,
+          size: 120,
+          modified: Date.now(),
+          permissions: "-rw-r--r--",
+        },
       ] satisfies FileEntry[];
     },
     sftp_download: async (sid, remote) => startTransfer(sid, "download", remote.split("/").pop() ?? remote, 18_400_000),
@@ -1143,20 +1344,49 @@ export function createMockApi(): HatobaApi {
     transfer_cancel: async (tid) => {
       transfers.get(tid)?.();
     },
+    ...edits,
 
     sync_status: async () => sync,
     sync_test: async (config) => {
       await delay(700);
       if (config.kind === "d1") {
         if (config.api_token.length < 20)
-          return { ok: false, initialized: false, version: null, latency_ms: null, databases: null, error: { code: "sync", detail: "token lacks D1 edit permission" } };
-        return { ok: true, initialized: demo === "onboarding" || deployDemo === "vault", version: null, latency_ms: 64, databases: [{ id: "3f8a2c91-d04e-4b7a-a1e6-c5d2b9f07e13", name: "hatoba", region: "APAC" }], error: null };
+          return {
+            ok: false,
+            initialized: false,
+            version: null,
+            latency_ms: null,
+            databases: null,
+            error: appError("sync", "token lacks D1 edit permission"),
+          };
+        return {
+          ok: true,
+          initialized: demo === "onboarding" || deployDemo === "vault",
+          version: null,
+          latency_ms: 64,
+          databases: [{ id: "3f8a2c91-d04e-4b7a-a1e6-c5d2b9f07e13", name: "hatoba", region: "APAC" }],
+          error: null,
+        };
       }
       if (!/^https?:\/\//.test(config.url) && !config.url.includes("."))
-        return { ok: false, initialized: false, version: null, latency_ms: null, databases: null, error: { code: "sync_offline", detail: "dns" } };
+        return {
+          ok: false,
+          initialized: false,
+          version: null,
+          latency_ms: null,
+          databases: null,
+          error: appError("sync_offline", "dns"),
+        };
       // First-launch demo (flow B) restores from a remote that already holds a vault, and so
       // does `?deploy=vault` (flow C).
-      return { ok: true, initialized: demo === "onboarding" || deployDemo === "vault", version: "0.1.0", latency_ms: 64, databases: null, error: null };
+      return {
+        ok: true,
+        initialized: demo === "onboarding" || deployDemo === "vault",
+        version: "0.1.0",
+        latency_ms: 64,
+        databases: null,
+        error: null,
+      };
     },
     sync_configure: async (config, password) => {
       await delay(1200);
@@ -1205,7 +1435,16 @@ export function createMockApi(): HatobaApi {
       if (sync.worker_update?.kind === "available") setSync({ worker_update: null });
     },
     sync_disconnect: async () => {
-      sync = { ...sync, kind: "none", state: "off", endpoint: null, database: null, last_synced_at: null, counts: null, conflicts: 0 };
+      sync = {
+        ...sync,
+        kind: "none",
+        state: "off",
+        endpoint: null,
+        database: null,
+        last_synced_at: null,
+        counts: null,
+        conflicts: 0,
+      };
       emit("sync://status", sync);
     },
     sync_devices: async () => devices,
@@ -1232,7 +1471,13 @@ export function createMockApi(): HatobaApi {
           : accountId
             ? []
             : [{ id: "0123456789abcdef0123456789abcdef", name: "Personal" }];
-      return { handle: deployment.handle, account_owned: !!accountId && deployDemo !== "accounts", accounts, worker_name: "hatoba-sync", database_name: "hatoba" };
+      return {
+        handle: deployment.handle,
+        account_owned: !!accountId && deployDemo !== "accounts",
+        accounts,
+        worker_name: "hatoba-sync",
+        database_name: "hatoba",
+      };
     },
     deploy_inspect: async (handle, target) => {
       needDeployment(handle);
@@ -1241,7 +1486,13 @@ export function createMockApi(): HatobaApi {
       const fresh = target.worker_name !== "hatoba-sync";
       return {
         subdomain: deployDemo === "nosub" ? null : "kc",
-        worker: fresh ? "create" : deployDemo === "vault" ? "has_vault" : deployDemo === "foreign" ? "foreign" : "create",
+        worker: fresh
+          ? "create"
+          : deployDemo === "vault"
+            ? "has_vault"
+            : deployDemo === "foreign"
+              ? "foreign"
+              : "create",
         database: "create",
         database_name: target.database_name,
         vault_url: deployDemo === "vault" && !fresh ? `https://${target.worker_name}.kc.workers.dev` : null,
@@ -1314,14 +1565,24 @@ export function createMockApi(): HatobaApi {
       const workersDev = url.endsWith(".workers.dev");
       return workerDemo === "available"
         ? { url, account_id: "0123456789abcdef0123456789abcdef", worker_name: "hatoba-sync", deployed_by_app: true }
-        : { url, account_id: null, worker_name: workersDev ? (sync.endpoint ?? "").split(".")[0] : null, deployed_by_app: false };
+        : {
+            url,
+            account_id: null,
+            worker_name: workersDev ? (sync.endpoint ?? "").split(".")[0] : null,
+            deployed_by_app: false,
+          };
     },
     deploy_upgrade_inspect: async (handle, target) => {
       needDeployment(handle);
       await delay(800);
       if (deployDemo === "permission") fail("cloudflare_permission", "token lacks D1 Edit", { permission: "d1" });
       const version = sync.worker_update?.version ?? null;
-      const stop = target.worker_name !== "hatoba-sync" ? "missing" : ({ missing: "missing", novault: "no_vault", newer: "newer", foreign: "foreign" } as const)[deployDemo ?? ""];
+      const stop =
+        target.worker_name !== "hatoba-sync"
+          ? "missing"
+          : ({ missing: "missing", novault: "no_vault", newer: "newer", foreign: "foreign" } as const)[
+              deployDemo ?? ""
+            ];
       return {
         worker: stop ?? "upgrade",
         database_name: stop ? null : "hatoba",
@@ -1358,7 +1619,7 @@ export function createMockApi(): HatobaApi {
 
     settings_get: async () => structuredClone(settings),
     settings_save: async (patch) => {
-      const terminal = applyPatch(settings.terminal, patch.terminal);
+      const terminal = applyPatch(settings.terminal, patch.terminal ?? {});
       if (JSON.stringify(terminal) === JSON.stringify(settings.terminal)) return;
       settings = { ...settings, terminal };
       touch();
@@ -1375,6 +1636,7 @@ export function createMockApi(): HatobaApi {
 
     window_snap_overlay: async () => {},
     window_floating: async () => false,
+    window_zoom: async (percent) => ({ zoom: zoomStep(percent), max: ZOOM_STEPS[ZOOM_STEPS.length - 1] }),
     window_hide_to_tray: async () => {},
     app_quit: async () => {},
     tray_set_menu: async () => {},
@@ -1408,12 +1670,32 @@ export function createMockApi(): HatobaApi {
     const timer = setInterval(() => {
       bytes = Math.min(total, bytes + rate / 5);
       const done = bytes >= total;
-      emit("transfer://progress", { transfer_id: tid, session_id: sid, direction, name, bytes, total, bytes_per_sec: rate, state: done ? "done" : "running", error: null });
+      emit("transfer://progress", {
+        transfer_id: tid,
+        session_id: sid,
+        direction,
+        name,
+        bytes,
+        total,
+        bytes_per_sec: rate,
+        state: done ? "done" : "running",
+        error: null,
+      });
       if (done) clearInterval(timer);
     }, 200);
     transfers.set(tid, () => {
       clearInterval(timer);
-      emit("transfer://progress", { transfer_id: tid, session_id: sid, direction, name, bytes, total, bytes_per_sec: 0, state: "cancelled", error: null });
+      emit("transfer://progress", {
+        transfer_id: tid,
+        session_id: sid,
+        direction,
+        name,
+        bytes,
+        total,
+        bytes_per_sec: 0,
+        state: "cancelled",
+        error: null,
+      });
     });
     return tid;
   }

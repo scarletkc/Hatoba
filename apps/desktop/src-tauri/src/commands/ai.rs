@@ -1,7 +1,7 @@
 //! AI assistant commands (spec §13): providers, search providers and the synced settings of
 //! Settings → AI, conversations with history search (AI-24), and the turn protocol of §13.1 with
-//! edit and resend (AI-26) and side questions (AI-42), which run in [`crate::ai`]. Skills and MCP
-//! servers have their own modules ([`super::skills`], [`super::mcp`]).
+//! edit and resend (AI-26) and side questions (AI-42), which run in [`hatoba_assistant::ai`].
+//! Skills and MCP servers have their own modules ([`super::skills`], [`super::mcp`]).
 //! API keys go one way to Rust: views say only whether a key is saved (AI-01).
 
 use std::sync::Arc;
@@ -11,33 +11,36 @@ use hatoba_ai::chatgpt::SessionStatus;
 use hatoba_ai::models::{TestFailure, TestOutcome};
 use hatoba_ai::provider::{ProviderConfig, validate_base_url};
 use hatoba_ai::web::SearchConfig;
+use hatoba_assistant::ai::conn::Conn;
+use hatoba_assistant::ai::{
+    AiEnv, EventSink, MAX_TITLE_CHARS, auth_header, chatgpt, conversation_view,
+    conversation_view_at, core_effort, drop_levels_of_old_protocol, effort_view, find_conversation,
+    listed_effort, model_spec, models_dev, protocol, search_kind,
+};
+use hatoba_assistant::dropped;
+use hatoba_assistant::settings::{find_search_provider, save_ai_settings};
 use hatoba_core::model::{
     AiAuthHeader as CoreAuthHeader, AiConversation, AiModel as CoreModel, AiModelRef as CoreRef,
-    AiProtocol as CoreProtocol, AiProvider, AiSettings, Item, MAX_CUSTOM_INSTRUCTIONS_BYTES,
-    MAX_ITEM_PLAINTEXT_BYTES, SETTINGS_ID, SearchKind as CoreSearchKind, SearchProvider,
+    AiProtocol as CoreProtocol, AiProvider, AiSettings, Item, SETTINGS_ID,
+    SearchKind as CoreSearchKind, SearchProvider,
 };
 use hatoba_core::{SnapshotKey, Vault};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
 use zeroize::Zeroizing;
 
-use crate::ai::{
-    AiEnv, EventSink, MAX_TITLE_CHARS, auth_header, chatgpt, conversation_view,
-    conversation_view_at, core_effort, drop_levels_of_old_protocol, effort_view, find_conversation,
-    listed_effort, model_spec, models_dev, protocol, search_kind,
-};
 use crate::dto::{
     AiAuthHeader, AiAutoVerdict, AiChatgptSignIn, AiChatgptStatus, AiChatgptView,
     AiConversationDetail, AiConversationView, AiEntryView, AiFileChange, AiFilePreview,
     AiFileRevert, AiHostFile, AiHostListing, AiJudgeSampleOutcome, AiModel, AiModelRef, AiProtocol,
     AiProviderInput, AiProviderView, AiSearchHit, AiSendInput, AiSendStarted, AiSettingsPatch,
     AiSettingsView, AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiSkillCommand, AiTestFailure,
-    AiTestResult, AiToolResultInput, AiToolRun, AiTurnContext, AiTurnEvent, Clearable, DroppedFile,
+    AiTestResult, AiToolResultInput, AiToolRun, AiTurnContext, AiTurnEvent, DroppedFile,
     SearchKind, SearchProviderInput, SearchProviderView,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, blocking, state};
-use crate::{dropped, sync};
+use crate::sync;
 
 /// The query `search_provider_test` sends.
 const TEST_QUERY: &str = "Hatoba SSH client";
@@ -50,19 +53,26 @@ impl AiEnv for AppEnv {
         sync::local_change(&self.0);
     }
 
-    fn session(&self, session_id: &str) -> Option<crate::ai::conn::Conn> {
+    fn session(&self, session_id: &str) -> Option<Conn> {
         let state = state(&self.0);
         match state.ssh.get(session_id) {
-            Ok(live) => Some(crate::ai::conn::Conn::Ssh(live.session.clone())),
-            Err(_) => state
-                .local
-                .find(session_id)
-                .map(crate::ai::conn::Conn::Local),
+            Ok(live) => Some(Conn::Ssh(live.session.clone())),
+            Err(_) => state.local.find(session_id).map(Conn::Local),
         }
     }
 
     fn app_version(&self) -> String {
         self.0.package_info().version.to_string()
+    }
+}
+
+/// A turn's events, as the `Channel` of `ai_send`, `ai_retry` or `ai_edit_resend`.
+struct TurnChannel(Channel<AiTurnEvent>);
+
+impl EventSink for TurnChannel {
+    fn send(&self, event: AiTurnEvent) {
+        // A reloaded WebView drops its channels; the turn goes on and its entries are stored.
+        let _ = self.0.send(event);
     }
 }
 
@@ -172,6 +182,7 @@ fn ai_settings_view(s: &AiSettings) -> AiSettingsView {
         send_terminal_screen: s.send_terminal_screen,
         judge_model: s.judge_model.as_ref().map(model_ref_view),
         memory: s.memory,
+        text_size: s.text_size,
     }
 }
 
@@ -336,7 +347,7 @@ pub(crate) fn provider_config_for(v: &Vault, input: &AiProviderInput) -> AppResu
     if let Some(id) = &input.id {
         let saved = find_provider(v, id)?;
         if saved.chatgpt.is_some() {
-            return Ok(crate::ai::provider_config(id, &saved));
+            return Ok(hatoba_assistant::ai::provider_config(id, &saved));
         }
     }
     let saved = match (&input.api_key, &input.id) {
@@ -371,6 +382,7 @@ pub(crate) fn delete_provider(v: &mut Vault, id: &str) -> AppResult<()> {
     Ok(())
 }
 
+/// AI-01: the providers. API keys go one way to Rust and never come back.
 #[tauri::command]
 #[specta::specta]
 pub fn ai_providers_list(state: State<'_, AppState>) -> AppResult<Vec<AiProviderView>> {
@@ -456,7 +468,10 @@ pub async fn ai_chatgpt_sign_in(
         .finish(&state.ai.http(), &cancel)
         .await
         .map_err(|e| {
-            tracing::info!(kind = crate::ai::error_kind(&e), "ChatGPT sign-in failed");
+            tracing::info!(
+                kind = hatoba_assistant::ai::error_kind(&e),
+                "ChatGPT sign-in failed"
+            );
             AppError::from(e)
         })?;
     let stored = state.with_unlocked(|v| {
@@ -515,7 +530,7 @@ pub async fn ai_chatgpt_sign_in(
     let config = state.with_unlocked(|v| {
         let provider = find_provider(v, &id)?;
         Ok((credentials.plan_enabled() && provider.models.is_empty())
-            .then(|| crate::ai::provider_config(&id, &provider)))
+            .then(|| hatoba_assistant::ai::provider_config(&id, &provider)))
     })?;
     if let Some(config) = config {
         // The sign-in is done, so Cancel no longer stops it; a lock still does.
@@ -549,7 +564,7 @@ pub async fn ai_chatgpt_sign_in(
                 })?;
             }
             Err(e) => tracing::info!(
-                kind = crate::ai::error_kind(&e),
+                kind = hatoba_assistant::ai::error_kind(&e),
                 status = ?e.status(),
                 "ChatGPT model list failed after the sign-in"
             ),
@@ -606,7 +621,7 @@ pub async fn ai_provider_models(
         .await
         .map_err(|e| {
             tracing::info!(
-                kind = crate::ai::error_kind(&e),
+                kind = hatoba_assistant::ai::error_kind(&e),
                 status = ?e.status(),
                 "AI model list failed"
             );
@@ -646,13 +661,6 @@ pub async fn ai_provider_test(
 }
 
 // ───────────────────────── search providers (AI-14) ─────────────────────────
-
-fn find_search_provider(v: &Vault, id: &str) -> AppResult<SearchProvider> {
-    v.get(id)
-        .and_then(Item::as_search_provider)
-        .cloned()
-        .ok_or_else(|| AppError::not_found("search provider"))
-}
 
 /// Stores a search provider from the form; `base_url` is the checked SearXNG URL.
 pub(crate) fn save_search_provider(
@@ -724,6 +732,7 @@ pub(crate) fn delete_search_provider(v: &mut Vault, id: &str) -> AppResult<()> {
     Ok(())
 }
 
+/// AI-14: the search providers behind `web_search`.
 #[tauri::command]
 #[specta::specta]
 pub fn search_providers_list(state: State<'_, AppState>) -> AppResult<Vec<SearchProviderView>> {
@@ -787,7 +796,7 @@ pub async fn search_provider_test(
             message: None,
         },
         Err(e) => {
-            tracing::info!(kind = crate::ai::error_kind(&e), status = ?e.status(), "search provider test failed");
+            tracing::info!(kind = hatoba_assistant::ai::error_kind(&e), status = ?e.status(), "search provider test failed");
             search_test_failure(&e)
         }
     })
@@ -795,132 +804,13 @@ pub async fn search_provider_test(
 
 // ───────────────────────── synced settings ─────────────────────────
 
-/// The model reference the settings field `field` holds after `patch`, from `current`: one the
-/// user changed must name an existing provider that lists the model, and with `chats` a provider
-/// that chats, not a System One one (AI-47); an unchanged one is kept as it is, even when it
-/// dangles.
-fn patched_model(
-    v: &Vault,
-    field: &str,
-    current: Option<&CoreRef>,
-    patch: &Clearable<AiModelRef>,
-    chats: bool,
-) -> AppResult<Option<CoreRef>> {
-    let m = match patch {
-        Clearable::Keep => return Ok(current.cloned()),
-        Clearable::Clear => return Ok(None),
-        Clearable::Set(m) => m,
-    };
-    let unchanged =
-        current.is_some_and(|c| c.provider_id == m.provider_id && c.model_id == m.model_id);
-    if !unchanged {
-        let provider = v
-            .get(&m.provider_id)
-            .and_then(Item::as_ai_provider)
-            .ok_or_else(|| AppError::invalid(field, "provider not found"))?;
-        if !provider.models.iter().any(|x| x.id == m.model_id) {
-            return Err(AppError::invalid(field, "the provider has no such model"));
-        }
-        if chats && provider.protocol == CoreProtocol::SystemOne {
-            return Err(AppError::invalid(field, "a System One model cannot chat"));
-        }
-    }
-    Ok(Some(CoreRef {
-        provider_id: m.provider_id.clone(),
-        model_id: m.model_id.clone(),
-    }))
-}
-
-/// Writes the fields `patch` sets over the stored `Settings.ai`, as `settings_save` does for the
-/// terminal, and returns whether that changed them. A reference the user changed must point at an
-/// existing provider and model or search provider; an unchanged one is kept as it is, even when it
-/// dangles (e.g. the item it names has not synced to this device yet). The default model must be
-/// one that chats; the judge of Auto mode (AI-47) may be a model of any provider, a System One one
-/// included.
-pub(crate) fn save_ai_settings(v: &mut Vault, patch: &AiSettingsPatch) -> AppResult<bool> {
-    let mut settings = v.settings();
-    let current = &settings.ai;
-    let default_model = patched_model(
-        v,
-        "default_model",
-        current.default_model.as_ref(),
-        &patch.default_model,
-        true,
-    )?;
-    let judge_model = patched_model(
-        v,
-        "judge_model",
-        current.judge_model.as_ref(),
-        &patch.judge_model,
-        false,
-    )?;
-    let search_provider_id = match &patch.search_provider_id {
-        Clearable::Keep => current.search_provider_id.clone(),
-        Clearable::Clear => None,
-        Clearable::Set(id) => {
-            if current.search_provider_id.as_ref() != Some(id) {
-                find_search_provider(v, id).map_err(|_| {
-                    AppError::invalid("search_provider_id", "search provider not found")
-                })?;
-            }
-            Some(id.clone())
-        }
-    };
-    if patch
-        .custom_instructions
-        .as_ref()
-        .is_some_and(|text| text.len() > MAX_CUSTOM_INSTRUCTIONS_BYTES)
-    {
-        return Err(AppError::invalid(
-            "custom_instructions",
-            "custom instructions are limited to 32 KB",
-        ));
-    }
-    let ai = AiSettings {
-        default_model,
-        default_effort: match patch.default_effort {
-            Clearable::Keep => current.default_effort,
-            Clearable::Clear => None,
-            Clearable::Set(effort) => Some(core_effort(effort)),
-        },
-        search_provider_id,
-        native_search: patch.native_search.unwrap_or(current.native_search),
-        builtin_skill_enabled: patch
-            .builtin_skill_enabled
-            .unwrap_or(current.builtin_skill_enabled),
-        custom_instructions: patch
-            .custom_instructions
-            .clone()
-            .unwrap_or_else(|| current.custom_instructions.clone()),
-        send_terminal_screen: patch
-            .send_terminal_screen
-            .unwrap_or(current.send_terminal_screen),
-        judge_model,
-        memory: patch.memory.unwrap_or(current.memory),
-    };
-    if ai == settings.ai {
-        return Ok(false);
-    }
-    settings.ai = ai;
-    let item = Item::Settings(settings);
-    // With sync on, the Worker and D1 would refuse a larger settings item on every sync (§6.2);
-    // only instructions whose JSON is far longer than their text (many quotes) get there.
-    if v.sync_config()?.is_some() && item.plaintext_len()? > MAX_ITEM_PLAINTEXT_BYTES {
-        return Err(AppError::invalid(
-            "custom_instructions",
-            "the custom instructions are too large to sync",
-        ));
-    }
-    v.put(Some(SETTINGS_ID), item)?;
-    Ok(true)
-}
-
 #[tauri::command]
 #[specta::specta]
 pub fn ai_settings_get(state: State<'_, AppState>) -> AppResult<AiSettingsView> {
     state.with_unlocked(|v| Ok(ai_settings_view(&v.settings().ai)))
 }
 
+/// Writes the fields `patch` sets, like `settings_save`.
 #[tauri::command]
 #[specta::specta]
 pub fn ai_settings_save(
@@ -1055,7 +945,7 @@ pub async fn ai_send(
     input: AiSendInput,
     channel: Channel<AiTurnEvent>,
 ) -> AppResult<AiSendStarted> {
-    let sink: Arc<dyn EventSink> = Arc::new(channel);
+    let sink: Arc<dyn EventSink> = Arc::new(TurnChannel(channel));
     let (started, task) = state
         .ai
         .send(&state.vault, Arc::new(AppEnv(app)), input, sink)
@@ -1074,7 +964,7 @@ pub async fn ai_retry(
     context: AiTurnContext,
     channel: Channel<AiTurnEvent>,
 ) -> AppResult<()> {
-    let sink: Arc<dyn EventSink> = Arc::new(channel);
+    let sink: Arc<dyn EventSink> = Arc::new(TurnChannel(channel));
     let task = state.ai.retry(
         &state.vault,
         Arc::new(AppEnv(app)),
@@ -1171,7 +1061,7 @@ pub async fn ai_file_change_diff(
 #[tauri::command]
 #[specta::specta]
 pub fn ai_session_server(app: AppHandle, session_id: Option<String>) -> Option<String> {
-    crate::ai::session_server(&AppEnv(app), session_id.as_deref())
+    hatoba_assistant::ai::session_server(&AppEnv(app), session_id.as_deref())
 }
 
 /// Reverts the change an `edit_file` or `write_file` call made (AI-41), on the conversation's tab
@@ -1311,7 +1201,7 @@ pub async fn ai_compact(
 #[tauri::command]
 #[specta::specta]
 pub async fn ai_skill_commands(state: State<'_, AppState>) -> AppResult<Vec<AiSkillCommand>> {
-    state.with_unlocked(|v| Ok(crate::ai::skill_commands(v)))
+    state.with_unlocked(|v| Ok(hatoba_assistant::ai::skill_commands(v)))
 }
 
 /// AI-50: the `SKILL.md` of the enabled skill `name`, which a `/<skill>` command attaches.
@@ -1323,7 +1213,7 @@ pub async fn ai_skill_text(
     name: String,
 ) -> AppResult<String> {
     let version = AppEnv(app).app_version();
-    state.with_unlocked(|v| crate::ai::skill_text(v, &name, &version))
+    state.with_unlocked(|v| hatoba_assistant::ai::skill_text(v, &name, &version))
 }
 
 /// AI-51: the entries of the directory `path` on the host of the tab's session `session_id`, for
@@ -1338,7 +1228,7 @@ pub async fn ai_host_list(
 ) -> AppResult<AiHostListing> {
     state.with_unlocked(|_| Ok(()))?;
     let session = AppEnv(app).session(&session_id);
-    Ok(crate::ai::mentions::list(session, &path).await)
+    Ok(hatoba_assistant::ai::mentions::list(session, &path).await)
 }
 
 /// AI-51: the text file `path` on the host of the tab's session `session_id`, which an `@`
@@ -1353,7 +1243,7 @@ pub async fn ai_host_read(
 ) -> AppResult<AiHostFile> {
     state.with_unlocked(|_| Ok(()))?;
     let session = AppEnv(app).session(&session_id);
-    Ok(crate::ai::mentions::read(session, &path).await)
+    Ok(hatoba_assistant::ai::mentions::read(session, &path).await)
 }
 
 /// AI-42: asks a side question about the conversation without stopping its turn. The answer
@@ -1394,7 +1284,7 @@ pub async fn ai_side_stop(
 #[specta::specta]
 pub async fn ai_search(state: State<'_, AppState>, query: String) -> AppResult<Vec<AiSearchHit>> {
     let vault = state.vault.clone();
-    blocking(move || crate::ai::search(&vault, &query)).await
+    blocking(move || hatoba_assistant::ai::search(&vault, &query)).await
 }
 
 /// AI-26: replaces the user's message `entry_id` with `text`, deletes every entry after it, and
@@ -1410,7 +1300,7 @@ pub async fn ai_edit_resend(
     context: AiTurnContext,
     channel: Channel<AiTurnEvent>,
 ) -> AppResult<AiSendStarted> {
-    let sink: Arc<dyn EventSink> = Arc::new(channel);
+    let sink: Arc<dyn EventSink> = Arc::new(TurnChannel(channel));
     let (started, task) = state
         .ai
         .edit_resend(
@@ -1450,10 +1340,10 @@ pub async fn ai_read_dropped_files(
 #[cfg(test)]
 mod tests {
     use hatoba_core::KdfParams;
-    use hatoba_core::model::AiEffort as CoreEffort;
+    use hatoba_core::model::{AiEffort as CoreEffort, MAX_CUSTOM_INSTRUCTIONS_BYTES};
 
     use super::*;
-    use crate::dto::AiEffort;
+    use crate::dto::{AiEffort, Clearable};
 
     const KEY: &str = "sk-test-NEVER-SHOWN-4242";
 
@@ -1789,6 +1679,16 @@ mod tests {
         save_ai_settings(&mut v, &forgetful).unwrap();
         assert!(!ai_settings_view(&v.settings().ai).memory);
         assert!(!v.settings().ai.send_terminal_screen);
+
+        // TERM-13: and so is the text size, kept within its range.
+        assert_eq!(ai_settings_view(&v.settings().ai).text_size, 13);
+        save_ai_settings(&mut v, &patch(|p| p.text_size = Some(16))).unwrap();
+        assert_eq!(v.settings().ai.text_size, 16);
+        save_ai_settings(&mut v, &patch(|p| p.text_size = Some(99))).unwrap();
+        assert_eq!(v.settings().ai.text_size, 24);
+        save_ai_settings(&mut v, &patch(|p| p.text_size = Some(1))).unwrap();
+        assert_eq!(v.settings().ai.text_size, 11);
+        assert!(!v.settings().ai.memory);
 
         // AI-14: and so is native search, on until turned off.
         assert!(ai_settings_view(&v.settings().ai).native_search);

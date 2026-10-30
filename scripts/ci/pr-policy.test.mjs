@@ -5,7 +5,10 @@ import { test } from "node:test";
 import { hasImage, isSmallDocsFix, isUiFile, linkedIssues, problems, run, sections, ticked } from "./pr-policy.mjs";
 
 const REPO = "scarletkc/Hatoba";
-const TEMPLATE = readFileSync(new URL("../../.github/pull_request_template.md", import.meta.url), "utf8").replaceAll("\r\n", "\n");
+const TEMPLATE = readFileSync(new URL("../../.github/pull_request_template.md", import.meta.url), "utf8").replaceAll(
+  "\r\n",
+  "\n",
+);
 
 /** The template, filled in and ticked, linking issue 42. */
 const FILLED = TEMPLATE.replaceAll("- [ ]", "- [x]")
@@ -17,7 +20,13 @@ const FILLED = TEMPLATE.replaceAll("- [ ]", "- [x]")
 const code = (filename, lines = 10) => ({ filename, additions: lines, deletions: 0 });
 const issue = (fields = {}) => ({ pullRequest: false, labels: [], user: "maintainer", assignees: [], ...fields });
 const check = ({ body = FILLED, files = [code("crates/hatoba-core/src/lib.rs")], issues, comments = [] } = {}) =>
-  problems({ body, author: "alice", files, issues: issues ?? new Map([[42, issue({ labels: ["help wanted"] })]]), comments });
+  problems({
+    body,
+    author: "alice",
+    files,
+    issues: issues ?? new Map([[42, issue({ labels: ["help wanted"] })]]),
+    comments,
+  });
 
 test("the template fills in to a description with nothing missing", () => {
   assert.deepEqual(check(), []);
@@ -61,19 +70,35 @@ test("issues are linked with a closing keyword or Refs, in any form GitHub links
 });
 
 test("an issue is open to its author, its assignee, and everyone when labeled for it", () => {
-  for (const linked of [issue({ labels: ["good first issue"] }), issue({ labels: ["help wanted"] }), issue({ user: "alice" }), issue({ assignees: ["alice"] })]) {
+  for (const linked of [
+    issue({ labels: ["good first issue"] }),
+    issue({ labels: ["help wanted"] }),
+    issue({ user: "alice" }),
+    issue({ assignees: ["alice"] }),
+  ]) {
     assert.deepEqual(check({ issues: new Map([[42, linked]]) }), [], JSON.stringify(linked));
   }
 });
 
 test("an issue that is not open to the author, a pull request, or a missing issue does not count", () => {
   assert.match(check({ issues: new Map([[42, issue()]]) })[0], /^#42 is not open to you/);
-  assert.match(check({ issues: new Map([[42, issue({ pullRequest: true, user: "alice" })]]) })[0], /^#42 is a pull request/);
+  assert.match(
+    check({ issues: new Map([[42, issue({ pullRequest: true, user: "alice" })]]) })[0],
+    /^#42 is a pull request/,
+  );
   assert.match(check({ issues: new Map([[42, null]]) })[0], /^#42 is not an issue/);
 });
 
 test("one issue open to the author is enough", () => {
-  assert.deepEqual(check({ issues: new Map([[41, issue()], [42, issue({ user: "alice" })]]) }), []);
+  assert.deepEqual(
+    check({
+      issues: new Map([
+        [41, issue()],
+        [42, issue({ user: "alice" })],
+      ]),
+    }),
+    [],
+  );
 });
 
 test("a small fix to the docs needs no issue, and no tick for one", () => {
@@ -93,15 +118,19 @@ test("components, styles and copy of the desktop app are UI, tests and logic are
     "apps/desktop/src/styles/tokens.css",
     "apps/desktop/src/i18n/locales/settings.ts",
     "apps/desktop/index.html",
+    "packages/ui/src/overlay.tsx",
+    "packages/ui/src/styles/tokens.css",
   ]) {
     assert.ok(isUiFile(path), path);
   }
   for (const path of [
-    "apps/desktop/src/components/overlay.test.tsx",
+    "packages/ui/src/overlay.test.tsx",
+    "packages/ui/src/tags.ts",
+    "packages/ui/package.json",
     "apps/desktop/src/app/store.ts",
     "apps/desktop/src-tauri/src/lib.rs",
     "apps/site/src/pages/index.astro",
-    "docs/design/README.md",
+    "docs/hatoba-spec.md",
   ]) {
     assert.ok(!isUiFile(path), path);
   }
@@ -109,7 +138,10 @@ test("components, styles and copy of the desktop app are UI, tests and logic are
 
 test("a UI change needs an image in the Screenshots section or an author's comment", () => {
   const files = [code("apps/desktop/src/features/settings/GeneralPane.tsx")];
-  assert.match(check({ files })[0], /^This changes the UI \(`apps\/desktop\/src\/features\/settings\/GeneralPane.tsx`\)/);
+  assert.match(
+    check({ files })[0],
+    /^This changes the UI \(`apps\/desktop\/src\/features\/settings\/GeneralPane.tsx`\)/,
+  );
   const shot = "![Settings, Windows, dark](https://github.com/user-attachments/assets/0f6e)";
   assert.deepEqual(check({ files, body: FILLED.replace("## Screenshots\n", `## Screenshots\n\n${shot}\n`) }), []);
   assert.deepEqual(check({ files, comments: [{ body: `Light theme:\n${shot}` }] }), []);
@@ -208,25 +240,42 @@ const pull = (fields = {}) => ({
   ...fields,
 });
 const shot = "![Settings](https://github.com/user-attachments/assets/0f6e)";
-const failed = { id: 9, user: { login: "github-actions[bot]" }, body: "<!-- pr-policy: failed -->\nThis pull request was closed" };
+const failed = {
+  id: 9,
+  user: { login: "github-actions[bot]" },
+  body: "<!-- pr-policy: failed -->\nThis pull request was closed",
+};
 
 test("a pull request that misses something gets a comment and is closed", async () => {
   const { writes } = await runAgainst({ pr: pull() });
-  assert.deepEqual(writes.map(([what]) => what), ["POST /repos/o/r/issues/7/comments", "PATCH /repos/o/r/pulls/7"]);
+  assert.deepEqual(
+    writes.map(([what]) => what),
+    ["POST /repos/o/r/issues/7/comments", "PATCH /repos/o/r/pulls/7"],
+  );
   assert.match(writes[0][1].body, /^<!-- pr-policy: failed -->\n/);
   assert.match(writes[0][1].body, /This changes the UI/);
   assert.deepEqual(writes[1][1], { state: "closed" });
 });
 
 test("a later run edits its comment instead of adding another", async () => {
-  const { writes } = await runAgainst({ pr: pull({ state: "closed" }), comments: [failed], closedBy: "github-actions[bot]" });
-  assert.deepEqual(writes.map(([what]) => what), ["PATCH /repos/o/r/issues/comments/9"]);
+  const { writes } = await runAgainst({
+    pr: pull({ state: "closed" }),
+    comments: [failed],
+    closedBy: "github-actions[bot]",
+  });
+  assert.deepEqual(
+    writes.map(([what]) => what),
+    ["PATCH /repos/o/r/issues/comments/9"],
+  );
 });
 
 test("a pull request the check closed reopens once the author adds what was missing", async () => {
   const comments = [failed, { user: { login: "alice" }, body: shot }];
   const { writes } = await runAgainst({ pr: pull({ state: "closed" }), comments, closedBy: "github-actions[bot]" });
-  assert.deepEqual(writes.map(([what]) => what), ["PATCH /repos/o/r/pulls/7", "PATCH /repos/o/r/issues/comments/9"]);
+  assert.deepEqual(
+    writes.map(([what]) => what),
+    ["PATCH /repos/o/r/pulls/7", "PATCH /repos/o/r/issues/comments/9"],
+  );
   assert.deepEqual(writes[0][1], { state: "open" });
   assert.match(writes[1][1].body, /^<!-- pr-policy: passed -->\n.*so it is open again\.$/);
 });
@@ -234,7 +283,10 @@ test("a pull request the check closed reopens once the author adds what was miss
 test("a pull request its author closed stays closed", async () => {
   const comments = [failed, { user: { login: "alice" }, body: shot }];
   const { writes } = await runAgainst({ pr: pull({ state: "closed" }), comments, closedBy: "alice" });
-  assert.deepEqual(writes.map(([what]) => what), ["PATCH /repos/o/r/issues/comments/9"]);
+  assert.deepEqual(
+    writes.map(([what]) => what),
+    ["PATCH /repos/o/r/issues/comments/9"],
+  );
   assert.doesNotMatch(writes[0][1].body, /open again/);
 });
 
@@ -244,10 +296,18 @@ test("a screenshot from someone else does not count", async () => {
 });
 
 test("maintainers, bots, drafts, and pull requests a maintainer reopened are left alone", async () => {
-  for (const pr of [pull({ author_association: "OWNER" }), pull({ author_association: "COLLABORATOR" }), pull({ user: { login: "dependabot[bot]", type: "Bot" } }), pull({ draft: true })]) {
+  for (const pr of [
+    pull({ author_association: "OWNER" }),
+    pull({ author_association: "COLLABORATOR" }),
+    pull({ user: { login: "dependabot[bot]", type: "Bot" } }),
+    pull({ draft: true }),
+  ]) {
     assert.deepEqual((await runAgainst({ pr })).writes, [], JSON.stringify(pr));
   }
-  const events = [{ event: "closed", actor: { login: "github-actions[bot]" } }, { event: "reopened", actor: { login: "scarletkc" } }];
+  const events = [
+    { event: "closed", actor: { login: "github-actions[bot]" } },
+    { event: "reopened", actor: { login: "scarletkc" } },
+  ];
   assert.deepEqual((await runAgainst({ pr: pull(), events })).writes, []);
   // The author reopening their own pull request is checked as usual.
   const own = [{ event: "reopened", actor: { login: "alice" } }];
@@ -266,7 +326,12 @@ test("a run checks again when the pull request changed while it acted", async ()
   const { writes, comments } = await runAgainst({ pr: [pull(), fixed], closedBy: "github-actions[bot]" });
   assert.deepEqual(
     writes.map(([what, body]) => `${what} ${body?.state ?? ""}`.trim()),
-    ["POST /repos/o/r/issues/7/comments", "PATCH /repos/o/r/pulls/7 closed", "PATCH /repos/o/r/pulls/7 open", "PATCH /repos/o/r/issues/comments/100"],
+    [
+      "POST /repos/o/r/issues/7/comments",
+      "PATCH /repos/o/r/pulls/7 closed",
+      "PATCH /repos/o/r/pulls/7 open",
+      "PATCH /repos/o/r/issues/comments/100",
+    ],
   );
   assert.equal(comments.length, 1);
   assert.match(comments[0].body, /^<!-- pr-policy: passed -->\n.*so it is open again\.$/);
@@ -274,9 +339,19 @@ test("a run checks again when the pull request changed while it acted", async ()
 
 test("copies of the comment that runs alongside added are deleted, and the oldest stays", async () => {
   const copy = { ...failed, id: 12 };
-  const { writes, comments } = await runAgainst({ pr: pull({ state: "closed" }), comments: [copy, failed], closedBy: "github-actions[bot]" });
-  assert.deepEqual(writes.map(([what]) => what), ["DELETE /repos/o/r/issues/comments/12", "PATCH /repos/o/r/issues/comments/9"]);
-  assert.deepEqual(comments.map((c) => c.id), [9]);
+  const { writes, comments } = await runAgainst({
+    pr: pull({ state: "closed" }),
+    comments: [copy, failed],
+    closedBy: "github-actions[bot]",
+  });
+  assert.deepEqual(
+    writes.map(([what]) => what),
+    ["DELETE /repos/o/r/issues/comments/12", "PATCH /repos/o/r/issues/comments/9"],
+  );
+  assert.deepEqual(
+    comments.map((c) => c.id),
+    [9],
+  );
   assert.match(comments[0].body, /This changes the UI/);
 });
 
@@ -285,7 +360,10 @@ test("the workflow does not queue runs, and skips pull requests the check leaves
   // A run that a newer one replaced in the queue would show as a failed check.
   assert.doesNotMatch(workflow, /^\s*concurrency:/m);
   for (const event of ["github.event.pull_request", "github.event.issue"]) {
-    assert.ok(workflow.includes(`!contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), ${event}.author_association)`), event);
+    assert.ok(
+      workflow.includes(`!contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), ${event}.author_association)`),
+      event,
+    );
     assert.ok(workflow.includes(`${event}.user.type != 'Bot'`), event);
   }
 });

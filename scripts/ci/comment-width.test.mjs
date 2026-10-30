@@ -14,7 +14,14 @@ test("comment lines are measured in characters, not bytes", () => {
 });
 
 test("every comment style is checked, at its line number", () => {
-  const text = ["fn main() {}", line("//! ", 101), "", line("/// ", 102), line("        // ", 103), line("// ", 100)].join("\r\n");
+  const text = [
+    "fn main() {}",
+    line("//! ", 101),
+    "",
+    line("/// ", 102),
+    line("        // ", 103),
+    line("// ", 100),
+  ].join("\r\n");
   assert.deepEqual(longComments(text), [
     { line: 2, width: 101 },
     { line: 4, width: 102 },

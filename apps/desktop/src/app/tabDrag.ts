@@ -133,7 +133,10 @@ export class TabDrag {
     }
     const { slots, from } = d;
     const last = slots[slots.length - 1];
-    d.dx = Math.min(Math.max(dx, slots[0].left - slots[from].left), last.left + last.width - slots[from].left - slots[from].width);
+    d.dx = Math.min(
+      Math.max(dx, slots[0].left - slots[from].left),
+      last.left + last.width - slots[from].left - slots[from].width,
+    );
     translate(d.el, d.dx);
     const to = dropIndex(slots, from, slots[from].left + d.dx);
     if (to === d.to) return;

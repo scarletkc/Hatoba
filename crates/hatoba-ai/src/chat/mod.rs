@@ -19,7 +19,9 @@
 //!   vendor accepts the request. When a
 //!   request that replayed `raw` is refused with a 400 about thinking, signatures or blocks
 //!   (newer Claude models bind signed thinking to the exact prefix), it is sent once more with
-//!   every assistant entry rebuilt from its fields.
+//!   every assistant entry rebuilt from its fields. That retry comes first, keeping the progress
+//!   updates and the level, unless the error also names the display, its beta header or the
+//!   effort fields. Each retry is logged with the refusal's status.
 //! - Responses: `POST {base_url}/responses` with `Authorization: Bearer` (none when the key is
 //!   empty), the system prompt as `instructions` and the conversation as `input` items, rebuilt
 //!   in full each time with `store: false` (no `previous_response_id`, nothing kept on the
@@ -247,12 +249,22 @@ pub async fn stream_chat(
                 if !response.status().is_success() {
                     let err = provider.error(response, cancel).await;
                     confirming = false;
+                    // Replayed thinking that no longer binds (after the system prompt or the
+                    // tools changed, say) is no refusal of the display: rebuilding the entries
+                    // keeps the progress updates.
+                    if built.used_raw && rejects_only_replayed_raw(&err) {
+                        log_retry(&err, "replayed blocks");
+                        allow_raw = false;
+                        continue;
+                    }
                     if built.beta.is_some() && may_refuse_updates(&err) {
+                        log_retry(&err, "progress updates");
                         with_updates = false;
                         confirming = true;
                         continue;
                     }
                     if built.sent_effort && rejects_effort(&err) {
+                        log_retry(&err, "thinking level");
                         with_effort = false;
                         if built.effort.is_some() {
                             on_event(StreamEvent::EffortIgnored);
@@ -260,6 +272,7 @@ pub async fn stream_chat(
                         continue;
                     }
                     if built.used_raw && rejects_replayed_raw(&err) {
+                        log_retry(&err, "replayed blocks");
                         allow_raw = false;
                         continue;
                     }
@@ -441,6 +454,23 @@ pub(crate) fn rejects_replayed_raw(err: &AiError) -> bool {
         }
         _ => false,
     }
+}
+
+/// Whether an Anthropic error is [`rejects_replayed_raw`]'s and names none of the request's
+/// thinking options: the fields [`rejects_effort`] looks for, or the beta header of progress
+/// updates. The replayed blocks alone were refused, so the retry without `raw` keeps the display
+/// and the level.
+pub(crate) fn rejects_only_replayed_raw(err: &AiError) -> bool {
+    rejects_replayed_raw(err)
+        && !rejects_effort(err)
+        && !matches!(err, AiError::Http { message, .. }
+            if message.to_ascii_lowercase().contains("beta"))
+}
+
+/// Logs that an Anthropic request is sent once more without `without`, with the refusal's status
+/// and not the provider's message.
+fn log_retry(err: &AiError, without: &str) {
+    tracing::info!(status = ?err.status(), without, "AI request retried");
 }
 
 async fn post(
@@ -652,6 +682,8 @@ fn into_entry(
         raw: assembled.raw,
         // The shell knows which tools the request offered and records it when it stores the entry.
         terminal: None,
+        shell: None,
+        mcp_servers: None,
         interrupted: false,
     }
 }

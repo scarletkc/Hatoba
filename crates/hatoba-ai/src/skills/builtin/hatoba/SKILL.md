@@ -5,7 +5,7 @@ description: "How Hatoba works: its windows, menus, settings and features, and w
 
 # Hatoba
 
-Hatoba is a desktop SSH client (Tauri 2: a Rust backend with a React interface). It keeps hosts, SSH keys and settings in an encrypted vault on the device, and offers terminal tabs for SSH sessions and for the shells of this computer, an SFTP file panel, port forwarding (local, remote and SOCKS), optional end-to-end encrypted sync, and an AI assistant panel. Windows is the first platform; macOS and Linux follow. The interface is available in Simplified Chinese (zh-CN), English (en) and Japanese (ja).
+Hatoba is a desktop SSH client (Tauri 2: a Rust backend with a React interface). It keeps hosts, SSH keys and settings in an encrypted vault on the device, and offers terminal tabs for SSH sessions and for the shells of this computer, an SFTP file panel, port forwarding (local, remote and SOCKS), optional end-to-end encrypted sync, and an AI assistant panel. Windows is the first platform; macOS and Linux follow. The interface is available in Simplified Chinese (zh-CN), Traditional Chinese (zh-TW), English (en) and Japanese (ja).
 
 - Local first: everything works offline. Hatoba runs no server and collects no telemetry.
 - Sync is optional. It goes through a Worker and a D1 database in the user's own Cloudflare account, or straight to D1. The cloud holds only ciphertext.
@@ -13,12 +13,12 @@ Hatoba is a desktop SSH client (Tauri 2: a Rust backend with a React interface).
 
 ## Window layout
 
-- Sidebar (left). The header has **Settings** (gear) and **Show or hide the sidebar**. Below: **Dashboard** (every host's status and resource usage), **All Hosts**, **Favorites**, **Recent**, **Port Forwarding**; **Groups** with **New Group** (right-click a group for Rename Group and Delete Group); **Tags** (only when some host has a tag); and a **Vault** heading with **Keys** and **Cloud Sync**. At the bottom: the sync status button (opens Cloud Sync) and **Lock**. A card asking for a GitHub star appears occasionally.
-- Tab bar (top, merged with the title bar). The first tab is the home tab. It shows the page chosen in the sidebar: the dashboard, the host list, the host editor, port forwarding, Keys or Cloud Sync. Each open SSH session gets its own tab after it, with a status dot (orange connecting, green connected, red failed, grey disconnected), and the same host can be open in several tabs; a local terminal tab (a shell of this computer) shows a terminal icon. Then **New Tab** (+), which goes to the host list and focuses the search box, **New Local Terminal** (the arrow after it), which lists this computer's shells, and the AI button (sparkle). Windows and Linux show their own minimize, maximize and close buttons here; macOS uses its native window buttons.
+- Tab bar (top, merged with the title bar, across the whole window). The first tab is the home tab, a house icon. Each open SSH session gets its own tab after it, with a status dot (orange connecting, green connected, red failed, grey disconnected), and the same host can be open in several tabs; a local terminal tab (a shell of this computer) shows a terminal icon. Then **New Tab** (+), which goes to the hosts page and focuses the search box, and **New Local Terminal** (the arrow after it), which lists this computer's shells. At the right: **Lock**, **Settings** (gear) and the AI button (sparkle). Windows and Linux show their own minimize, maximize and close buttons there; macOS uses its native window buttons at the left.
+- Home tab. A navigation rail at its left edge, an icon over each name: **Hosts** (the hosts page, which also shows resource usage), **Forwards** (the Port Forwarding page) and **Keys**, and at the bottom **Sync** (the Cloud Sync page), whose icon shows the sync status. Other pages, such as the host editor, open in the home tab too. Session tabs have no rail, so a terminal has the window's whole width. A card asking for a GitHub star appears occasionally in the home tab's lower right corner.
 - Terminal tab. A status bar sits above the terminal: connection state, `user@host:port`, the jump host ("via"), latency in ms, and the buttons **Show Resource Usage** (or the resource usage readout once it is on), **Find in terminal**, **Port Forwarding** (for a host with rules), **SFTP** and **More actions**. The SFTP file panel opens to the right of the terminal.
 - AI panel. At the window's right edge, below the tab bar. It shows the active tab's conversation. Open it with the AI button or Ctrl+Shift+A (⌘⇧A on macOS).
-- Settings. A window with the tabs General, Appearance, Terminal, Proxies, Security, AI and About. Open it with the gear in the sidebar or with Ctrl+, (⌘, on macOS).
-- System tray (Windows and Linux). An icon in the notification area while Hatoba runs, with **Open Hatoba**, **Lock**, running port forwards and **Quit Hatoba**; a left click opens the window. Closing the window asks whether to minimize to the tray or quit (Settings → General → **Close Button**). macOS has no tray: its red button hides the window and the Dock icon brings it back.
+- Settings. A window with the tabs General, Appearance, Terminal, Proxies, Security, AI and About. Open it with the gear in the title bar or with Ctrl+, (⌘, on macOS).
+- System tray (Windows and Linux). An icon in the notification area while Hatoba runs, with **Open Hatoba**, **Lock**, **Update to vX.Y.Z** once a newer release is found, running port forwards and **Quit Hatoba**; a left click opens the window. Closing the window asks whether to minimize to the tray or quit (Settings → General → **Close Button**). macOS has no tray: its red button hides the window and the Dock icon brings it back.
 - Lock screen and first launch. Both replace the whole window: the lock screen asks for the master password, and first launch offers to create a vault or restore one from the cloud.
 
 Other labels: **This Computer**, **Close Tab**, **Show AI Panel**, **Hide AI Panel**, **Minimize**, **Maximize**, **Restore Down**, **Minimize to Tray**, **Connected**, **Connecting…**, **Connection failed**, **Disconnected**.
@@ -31,7 +31,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 |---|---|
 | `references/hosts-and-connecting.md` | The host list and editor, quick connect from the search box, authentication methods, jump hosts, proxies, environment variables, importing hosts from an SSH config or another SSH client (Xshell, FinalShell, MobaXterm, PuTTY, SecureCRT, Tabby), host key prompts, connecting and reconnecting |
 | `references/command-line.md` | The `hatoba` command: opening hosts from a terminal, and letting coding agents and scripts use the saved hosts with `hatoba hosts`, `hatoba exec` and `hatoba cp` |
-| `references/dashboard.md` | The Dashboard: every host's status and resource usage, cards and table, sorting, thresholds, how hosts are read, hosts that need a password or failed to sign in, leaving hosts out |
+| `references/resource-usage.md` | Resource usage on the hosts page: every host's status, CPU, memory, disk and network as a list or cards, sorting, thresholds, how hosts are read, hosts that need a password or failed to sign in, leaving hosts out |
 | `references/keys-vault-and-lock.md` | The master password, recovery code, locking and auto-lock, Windows Hello and Touch ID, the PIN, the encrypted backup, and the Keys page (import, generate, deploy) |
 | `references/terminal.md` | The terminal tab: local terminal tabs and their shells, Telnet hosts and tabs, status bar, copy and paste, search, links, context menus, and the Terminal settings (font, cursor, scrollback, local terminal shell) |
 | `references/sftp.md` | The SFTP file panel: browsing, upload, download, rename, delete, transfers |
@@ -56,20 +56,20 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/troubleshooting-sync.md` | Sync and Cloudflare errors and what to do |
 | `references/troubleshooting-ai.md` | AI provider, search and MCP errors and what to do |
 
-These files name labels in English. The label files give them in the other languages, by file and section:
+These files name labels in English. The label files give them in the other languages, by file and section: `references/labels/<language>-<area>.md`, where the language is `zh-CN` (Simplified Chinese), `zh-TW` (Traditional Chinese) or `ja` (Japanese), such as `references/labels/zh-TW-ai.md`, and the area is one of these:
 
-| Files | Simplified Chinese | Japanese |
-|---|---|---|
-| This file, hosts and connecting, the hatoba command, the dashboard, shortcuts | `references/labels/zh-CN-app.md` | `references/labels/ja-app.md` |
-| Terminal, SFTP, port forwarding, connection errors | `references/labels/zh-CN-terminal.md` | `references/labels/ja-terminal.md` |
-| Keys, vault and lock, settings, other errors | `references/labels/zh-CN-vault.md` | `references/labels/ja-vault.md` |
-| Sync, the sync Worker, sync errors | `references/labels/zh-CN-sync.md` | `references/labels/ja-sync.md` |
-| The AI panel, tools, history, models, file changes, attachments, side questions | `references/labels/zh-CN-ai.md` | `references/labels/ja-ai.md` |
-| AI instructions and memory, AI settings, ChatGPT, MCP, AI errors | `references/labels/zh-CN-ai-settings.md` | `references/labels/ja-ai-settings.md` |
+| Area | Files |
+|---|---|
+| `app` | This file, hosts and connecting, the hatoba command, resource usage, shortcuts |
+| `terminal` | Terminal, SFTP, port forwarding, connection errors |
+| `vault` | Keys, vault and lock, settings, other errors |
+| `sync` | Sync, the sync Worker, sync errors |
+| `ai` | The AI panel, tools, history, models, file changes, attachments, side questions |
+| `ai-settings` | AI instructions and memory, AI settings, ChatGPT, MCP, AI errors |
 
 ## How to answer
 
-- Name UI elements by their exact label in the language the user writes in (zh-CN, en or ja). For Chinese or Japanese, read the label file that covers the topic and copy the label as it is; do not translate it yourself. If a label is not there, describe the element and where it is instead of guessing its text.
+- Name UI elements by their exact label in the language the user writes in (zh-CN, zh-TW, en or ja). For Chinese or Japanese, read the label file that covers the topic and copy the label as it is; do not translate it yourself. If a label is not there, describe the element and where it is instead of guessing its text.
 - Give menu paths with an arrow, such as Settings → AI (设置 → AI, 設定 → AI). Settings tabs are listed above; a setting's tab is named in its section.
 - Mention platform differences. Shortcuts use Ctrl+Shift+letter on Windows and Linux and ⌘ on macOS. Windows Hello is on Windows only, Touch ID on macOS only. The SSH agent is the OpenSSH agent on Windows, and elsewhere the one `ssh` uses (`IdentityAgent` or `SSH_AUTH_SOCK`). If the user's platform is unknown, give both.
 - Say plainly when Hatoba does not support something, and do not invent a feature, menu or setting. Offer a real workaround only when one exists, such as running `ssh` or `scp` in the terminal.
@@ -83,7 +83,7 @@ Hatoba is open source: https://github.com/scarletkc/Hatoba (README, docs, releas
 
 *Feedback.* When the user hits what looks like a bug, or asks for something Hatoba does not do, suggest reporting it. Do not send them there for a question this skill answers.
 
-- A bug: **Report a Problem** in Settings → About (the star card in the sidebar has it too). It opens GitHub's bug report form with the Hatoba version and the operating system filled in.
+- A bug: **Report a Problem** in Settings → About (the star card on the home tab has it too). It opens GitHub's bug report form with the Hatoba version and the operating system filled in.
 - A feature request: https://github.com/scarletkc/Hatoba/issues/new?template=feature_request.yml (the "Suggest a feature" form: the problem, where it happens, what happens if nothing changes, a proposed solution).
 - A security vulnerability: report it privately at https://github.com/scarletkc/Hatoba/security/advisories/new, not as a public issue.
 - Offer to draft the text: what happened, the steps, what was expected, the version (Settings → About) and OS, and for a connection or sync problem the SSH server, the authentication method, ProxyJump, a proxy or ssh-agent, or whether sync uses a Worker or direct D1. Remind the user to leave out host names, addresses, keys, passwords, tokens, recovery codes and other secrets, and to read any logs before pasting them (on Windows they are in `%LOCALAPPDATA%\app.hatoba.desktop\logs`). The user submits the report; never submit anything on their behalf.
@@ -94,10 +94,9 @@ Hatoba is open source: https://github.com/scarletkc/Hatoba (README, docs, releas
 - https://hatoba.fog.moe/docs/ (these docs as of the newest release; each page names the version it describes)
 - https://api.github.com/repos/scarletkc/Hatoba/releases/latest (JSON)
 - https://raw.githubusercontent.com/scarletkc/Hatoba/main/README.md
-- https://raw.githubusercontent.com/scarletkc/Hatoba/main/docs/status.md
 
-The `main` branch can be ahead of the latest release and of the user's version, so say where a statement comes from. Compare the latest release with {{HATOBA_VERSION}}. If a newer release exists, point to **Check for Updates** in Settings → About, or to the dot on the sidebar's gear (**Settings (update available)**), which opens About. Once a check finds the newer version, **Download and Install** there downloads it, checks its signature, then closes Hatoba to install it and opens it again; see `references/settings.md`.
+The `main` branch can be ahead of the latest release and of the user's version, so say where a statement comes from. Compare the latest release with {{HATOBA_VERSION}}. If a newer release exists, point to **Check for Updates** in Settings → About, or to the dot on the gear in the title bar (**Settings (update available)**), which opens About. Once a check finds the newer version, **Download and Install** there downloads it, checks its signature, then closes Hatoba to install it and opens it again; see `references/settings.md`.
 
 ## Not in Hatoba (current version)
 
-Split panes in a terminal, session logs, snippets, editing remote files, uploading or downloading whole folders over SFTP, `ProxyCommand`, SOCKS4 and HTTPS proxies, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH (Telnet, serial, RDP, VNC).
+Split panes in a terminal, session logs, snippets, uploading or downloading whole folders over SFTP, `ProxyCommand`, SOCKS4 and HTTPS proxies, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH and Telnet (serial, RDP, VNC).

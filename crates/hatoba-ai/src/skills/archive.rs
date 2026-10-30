@@ -2,7 +2,8 @@
 //!
 //! Nothing is extracted: entries are listed from the central directory and read into memory, at
 //! most 32 KB + 1 of each, so a bomb that claims a small size and inflates to gigabytes (or the
-//! reverse) costs a bounded amount of work. Symbolic link entries and directories are ignored.
+//! reverse) costs a bounded amount of work. An entry that inflates past the size it claims makes
+//! the archive corrupt. Symbolic link entries and directories are ignored.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -68,7 +69,7 @@ pub fn read_zip(path: &Path) -> Result<SkillImport, SkillError> {
     for index in 0..archive.len() {
         let entry = archive.by_index_raw(index).map_err(zip_error)?;
         if !entry.is_dir() && !entry.is_symlink() {
-            collector.add_file(entry.name(), entry.size(), index);
+            collector.add_file(&entry.name().map_err(zip_error)?, entry.size(), index);
         }
     }
     let (entries, issues) = collector.finish();

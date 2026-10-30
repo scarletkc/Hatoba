@@ -1,4 +1,4 @@
-# Simplified Chinese labels: the window, the host list, connecting and the dashboard
+# Simplified Chinese labels: the window, the hosts page, connecting and resource usage
 
 The labels that these files name in English, as the interface shows them in Simplified Chinese (zh-CN). Quote them exactly; the same English label can read differently in another file or section. A word in braces, such as {host}, stands for the value the interface fills in.
 
@@ -8,19 +8,14 @@ The labels that these files name in English, as the interface shows them in Simp
 
 | en | zh-CN |
 |---|---|
-| Settings | 设置 |
-| Show or hide the sidebar | 显示或隐藏侧边栏 |
-| Dashboard | 仪表盘 |
-| All Hosts | 全部主机 |
-| Favorites | 收藏 |
-| Recent | 最近连接 |
-| Groups | 分组 |
-| New Group | 新建分组 |
-| Tags | 标签 |
-| Vault | 保险库 |
-| Keys | 密钥库 |
-| Cloud Sync | 云同步 |
 | Lock | 锁定 |
+| Settings | 设置 |
+| Hosts | 主机 |
+| Forwards | 端口转发 |
+| Port Forwarding | 端口转发 |
+| Keys | 密钥库 |
+| Sync | 云同步 |
+| Cloud Sync | 云同步 |
 | New Local Terminal | 新建本地终端 |
 | This Computer | 本机 |
 | New Tab | 新建标签 |
@@ -39,7 +34,6 @@ The labels that these files name in English, as the interface shows them in Simp
 | Connection failed | 连接失败 |
 | Disconnected | 已断开 |
 | Find in terminal | 在终端中查找 |
-| Port Forwarding | 端口转发 |
 | SFTP | SFTP |
 | More actions | 更多操作 |
 | General | 通用 |
@@ -63,18 +57,24 @@ The labels that these files name in English, as the interface shows them in Simp
 
 ## `references/hosts-and-connecting.md`
 
-### The host list
+### The hosts page
 
 | en | zh-CN |
 |---|---|
-| All Hosts | 全部主机 |
-| Favorites | 收藏 |
-| Recent | 最近连接 |
+| Hosts | 主机 |
 | Search hosts or ssh user@host | 搜索主机或 ssh user@host |
+| Import | 导入 |
+| New Host | 新建主机 |
+| New Group | 新建分组 |
+| Favorites | 收藏 |
+| Tags | 标签 |
+| Resource Usage | 资源占用 |
+| List | 列表 |
+| Cards | 卡片 |
 | Sort by | 排序方式 |
+| Recent | 最近连接 |
 | Name | 名称 |
 | Address | 地址 |
-| New Host | 新建主机 |
 | Tags | 标签 |
 | Last Connected | 最近连接 |
 | Connect | 连接 |
@@ -85,9 +85,10 @@ The labels that these files name in English, as the interface shows them in Simp
 | Remove from Favorites | 取消收藏 |
 | Copy Address | 复制地址 |
 | Copy Password | 复制密码 |
-| Delete… | 删除… |
+| Delete | 删除 |
 | Rename Group | 重命名分组 |
 | Delete Group | 删除分组 |
+| Clear Filters | 清除筛选 |
 | General | 通用 |
 | Show host reachability | 显示主机在线状态 |
 
@@ -100,7 +101,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Recent | 最近 |
 | Recent Quick Connections | 快速连接记录 |
 | Remove from Recent | 从记录中移除 |
-| Save as Host… | 保存为主机… |
+| Save as Host | 保存为主机 |
 | Username | 用户名 |
 
 ### Import hosts
@@ -115,8 +116,8 @@ The labels that these files name in English, as the interface shows them in Simp
 | ProxyCommand not imported | 不导入 ProxyCommand |
 | Proxy not imported | 不导入代理 |
 | Key stays in {app} | 密钥留在 {app} 中 |
-| Choose File… | 选择文件… |
-| Choose Folder… | 选择文件夹… |
+| Choose File | 选择文件 |
+| Choose Folder | 选择文件夹 |
 
 ### The host editor
 
@@ -202,18 +203,25 @@ The labels that these files name in English, as the interface shows them in Simp
 | Disconnect all sessions when locked | 锁定时断开所有会话 |
 | Security | 安全 |
 
-## `references/dashboard.md`
+## `references/resource-usage.md`
 
 | en | zh-CN |
 |---|---|
-| Dashboard | 仪表盘 |
-| Cards | 卡片 |
-| Table | 表格 |
-| Columns | 列 |
-| Host List Order | 主机列表顺序 |
-| No Group | 未分组 |
+| Resource Usage | 资源占用 |
 | Open Terminal | 打开终端 |
 | Filesystems | 文件系统 |
+
+### On the hosts page
+
+| en | zh-CN |
+|---|---|
+| Favorites | 收藏 |
+| Tags | 标签 |
+| Cards | 卡片 |
+| List | 列表 |
+| Columns | 列 |
+| Show Details | 查看详情 |
+| Connect | 连接 |
 
 ### How hosts are read
 
@@ -246,12 +254,11 @@ The labels that these files name in English, as the interface shows them in Simp
 
 | en | zh-CN |
 |---|---|
-| Leave Out of Dashboard | 不在仪表盘中显示 |
-| Include in Dashboard | 在仪表盘中显示 |
-| Leave Group Out of Dashboard | 不在仪表盘中显示此分组 |
-| Include Group in Dashboard | 在仪表盘中显示此分组 |
-| Show | 显示 |
-| Left Out | 未纳入 |
+| Don’t Read Usage | 不读取资源占用 |
+| Read Usage | 读取资源占用 |
+| Don’t Read the Group’s Usage | 不读取此分组的资源占用 |
+| Read the Group’s Usage | 读取此分组的资源占用 |
+| Not Read | 不读取 |
 
 ## `references/command-line.md`
 
@@ -266,6 +273,8 @@ The labels that these files name in English, as the interface shows them in Simp
 | en | zh-CN |
 |---|---|
 | Let other programs use saved hosts | 允许其他程序使用已保存的主机 |
+| Skill for coding agents | 编程 agent 技能 |
+| Copy Command | 复制命令 |
 | Recent use | 最近使用 |
 | Details | 详情 |
 
@@ -283,3 +292,13 @@ The labels that these files name in English, as the interface shows them in Simp
 | Hide AI Panel | 隐藏 AI 面板 |
 | Search hosts or ssh user@host | 搜索主机或 ssh user@host |
 | Right-Click in Terminal | 终端中的右键 |
+
+### Zoom
+
+| en | zh-CN |
+|---|---|
+| Font Size | 字号 |
+| Appearance | 外观 |
+| AI Panel | AI 面板 |
+| Text Size | 文字大小 |
+| Zoom | 缩放 |

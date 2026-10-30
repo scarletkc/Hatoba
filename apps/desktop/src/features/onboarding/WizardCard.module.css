@@ -3,8 +3,10 @@
   max-width: 100%;
   margin: 0;
   background: var(--sheet);
-  border-radius: var(--radius-window);
-  box-shadow: 0 0 0 0.5px var(--winline), var(--shadow);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    0 0 0 0.5px var(--winline),
+    var(--shadow);
   color: var(--fg);
   font-size: var(--text-md);
   line-height: 1.4;
@@ -29,20 +31,20 @@
   padding: 22px 28px 24px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--space-16);
 }
 
 .footer {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 12px 16px;
   border-top: 0.5px solid var(--line);
 }
 
 .title {
   margin: 0;
-  font-size: var(--text-wizard);
+  font-size: var(--text-title);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -57,7 +59,7 @@
 .steps {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -69,7 +71,7 @@
 .step {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .stepCurrent {
@@ -114,25 +116,11 @@
 }
 
 .bubbleDone i {
-  font-size: 11px;
+  font-size: var(--icon-12);
 }
 
 .bubbleCurrent {
   background: var(--accent);
   box-shadow: none;
   color: #ffffff;
-}
-
-.error {
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  color: var(--red);
-}
-
-.error i {
-  margin-top: 1px;
-  flex: none;
 }

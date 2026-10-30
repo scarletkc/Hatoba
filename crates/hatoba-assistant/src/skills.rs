@@ -1,0 +1,518 @@
+//! Skills in the vault (spec §13.8, AI-27), behind the `skill_*` commands. A skill is a `skill`
+//! item and one `skill_file` item per file, with the body of `SKILL.md` in the file whose path is
+//! `SKILL.md` (§5.1). Edits and imports are checked against the same rules
+//! (`hatoba_ai::skills::validate`).
+//!
+//! The built-in `hatoba` skill (AI-34) is not an item: [`builtin_view`] shows it, its switch is
+//! `Settings.ai.builtin_skill_enabled`, and no user skill may take its name.
+//!
+//! Skill text reaches the model as instructions, so it is never logged (SEC-04).
+
+use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
+use std::path::Path;
+
+use hatoba_ai::skills::{
+    self, BUILTIN_NAME, MAX_DESCRIPTION_CHARS, MAX_FILES, SkillError, SkillFileData, SkillImport,
+    SkillIssue as Issue, SkillPackage,
+};
+use hatoba_core::Vault;
+use hatoba_core::model::{Item, Skill, SkillFile};
+use serde_json::{Map, Value};
+
+use crate::dto::{
+    BuiltinSkillView, SkillDetail, SkillFileView, SkillImportPreview, SkillInput, SkillIssue,
+    SkillView,
+};
+use crate::error::{AppError, AppResult};
+
+/// The file that holds a skill's instructions (its body, without frontmatter).
+const SKILL_MD: &str = "SKILL.md";
+
+/// What a name must be (AI-27), for messages.
+const NAME_RULE: &str = "Use 1 to 64 lowercase letters, digits and hyphens.";
+
+/// The most plaintext a skill or skill file item may have, as for a part of a conversation entry:
+/// its sync envelope (the item's JSON, encrypted and in base64) must stay under the Worker's
+/// 64 KB limit (§6.2). The 32 KB file limit counts raw bytes, which JSON escaping can more than
+/// double (a control character takes six bytes), so it does not bound the item by itself.
+const ITEM_MAX_BYTES: usize = hatoba_core::AI_PART_MAX_BYTES;
+
+/// A skill id as long as any the vault makes, to measure the items of a skill that has none yet.
+const PLACEHOLDER_ID: &str = "00000000-0000-7000-8000-000000000000";
+
+// ───────────────────────── issues ─────────────────────────
+
+fn issue_view(issue: &Issue) -> SkillIssue {
+    match issue {
+        Issue::MissingSkillMd => SkillIssue::MissingSkillMd,
+        Issue::InvalidFrontmatter(detail) => SkillIssue::InvalidFrontmatter {
+            detail: detail.clone(),
+        },
+        Issue::InvalidName(name) => SkillIssue::InvalidName { name: name.clone() },
+        Issue::MissingDescription => SkillIssue::MissingDescription,
+        Issue::DescriptionTooLong(chars) => SkillIssue::DescriptionTooLong {
+            chars: *chars as u64,
+        },
+        Issue::FileTooLarge { path, size } => SkillIssue::FileTooLarge {
+            path: path.clone(),
+            size: *size,
+        },
+        Issue::UnsafePath(path) => SkillIssue::UnsafePath { path: path.clone() },
+        Issue::TooManyFiles(count) => SkillIssue::TooManyFiles {
+            count: *count as u64,
+        },
+        Issue::TooLarge(bytes) => SkillIssue::TooLarge { bytes: *bytes },
+    }
+}
+
+/// The form field an issue belongs to.
+fn issue_field(issue: &Issue) -> &'static str {
+    match issue {
+        Issue::InvalidName(_) => "name",
+        Issue::MissingDescription | Issue::DescriptionTooLong(_) => "description",
+        Issue::FileTooLarge { path, .. } if path == SKILL_MD => "body",
+        Issue::MissingSkillMd | Issue::InvalidFrontmatter(_) => "body",
+        Issue::FileTooLarge { .. }
+        | Issue::UnsafePath(_)
+        | Issue::TooManyFiles(_)
+        | Issue::TooLarge(_) => "files",
+    }
+}
+
+/// A short sentence for the user, naming the file or the field (§9).
+fn issue_text(issue: &Issue) -> String {
+    match issue {
+        Issue::MissingSkillMd => "No SKILL.md was found.".to_owned(),
+        Issue::InvalidFrontmatter(detail) => {
+            format!("The frontmatter of SKILL.md is not valid: {detail}.")
+        }
+        Issue::InvalidName(_) => format!("The name is not valid. {NAME_RULE}"),
+        Issue::MissingDescription => "A description is required.".to_owned(),
+        Issue::DescriptionTooLong(chars) => {
+            format!("The description has {chars} characters; the limit is {MAX_DESCRIPTION_CHARS}.")
+        }
+        Issue::FileTooLarge { path, .. } if path == SKILL_MD => {
+            "The instructions are larger than 32 KB.".to_owned()
+        }
+        Issue::FileTooLarge { path, .. } => format!("{path} is larger than 32 KB."),
+        Issue::UnsafePath(path) => format!("\"{path}\" is not a valid file path."),
+        Issue::TooManyFiles(_) => format!("A skill can have at most {MAX_FILES} files."),
+        Issue::TooLarge(_) => "The files together are larger than 5 MB.".to_owned(),
+    }
+}
+
+fn source_error(e: SkillError) -> AppError {
+    match e {
+        SkillError::Io(_) => AppError::invalid("path", "The folder or file could not be read."),
+        SkillError::Zip(detail) => AppError::invalid(
+            "path",
+            format!("The .zip file could not be read: {detail}."),
+        ),
+    }
+}
+
+// ───────────────────────── stored skills ─────────────────────────
+
+fn find_skill(v: &Vault, id: &str) -> AppResult<Skill> {
+    v.get(id)
+        .and_then(Item::as_skill)
+        .cloned()
+        .ok_or_else(|| AppError::not_found("skill"))
+}
+
+/// The frontmatter fields a skill item keeps: all but `name` and `description`.
+fn other_fields(mut fields: Map<String, Value>) -> Map<String, Value> {
+    fields.remove("name");
+    fields.remove("description");
+    fields
+}
+
+/// A skill's files by path, as `(item id, file)`. Of two items with one path (two devices
+/// wrote it), the newest wins; the others are returned to delete.
+fn files_by_path(
+    v: &Vault,
+    skill_id: &str,
+) -> (BTreeMap<String, (String, SkillFile)>, Vec<String>) {
+    let mut files: BTreeMap<String, (String, SkillFile)> = BTreeMap::new();
+    let mut extra = Vec::new();
+    for (id, file) in v.skill_files(skill_id) {
+        match files.entry(file.path.clone()) {
+            Entry::Vacant(slot) => {
+                slot.insert((id, file));
+            }
+            Entry::Occupied(mut slot) if file.updated_at > slot.get().1.updated_at => {
+                let (older, _) = slot.insert((id, file));
+                extra.push(older);
+            }
+            Entry::Occupied(_) => extra.push(id),
+        }
+    }
+    (files, extra)
+}
+
+pub fn skill_view(v: &Vault, id: &str, skill: &Skill) -> SkillView {
+    let (files, _) = files_by_path(v, id);
+    SkillView {
+        id: id.to_owned(),
+        name: skill.name.clone(),
+        description: skill.description.clone(),
+        enabled: skill.enabled,
+        files: files.into_keys().filter(|p| p != SKILL_MD).collect(),
+        updated_at: skill.updated_at,
+    }
+}
+
+/// A stored skill as a package, for export.
+pub fn package_of(v: &Vault, id: &str) -> AppResult<SkillPackage> {
+    let skill = find_skill(v, id)?;
+    let (mut files, _) = files_by_path(v, id);
+    let body = files
+        .remove(SKILL_MD)
+        .map(|(_, f)| f.content)
+        .unwrap_or_default();
+    Ok(SkillPackage {
+        name: skill.name,
+        description: skill.description,
+        frontmatter: skill.frontmatter,
+        body,
+        files: files
+            .into_values()
+            .map(|(_, f)| SkillFileData {
+                path: f.path,
+                content: f.content,
+            })
+            .collect(),
+    })
+}
+
+pub fn skill_detail(v: &Vault, id: &str) -> AppResult<SkillDetail> {
+    let skill = find_skill(v, id)?;
+    let package = package_of(v, id)?;
+    Ok(SkillDetail {
+        skill: skill_view(v, id, &skill),
+        body: package.body,
+        files: package
+            .files
+            .into_iter()
+            .map(|f| SkillFileView {
+                path: f.path,
+                content: f.content,
+            })
+            .collect(),
+        frontmatter_keys: other_fields(skill.frontmatter)
+            .into_iter()
+            .map(|(k, _)| k)
+            .collect(),
+    })
+}
+
+/// The id of another skill named `name`.
+fn named(v: &Vault, name: &str, except: Option<&str>) -> Option<String> {
+    v.skills()
+        .into_iter()
+        .find(|(id, s)| s.name == name && Some(id.as_str()) != except)
+        .map(|(id, _)| id)
+}
+
+fn taken(field: &str, name: &str) -> AppError {
+    AppError::invalid(field, format!("A skill named \"{name}\" already exists."))
+}
+
+/// AI-34: the built-in skill's name is not for user skills.
+fn reserved(field: &str) -> AppError {
+    AppError::invalid(
+        field,
+        format!("The name {BUILTIN_NAME} is reserved for the built-in skill."),
+    )
+}
+
+/// The built-in skill as the Settings viewer shows it, with `version` filled in (AI-34).
+pub fn builtin_view(v: &Vault, version: &str) -> BuiltinSkillView {
+    let skill = skills::builtin_skill(version);
+    BuiltinSkillView {
+        name: skill.name,
+        description: skill.description,
+        enabled: v.settings().ai.builtin_skill_enabled,
+        body: skill.body,
+        files: skill
+            .files
+            .into_iter()
+            .map(|f| SkillFileView {
+                path: f.path,
+                content: f.content,
+            })
+            .collect(),
+    }
+}
+
+/// What [`store_skill`] would write that is too large to sync.
+#[derive(Debug, PartialEq, Eq)]
+enum Oversized {
+    /// The skill item: its frontmatter fields (the name and description have limits of their own).
+    Frontmatter,
+    /// A file, by path (`SKILL.md` for the instructions).
+    File(String),
+}
+
+impl Oversized {
+    /// The form field it belongs to.
+    fn field(&self) -> &'static str {
+        match self {
+            Self::Frontmatter => "body",
+            Self::File(path) if path == SKILL_MD => "body",
+            Self::File(_) => "files",
+        }
+    }
+
+    fn text(&self) -> String {
+        const WHY: &str = "Quotes, backslashes and control characters take more room once encoded.";
+        match self {
+            Self::Frontmatter => format!("The frontmatter of SKILL.md is too large to sync. {WHY}"),
+            Self::File(path) if path == SKILL_MD => {
+                format!("The instructions are too large to sync. {WHY}")
+            }
+            Self::File(path) => format!("{path} is too large to sync. {WHY}"),
+        }
+    }
+}
+
+/// The first item of `pkg`, stored under `id`, whose plaintext would pass [`ITEM_MAX_BYTES`].
+fn oversized(id: Option<&str>, pkg: &SkillPackage) -> AppResult<Option<Oversized>> {
+    let too_large =
+        |item: Item| -> AppResult<bool> { Ok(item.to_plaintext()?.len() > ITEM_MAX_BYTES) };
+    let skill = Item::Skill(Skill {
+        name: pkg.name.clone(),
+        description: pkg.description.clone(),
+        frontmatter: other_fields(pkg.frontmatter.clone()),
+        enabled: false,
+        // The widest number it can carry.
+        updated_at: i64::MIN,
+    });
+    if too_large(skill)? {
+        return Ok(Some(Oversized::Frontmatter));
+    }
+    let skill_id = id.unwrap_or(PLACEHOLDER_ID);
+    let files = std::iter::once((SKILL_MD, pkg.body.as_str())).chain(
+        pkg.files
+            .iter()
+            .map(|f| (f.path.as_str(), f.content.as_str())),
+    );
+    for (path, content) in files {
+        let file = Item::SkillFile(SkillFile {
+            skill_id: skill_id.to_owned(),
+            path: path.to_owned(),
+            content: content.to_owned(),
+            updated_at: i64::MIN,
+        });
+        if too_large(file)? {
+            return Ok(Some(Oversized::File(path.to_owned())));
+        }
+    }
+    Ok(None)
+}
+
+/// Stores a package as a skill and its files: under `id` (its fields and files replaced) or as a
+/// new skill. A file left out is deleted; an unchanged one is not written again. The caller
+/// checked [`oversized`].
+fn store_skill(
+    v: &mut Vault,
+    id: Option<&str>,
+    pkg: &SkillPackage,
+    enabled: bool,
+) -> AppResult<String> {
+    let skill = Skill {
+        name: pkg.name.clone(),
+        description: pkg.description.clone(),
+        frontmatter: other_fields(pkg.frontmatter.clone()),
+        enabled,
+        updated_at: 0,
+    };
+    let skill_id = v.put(id, Item::Skill(skill))?;
+    let (existing, duplicates) = files_by_path(v, &skill_id);
+    let wanted: Vec<(&str, &str)> = std::iter::once((SKILL_MD, pkg.body.as_str()))
+        .chain(
+            pkg.files
+                .iter()
+                .map(|f| (f.path.as_str(), f.content.as_str())),
+        )
+        .collect();
+    for (path, content) in &wanted {
+        let file_id = match existing.get(*path) {
+            Some((_, file)) if file.content == *content => continue,
+            Some((file_id, _)) => Some(file_id.as_str()),
+            None => None,
+        };
+        v.put(
+            file_id,
+            Item::SkillFile(SkillFile {
+                skill_id: skill_id.clone(),
+                path: (*path).to_owned(),
+                content: (*content).to_owned(),
+                updated_at: 0,
+            }),
+        )?;
+    }
+    for (path, (file_id, _)) in &existing {
+        if !wanted.iter().any(|(p, _)| p == path) {
+            v.delete(file_id)?;
+        }
+    }
+    for file_id in duplicates {
+        v.delete(&file_id)?;
+    }
+    Ok(skill_id)
+}
+
+/// `skill_save`: checks the skill like an import (AI-27) and stores it. The frontmatter fields of
+/// a saved skill are kept.
+pub fn save_skill(v: &mut Vault, input: &SkillInput) -> AppResult<SkillView> {
+    let existing = match &input.id {
+        Some(id) => Some(find_skill(v, id)?),
+        None => None,
+    };
+    let pkg = SkillPackage {
+        name: input.name.trim().to_owned(),
+        description: input.description.trim().to_owned(),
+        frontmatter: existing.map(|s| s.frontmatter).unwrap_or_default(),
+        body: input.body.clone(),
+        files: input
+            .files
+            .iter()
+            .map(|f| SkillFileData {
+                path: f.path.clone(),
+                content: f.content.clone(),
+            })
+            .collect(),
+    };
+    if let Some(issue) = skills::validate(&pkg).first() {
+        return Err(AppError::invalid(issue_field(issue), issue_text(issue)));
+    }
+    if pkg.name == BUILTIN_NAME {
+        return Err(reserved("name"));
+    }
+    if named(v, &pkg.name, input.id.as_deref()).is_some() {
+        return Err(taken("name", &pkg.name));
+    }
+    if let Some(too_large) = oversized(input.id.as_deref(), &pkg)? {
+        return Err(AppError::invalid(too_large.field(), too_large.text()));
+    }
+    let id = store_skill(v, input.id.as_deref(), &pkg, input.enabled)?;
+    Ok(skill_view(v, &id, &find_skill(v, &id)?))
+}
+
+pub fn set_skill_enabled(v: &mut Vault, id: &str, enabled: bool) -> AppResult<()> {
+    let mut skill = find_skill(v, id)?;
+    if skill.enabled != enabled {
+        skill.enabled = enabled;
+        v.put(Some(id), Item::Skill(skill))?;
+    }
+    Ok(())
+}
+
+// ───────────────────────── import ─────────────────────────
+
+/// Reads a folder, a `.zip`, or the folder of a picked `SKILL.md`.
+pub fn read_source(path: &Path) -> AppResult<SkillImport> {
+    let meta = std::fs::metadata(path)
+        .map_err(|_| AppError::invalid("path", "The folder or file could not be opened."))?;
+    let result = if meta.is_dir() {
+        skills::read_folder(path)
+    } else if path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("zip"))
+    {
+        skills::read_zip(path)
+    } else if path
+        .file_name()
+        .is_some_and(|n| n.eq_ignore_ascii_case(SKILL_MD))
+        && let Some(folder) = path.parent()
+    {
+        skills::read_folder(folder)
+    } else {
+        return Err(AppError::invalid(
+            "path",
+            "Choose a folder or a .zip file that holds a SKILL.md.",
+        ));
+    };
+    result.map_err(source_error)
+}
+
+pub fn preview(v: &Vault, import: &SkillImport) -> SkillImportPreview {
+    let package = import.package.as_ref();
+    SkillImportPreview {
+        name: package.map(|p| p.name.clone()),
+        description: package.map(|p| p.description.clone()),
+        body: package.map(|p| p.body.clone()),
+        files: package
+            .map(|p| {
+                p.files
+                    .iter()
+                    .map(|f| SkillFileView {
+                        path: f.path.clone(),
+                        content: f.content.clone(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        frontmatter_keys: package
+            .map(|p| {
+                other_fields(p.frontmatter.clone())
+                    .into_iter()
+                    .map(|(k, _)| k)
+                    .collect()
+            })
+            .unwrap_or_default(),
+        skipped: import.skipped.iter().map(|s| s.path.clone()).collect(),
+        issues: import.issues.iter().map(issue_view).collect(),
+        existing_id: package.and_then(|p| named(v, &p.name, None)),
+        reserved_name: package.is_some_and(|p| p.name == BUILTIN_NAME),
+    }
+}
+
+/// `skill_import`: `replace_id` keeps that skill's id and enabled state and rewrites its fields
+/// and files; `rename` saves under a new, valid name; otherwise a taken name is refused.
+pub fn import_skill(
+    v: &mut Vault,
+    import: SkillImport,
+    replace_id: Option<&str>,
+    rename: Option<&str>,
+) -> AppResult<SkillView> {
+    if let Some(issue) = import.issues.first() {
+        return Err(AppError::invalid("path", issue_text(issue)));
+    }
+    let Some(mut pkg) = import.package else {
+        return Err(AppError::invalid("path", "No SKILL.md was found."));
+    };
+    let field = if let Some(name) = rename {
+        let name = name.trim();
+        if !skills::valid_name(name) {
+            return Err(AppError::invalid(
+                "rename",
+                format!("The name is not valid. {NAME_RULE}"),
+            ));
+        }
+        name.clone_into(&mut pkg.name);
+        "rename"
+    } else {
+        "name"
+    };
+    if pkg.name == BUILTIN_NAME {
+        return Err(reserved(field));
+    }
+    let enabled = match replace_id {
+        Some(id) => find_skill(v, id)?.enabled,
+        None => true,
+    };
+    if named(v, &pkg.name, replace_id).is_some() {
+        return Err(taken(field, &pkg.name));
+    }
+    if let Some(too_large) = oversized(replace_id, &pkg)? {
+        return Err(AppError::invalid("path", too_large.text()));
+    }
+    let id = store_skill(v, replace_id, &pkg, enabled)?;
+    Ok(skill_view(v, &id, &find_skill(v, &id)?))
+}
+
+#[cfg(test)]
+mod tests;

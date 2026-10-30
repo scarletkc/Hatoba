@@ -1,45 +1,48 @@
-import { useRef } from "react";
-import { Icon, Segmented, controlStyles } from "@/components/controls";
-import { Group } from "@/components/layout";
-import { Menu, useMenu, type MenuEntry } from "@/components/overlay";
+import { Group, PopupSelect, Segmented, Stepper, toast } from "@hatoba/ui";
+import { errorMessage } from "@/app/errors";
+import { useApp } from "@/app/store";
+import { setAiTextSize } from "@/app/zoomKeys";
+import { useAi } from "@/features/ai/store";
+import { AI_TEXT_SIZE_MAX, AI_TEXT_SIZE_MIN } from "@/features/ai/textSize";
 import { useT } from "@/i18n";
-import type { Language, LocalPrefs } from "@/ipc/types";
+import type { LocalPrefs } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { SchemePicker } from "./SchemePicker";
-import { Pane, SettingRow, usePrefs, type PaneProps } from "./shared";
+import { ZOOM_STEPS } from "@/lib/zoom";
+import { Pane, Section, SettingRow, usePrefs } from "./shared";
 import s from "./AppearancePane.module.css";
 
 type Appearance = LocalPrefs["appearance"];
 
-/** Settings → Appearance (design §07): theme thumbnails, density, terminal color schemes, language. */
-export function AppearancePane({ settings, updateTerminal }: PaneProps) {
+/** Settings → Appearance: theme thumbnails, density and zoom, and the AI panel's text size (TERM-13). */
+export function AppearancePane() {
   const t = useT();
   const [prefs, setPrefs] = usePrefs();
-  const langMenu = useMenu();
-  const langButton = useRef<HTMLButtonElement>(null);
-  const term = settings?.terminal;
-  /** Following the app appearance: a scheme for each mode. */
-  const both = term?.theme === "system";
-
-  const languages: { value: Language; label: string }[] = [
-    { value: "system", label: t("settings.language.system") },
-    { value: "zh-CN", label: t("settings.language.zh") },
-    { value: "en", label: t("settings.language.en") },
-    { value: "ja", label: t("settings.language.ja") },
-  ];
-  const langEntries: MenuEntry[] = languages.flatMap((l, i): MenuEntry[] => [
-    { label: l.label, checked: prefs.language === l.value, onSelect: () => setPrefs({ language: l.value }) },
-    ...(i === 0 ? [{ kind: "separator" } as const] : []),
-  ]);
+  const zoom = useApp((st) => st.zoom);
+  const aiTextSize = useAi((st) => st.catalog.settings?.text_size);
 
   return (
     <Pane>
       <Group>
         <SettingRow top label={t("settings.appearance")}>
           <div className={s.thumbs} role="radiogroup" aria-label={t("settings.appearance")}>
-            <Thumb kind="light" label={t("settings.appearance.light")} selected={prefs.appearance === "light"} onSelect={() => setPrefs({ appearance: "light" })} />
-            <Thumb kind="dark" label={t("settings.appearance.dark")} selected={prefs.appearance === "dark"} onSelect={() => setPrefs({ appearance: "dark" })} />
-            <Thumb kind="system" label={t("settings.appearance.auto")} selected={prefs.appearance === "system"} onSelect={() => setPrefs({ appearance: "system" })} />
+            <Thumb
+              kind="light"
+              label={t("settings.appearance.light")}
+              selected={prefs.appearance === "light"}
+              onSelect={() => setPrefs({ appearance: "light" })}
+            />
+            <Thumb
+              kind="dark"
+              label={t("settings.appearance.dark")}
+              selected={prefs.appearance === "dark"}
+              onSelect={() => setPrefs({ appearance: "dark" })}
+            />
+            <Thumb
+              kind="system"
+              label={t("settings.appearance.auto")}
+              selected={prefs.appearance === "system"}
+              onSelect={() => setPrefs({ appearance: "system" })}
+            />
           </div>
         </SettingRow>
         <SettingRow label={t("settings.density")}>
@@ -53,68 +56,55 @@ export function AppearancePane({ settings, updateTerminal }: PaneProps) {
             onChange={(density) => setPrefs({ density })}
           />
         </SettingRow>
-      </Group>
-
-      {term && (
-        <Group>
-          <SettingRow label={t("settings.termColors")}>
-            <Segmented
-              ariaLabel={t("settings.termColors")}
-              value={term.theme}
-              options={[
-                { value: "dark", label: t("settings.termColors.dark") },
-                { value: "light", label: t("settings.termColors.light") },
-                { value: "system", label: t("settings.termColors.follow") },
-              ]}
-              onChange={(theme) => updateTerminal({ theme })}
-            />
-          </SettingRow>
-          {term.theme !== "light" && (
-            <SchemePicker
-              mode="dark"
-              value={term.dark_scheme}
-              label={t("settings.termColors")}
-              caption={both ? t("settings.termColors.forDark") : undefined}
-              onChange={(dark_scheme) => updateTerminal({ dark_scheme })}
-            />
-          )}
-          {term.theme !== "dark" && (
-            <SchemePicker
-              mode="light"
-              value={term.light_scheme}
-              label={t("settings.termColors")}
-              caption={both ? t("settings.termColors.forLight") : undefined}
-              onChange={(light_scheme) => updateTerminal({ light_scheme })}
-            />
-          )}
-        </Group>
-      )}
-
-      <Group>
-        <SettingRow label={t("settings.language")}>
-          <button
-            ref={langButton}
-            type="button"
-            aria-haspopup="menu"
-            aria-expanded={!!langMenu.anchor}
-            aria-label={t("settings.language")}
-            className={cx(controlStyles.popup, s.langButton)}
-            onClick={() => langButton.current && langMenu.openBelow(langButton.current, true)}
-          >
-            <Icon name="translate" className={controlStyles.popupIcon} style={{ fontSize: 14 }} />
-            <span className={controlStyles.popupLabel}>{languages.find((l) => l.value === prefs.language)?.label}</span>
-            <Icon name="caret-up-down" className={controlStyles.popupCaret} />
-          </button>
+        <SettingRow
+          label={t("settings.zoom")}
+          hint={zoom.max < ZOOM_STEPS[ZOOM_STEPS.length - 1] ? t("settings.zoom.max", { n: zoom.max }) : undefined}
+        >
+          <PopupSelect
+            ariaLabel={t("settings.zoom")}
+            value={zoom.zoom}
+            minWidth={100}
+            options={ZOOM_STEPS.filter((z) => z <= zoom.max).map((z) => ({ value: z, label: `${z}%` }))}
+            onChange={(z) =>
+              void useApp
+                .getState()
+                .setZoom(z)
+                .catch((e) => toast(errorMessage(t, e), "error"))
+            }
+          />
         </SettingRow>
       </Group>
 
-      {langMenu.anchor && <Menu anchor={langMenu.anchor} onClose={langMenu.close} minWidth={200} entries={langEntries} />}
+      {aiTextSize !== undefined && (
+        <Section title={t("settings.aiPanel")}>
+          <SettingRow label={t("settings.aiText")} hint={t("settings.aiText.hint")}>
+            <Stepper
+              value={aiTextSize}
+              min={AI_TEXT_SIZE_MIN}
+              max={AI_TEXT_SIZE_MAX}
+              downLabel={t("settings.aiText.down")}
+              upLabel={t("settings.aiText.up")}
+              onChange={setAiTextSize}
+            />
+          </SettingRow>
+        </Section>
+      )}
     </Pane>
   );
 }
 
 /** Miniature window used as the appearance picker (colors are fixed illustrations, not theme tokens). */
-function Thumb({ kind, label, selected, onSelect }: { kind: Appearance; label: string; selected: boolean; onSelect: () => void }) {
+function Thumb({
+  kind,
+  label,
+  selected,
+  onSelect,
+}: {
+  kind: Appearance;
+  label: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   return (
     <button type="button" role="radio" aria-checked={selected} className={s.thumb} onClick={onSelect}>
       <span className={cx(s.preview, s[kind], selected && s.previewOn)}>

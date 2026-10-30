@@ -6,8 +6,8 @@ The labels that these files name in English, as the interface shows them in Japa
 
 | en | ja |
 |---|---|
+| Sync | 同期 |
 | Cloud Sync | クラウド同期 |
-| Vault | 保管庫 |
 | Sync is off | クラウド同期はオフ |
 | Stored on this device only | このデバイスにのみ保存 |
 | Synced | 同期済み |
@@ -97,7 +97,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Always ask | 常に確認 |
 | Generate New Recovery Code | 新しいリカバリーコードを作成 |
 | Change Master Password | マスターパスワードを変更 |
-| Disconnect… | クラウド同期を解除… |
+| Disconnect | クラウド同期を解除 |
 | Disconnect Cloud Sync? | クラウド同期を解除しますか？ |
 | Disconnect | 解除 |
 

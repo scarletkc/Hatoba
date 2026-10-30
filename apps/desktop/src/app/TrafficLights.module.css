@@ -1,0 +1,80 @@
+/* Where the native buttons are, as measured on macOS 26 (platform/window.rs): 14 window pixels across, 23 apart,
+   the first 18 from the left edge, and centered 22 from the top, at every interface zoom. */
+.lights {
+  position: fixed;
+  top: calc(15 * var(--window-px));
+  left: calc(18 * var(--window-px));
+  z-index: 2147483647;
+  display: flex;
+  gap: calc(9 * var(--window-px));
+}
+
+.lights > span {
+  width: calc(14 * var(--window-px));
+  height: calc(14 * var(--window-px));
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 var(--window-px) var(--edge);
+  background: var(--face);
+}
+
+.close {
+  --face: #ff5c5f;
+  --edge: #ff2529;
+  --glyph: #8c1a10;
+}
+
+.minimize {
+  --face: #fac800;
+  --edge: #f8ba00;
+  --glyph: #985712;
+}
+
+.zoom {
+  --face: #34c759;
+  --edge: #00b422;
+  --glyph: #0b650d;
+}
+
+:root[data-theme="dark"] .close {
+  --edge: #f91f23;
+}
+
+:root[data-theme="dark"] .minimize {
+  --edge: #e6a800;
+}
+
+:root[data-theme="dark"] .zoom {
+  --edge: #00ae1c;
+}
+
+/* An inactive window greys them out until they are hovered, as a native one does. */
+.lights[data-inactive]:not(:hover) > span {
+  --face: #dddddc;
+  --edge: #c9c9c8;
+}
+
+:root[data-theme="dark"] .lights[data-inactive]:not(:hover) > span {
+  --face: #4d4d4f;
+  --edge: #5c5c5e;
+}
+
+.lights svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: var(--glyph);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  opacity: 0;
+}
+
+.lights svg .fill {
+  fill: var(--glyph);
+  stroke: none;
+}
+
+/* Hovering any of them shows every glyph. */
+.lights:hover svg {
+  opacity: 1;
+}

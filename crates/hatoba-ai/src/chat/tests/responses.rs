@@ -75,6 +75,8 @@ async fn responses_streams_text_and_sends_the_expected_request() {
                                       "text": "Disk usage is 42%."}],
                          "role": "assistant"}]),
             terminal: None,
+            shell: None,
+            mcp_servers: None,
             interrupted: false,
         }
     );

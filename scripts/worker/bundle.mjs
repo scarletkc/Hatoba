@@ -37,8 +37,13 @@ function only(list = [], key, name, what) {
  * wrangler wrote to its output directory, and the migrations as `{ name, sql }`.
  */
 export function buildPackage({ config, version, outputFiles, migrations }) {
-  const extra = Object.keys(outputFiles).filter((name) => name !== MAIN_MODULE && name !== "README.md" && !name.endsWith(".map"));
-  if (extra.length > 0) throw new Error(`wrangler produced more than one module (${extra.join(", ")}); the app uploads only ${MAIN_MODULE}.`);
+  const extra = Object.keys(outputFiles).filter(
+    (name) => name !== MAIN_MODULE && name !== "README.md" && !name.endsWith(".map"),
+  );
+  if (extra.length > 0)
+    throw new Error(
+      `wrangler produced more than one module (${extra.join(", ")}); the app uploads only ${MAIN_MODULE}.`,
+    );
   const content = outputFiles[MAIN_MODULE];
   if (!content) throw new Error(`wrangler did not produce ${MAIN_MODULE}.`);
   if (migrations.length === 0) throw new Error("workers/sync/migrations has no .sql files.");
@@ -65,7 +70,8 @@ export function buildPackage({ config, version, outputFiles, migrations }) {
 
 function run(command, args, options) {
   const result = spawnSync(command, args, { cwd: WORKER_DIR, stdio: "inherit", ...options });
-  if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} failed${result.error ? `: ${result.error.message}` : ""}.`);
+  if (result.status !== 0)
+    throw new Error(`${command} ${args.join(" ")} failed${result.error ? `: ${result.error.message}` : ""}.`);
 }
 
 function readMigrations() {
@@ -85,7 +91,9 @@ function main(argv) {
     run(process.execPath, [wrangler, "deploy", "--dry-run", "--outdir", outdir], {
       env: { ...process.env, WRANGLER_SEND_METRICS: "false" },
     });
-    const outputFiles = Object.fromEntries(readdirSync(outdir).map((name) => [name, readFileSync(join(outdir, name), "utf8")]));
+    const outputFiles = Object.fromEntries(
+      readdirSync(outdir).map((name) => [name, readFileSync(join(outdir, name), "utf8")]),
+    );
     const require = createRequire(join(WORKER_DIR, "package.json"));
     const config = require("wrangler").unstable_readConfig({ config: join(WORKER_DIR, "wrangler.toml") });
     const { version } = JSON.parse(readFileSync(join(WORKER_DIR, "package.json"), "utf8"));

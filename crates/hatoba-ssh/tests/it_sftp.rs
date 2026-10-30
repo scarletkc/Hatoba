@@ -6,6 +6,7 @@ mod common;
 use std::fs;
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -702,4 +703,70 @@ async fn concurrent_transfers_to_the_same_destination_do_not_collide() {
     db.unwrap();
     assert_eq!(sha256_hex(&fs::read(&dst).unwrap()), got);
     assert_eq!(names_in(local.path()), ["a", "b", "dst.bin"]);
+}
+
+#[tokio::test]
+async fn edits_write_back_through_symlinks_and_keep_the_mode() {
+    let server = server!();
+    let (_s, sftp) = sftp_for(&server).await;
+    let area = server.area("edit_back");
+
+    let script = area.join("run.sh");
+    fs::write(&script, "#!/bin/sh\necho old\n").unwrap();
+    // Setuid too, which writing the content clears.
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o4750)).unwrap();
+    symlink(&script, area.join("link.sh")).unwrap();
+
+    // The link resolves to the script, whose size and mode the edit compares and keeps.
+    let target = sftp.resolve(s(&area.join("link.sh"))).await.unwrap();
+    assert_eq!(target, s(&fs::canonicalize(&script).unwrap()));
+    let before = sftp.stat(&target).await.unwrap().unwrap();
+    assert_eq!(before.size, 19);
+    assert_eq!(before.mode.unwrap() & 0o7777, 0o4750);
+    assert!(!before.is_dir());
+    assert!(sftp.stat(s(&area)).await.unwrap().unwrap().is_dir());
+    assert_eq!(sftp.stat(s(&area.join("gone"))).await.unwrap(), None);
+
+    sftp.write_back(
+        b"#!/bin/sh\necho new\n".to_vec(),
+        &target,
+        Some(before),
+        &AtomicBool::new(false),
+        |_| {},
+        CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&script).unwrap(),
+        "#!/bin/sh\necho new\n"
+    );
+    let mode = fs::metadata(&script).unwrap().permissions().mode();
+    assert_eq!(mode & 0o7777, 0o4750);
+    let link = fs::symlink_metadata(area.join("link.sh")).unwrap();
+    assert!(link.file_type().is_symlink());
+    assert_eq!(names_in(&area), ["link.sh", "run.sh"]);
+
+    // In a folder the login user cannot write, the file itself is written.
+    let locked = area.join("locked");
+    fs::create_dir(&locked).unwrap();
+    let conf = locked.join("app.conf");
+    fs::write(&conf, "old\n").unwrap();
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).unwrap();
+    let old = sftp.stat(s(&conf)).await.unwrap();
+    let written = sftp
+        .write_back(
+            b"new\n".to_vec(),
+            s(&conf),
+            old,
+            &AtomicBool::new(false),
+            |_| {},
+            CancellationToken::new(),
+        )
+        .await;
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+    written.unwrap();
+    assert_eq!(fs::read_to_string(&conf).unwrap(), "new\n");
+    assert_eq!(names_in(&locked), ["app.conf"]);
 }

@@ -14,7 +14,7 @@ describe("install steps", () => {
 
   it.each(PLATFORMS)("name every file of %s that the English names", (platform) => {
     const files = INSTALL_STEPS[platform].bundles.map((bundle) => names[bundle]);
-    for (const locale of ["zh", "ja"] as const) {
+    for (const locale of ["zh-cn", "zh-tw", "ja"] as const) {
       for (const file of files) expect(installSteps(locale, platform, names)).toContain(file);
     }
   });

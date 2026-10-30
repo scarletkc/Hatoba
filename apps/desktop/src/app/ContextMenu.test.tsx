@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
-import { setOverlaysLocked } from "@/components/overlay";
+import { setOverlaysLocked } from "@hatoba/ui";
 import { ContextMenuHost } from "./ContextMenu";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -32,7 +32,10 @@ function rightClick(el: Element): boolean {
   return e.defaultPrevented;
 }
 
-const items = () => [...document.querySelectorAll("[role=menu] [role=menuitem]")].map((b) => `${b.textContent}${(b as HTMLButtonElement).disabled ? " (off)" : ""}`);
+const items = () =>
+  [...document.querySelectorAll("[role=menu] [role=menuitem]")].map(
+    (b) => `${b.textContent}${(b as HTMLButtonElement).disabled ? " (off)" : ""}`,
+  );
 
 describe("ContextMenuHost", () => {
   it("offers editing in a text field", () => {

@@ -32,6 +32,8 @@ The labels that these files name in English, as the interface shows them in Japa
 | MCP Servers | MCP サーバー |
 | Auto Mode | 自動承認モード |
 | This Device | このデバイス |
+| Text Size | 文字サイズ |
+| Appearance | 外観 |
 
 ### Providers
 
@@ -90,8 +92,8 @@ The labels that these files name in English, as the interface shows them in Japa
 | Read skill | スキルを読む |
 | New Skill | スキルを作成 |
 | Import | インポート |
-| Import Folder… | フォルダーをインポート… |
-| Import .zip… | .zip をインポート… |
+| Import Folder | フォルダーをインポート |
+| Import .zip | .zip をインポート |
 | Description | 説明 |
 | Instructions | 指示 |
 | Files | ファイル |

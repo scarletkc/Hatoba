@@ -1,9 +1,9 @@
 import type { FormEvent, ReactNode } from "react";
-import { Icon } from "@/components/controls";
+import { Icon } from "@hatoba/ui";
 import { cx } from "@/lib/cx";
 import s from "./WizardCard.module.css";
 
-/** Step indicator from the design's sync wizard: ✓ done · filled current · outlined upcoming. */
+/** Step indicator: ✓ done · filled current · outlined upcoming. */
 export function Steps({ labels, current }: { labels: string[]; current: number }) {
   return (
     <ol className={s.steps}>
@@ -11,7 +11,11 @@ export function Steps({ labels, current }: { labels: string[]; current: number }
         const n = i + 1;
         const done = n < current;
         return (
-          <li key={label} className={cx(s.step, n === current && s.stepCurrent)} aria-current={n === current ? "step" : undefined}>
+          <li
+            key={label}
+            className={cx(s.step, n === current && s.stepCurrent)}
+            aria-current={n === current ? "step" : undefined}
+          >
             {i > 0 && <span className={s.rule} />}
             <span className={cx(s.bubble, done && s.bubbleDone, n === current && s.bubbleCurrent)}>
               {done ? <Icon name="check" /> : n}
@@ -24,7 +28,7 @@ export function Steps({ labels, current }: { labels: string[]; current: number }
   );
 }
 
-/** The 540px card used by every first-launch step (mirrors the design's wizard sheets). */
+/** The 540px card used by every first-launch step. */
 export function WizardCard({
   steps,
   current,
@@ -60,14 +64,5 @@ export function WizardCard({
       </div>
       <div className={s.footer}>{footer}</div>
     </form>
-  );
-}
-
-export function ErrorLine({ children }: { children: ReactNode }) {
-  return (
-    <div className={s.error} role="alert">
-      <Icon name="warning-circle" size={15} />
-      <span>{children}</span>
-    </div>
   );
 }

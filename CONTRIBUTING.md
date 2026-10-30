@@ -170,12 +170,15 @@ Before requesting review:
 
 - Run the tests and checks in the [development guide](docs/development.md).
   CI runs on every update to the pull request, and every job must pass.
-- Follow the [design notes](docs/design/README.md) for UI changes.
+- Build UI from the shared components and design tokens in `packages/ui`
+  (`@hatoba/ui`), take icons from Phosphor through the `Icon` component (the
+  app bundles them and loads no icons from the network), and put copy in
+  `apps/desktop/src/i18n/locales/`.
 - When behavior changes, update the
   [architecture and requirements](docs/hatoba-spec.md) and any other affected
   docs in the same pull request; the
-  [implementation status](docs/status.md) is the easiest to forget. Write
-  documentation in English.
+  [built-in skill](docs/development.md#keep-the-built-in-skill-current) is
+  the easiest to forget. Write documentation in English.
 - Change a schema by adding a migration, never by editing an existing one:
   `MIGRATIONS` in `crates/hatoba-core/src/store.rs` for the local database,
   and `workers/sync/migrations/` for D1. Vaults and Workers that already ran a
@@ -223,8 +226,8 @@ to layout, styling, components, visible text, and interaction states.
 - Show sample data only. Screenshots must not contain real host names,
   addresses, user names, key fingerprints, or anything else from your vault.
 
-`pnpm dev` runs the frontend in a browser with the mock backend and the
-design's sample data, and URL parameters select states and platforms, as the
+`pnpm dev` runs the frontend in a browser with the mock backend and its sample
+data, and URL parameters select states and platforms, as the
 [development guide](docs/development.md#run) describes. Capture changes that
 depend on the native window or the operating system, such as the title bar,
 Mica, or input methods, in the desktop app from `pnpm tauri dev` on the

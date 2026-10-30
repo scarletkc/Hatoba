@@ -40,7 +40,11 @@ export function errorMessage(t: T, e: unknown, ctx: Context = {}): string {
   }
 }
 
-export function sshErrorMessage(t: T, err: AppError, ctx: { host?: string; port?: number; timeoutSec?: number } = {}): string {
+export function sshErrorMessage(
+  t: T,
+  err: AppError,
+  ctx: { host?: string; port?: number; timeoutSec?: number } = {},
+): string {
   const kind = err.ssh_kind ?? "other";
   return t(`ssh.err.${kind}` as MessageKey, { host: ctx.host ?? "", port: ctx.port ?? 22, s: ctx.timeoutSec ?? 15 });
 }

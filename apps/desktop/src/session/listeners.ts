@@ -1,0 +1,29 @@
+import { api } from "@/ipc/api";
+import { quitEditing, useEdits } from "./edits";
+import { pushAuthPrompt, pushHostKeyPrompt } from "./prompts";
+import { routeStateEvent } from "./session";
+import { watchTerminalAppearance } from "./theme";
+import { useTransfers } from "./transfers";
+
+let started = false;
+
+/**
+ * Backend → UI events for terminals, SFTP and the connection prompts. They are wired once at module
+ * level (never removed) so a prompt that arrives while the lock screen is up is not lost.
+ */
+export function startSessionListeners() {
+  if (started) return;
+  started = true;
+  void api.listen("ssh://state", routeStateEvent);
+  void api.listen("ssh://hostkey-prompt", pushHostKeyPrompt);
+  void api.listen("ssh://auth-prompt", pushAuthPrompt);
+  void api.listen("transfer://progress", (ev) => useTransfers.getState().handle(ev));
+  // SFTP-05: listening first, so no change between the two is lost.
+  void api
+    .listen("sftp://edit", (ev) => useEdits.getState().handle(ev))
+    .then(() => api.sftp_edit_list())
+    .then((list) => useEdits.getState().load(list))
+    .catch(() => {});
+  void api.listen("sftp://quit", () => void quitEditing());
+  watchTerminalAppearance();
+}

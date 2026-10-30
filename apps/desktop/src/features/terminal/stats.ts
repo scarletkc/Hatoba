@@ -1,4 +1,3 @@
-import { useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { formatBytes, translate, type Locale } from "@/i18n";
 import { api } from "@/ipc/api";
@@ -58,7 +57,7 @@ export function appendReading(history: StatsReading[], reading: StatsReading): S
   return [...recent(history, reading.at), reading];
 }
 
-/** Starts sampling a session's resource usage. A server already found not to run Linux is not asked again. */
+/** Starts sampling a session's resource usage. A server already found to run neither Linux nor macOS is not asked again. */
 export function startStats(sessionId: string, now = Date.now()) {
   const current = useStatsStore.getState().bySession[sessionId];
   if (current?.state.kind === "unsupported") return;
@@ -71,7 +70,10 @@ export function startStats(sessionId: string, now = Date.now()) {
       if (!live()) return;
       switch (event.kind) {
         case "stats":
-          update(sessionId, (s) => ({ state: { kind: "live" }, history: appendReading(s.history, { ...event.stats, at: Date.now() }) }));
+          update(sessionId, (s) => ({
+            state: { kind: "live" },
+            history: appendReading(s.history, { ...event.stats, at: Date.now() }),
+          }));
           break;
         case "unsupported":
           update(sessionId, (s) => ({ ...s, state: { kind: "unsupported", system: event.system } }));
@@ -113,16 +115,6 @@ export function getSessionStats(sessionId: string): SessionStats | undefined {
 
 export function useSessionStats(sessionId: string | null): SessionStats | undefined {
   return useStatsStore((st) => (sessionId ? st.bySession[sessionId] : undefined));
-}
-
-function subscribeVisibility(cb: () => void) {
-  document.addEventListener("visibilitychange", cb);
-  return () => document.removeEventListener("visibilitychange", cb);
-}
-
-/** `false` while the window is minimized or hidden, when there is no point in sampling. */
-export function useDocumentVisible(): boolean {
-  return useSyncExternalStore(subscribeVisibility, () => document.visibilityState !== "hidden");
 }
 
 // ───────────────────────── Formatting ─────────────────────────

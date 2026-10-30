@@ -1,6 +1,8 @@
 ---
 import { getCollection, render, type CollectionEntry } from "astro:content";
-import Icon from "../../components/Icon.astro";
+import CodeBlock from "../../components/CodeBlock.astro";
+import Link from "../../components/Link.astro";
+import SectionHeader from "../../components/SectionHeader.astro";
 import Base from "../../layouts/Base.astro";
 import { OVERVIEW, docPath, sidebar } from "../../lib/docs";
 import { pageTitle } from "../../lib/seo";
@@ -17,54 +19,75 @@ const { title, description, editUrl, version } = doc.data;
 const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
 ---
 
-<Base locale="en" title={pageTitle("en", doc.id === OVERVIEW ? "Documentation" : title)} description={description} path={docPath(doc.id)} translated={false}>
+<Base
+  locale="en"
+  title={pageTitle("en", doc.id === OVERVIEW ? "Documentation" : title)}
+  description={description}
+  path={docPath(doc.id)}
+  translated={false}
+>
   <div class="container docs">
     <nav class="sidebar" aria-label="Documentation">
       <details open>
         <summary>Contents</summary>
-        {
-          groups.map((group) => (
-            <div class="group">
-              <p class="group-title">{group.title}</p>
-              <ul>
-                {group.pages.map((page) => (
-                  <li>
-                    <a href={docPath(page.slug)} aria-current={page.slug === doc.id ? "page" : undefined}>
-                      {page.slug === OVERVIEW ? "Overview" : page.title}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))
-        }
+        {groups.map((group) => (
+          <div class="group">
+            <p class="group-title">{group.title}</p>
+            <ul>
+              {group.pages.map((page) => (
+                <li>
+                  <a href={docPath(page.slug)} aria-current={page.slug === doc.id ? "page" : undefined}>
+                    {page.slug === OVERVIEW ? "Overview" : page.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </details>
     </nav>
     <article>
-      <h1>{heading}</h1>
-      <p class="version">{version ? `Describes Hatoba ${version}.` : "Describes the development version of Hatoba."}</p>
+      <SectionHeader as="h1" size="title" title={heading}>
+        <p class="version">
+          {version ? `Describes Hatoba ${version}.` : "Describes the development version of Hatoba."}
+        </p>
+      </SectionHeader>
       <div class="prose">
         <Content />
       </div>
       <p class="edit">
-        <a href={editUrl}><Icon name="external" size={16} />Edit this page on GitHub</a>
+        <Link href={editUrl} icon="external">
+          Edit this page on GitHub
+        </Link>
       </p>
     </article>
+  </div>
+  <!-- A <template> would keep the CodeBlock's script from running, so the source is a hidden div. -->
+  <div id="code-block" hidden>
+    <CodeBlock code="" copyLabel="Copy" copied="Copied" />
   </div>
 </Base>
 
 <script>
-  // On a narrow screen the contents start closed, so the page starts with the article.
-  const contents = document.querySelector<HTMLDetailsElement>(".sidebar details");
-  if (contents && matchMedia("(max-width: 900px)").matches) contents.open = false;
+  // Each code block gets the Copy button of a CodeBlock. It sits in the block's corner, so adding it
+  // moves nothing.
+  const copy = document.querySelector("#code-block button")!;
+  for (const block of document.querySelectorAll(".prose .code-block")) block.append(copy.cloneNode(true));
+
+  // On a narrow screen the contents start closed, so the page starts with the article. A wide
+  // screen has no summary to open them with, so widening the window opens them again.
+  const contents = document.querySelector<HTMLDetailsElement>(".sidebar details")!;
+  const narrow = matchMedia("(max-width: 900px)");
+  contents.open = !narrow.matches;
+  narrow.addEventListener("change", () => (contents.open = !narrow.matches));
 </script>
 
 <style>
   .docs {
     display: grid;
     grid-template-columns: 248px minmax(0, 1fr);
-    gap: 56px;
-    padding: 40px 0 96px;
+    gap: var(--space-56);
+    padding: var(--space-40) 0 var(--space-96);
   }
 
   .sidebar {
@@ -73,7 +96,10 @@ const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
     align-self: start;
     max-height: calc(100vh - 48px);
     overflow-y: auto;
-    font-size: 15px;
+    /* The scroll box would clip the link highlights that reach past the text on the left. */
+    margin-left: calc(-1 * var(--space-10));
+    padding-left: var(--space-10);
+    font-size: var(--text-md);
   }
 
   summary {
@@ -81,14 +107,14 @@ const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
   }
 
   .group + .group {
-    margin-top: 22px;
+    margin-top: var(--space-24);
   }
 
   .group-title {
     font-weight: 700;
-    font-size: 14px;
+    font-size: var(--text-sm);
     color: var(--ink);
-    margin-bottom: 6px;
+    margin-bottom: var(--space-6);
   }
 
   .sidebar ul {
@@ -99,12 +125,15 @@ const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
 
   .sidebar a {
     display: block;
-    padding: 5px 10px;
-    margin-left: -10px;
-    border-radius: 8px;
+    padding: var(--space-4) var(--space-10);
+    margin-left: calc(-1 * var(--space-10));
+    border-radius: var(--radius-md);
     color: var(--ink-2);
     text-decoration: none;
     line-height: 1.35;
+    transition:
+      background-color var(--duration-fast) var(--ease-standard),
+      color var(--duration-fast) var(--ease-standard);
   }
 
   .sidebar a:hover {
@@ -122,65 +151,55 @@ const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
     max-width: 46em;
   }
 
-  h1 {
-    font-size: clamp(32px, 4.4vw, 48px);
-  }
-
   .version {
-    margin-top: 12px;
+    margin-top: var(--space-12);
     color: var(--ink-2);
-    font-size: 15px;
+    font-size: var(--text-md);
   }
 
   .edit {
-    margin-top: 56px;
-    padding-top: 20px;
+    margin-top: var(--space-56);
+    padding-top: var(--space-20);
     border-top: 1px solid var(--line);
-    font-size: 15px;
-  }
-
-  .edit a {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
+    font-size: var(--text-md);
   }
 
   .prose {
-    margin-top: 32px;
+    margin-top: var(--space-32);
   }
 
   .prose :global(h2) {
-    margin: 48px 0 12px;
-    font-size: 26px;
+    margin: var(--space-48) 0 var(--space-12);
+    font-size: var(--text-2xl);
   }
 
   .prose :global(h3) {
-    margin: 32px 0 8px;
-    font-size: 19px;
+    margin: var(--space-32) 0 var(--space-8);
+    font-size: var(--text-lg);
   }
 
   .prose :global(p),
   .prose :global(ul),
   .prose :global(ol) {
-    margin: 0 0 16px;
+    margin: 0 0 var(--space-16);
   }
 
   .prose :global(li + li) {
-    margin-top: 6px;
+    margin-top: var(--space-6);
   }
 
   .prose :global(table) {
     width: 100%;
-    margin: 8px 0 24px;
+    margin: var(--space-8) 0 var(--space-24);
     border-collapse: collapse;
-    font-size: 14px;
+    font-size: var(--text-sm);
     display: block;
     overflow-x: auto;
   }
 
   .prose :global(th),
   .prose :global(td) {
-    padding: 7px 12px 7px 0;
+    padding: var(--space-8) var(--space-12) var(--space-8) 0;
     border-bottom: 1px solid var(--line);
     text-align: left;
     vertical-align: top;
@@ -191,29 +210,24 @@ const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
     color: var(--ink-2);
   }
 
-  .prose :global(pre) {
-    padding: 16px;
-    border-radius: 10px;
-    overflow-x: auto;
-    font-size: 14px;
-  }
-
-  .prose :global(pre code) {
-    background: none;
-    padding: 0;
+  .prose :global(.code-block) {
+    margin: 0 0 var(--space-16);
   }
 
   @media (max-width: 900px) {
     .docs {
       grid-template-columns: minmax(0, 1fr);
-      gap: 24px;
-      padding-top: 24px;
+      gap: var(--space-24);
+      padding-top: var(--space-24);
     }
 
     .sidebar {
       position: static;
       max-height: none;
-      padding-bottom: 16px;
+      overflow: visible;
+      margin-left: 0;
+      padding-left: 0;
+      padding-bottom: var(--space-16);
       border-bottom: 1px solid var(--line);
     }
 
@@ -221,11 +235,11 @@ const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
       display: list-item;
       cursor: pointer;
       font-weight: 600;
-      padding: 8px 0;
+      padding: var(--space-8) 0;
     }
 
     details[open] summary {
-      margin-bottom: 12px;
+      margin-bottom: var(--space-12);
     }
   }
 </style>

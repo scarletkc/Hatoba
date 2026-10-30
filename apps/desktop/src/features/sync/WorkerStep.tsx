@@ -1,12 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Button, DisclosureCaret, Icon, LinkButton, StatusDot, TextField } from "@/components/controls";
+import { Button, DisclosureCaret, Icon, LinkButton, StatusLine, TextField, isImeEvent } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { Field } from "@/features/keys/Field";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { SyncConfigInput } from "@/ipc/types";
-import { isImeEvent } from "@/lib/ime";
-import { DEPLOY_GUIDE_URL, DEPLOY_URL, openExternal } from "./external";
+import { DEPLOY_GUIDE_URL, DEPLOY_URL, openExternal } from "@/lib/external";
 import { normalizeWorkerUrl, type WorkerForm } from "./wizardTypes";
 import { WizardFrame, WizardTitle } from "./WizardFrame";
 import s from "./Wizard.module.css";
@@ -78,9 +77,9 @@ export function WorkerStep({
       const parts = [t(initialized ? "sync.test.hasVault" : "sync.test.connected")];
       if (test.result.version) parts.push(t("sync.test.version", { version: test.result.version }));
       if (test.result.latency_ms !== null) parts.push(`${test.result.latency_ms} ms`);
-      return { color: "var(--green)", text: parts.join(" · ") };
+      return { tone: "success" as const, text: parts.join(" · ") };
     }
-    if (test.status === "failed") return { color: "var(--red)", text: test.message };
+    if (test.status === "failed") return { tone: "error" as const, text: test.message };
     return null;
   })();
 
@@ -90,7 +89,21 @@ export function WorkerStep({
       footer={
         <>
           <Button onClick={onBack}>{t("btn.back")}</Button>
-          <Button variant="primary" disabled={!canContinue} onClick={() => ok && onNext({ kind: "worker", url: normalizeWorkerUrl(form.url), setup_token: initialized ? null : form.token.trim() }, initialized)}>
+          <Button
+            variant="primary"
+            disabled={!canContinue}
+            onClick={() =>
+              ok &&
+              onNext(
+                {
+                  kind: "worker",
+                  url: normalizeWorkerUrl(form.url),
+                  setup_token: initialized ? null : form.token.trim(),
+                },
+                initialized,
+              )
+            }
+          >
             {t("btn.continue")}
           </Button>
         </>
@@ -110,7 +123,12 @@ export function WorkerStep({
       </div>
 
       <div className={s.wrangler}>
-        <button type="button" className={s.disclosure} aria-expanded={wranglerOpen} onClick={() => setWranglerOpen((v) => !v)}>
+        <button
+          type="button"
+          className={s.disclosure}
+          aria-expanded={wranglerOpen}
+          onClick={() => setWranglerOpen((v) => !v)}
+        >
           <DisclosureCaret open={wranglerOpen} />
           {t("sync.wrangler")}
         </button>
@@ -145,7 +163,7 @@ export function WorkerStep({
             placeholder={t("sync.workerUrl.placeholder")}
             inputMode="url"
             invalid={test.status === "failed"}
-            trailing={ok ? <Icon name="check-circle" fill size={15} color="var(--green)" /> : undefined}
+            trailing={ok ? <Icon name="check-circle" fill size={16} color="var(--green)" /> : undefined}
             onChange={(e) => {
               request.current++;
               update({ url: e.target.value, test: { status: "idle" } });
@@ -164,15 +182,18 @@ export function WorkerStep({
           />
         </Field>
         <div className={s.testRow}>
-          <Button size="sm" icon="plugs-connected" busy={test.status === "testing"} disabled={!canTest} onClick={() => void runTest()}>
+          <Button
+            size="sm"
+            icon="plugs-connected"
+            busy={test.status === "testing"}
+            disabled={!canTest}
+            onClick={() => void runTest()}
+          >
             {t("sync.test")}
           </Button>
           {status && (
             <div className={s.testStatus} role="status">
-              <span className={s.dotSlot}>
-                <StatusDot color={status.color} />
-              </span>
-              <span>{status.text}</span>
+              <StatusLine tone={status.tone}>{status.text}</StatusLine>
             </div>
           )}
         </div>

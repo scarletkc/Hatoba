@@ -4,7 +4,10 @@ import type { BuiltinSkillView, SkillFileView } from "../types";
  * The built-in `hatoba` skill (AI-34) for the browser mock: the crate's own files, which Vite reads as text the
  * first time the skill is shown. Like Rust, the version goes in place of `{{HATOBA_VERSION}}`.
  */
-const files = import.meta.glob<string>("../../../../../crates/hatoba-ai/src/skills/builtin/hatoba/**/*.md", { query: "?raw", import: "default" });
+const files = import.meta.glob<string>("../../../../../crates/hatoba-ai/src/skills/builtin/hatoba/**/*.md", {
+  query: "?raw",
+  import: "default",
+});
 
 const PLACEHOLDER = /\{\{HATOBA_VERSION\}\}/g;
 

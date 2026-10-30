@@ -1,14 +1,15 @@
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { messages, type Locale, type MessageKey } from "./locales";
 
 export type { Locale, MessageKey };
-export const LOCALES: Locale[] = ["zh-CN", "en", "ja"];
+export const LOCALES: Locale[] = ["zh-CN", "zh-TW", "en", "ja"];
 
 /** Picks a supported locale from the OS / WebView language list (default: system language). */
 export function detectLocale(languages: readonly string[] = navigator.languages ?? [navigator.language]): Locale {
   for (const raw of languages) {
     const lang = raw.toLowerCase();
-    if (lang.startsWith("zh")) return "zh-CN";
+    // Traditional Chinese for Taiwan, Hong Kong and Macau, and wherever the script is named.
+    if (lang.startsWith("zh")) return /^zh-(hant|tw|hk|mo)(-|$)/.test(lang) ? "zh-TW" : "zh-CN";
     if (lang.startsWith("ja")) return "ja";
     if (lang.startsWith("en")) return "en";
   }
@@ -55,10 +56,16 @@ function subscribe(cb: () => void) {
   return () => listeners.delete(cb);
 }
 
-/** React hook: re-renders on language change (switching takes effect immediately, design §07). */
+/**
+ * React hook: re-renders on language change (switching takes effect immediately). The function stays the
+ * same until then, so the memoized values and components that take it keep their identity.
+ */
 export function useT() {
   const locale = useSyncExternalStore(subscribe, getLocale);
-  return Object.assign((key: MessageKey, params?: Params) => translate(locale, key, params), { locale });
+  return useMemo(
+    () => Object.assign((key: MessageKey, params?: Params) => translate(locale, key, params), { locale }),
+    [locale],
+  );
 }
 
 let zone = { id: "", offset: NaN, at: NaN };
@@ -70,7 +77,8 @@ let zone = { id: "", offset: NaN, at: NaN };
 function timeZone(): string {
   const now = Date.now();
   const offset = new Date(now).getTimezoneOffset();
-  if (offset !== zone.offset || !(Math.abs(now - zone.at) < 1000)) zone = { id: Intl.DateTimeFormat().resolvedOptions().timeZone, offset, at: now };
+  if (offset !== zone.offset || !(Math.abs(now - zone.at) < 1000))
+    zone = { id: Intl.DateTimeFormat().resolvedOptions().timeZone, offset, at: now };
   return zone.id;
 }
 
@@ -120,7 +128,7 @@ export function useToday(): number {
   return useSyncExternalStore(subscribeDay, clockNow).today;
 }
 
-/** "2 min ago", "Today 09:12", "Yesterday", "Oct 5" — the design's last-connected style. */
+/** "2 min ago", "Today 09:12", "Yesterday", "Oct 5" — the hosts list's last-connected style. */
 export function formatRelative(locale: Locale, ms: number, now = Date.now()): string {
   const diff = Math.max(0, now - ms);
   const min = Math.floor(diff / 60_000);
@@ -131,7 +139,10 @@ export function formatRelative(locale: Locale, ms: number, now = Date.now()): st
   if (ms >= startOfDay(now)) return translate(locale, "time.todayAt", { time: hm });
   if (ms >= startOfDay(now, -1)) return translate(locale, "time.yesterdayAt", { time: hm });
   const sameYear = d.getFullYear() === new Date(now).getFullYear();
-  return fmt(locale, sameYear ? { month: "short", day: "numeric" } : { year: "numeric", month: "short", day: "numeric" }).format(d);
+  return fmt(
+    locale,
+    sameYear ? { month: "short", day: "numeric" } : { year: "numeric", month: "short", day: "numeric" },
+  ).format(d);
 }
 
 /**
@@ -143,7 +154,8 @@ export function formatMessageTime(locale: Locale, ms: number, now = Date.now()):
   const clock = { hour: "2-digit", minute: "2-digit", hour12: false } as const;
   // A time from a later day (another device's clock ahead, say) keeps its date.
   if (ms >= startOfDay(now) && ms < startOfDay(now, 1)) return fmt(locale, clock).format(d);
-  if (ms >= startOfDay(now, -1) && ms < startOfDay(now)) return translate(locale, "time.yesterdayAt", { time: fmt(locale, clock).format(d) });
+  if (ms >= startOfDay(now, -1) && ms < startOfDay(now))
+    return translate(locale, "time.yesterdayAt", { time: fmt(locale, clock).format(d) });
   const year = d.getFullYear() === new Date(now).getFullYear() ? {} : ({ year: "numeric" } as const);
   return fmt(locale, { ...year, month: "short", day: "numeric", ...clock }).format(d);
 }

@@ -36,13 +36,14 @@ Other labels: **Connecting…**, **Connected**, **Connection failed**, **Disconn
 
 ## Resource usage
 
-For a Linux server, the status bar can show CPU, memory and network rates (↓ received, ↑ sent). It is off until **Show Resource Usage** turns it on, and the choice is remembered for the host on this device; a quick connection keeps it only for its tab. A narrow window drops the rates, then everything but the gauge icon.
+For a Linux or macOS server, the status bar can show CPU, memory and network rates (↓ received, ↑ sent). It is off until **Show Resource Usage** turns it on, and the choice is remembered for the host on this device; a quick connection keeps it only for its tab. A narrow window drops the rates, then everything but the gauge icon.
 
 Clicking the readout opens a popover: CPU over the last 3 minutes with the number of cores and the load averages, memory and swap, network rates over the last 3 minutes with the interfaces counted (those of the default route), the disk usage of `/`, and the uptime. Pointing at a chart (or the arrow keys once it has focus) shows every value as it was at that moment. A meter turns orange at 80% and red at 95%. **Hide Resource Usage** at the bottom turns it off for the host.
 
-Hatoba reads `/proc` on the server every 2 seconds over the tab's own connection, by running `sh` on a separate channel; nothing is installed, and the process shows on the server (for example in `ps`) while the readout is sampled. Sampling pauses while the tab is in the background, the window is minimized, or the vault is locked, and a pause shows as a gap in the charts. The first reading after a pause has no CPU or network rate yet ("—"); the next one, 2 seconds later, does.
+Hatoba reads `/proc` on the server (on macOS, `iostat`, `vm_stat`, `sysctl`, `netstat` and `df`) every 2 seconds over the tab's own connection, by running `sh` on a separate channel; nothing is installed, and the process shows on the server (for example in `ps`) while the readout is sampled. Sampling pauses while another tab is in front or the vault is locked, and goes on while the window is minimized; a pause shows as a gap in the charts. The first reading after a pause has no CPU or network rate yet ("—"); the next one, 2 seconds later, does.
 
-- FreeBSD, NetBSD, macOS, Windows and other systems show "Resource usage is available only for Linux servers." with the system's name when known.
+- On macOS, memory in use is counted as Activity Monitor counts it (app memory, wired and compressed), and the disk is the APFS container of `/`, used as Finder shows it: its size less what is available.
+- FreeBSD, NetBSD, Windows and other systems show "Resource usage is available only for Linux and macOS servers." with the system's name when known.
 - If the readings stop (for example the server refused to run the command, or `sh` exited), the popover shows the reason and **Retry**.
 - In a container, `/proc` describes the host machine, so CPU and memory are the host's, not the container's.
 
@@ -53,7 +54,7 @@ Other labels: **Memory**, **Swap**, **No swap**, **Network**, **Disk**, **Readin
 The tab menu (**More actions**) and the right-click menu share most entries. Right-click shows the menu when **Right-Click in Terminal** is set to **Show context menu** (see Settings below), the default on macOS; elsewhere right-click by default copies the selection, or pastes when nothing is selected. A program that tracks the mouse (vim, tmux) gets the right click itself unless Shift is held.
 
 - Right-click menu: Copy, Paste, Select All, Ask AI, Clear Scrollback, Find…
-- **More actions** menu: Reconnect, Disconnect, Copy, Paste, Clear Scrollback, Select All, Find…, Ask AI, Edit Host. A quick connection (see `references/hosts-and-connecting.md`) has **Save as Host…** instead of Edit Host.
+- **More actions** menu: Reconnect, Disconnect, Copy, Paste, Clear Scrollback, Select All, Find…, Ask AI, Edit Host. A quick connection (see `references/hosts-and-connecting.md`) has **Save as Host** instead of Edit Host.
 - **Ask AI** is enabled when text is selected. It opens the AI panel with the selection attached; see `references/ai-attachments.md`.
 
 ## Copy, paste, search and links
@@ -66,7 +67,7 @@ Plain Ctrl+letter always reaches the remote shell (Ctrl+L, Ctrl+W, Ctrl+K and so
 | Paste | Ctrl+V, Ctrl+Shift+V, or Shift+Insert | ⌘V |
 | Find in the terminal | Ctrl+Shift+F | ⌘F |
 
-- Pasting a single line drops its trailing line breaks, so a copied command waits for Enter instead of running. Text with line breaks inside is pasted unchanged, after **Paste multiple lines?** with a preview; **Paste** confirms. The check can be turned off in Settings → General (**Confirm before pasting multiple lines**). Pasting needs a connected tab.
+- Pasting a single line drops its trailing line breaks, so a copied command waits for Enter instead of running. Text with line breaks inside is pasted unchanged, after **Paste multiple lines?** with a preview; **Paste** confirms. The check can be turned off in Settings → Terminal (**Confirm before pasting multiple lines**). Pasting needs a connected tab.
 - The find bar searches the visible screen and the scrollback. Enter goes to the next match, Shift+Enter to the previous one, Esc closes the bar. It shows "No results" or the position as i/n.
 - HTTP and HTTPS links in the output open in the default browser with Ctrl+click (⌘+click on macOS), including local HTTP services. Other schemes are not opened. A plain click only selects text.
 
@@ -74,25 +75,25 @@ Other labels: **Previous (Shift+Enter)**, **Next (Enter)**, **Close find (Esc)**
 
 ## Terminal settings
 
-The terminal settings sync with the vault. They are in three places:
-
-- Settings → Terminal: font, size, cursor and scrollback, with a live preview, and **Local Terminal Shell**, the shell new local tabs run, which is kept on this device only (not synced).
-- Settings → Appearance: **Terminal Colors**.
-- Settings → General: **Right-Click in Terminal** and **Confirm before pasting multiple lines**.
+All of them are in Settings → Terminal and sync with the vault, except **Local Terminal Shell** and **Editor**. The page has four sections: **Text and Cursor**, with a preview under it of the font, size, cursor and color scheme, then **Colors**, **Behavior** and **SFTP**.
 
 Other labels: **Decrease font size**, **Increase font size**.
 
 - **Font**: the name of an installed font family (default Cascadia Mono, or Menlo on macOS). A font that is not installed falls back to the system monospace font.
-- **Font Size**: 10 to 24 (default 13), changed with the minus and plus buttons.
+- **Font Size**: 10 to 24 (default 13), changed with the minus and plus buttons, or in any terminal with Ctrl+= / Ctrl+- / Ctrl+0 (⌘ on macOS) and Ctrl+wheel, which change every terminal tab; see `references/shortcuts.md`.
 - **Cursor Style**: Block (default), Bar or Underline.
-- **Scrollback**: 1,000, 5,000, 10,000 (default), or 50,000 lines.
-- **Terminal Colors**: **Always Dark** (default), **Always Light**, or **Match Appearance**, which follows the app's light or dark theme. Below it, the built-in color schemes show as small terminal previews; click one to use it:
+- **Colors** → **Mode**: **Always Dark** (default), **Always Light**, or **Match Appearance**, which follows the app's light or dark theme. Below it, the built-in color schemes show as small terminal previews; click one to use it:
   - Dark: Hatoba Dark (default), Dracula, Tokyo Night, Catppuccin Mocha, One Half Dark, Nord, Gruvbox Dark, Solarized Dark, Rosé Pine, Kanagawa, GitHub Dark.
   - Light: Hatoba Light (default), GitHub Light, One Half Light, Catppuccin Latte, Solarized Light, Gruvbox Light, Rosé Pine Dawn.
   - With **Match Appearance** both lists show, under **In Dark Appearance** and **In Light Appearance**, and the terminal switches between the two picks with the theme. Open terminals take a new pick when the Settings window closes.
   - Light schemes darken colors that would be hard to read on a light background, such as white or yellow text from programs written for dark terminals.
   - There are no custom schemes and no import from other terminals.
-- Language, theme and list density are device-local settings in Settings → Appearance; see `references/settings.md`.
+- **Right-Click in Terminal**: **Copy if selected, otherwise paste** (default, except on macOS) or **Show context menu** (default on macOS).
+- **Confirm before pasting multiple lines**: on by default. Pasting text that contains line breaks shows a preview first.
+- **Scrollback**: 1,000, 5,000, 10,000 (default), or 50,000 lines.
+- **Local Terminal Shell**: the shell new local tabs run, kept on this device only (not synced); see "Local terminal tabs" above.
+- **SFTP** → **Editor**: the program that opens files edited from the SFTP panel, kept on this device only: **System Default** (the system's app for each kind of file) or a program picked with **Choose a Program…**; see `references/sftp.md`.
+- The language is in Settings → General, and the theme, list density and window zoom in Settings → Appearance; see `references/settings.md`.
 
 ## Tab states
 

@@ -1,10 +1,11 @@
 //! AI memory commands (AI-53, spec §13.12): Settings → AI lists, edits and deletes the memories
-//! the assistant keeps, under the rules its `memory` tool follows ([`crate::ai::memory`]).
+//! the assistant keeps, under the rules its `memory` tool follows
+//! ([`hatoba_assistant::ai::memory`]).
 
+use hatoba_assistant::ai::memory;
 use hatoba_core::model::{AiMemory, Item};
 use tauri::{AppHandle, State};
 
-use crate::ai::memory;
 use crate::dto::{AiMemoryInput, AiMemoryView};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
@@ -53,8 +54,13 @@ pub async fn ai_memory_save(
                 .and_then(Item::as_ai_memory)
                 .is_some_and(|m| m.host_id.as_deref() == Some(host_id))
         };
+        // A Telnet host takes host memories too (TELNET-04).
+        let saved = |host_id: &str| {
+            v.get(host_id)
+                .is_some_and(|i| i.as_host().is_some() || i.as_telnet_host().is_some())
+        };
         if let Some(host_id) = &input.host_id
-            && v.get(host_id).and_then(Item::as_host).is_none()
+            && !saved(host_id)
             && !kept(host_id)
         {
             return Err(AppError::not_found("host"));

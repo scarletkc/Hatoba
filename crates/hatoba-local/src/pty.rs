@@ -311,8 +311,16 @@ mod tests {
         events: &mut mpsc::Receiver<PtyEvent>,
         needle: &str,
     ) -> (String, Option<Option<u32>>) {
+        output_within(events, needle, Duration::from_secs(20)).await
+    }
+
+    async fn output_within(
+        events: &mut mpsc::Receiver<PtyEvent>,
+        needle: &str,
+        wait: Duration,
+    ) -> (String, Option<Option<u32>>) {
         let mut text = String::new();
-        let deadline = Instant::now() + Duration::from_secs(20);
+        let deadline = Instant::now() + wait;
         loop {
             let Ok(event) = tokio::time::timeout_at(deadline, events.recv()).await else {
                 panic!("the shell did not answer in time; it printed {text:?}");
@@ -376,6 +384,14 @@ mod tests {
     async fn close_ends_the_shell() {
         let shell = test_shell();
         let (pty, mut events) = LocalPty::spawn(&shell, size(), &[], None).unwrap();
+        // macOS's sh can outlive a hangup that comes while it is still starting, and a tab is
+        // closed once its shell runs, so the test waits until sh has run a command. Only the
+        // command's output, not its echo, has `hatoba-42`.
+        #[cfg(not(windows))]
+        {
+            pty.write(b"echo hatoba-$((40+2))\r".to_vec()).unwrap();
+            output_until(&mut events, "hatoba-42").await;
+        }
         pty.close();
         let (_, exited) = output_until(&mut events, "").await;
         assert!(exited.is_some());
@@ -423,7 +439,10 @@ mod tests {
             };
             let (pty, mut events) = LocalPty::spawn(&shell, size(), &[], None).unwrap();
             pty.write(b"\x1b[1;1R".to_vec()).unwrap();
-            let (text, exited) = output_until(&mut events, "hatoba-ready").await;
+            // Windows PowerShell on a busy CI machine has stalled past 20 s before running the
+            // script; it reads each key after that in well under a second.
+            let (text, exited) =
+                output_within(&mut events, "hatoba-ready", Duration::from_secs(60)).await;
             assert!(
                 exited.is_none() && text.contains("hatoba-ready"),
                 "{}: {text}",

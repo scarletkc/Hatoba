@@ -8,7 +8,15 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { NOTES_DIR, ROOT, VERSION_FILES, WORKER_VERSION_FILES, nextVersion, planBump, readVersion } from "./version.mjs";
+import {
+  NOTES_DIR,
+  ROOT,
+  VERSION_FILES,
+  WORKER_VERSION_FILES,
+  nextVersion,
+  planBump,
+  readVersion,
+} from "./version.mjs";
 
 const MODELS_DEV_SNAPSHOT = "crates/hatoba-ai/src/models/models-dev.json";
 
@@ -32,7 +40,8 @@ function main() {
     },
   });
   if (positionals.length > 1) throw new Error("Pass one version: patch, minor, major, or VERSION.");
-  if (values.worker && values.note !== undefined) throw new Error("--note starts a release note; a Worker version has none.");
+  if (values.worker && values.note !== undefined)
+    throw new Error("--note starts a release note; a Worker version has none.");
   const files = values.worker ? WORKER_VERSION_FILES : VERSION_FILES;
   const current = readVersion(ROOT, files);
   const version = nextVersion(current, positionals[0] ?? "patch");
@@ -53,7 +62,10 @@ function main() {
     if (dryRun) console.log(`Would update ${MODELS_DEV_SNAPSHOT}`);
     else {
       try {
-        execFileSync("cargo", ["run", "--quiet", "-p", "hatoba-ai", "--example", "models_dev_snapshot"], { cwd: ROOT, stdio: "inherit" });
+        execFileSync("cargo", ["run", "--quiet", "-p", "hatoba-ai", "--example", "models_dev_snapshot"], {
+          cwd: ROOT,
+          stdio: "inherit",
+        });
       } catch {
         console.warn(`Could not refresh ${MODELS_DEV_SNAPSHOT}; it stays as it is.`);
       }

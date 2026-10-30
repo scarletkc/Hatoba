@@ -1,39 +1,46 @@
 import { create } from "zustand";
 import { api } from "@/ipc/api";
-import type { AppInfo, LocalPrefs, QuickTarget, SyncStatus, VaultLockedEvent, VaultStatus } from "@/ipc/types";
+import type {
+  AppInfo,
+  LocalPrefs,
+  QuickTarget,
+  SyncStatus,
+  VaultLockedEvent,
+  VaultStatus,
+  ZoomView,
+} from "@/ipc/types";
 import { detectLocale, setLocale, type Locale } from "@/i18n";
 import type { HostDraft } from "@/features/hosts/ProtocolRow";
-
-export type HostFilter =
-  | { kind: "all" }
-  | { kind: "favorites" }
-  | { kind: "recent" }
-  | { kind: "group"; id: string }
-  | { kind: "tag"; name: string };
+import { applyZoom } from "@/lib/zoom";
 
 /** What the "home" tab shows. Session tabs are tracked in `tabs.ts`. */
 export type Page =
-  | { kind: "hosts"; filter: HostFilter }
+  /** Every host, or the hosts of `group`; favorites and tags narrow it in `useHostsUi`. */
+  | { kind: "hosts"; group: string | null }
   | {
       kind: "host-edit";
       hostId: string | null;
       groupId: string | null;
-      back: HostFilter;
-      /** The editor was opened from the dashboard, which Back and Save return to with the `back` filter (HOST-14). */
-      fromDashboard?: boolean;
+      /** The group whose hosts Back and Save return to, or null for every host. */
+      back: string | null;
       /** A new host starts from this quick-connect target (HOST-12). */
       prefill?: QuickTarget;
       /** A new host starts from what the Telnet editor's form had when its protocol was switched. */
       draft?: HostDraft;
     }
   /** A Telnet host's editor (TELNET-01); a new one may start from the SSH editor's form. */
-  | { kind: "telnet-edit"; hostId: string | null; groupId: string | null; back: HostFilter; draft?: HostDraft }
+  | {
+      kind: "telnet-edit";
+      hostId: string | null;
+      groupId: string | null;
+      /** The group whose hosts Back and Save return to, or null for every host. */
+      back: string | null;
+      draft?: HostDraft;
+    }
   | { kind: "keys" }
   | { kind: "sync" }
   /** Every host's port forwards (FWD-05), with the section of `hostId` in view. */
-  | { kind: "forwards"; hostId: string | null }
-  /** The status and resource usage of the hosts a filter shows (HOST-14). */
-  | { kind: "dashboard"; filter: HostFilter };
+  | { kind: "forwards"; hostId: string | null };
 
 export type Phase = "boot" | "onboarding" | "locked" | "unlocked";
 
@@ -45,6 +52,7 @@ export const DEFAULT_PREFS: LocalPrefs = {
   language: "system",
   appearance: "system",
   density: "regular",
+  ui_zoom: 100,
   host_probe: true,
   auto_update_check: true,
   ai_permission_mode: "manual",
@@ -57,7 +65,8 @@ export const DEFAULT_PREFS: LocalPrefs = {
   lock_on_sleep: true,
   lock_disconnects_sessions: false,
   clipboard_clear_secs: 90,
-  dashboard_layout: "cards",
+  hosts_view: "list",
+  hosts_stats: false,
   dashboard_hidden_columns: [],
   dashboard_interval_secs: 3,
   dashboard_cpu_alert: 90,
@@ -65,6 +74,7 @@ export const DEFAULT_PREFS: LocalPrefs = {
   dashboard_disk_alert: 90,
   close_action: "ask",
   local_shell: null,
+  sftp_editor: null,
 };
 
 interface AppState {
@@ -73,12 +83,13 @@ interface AppState {
   /** Whether the Linux window shows its painted chrome right now (`:root[data-floating]`). */
   floating: boolean;
   prefs: LocalPrefs;
+  /** The interface zoom in effect, which the screen may hold below `prefs.ui_zoom` (TERM-13). */
+  zoom: ZoomView;
   vault: VaultStatus | null;
   /** Why the vault last locked while the app ran; null when it started locked. */
   lockReason: VaultLockedEvent["reason"] | null;
   sync: SyncStatus | null;
   page: Page;
-  sidebarCollapsed: boolean;
   settingsOpen: boolean;
   /** The tab the settings window opens on or switches to; null keeps the last one. The window clears it once taken. */
   settingsTab: SettingsTab | null;
@@ -92,10 +103,11 @@ interface AppState {
 
   navigate(page: Page): void;
   setPrefs(prefs: LocalPrefs): Promise<void>;
+  /** Zooms the interface to the step nearest `percent` that the screen allows, and keeps it as this device's preference. */
+  setZoom(percent: number): Promise<ZoomView>;
   refreshVault(): Promise<VaultStatus>;
   setSync(status: SyncStatus): void;
   setPhase(phase: Phase): void;
-  toggleSidebar(): void;
   /** Opens or closes Settings; `section` scrolls to a section of `tab`, such as `memory` in AI (AI-53). */
   openSettings(open: boolean, tab?: SettingsTab, section?: SettingsSection): void;
   focusSearch(text?: string): void;
@@ -108,11 +120,11 @@ export const useApp = create<AppState>((set, get) => ({
   info: { version: "0.0.0", platform: "web", mica: false, local_user: "", device_name: "", package_manager: null },
   floating: false,
   prefs: DEFAULT_PREFS,
+  zoom: { zoom: 100, max: 200 },
   vault: null,
   lockReason: null,
   sync: null,
-  page: { kind: "hosts", filter: { kind: "all" } },
-  sidebarCollapsed: false,
+  page: { kind: "hosts", group: null },
   settingsOpen: false,
   settingsTab: null,
   settingsSection: null,
@@ -126,6 +138,13 @@ export const useApp = create<AppState>((set, get) => ({
     applyPrefs(prefs);
     await api.prefs_save(prefs);
   },
+  setZoom: async (percent) => {
+    const zoom = await api.window_zoom(percent);
+    set({ zoom });
+    applyZoom(zoom.zoom);
+    if (zoom.zoom !== get().prefs.ui_zoom) await get().setPrefs({ ...get().prefs, ui_zoom: zoom.zoom });
+    return zoom;
+  },
   refreshVault: async () => {
     const vault = await api.vault_status();
     set({ vault });
@@ -133,8 +152,8 @@ export const useApp = create<AppState>((set, get) => ({
   },
   setSync: (sync) => set({ sync }),
   setPhase: (phase) => set({ phase }),
-  toggleSidebar: () => set({ sidebarCollapsed: !get().sidebarCollapsed }),
-  openSettings: (settingsOpen, tab, section) => set({ settingsOpen, settingsTab: tab ?? null, settingsSection: section ?? null }),
+  openSettings: (settingsOpen, tab, section) =>
+    set({ settingsOpen, settingsTab: tab ?? null, settingsSection: section ?? null }),
   focusSearch: (text) => set((s) => ({ searchFocusTick: s.searchFocusTick + 1, searchFocusText: text ?? null })),
   refreshSynced: () => set((s) => ({ syncTick: s.syncTick + 1 })),
   lock: async () => {

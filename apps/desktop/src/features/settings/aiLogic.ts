@@ -6,7 +6,6 @@ import type {
   AiModelRef,
   AiProtocol,
   AiProviderView,
-  AiSettingsPatch,
   AiSettingsView,
   AiTestFailure,
   SearchKind,
@@ -105,7 +104,10 @@ const MAX_TOKENS = 1_000_000_000;
  * number with a `K` or `M` suffix ("200K", "1.5M").
  */
 export function parseTokenCount(text: string): TokenCount {
-  const value = text.trim().replace(/[\s,_]/g, "").toLowerCase();
+  const value = text
+    .trim()
+    .replace(/[\s,_]/g, "")
+    .toLowerCase();
   if (value === "") return { ok: true, value: null };
   const m = /^(\d+(?:\.\d+)?)([km]?)$/.exec(value);
   if (!m) return { ok: false };
@@ -268,7 +270,14 @@ export function removeModel(drafts: readonly ModelDraft[], id: string): ModelDra
 
 /** Model IDs from pasted or typed text, separated by commas, spaces, or lines, without repeats. */
 export function parseModelIds(text: string): string[] {
-  return [...new Set(text.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean))];
+  return [
+    ...new Set(
+      text
+        .split(/[\s,;]+/)
+        .map((x) => x.trim())
+        .filter(Boolean),
+    ),
+  ];
 }
 
 /** Whether a model passes the picker's filter: every word is in its ID or display name. */
@@ -316,10 +325,14 @@ export function sanitizeSettings(
   providers: readonly AiProviderView[],
   searchProviders: readonly SearchProviderView[],
 ): AiSettingsView {
-  const listed = (choices: ModelChoice[], ref: AiModelRef | null) => (ref && choices.some((c) => sameRef(c.ref, ref)) ? ref : null);
+  const listed = (choices: ModelChoice[], ref: AiModelRef | null) =>
+    ref && choices.some((c) => sameRef(c.ref, ref)) ? ref : null;
   const defaultModel = listed(modelChoices(providers), settings.default_model);
   const judgeModel = listed(judgeChoices(providers), settings.judge_model);
-  const searchId = settings.search_provider_id && searchProviders.some((p) => p.id === settings.search_provider_id) ? settings.search_provider_id : null;
+  const searchId =
+    settings.search_provider_id && searchProviders.some((p) => p.id === settings.search_provider_id)
+      ? settings.search_provider_id
+      : null;
   return {
     default_model: defaultModel,
     default_effort: settings.default_effort,
@@ -328,6 +341,7 @@ export function sanitizeSettings(
     builtin_skill_enabled: settings.builtin_skill_enabled,
     custom_instructions: settings.custom_instructions,
     send_terminal_screen: settings.send_terminal_screen,
+    text_size: settings.text_size,
     judge_model: judgeModel,
     memory: settings.memory,
   };
@@ -352,17 +366,19 @@ export function resolveSettings(
 }
 
 /** The fields of `next` that differ from `prev`, to save; null when none does. */
-export function changedSettings(prev: AiSettingsView, next: AiSettingsView): AiSettingsPatch | null {
-  const patch: AiSettingsPatch = {};
+export function changedSettings(prev: AiSettingsView, next: AiSettingsView): Partial<AiSettingsView> | null {
+  const patch: Partial<AiSettingsView> = {};
   if (!sameRef(prev.default_model, next.default_model)) patch.default_model = next.default_model;
   if (prev.default_effort !== next.default_effort) patch.default_effort = next.default_effort;
   if (prev.search_provider_id !== next.search_provider_id) patch.search_provider_id = next.search_provider_id;
   if (prev.native_search !== next.native_search) patch.native_search = next.native_search;
-  if (prev.builtin_skill_enabled !== next.builtin_skill_enabled) patch.builtin_skill_enabled = next.builtin_skill_enabled;
+  if (prev.builtin_skill_enabled !== next.builtin_skill_enabled)
+    patch.builtin_skill_enabled = next.builtin_skill_enabled;
   if (prev.custom_instructions !== next.custom_instructions) patch.custom_instructions = next.custom_instructions;
   if (prev.send_terminal_screen !== next.send_terminal_screen) patch.send_terminal_screen = next.send_terminal_screen;
   if (!sameRef(prev.judge_model, next.judge_model)) patch.judge_model = next.judge_model;
   if (prev.memory !== next.memory) patch.memory = next.memory;
+  if (prev.text_size !== next.text_size) patch.text_size = next.text_size;
   return Object.keys(patch).length > 0 ? patch : null;
 }
 

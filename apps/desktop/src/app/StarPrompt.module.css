@@ -1,0 +1,76 @@
+/* The star prompt (spec §9): a card in the home page's lower right corner, like a notification that stays. */
+.star {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  z-index: 10;
+  width: 280px;
+  max-width: calc(100% - 40px);
+  padding: 12px 14px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--sheet);
+  box-shadow: var(--shadow-popover);
+  font-size: var(--text-sm);
+  animation: starIn var(--motion-base) var(--ease-out);
+}
+
+@keyframes starIn {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-rise));
+  }
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.icon {
+  font-size: var(--icon-16);
+  color: var(--orange);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.close {
+  display: inline-flex;
+  border: 0;
+  padding: 2px;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--fg2);
+  font-size: var(--icon-14);
+}
+
+.close:hover {
+  background: var(--fill);
+  color: var(--fg);
+}
+
+.body {
+  margin: 6px 0 12px;
+  color: var(--fg2);
+  line-height: 1.45;
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.actions > * {
+  flex: 1 1 auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .star {
+    animation-duration: var(--motion-fade) !important;
+  }
+}

@@ -6,8 +6,8 @@ The labels that these files name in English, as the interface shows them in Simp
 
 | en | zh-CN |
 |---|---|
+| Sync | 云同步 |
 | Cloud Sync | 云同步 |
-| Vault | 保险库 |
 | Sync is off | 未开启云同步 |
 | Stored on this device only | 数据仅保存在本机 |
 | Synced | 已同步 |
@@ -97,7 +97,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Always ask | 始终询问 |
 | Generate New Recovery Code | 生成新的恢复码 |
 | Change Master Password | 更改主密码 |
-| Disconnect… | 断开云同步… |
+| Disconnect | 断开云同步 |
 | Disconnect Cloud Sync? | 断开云同步？ |
 | Disconnect | 断开 |
 

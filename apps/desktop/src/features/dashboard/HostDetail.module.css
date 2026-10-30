@@ -3,7 +3,7 @@
 .head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
   min-width: 0;
 }
 
@@ -12,7 +12,7 @@
 }
 
 .title {
-  font-size: var(--text-wizard);
+  font-size: var(--text-title);
   font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;
@@ -30,29 +30,16 @@
   text-overflow: ellipsis;
 }
 
+/* A StatusLine under the header; a long failure wraps anywhere. */
 .status {
   margin-top: -8px;
-  font-size: var(--text-sm);
   overflow-wrap: anywhere;
-}
-
-.normal,
-.dim {
-  color: var(--fg2);
-}
-
-.warn {
-  color: var(--orange);
-}
-
-.error {
-  color: var(--red);
 }
 
 .body {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-16);
 }
 
 /* Readings from before the host stopped answering. */
@@ -63,13 +50,13 @@
 .section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .row {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--space-8);
   min-width: 0;
 }
 
@@ -93,7 +80,7 @@
 .value {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4);
   min-width: 40px;
   justify-content: flex-end;
   font-weight: 600;
@@ -102,7 +89,7 @@
 }
 
 .value i {
-  font-size: 13px;
+  font-size: var(--icon-14);
 }
 
 .detail {
@@ -113,7 +100,7 @@
 .usage {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--space-6);
 }
 
 .usageLabel {
@@ -139,16 +126,16 @@
 .meter {
   --meter: var(--accent);
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--meter) 16%, transparent);
   overflow: hidden;
   transition: background-color var(--motion-slow) var(--ease-out);
 }
 
-/* Each new reading glides to its value (DashboardPage.module.css). */
+/* Each new reading glides to its value (views.module.css). */
 .meterFill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radius-full);
   background: var(--meter);
   transition:
     width var(--motion-slow) var(--ease-out),
@@ -166,7 +153,7 @@
 .legend {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4);
   font-size: var(--text-sm);
   white-space: nowrap;
 }
@@ -174,7 +161,7 @@
 .key {
   width: 10px;
   height: 2px;
-  border-radius: 1px;
+  border-radius: var(--radius-hair);
   background: var(--spark-line);
 }
 

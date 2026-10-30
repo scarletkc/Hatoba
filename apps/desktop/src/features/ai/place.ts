@@ -1,10 +1,11 @@
 import type { TabSource } from "@/app/tabs";
-import { formatTarget, sameTarget, savedHostFor } from "@/features/hosts/quickConnect";
 import type { MessageKey, Params } from "@/i18n";
 import { isTelnetHost, type AiConversationView, type AnyHostView, type HostView, type QuickTarget } from "@/ipc/types";
+import { formatTarget, sameTarget, savedHostFor } from "@/session/quickConnect";
 
 type Tr = (key: MessageKey, params?: Params) => string;
-type Recorded = Pick<AiConversationView, "host_id" | "quick_target"> & Partial<Pick<AiConversationView, "origin" | "local">>;
+type Recorded = Pick<AiConversationView, "host_id" | "quick_target"> &
+  Partial<Pick<AiConversationView, "origin" | "local">>;
 
 /** What follows a computer's name where a host's display name would be, as Rust's `local_name` writes it (§7.5). */
 const LOCAL_SUFFIX = " (local terminal)";
@@ -80,7 +81,9 @@ export function connectionFor(
   if (place.kind === "host")
     return {
       name: place.host.name,
-      source: isTelnetHost(place.host) ? { hostId: null, target: null, telnet: { hostId: place.host.id } } : { hostId: place.host.id, target: null },
+      source: isTelnetHost(place.host)
+        ? { hostId: null, target: null, telnet: { hostId: place.host.id } }
+        : { hostId: place.host.id, target: null },
     };
   if (place.kind === "local") return place.device === device ? { name: localName(device), source: "local" } : null;
   if (place.kind !== "target") return null;
@@ -88,7 +91,9 @@ export function connectionFor(
     hosts.filter((h): h is HostView => !isTelnetHost(h)),
     place.target,
   );
-  return saved ? { name: saved.name, source: { hostId: saved.id, target: null } } : { name: formatTarget(place.target), source: { hostId: null, target: place.target } };
+  return saved
+    ? { name: saved.name, source: { hostId: saved.id, target: null } }
+    : { name: formatTarget(place.target), source: { hostId: null, target: place.target } };
 }
 
 /**
@@ -99,7 +104,9 @@ export function moves(c: Recorded, tab: TabSource, device = ""): boolean {
   if (tab.local) return c.host_id !== null || c.quick_target !== null || c.local !== device;
   // TELNET-04: a saved Telnet host is a host; a Telnet quick connection is no place, so the conversation stays.
   if (tab.telnet) return tab.telnet.hostId !== null && c.host_id !== tab.telnet.hostId;
-  return tab.hostId !== null ? c.host_id !== tab.hostId : c.host_id !== null || !c.quick_target || !sameTarget(c.quick_target, tab.target);
+  return tab.hostId !== null
+    ? c.host_id !== tab.hostId
+    : c.host_id !== null || !c.quick_target || !sameTarget(c.quick_target, tab.target);
 }
 
 /**
@@ -107,7 +114,7 @@ export function moves(c: Recorded, tab: TabSource, device = ""): boolean {
  * name it: `from`, the conversation's host (empty when it was deleted since) or target, or with neither, a fork's
  * `origin` (AI-43), and `to`, the tab's.
  * Null when Rust writes none: the message does not move the conversation, it was nowhere (a home tab chat), the
- * move is between a target and the saved host with its address, port, and user (as after Save as Host…), the
+ * move is between a target and the saved host with its address, port, and user (as after Save as Host), the
  * tab's saved host was deleted, or both have one name.
  */
 export function movedFrom(
@@ -121,9 +128,17 @@ export function movedFrom(
   const nextId = tab.hostId ?? tab.telnet?.hostId ?? null;
   const next = hosts.find((h) => h.id === nextId);
   let from: string | null;
-  if (c.host_id) from = tab.target && old && !isTelnetHost(old) && sameTarget(old, tab.target) ? null : (old?.name ?? "");
-  else if (c.quick_target) from = next && !isTelnetHost(next) && sameTarget(next, c.quick_target) ? null : formatTarget(c.quick_target);
+  if (c.host_id)
+    from = tab.target && old && !isTelnetHost(old) && sameTarget(old, tab.target) ? null : (old?.name ?? "");
+  else if (c.quick_target)
+    from = next && !isTelnetHost(next) && sameTarget(next, c.quick_target) ? null : formatTarget(c.quick_target);
   else from = c.local ? localName(c.local) : (c.origin ?? null);
-  const to = tab.local ? localName(device) : nextId !== null ? next?.name : tab.target ? formatTarget(recordedTarget(tab.target)) : undefined;
+  const to = tab.local
+    ? localName(device)
+    : nextId !== null
+      ? next?.name
+      : tab.target
+        ? formatTarget(recordedTarget(tab.target))
+        : undefined;
   return from !== null && to !== undefined && from !== to ? { from, to } : null;
 }

@@ -1,4 +1,4 @@
-import type { HatobaApi } from "../api";
+import { appError, type HatobaApi } from "../api";
 import { builtinSkill } from "./builtinSkill";
 import type {
   AiHostEntry,
@@ -112,9 +112,14 @@ const demoSkills = (): { detail: SkillDetail; files: SkillFileView[] }[] => {
       [
         {
           path: "references/config-checks.md",
-          content: "# Config checks\n\n- `server_name` matches the host the client asked for.\n- `proxy_pass` ends with a slash only when the location does.\n- `upstream` servers listen on the port the config names.\n",
+          content:
+            "# Config checks\n\n- `server_name` matches the host the client asked for.\n- `proxy_pass` ends with a slash only when the location does.\n- `upstream` servers listen on the port the config names.\n",
         },
-        { path: "references/log-locations.md", content: "# Log locations\n\n- /var/log/nginx/error.log\n- /var/log/nginx/access.log\n- journalctl -u nginx\n" },
+        {
+          path: "references/log-locations.md",
+          content:
+            "# Log locations\n\n- /var/log/nginx/error.log\n- /var/log/nginx/access.log\n- journalctl -u nginx\n",
+        },
       ],
       true,
       ["allowed-tools", "license"],
@@ -125,12 +130,27 @@ const demoSkills = (): { detail: SkillDetail; files: SkillFileView[] }[] => {
       "postgres-backup",
       "Back up and restore PostgreSQL databases with pg_dump and pg_restore, and check that a backup file is usable.",
       "# PostgreSQL backups\n\nTake a custom-format dump with `pg_dump -Fc`. Restore into an empty database with `pg_restore --clean --if-exists`.\n\nAlways run `pg_restore --list` on a dump before relying on it.\n",
-      [{ path: "references/restore.md", content: "# Restore\n\n1. Create the target database.\n2. Run pg_restore with --no-owner when the roles differ.\n" }],
+      [
+        {
+          path: "references/restore.md",
+          content:
+            "# Restore\n\n1. Create the target database.\n2. Run pg_restore with --no-owner when the roles differ.\n",
+        },
+      ],
       true,
       [],
       26 * 3_600_000,
     ),
-    make("sk-notes", "release-notes", "Write release notes from a list of merged pull requests, grouped by change type.", "# Release notes\n\nGroup changes under Added, Changed, and Fixed. Keep each entry to one line.\n", [], false, [], 9 * 86_400_000),
+    make(
+      "sk-notes",
+      "release-notes",
+      "Write release notes from a list of merged pull requests, grouped by change type.",
+      "# Release notes\n\nGroup changes under Added, Changed, and Fixed. Keep each entry to one line.\n",
+      [],
+      false,
+      [],
+      9 * 86_400_000,
+    ),
   ];
 };
 
@@ -149,23 +169,44 @@ const importPackage = (path: string, reservedName: boolean) => {
   return zip
     ? {
         name: "nginx-ops",
-        description: "Diagnose and reload nginx on Linux hosts, with the checks a new config needs before it goes live.",
+        description:
+          "Diagnose and reload nginx on Linux hosts, with the checks a new config needs before it goes live.",
         body: NGINX_BODY,
         files: [
-          { path: "references/config-checks.md", content: "# Config checks\n\n- Run `nginx -T` to print the config nginx actually loaded.\n- Check certificate paths and permissions.\n" },
-          { path: "references/log-locations.md", content: "# Log locations\n\n- /var/log/nginx/error.log\n- /var/log/nginx/access.log\n" },
-          { path: "assets/example.conf", content: "server {\n  listen 80;\n  server_name example.com;\n  location / { proxy_pass http://127.0.0.1:3000/; }\n}\n" },
+          {
+            path: "references/config-checks.md",
+            content:
+              "# Config checks\n\n- Run `nginx -T` to print the config nginx actually loaded.\n- Check certificate paths and permissions.\n",
+          },
+          {
+            path: "references/log-locations.md",
+            content: "# Log locations\n\n- /var/log/nginx/error.log\n- /var/log/nginx/access.log\n",
+          },
+          {
+            path: "assets/example.conf",
+            content:
+              "server {\n  listen 80;\n  server_name example.com;\n  location / { proxy_pass http://127.0.0.1:3000/; }\n}\n",
+          },
         ],
         frontmatter_keys: ["allowed-tools", "license", "metadata"],
         skipped: [],
       }
     : {
         name: "docker-compose",
-        description: "Operate Docker Compose projects: bring services up and down, read their logs, and find out why a container keeps restarting.",
+        description:
+          "Operate Docker Compose projects: bring services up and down, read their logs, and find out why a container keeps restarting.",
         body: "# Docker Compose\n\nRun `docker compose ps` first to see what is running.\n\nTo find a restart loop, read `docker compose logs --tail 100 <service>` and check the exit code with `docker compose ps -a`.\n\nNever run `docker compose down -v` without asking: it deletes the volumes.\n",
         files: [
-          { path: "references/restart-loops.md", content: "# Restart loops\n\n- Exit code 137: the container was killed, often out of memory.\n- Exit code 1 right after start: read the first lines of its log.\n" },
-          { path: "scripts/status.sh", content: "#!/bin/sh\n# Hatoba never runs this file. It is text the assistant can read.\ndocker compose ps --format json\n" },
+          {
+            path: "references/restart-loops.md",
+            content:
+              "# Restart loops\n\n- Exit code 137: the container was killed, often out of memory.\n- Exit code 1 right after start: read the first lines of its log.\n",
+          },
+          {
+            path: "scripts/status.sh",
+            content:
+              "#!/bin/sh\n# Hatoba never runs this file. It is text the assistant can read.\ndocker compose ps --format json\n",
+          },
         ],
         frontmatter_keys: ["allowed-tools"],
         skipped: ["images/diagram.png", "assets/screenshot.jpg"],
@@ -183,36 +224,65 @@ interface ToolDef {
 const GITHUB_TOOLS: ToolDef[] = [
   {
     tool: "list_issues",
-    description: "List the issues of a GitHub repository. Returns the number, title, state, labels and author of each issue. `state` is open or closed.",
+    description:
+      "List the issues of a GitHub repository. Returns the number, title, state, labels and author of each issue. `state` is open or closed.",
     annotations: { title: "List issues", read_only_hint: true, open_world_hint: true },
   },
   {
     tool: "create_issue",
-    description: "Create an issue in a GitHub repository. Use it only when the user asked for an issue to be filed, and show the user the title and body first.",
-    annotations: { title: "Create issue", read_only_hint: false, destructive_hint: false, idempotent_hint: false, open_world_hint: true },
+    description:
+      "Create an issue in a GitHub repository. Use it only when the user asked for an issue to be filed, and show the user the title and body first.",
+    annotations: {
+      title: "Create issue",
+      read_only_hint: false,
+      destructive_hint: false,
+      idempotent_hint: false,
+      open_world_hint: true,
+    },
   },
   {
     tool: "search_code",
-    description: "Search the code of public and private repositories the token can read. Supports qualifiers such as `repo:`, `path:` and `language:`.",
+    description:
+      "Search the code of public and private repositories the token can read. Supports qualifiers such as `repo:`, `path:` and `language:`.",
     annotations: { read_only_hint: true, idempotent_hint: true, open_world_hint: true },
   },
 ];
 
 const FILESYSTEM_TOOLS: ToolDef[] = [
-  { tool: "read_file", description: "Read the complete contents of a file as text.", annotations: { read_only_hint: true, idempotent_hint: true } },
-  { tool: "list_directory", description: "List the files and folders in a directory.", annotations: { read_only_hint: true, idempotent_hint: true } },
+  {
+    tool: "read_file",
+    description: "Read the complete contents of a file as text.",
+    annotations: { read_only_hint: true, idempotent_hint: true },
+  },
+  {
+    tool: "list_directory",
+    description: "List the files and folders in a directory.",
+    annotations: { read_only_hint: true, idempotent_hint: true },
+  },
   {
     tool: "write_file",
     description:
       "Create a file or completely overwrite an existing one.\n\nIMPORTANT: this replaces the file without keeping a copy. Read the file first when it may already exist, and tell the user which path you will write before you call this tool.\n\nOnly paths inside the allowed directories can be written.",
     annotations: { read_only_hint: false, destructive_hint: true, idempotent_hint: true },
   },
-  { tool: "delete_file", description: "Delete a file. This cannot be undone.", annotations: { read_only_hint: false, destructive_hint: true } },
+  {
+    tool: "delete_file",
+    description: "Delete a file. This cannot be undone.",
+    annotations: { read_only_hint: false, destructive_hint: true },
+  },
 ];
 
 const POSTGRES_TOOLS: ToolDef[] = [
-  { tool: "list_tables", description: "List the tables of the connected database.", annotations: { read_only_hint: true } },
-  { tool: "query", description: "Run a read-only SQL query and return up to 100 rows.", annotations: { read_only_hint: true, open_world_hint: false } },
+  {
+    tool: "list_tables",
+    description: "List the tables of the connected database.",
+    annotations: { read_only_hint: true },
+  },
+  {
+    tool: "query",
+    description: "Run a read-only SQL query and return up to 100 rows.",
+    annotations: { read_only_hint: true, open_world_hint: false },
+  },
 ];
 
 const GENERIC_TOOLS: ToolDef[] = [
@@ -251,18 +321,43 @@ const GITHUB_PROMPTS: PromptDef[] = [
     name: "triage_issues",
     description: "Sort the open issues by how urgent they are.",
     arguments: [],
-    text: () => "List the open issues of the current repository and sort them by urgency, with one line on why for each.",
+    text: () =>
+      "List the open issues of the current repository and sort them by urgency, with one line on why for each.",
   },
 ];
 
 const GITHUB_RESOURCES: McpResourceView[] = [
-  { uri: "repo://scarletkc/hatoba/README.md", name: "README.md", title: null, description: "The repository's README", mime_type: "text/markdown" },
-  { uri: "repo://scarletkc/hatoba/CONTRIBUTING.md", name: "CONTRIBUTING.md", title: null, description: "How to contribute", mime_type: "text/markdown" },
+  {
+    uri: "repo://scarletkc/hatoba/README.md",
+    name: "README.md",
+    title: null,
+    description: "The repository's README",
+    mime_type: "text/markdown",
+  },
+  {
+    uri: "repo://scarletkc/hatoba/CONTRIBUTING.md",
+    name: "CONTRIBUTING.md",
+    title: null,
+    description: "How to contribute",
+    mime_type: "text/markdown",
+  },
 ];
 
 const FILESYSTEM_RESOURCES: McpResourceView[] = [
-  { uri: "file:///C:/Users/kc/Documents/runbook.md", name: "runbook.md", title: "Runbook", description: "On-call runbook", mime_type: "text/markdown" },
-  { uri: "file:///C:/Users/kc/Documents/logo.png", name: "logo.png", title: null, description: "", mime_type: "image/png" },
+  {
+    uri: "file:///C:/Users/kc/Documents/runbook.md",
+    name: "runbook.md",
+    title: "Runbook",
+    description: "On-call runbook",
+    mime_type: "text/markdown",
+  },
+  {
+    uri: "file:///C:/Users/kc/Documents/logo.png",
+    name: "logo.png",
+    title: null,
+    description: "",
+    mime_type: "image/png",
+  },
 ];
 
 const promptsFor = (name: string): PromptDef[] => (name.toLowerCase().includes("github") ? GITHUB_PROMPTS : []);
@@ -279,7 +374,8 @@ const resourceText = (uri: string): string | null => {
   if (uri.endsWith(".png")) return null;
   if (uri.endsWith("runbook.md"))
     return "# Runbook\n\n1. Check `systemctl status nginx` and the error log.\n2. Roll back the last deploy if the error started with it.\n3. Page the database owner for anything under /var/lib/postgresql.\n";
-  if (uri.endsWith("CONTRIBUTING.md")) return "# Contributing to Hatoba\n\nOpen or find an issue before writing code.\n";
+  if (uri.endsWith("CONTRIBUTING.md"))
+    return "# Contributing to Hatoba\n\nOpen or find an issue before writing code.\n";
   return "# Hatoba\n\nOpen-source desktop SSH client with an AI assistant and end-to-end encrypted sync.\n";
 };
 
@@ -292,7 +388,8 @@ const HOST_TREE: { [name: string]: HostNode } = {
       ".bashrc": "export EDITOR=vim\n",
       ".ssh": { authorized_keys: "ssh-ed25519 AAAA… deploy@laptop\n" },
       app: {
-        "docker-compose.yml": 'services:\n  api:\n    image: registry.example.com/api:1.8.2\n    ports:\n      - "127.0.0.1:8080:8080"\n',
+        "docker-compose.yml":
+          'services:\n  api:\n    image: registry.example.com/api:1.8.2\n    ports:\n      - "127.0.0.1:8080:8080"\n',
         ".env.example": "DATABASE_URL=postgres://app@db/app\n",
         "README.md": "# api\n\nRun `docker compose up -d`.\n",
       },
@@ -302,15 +399,24 @@ const HOST_TREE: { [name: string]: HostNode } = {
   etc: {
     hosts: "127.0.0.1 localhost\n10.0.0.12 db\n",
     nginx: {
-      "nginx.conf": "user www-data;\nworker_processes auto;\n\nhttp {\n    include /etc/nginx/conf.d/*.conf;\n    include /etc/nginx/sites-enabled/*;\n}\n",
+      "nginx.conf":
+        "user www-data;\nworker_processes auto;\n\nhttp {\n    include /etc/nginx/conf.d/*.conf;\n    include /etc/nginx/sites-enabled/*;\n}\n",
       "sites-enabled": {
-        "api.conf": "server {\n    listen 443 ssl;\n    server_name api.example.com;\n\n    location / {\n        proxy_pass http://127.0.0.1:8080;\n    }\n}\n",
+        "api.conf":
+          "server {\n    listen 443 ssl;\n    server_name api.example.com;\n\n    location / {\n        proxy_pass http://127.0.0.1:8080;\n    }\n}\n",
       },
       "conf.d": {},
     },
     shadow: "",
   },
-  var: { log: { nginx: { "error.log": "2026/10/12 09:14:03 [error] 812#812: *41 connect() failed (111: Connection refused) while connecting to upstream\n" } } },
+  var: {
+    log: {
+      nginx: {
+        "error.log":
+          "2026/10/12 09:14:03 [error] 812#812: *41 connect() failed (111: Connection refused) while connecting to upstream\n",
+      },
+    },
+  },
 };
 
 /** The demo host's node at an absolute path, or undefined. */
@@ -401,22 +507,31 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
   const id = (p: string) => `${p}-${(++seq).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   function fail(code: AppError["code"], detail: string, field?: string): never {
-    const err: AppError = { code, detail, ...(field ? { field } : {}) };
-    throw err;
+    throw appError(code, detail, field ? { field } : {});
   }
 
   // ── skills ──
-  const skills = new Map<string, SkillDetail>(skillFlags.has("demo") ? demoSkills().map((s) => [s.detail.skill.id, s.detail]) : []);
+  const skills = new Map<string, SkillDetail>(
+    skillFlags.has("demo") ? demoSkills().map((s) => [s.detail.skill.id, s.detail]) : [],
+  );
   if (skillFlags.has("reserved"))
     skills.set("sk-legacy", {
-      skill: { id: "sk-legacy", name: RESERVED, description: "Notes on Hatoba, saved before the name was reserved.", enabled: true, files: [], updated_at: Date.now() - 86_400_000 },
+      skill: {
+        id: "sk-legacy",
+        name: RESERVED,
+        description: "Notes on Hatoba, saved before the name was reserved.",
+        enabled: true,
+        files: [],
+        updated_at: Date.now() - 86_400_000,
+      },
       body: "# Hatoba notes\n",
       files: [],
       frontmatter_keys: [],
     });
   const skillView = (d: SkillDetail): SkillView => ({ ...d.skill, files: d.files.map((f) => f.path) });
 
-  const nameTaken = (name: string, except: string | null) => [...skills.values()].some((d) => d.skill.name === name && d.skill.id !== except);
+  const nameTaken = (name: string, except: string | null) =>
+    [...skills.values()].some((d) => d.skill.name === name && d.skill.id !== except);
 
   /** The rules of AI-27, as the backend checks a saved skill. */
   const skillIssues = (name: string, description: string, body: string, files: SkillFileView[]): SkillIssue[] => {
@@ -428,7 +543,13 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
     if (bytes(body) > FILE_LIMIT) issues.push({ kind: "file_too_large", path: "SKILL.md", size: bytes(body) });
     const seen = new Set<string>();
     for (const f of files) {
-      if (!f.path || f.path.startsWith("/") || f.path.split(/[\\/]/).includes("..") || f.path === "SKILL.md" || seen.has(f.path)) {
+      if (
+        !f.path ||
+        f.path.startsWith("/") ||
+        f.path.split(/[\\/]/).includes("..") ||
+        f.path === "SKILL.md" ||
+        seen.has(f.path)
+      ) {
         issues.push({ kind: "unsafe_path", path: f.path });
       }
       seen.add(f.path);
@@ -454,7 +575,17 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
   const previewFor = (path: string): SkillImportPreview => {
     const lower = path.toLowerCase();
     if (lower.includes("empty")) {
-      return { name: null, description: null, body: null, files: [], frontmatter_keys: [], skipped: [], issues: [{ kind: "missing_skill_md" }], existing_id: null, reserved_name: false };
+      return {
+        name: null,
+        description: null,
+        body: null,
+        files: [],
+        frontmatter_keys: [],
+        skipped: [],
+        issues: [{ kind: "missing_skill_md" }],
+        existing_id: null,
+        reserved_name: false,
+      };
     }
     if (lower.includes("broken") || (skillFlags.has("badimport") && !lower.endsWith(".zip"))) {
       return {
@@ -516,7 +647,13 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
   });
   const publish = (e: Entry) => emit("ai://mcp-status", statusOf(e));
   const settle = (e: Entry) => {
-    if (commandLine(e.view.transport.kind === "stdio" ? { kind: "stdio", command: e.view.transport.command, args: e.view.transport.args } : { kind: "http", url: e.view.transport.url }).includes("fail")) {
+    if (
+      commandLine(
+        e.view.transport.kind === "stdio"
+          ? { kind: "stdio", command: e.view.transport.command, args: e.view.transport.args }
+          : { kind: "http", url: e.view.transport.url },
+      ).includes("fail")
+    ) {
       e.state = "failed";
       e.error =
         e.view.transport.kind === "stdio"
@@ -565,7 +702,12 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
         ...base,
         id: "mcp-filesystem",
         name: "filesystem",
-        transport: { kind: "stdio", command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Users\\kc\\Documents"], env_keys: [] },
+        transport: {
+          kind: "stdio",
+          command: "npx",
+          args: ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Users\\kc\\Documents"],
+          env_keys: [],
+        },
         always_ask: true,
         updated_at: Date.now() - 2 * day,
       },
@@ -575,7 +717,12 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
       ...base,
       id: "mcp-postgres",
       name: "postgres",
-      transport: { kind: "stdio", command: "uvx", args: ["postgres-mcp", "--access-mode=restricted"], env_keys: ["DATABASE_URI"] },
+      transport: {
+        kind: "stdio",
+        command: "uvx",
+        args: ["postgres-mcp", "--access-mode=restricted"],
+        env_keys: ["DATABASE_URI"],
+      },
       updated_at: Date.now() - day,
     });
     postgres.state = "starting";
@@ -589,7 +736,12 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
         ...base,
         id: "mcp-broken",
         name: "report-builder",
-        transport: { kind: "stdio", command: "node", args: ["C:\\tools\\fail-server.js", "--stdio"], env_keys: ["REPORT_DIR", "LOG_LEVEL"] },
+        transport: {
+          kind: "stdio",
+          command: "node",
+          args: ["C:\\tools\\fail-server.js", "--stdio"],
+          env_keys: ["REPORT_DIR", "LOG_LEVEL"],
+        },
         updated_at: Date.now() - 4 * day,
       },
       "failed",
@@ -610,7 +762,8 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
   const transportView = (input: McpServerInput["transport"], old: McpServerView | undefined): McpTransportView => {
     const secretKeys = (rows: { key: string; value: string | null }[], saved: string[]) => {
       for (const r of rows) {
-        if (r.value === null && !saved.includes(r.key)) fail("invalid_input", `there is no saved value for ${r.key}`, input.kind === "stdio" ? "env" : "headers");
+        if (r.value === null && !saved.includes(r.key))
+          fail("invalid_input", `there is no saved value for ${r.key}`, input.kind === "stdio" ? "env" : "headers");
       }
       return rows.map((r) => r.key);
     };
@@ -626,7 +779,8 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
         return fail("invalid_input", "the URL is not valid", "url");
       }
     })();
-    if (url.protocol !== "https:" && url.protocol !== "http:") fail("invalid_input", "the URL must start with https:// or http://", "url");
+    if (url.protocol !== "https:" && url.protocol !== "http:")
+      fail("invalid_input", "the URL must start with https:// or http://", "url");
     if (url.username || url.password) fail("invalid_input", "the URL must not contain a user name or password", "url");
     const saved = old?.transport.kind === "http" ? old.transport.header_keys : [];
     return { kind: "http", url: input.url, header_keys: secretKeys(input.headers, saved) };
@@ -644,15 +798,24 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
     } catch (e) {
       const at = /position (\d+)/.exec(e instanceof Error ? e.message : "");
       const before = at ? json.slice(0, Number(at[1])).split("\n") : [];
-      return fail("invalid_input", at ? `the text is not valid JSON (line ${before.length}, column ${before[before.length - 1].length + 1})` : "the text is not valid JSON");
+      return fail(
+        "invalid_input",
+        at
+          ? `the text is not valid JSON (line ${before.length}, column ${before[before.length - 1].length + 1})`
+          : "the text is not valid JSON",
+      );
     }
-    const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+    const isObject = (v: unknown): v is Record<string, unknown> =>
+      typeof v === "object" && v !== null && !Array.isArray(v);
     if (!isObject(top)) return fail("invalid_input", "the text must be a JSON object");
     const looksLikeServer = (v: unknown) => isObject(v) && ("command" in v || "url" in v || "type" in v);
     let list: unknown = top.mcpServers ?? top.servers;
     if (list === undefined && Object.keys(top).length > 0 && Object.values(top).every(looksLikeServer)) list = top;
     if (!isObject(list)) {
-      return fail("invalid_input", 'no MCP servers found: expected an "mcpServers" object (Claude Desktop, Claude Code, Cursor) or a "servers" object (VS Code)');
+      return fail(
+        "invalid_input",
+        'no MCP servers found: expected an "mcpServers" object (Claude Desktop, Claude Code, Cursor) or a "servers" object (VS Code)',
+      );
     }
     const servers: Parsed[] = [];
     const skipped: { name: string; reason: string }[] = [];
@@ -660,7 +823,11 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
       const name = rawName.trim();
       if (!name) skipped.push({ name: rawName, reason: "the server has no name" });
       else if (!isObject(v)) skipped.push({ name, reason: "the entry is not an object" });
-      else if (v.type === "sse") skipped.push({ name, reason: 'the "sse" transport is not supported; only stdio and Streamable HTTP servers can be imported' });
+      else if (v.type === "sse")
+        skipped.push({
+          name,
+          reason: 'the "sse" transport is not supported; only stdio and Streamable HTTP servers can be imported',
+        });
       else if (typeof v.command === "string" && v.command.trim()) {
         servers.push({
           name,
@@ -674,7 +841,11 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
       } else if (typeof (v.url ?? v.httpUrl ?? v.serverUrl) === "string") {
         servers.push({
           name,
-          transport: { kind: "http", url: String(v.url ?? v.httpUrl ?? v.serverUrl), header_keys: isObject(v.headers) ? Object.keys(v.headers) : [] },
+          transport: {
+            kind: "http",
+            url: String(v.url ?? v.httpUrl ?? v.serverUrl),
+            header_keys: isObject(v.headers) ? Object.keys(v.headers) : [],
+          },
         });
       } else skipped.push({ name, reason: "the server has neither a command nor a URL" });
     }
@@ -686,7 +857,13 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
     for (const e of entries) {
       if (e.state !== "running") continue;
       const def = e.tools.find((d) => toolName(e.view.name, d.tool) === name);
-      if (def) return { server_id: e.view.id, server_name: e.view.name, always_ask: e.view.always_ask, tool: toolView(e, def) };
+      if (def)
+        return {
+          server_id: e.view.id,
+          server_name: e.view.name,
+          always_ask: e.view.always_ask,
+          tool: toolView(e, def),
+        };
     }
     return null;
   };
@@ -715,7 +892,14 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
       if (input.id && !old) fail("not_found", "no such skill");
       const skillId = old?.skill.id ?? id("sk");
       const detail: SkillDetail = {
-        skill: { id: skillId, name: input.name, description: input.description, enabled: input.enabled, files: input.files.map((f) => f.path), updated_at: Date.now() },
+        skill: {
+          id: skillId,
+          name: input.name,
+          description: input.description,
+          enabled: input.enabled,
+          files: input.files.map((f) => f.path),
+          updated_at: Date.now(),
+        },
         body: input.body,
         files: structuredClone(input.files),
         frontmatter_keys: old?.frontmatter_keys ?? [],
@@ -737,15 +921,24 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
     skill_import: async (path, replaceId, rename) => {
       await wait(300);
       const p = previewFor(path);
-      if (p.issues.length || p.name === null || p.description === null || p.body === null) fail("invalid_input", "the import has issues", "path");
+      if (p.issues.length || p.name === null || p.description === null || p.body === null)
+        fail("invalid_input", "the import has issues", "path");
       const name = rename ?? p.name;
       if (!NAME_RULE.test(name)) fail("invalid_input", "the new name is not valid", "rename");
-      if (name === RESERVED) fail("invalid_input", "The name hatoba is reserved for the built-in skill.", rename ? "rename" : "name");
+      if (name === RESERVED)
+        fail("invalid_input", "The name hatoba is reserved for the built-in skill.", rename ? "rename" : "name");
       if (replaceId && !skills.has(replaceId)) fail("not_found", "no such skill");
       if (nameTaken(name, replaceId)) fail("invalid_input", "another skill has this name", "name");
       const skillId = replaceId ?? id("sk");
       const detail: SkillDetail = {
-        skill: { id: skillId, name, description: p.description, enabled: skills.get(skillId)?.skill.enabled ?? true, files: p.files.map((f) => f.path), updated_at: Date.now() },
+        skill: {
+          id: skillId,
+          name,
+          description: p.description,
+          enabled: skills.get(skillId)?.skill.enabled ?? true,
+          files: p.files.map((f) => f.path),
+          updated_at: Date.now(),
+        },
         body: p.body,
         files: structuredClone(p.files),
         frontmatter_keys: p.frontmatter_keys,
@@ -774,9 +967,15 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
     mcp_prompt_get: async (sid, name, args) => {
       await wait(300);
       const e = runningEntry(sid);
-      const prompt = promptsFor(e.view.name).find((p) => p.name === name) ?? fail("ai", `the MCP server "${e.view.name}" could not get the prompt: Unknown prompt (code -32602)`);
+      const prompt =
+        promptsFor(e.view.name).find((p) => p.name === name) ??
+        fail("ai", `the MCP server "${e.view.name}" could not get the prompt: Unknown prompt (code -32602)`);
       const missing = prompt.arguments.find((a) => a.required && !args.some((x) => x.name === a.name && x.value));
-      if (missing) fail("ai", `the MCP server "${e.view.name}" could not get the prompt: missing required argument ${missing.name} (code -32602)`);
+      if (missing)
+        fail(
+          "ai",
+          `the MCP server "${e.view.name}" could not get the prompt: missing required argument ${missing.name} (code -32602)`,
+        );
       return prompt.text(Object.fromEntries(args.map((a) => [a.name, a.value])));
     },
     mcp_resource_read: async (sid, uri) => {
@@ -784,7 +983,10 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
       const e = runningEntry(sid);
       const text = resourceText(uri);
       if (text === null)
-        fail("ai", `the MCP server "${e.view.name}" could not read the resource: unexpected answer from the server: the resource has no text content, only binary content, which Hatoba does not attach`);
+        fail(
+          "ai",
+          `the MCP server "${e.view.name}" could not read the resource: unexpected answer from the server: the resource has no text content, only binary content, which Hatoba does not attach`,
+        );
       return text;
     },
     ai_skill_commands: async () => {
@@ -832,8 +1034,15 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
       const transport = transportView(input.transport, old?.view);
       if (old) {
         const rows = input.transport.kind === "stdio" ? input.transport.env : input.transport.headers;
-        const changed = JSON.stringify(old.view.transport) !== JSON.stringify(transport) || rows.some((r) => r.value !== null);
-        old.view = { ...old.view, name: input.name.trim(), transport, always_ask: input.always_ask, updated_at: Date.now() };
+        const changed =
+          JSON.stringify(old.view.transport) !== JSON.stringify(transport) || rows.some((r) => r.value !== null);
+        old.view = {
+          ...old.view,
+          name: input.name.trim(),
+          transport,
+          always_ask: input.always_ask,
+          updated_at: Date.now(),
+        };
         // A running server whose configuration changed is stopped; it starts again when a conversation needs it.
         if (changed && old.state !== "stopped") {
           stop(old);
@@ -906,7 +1115,8 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
       let name = "";
       try {
         const parsed: unknown = JSON.parse(args);
-        if (parsed && typeof parsed === "object" && typeof (parsed as { tool?: unknown }).tool === "string") name = (parsed as { tool: string }).tool;
+        if (parsed && typeof parsed === "object" && typeof (parsed as { tool?: unknown }).tool === "string")
+          name = (parsed as { tool: string }).tool;
       } catch {
         // Not JSON: names no tool.
       }
@@ -917,7 +1127,10 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
       await wait(150);
       const { servers, skipped } = parseImport(json);
       return {
-        servers: servers.map((s) => ({ ...s, exists: entries.some((e) => e.view.name.toLowerCase() === s.name.toLowerCase()) })),
+        servers: servers.map((s) => ({
+          ...s,
+          exists: entries.some((e) => e.view.name.toLowerCase() === s.name.toLowerCase()),
+        })),
         skipped,
       };
     },
@@ -945,8 +1158,18 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
         const t = view.transport;
         mcpServers[view.name] =
           t.kind === "stdio"
-            ? { command: t.command, args: t.args, ...(t.env_keys.length ? { env: Object.fromEntries(t.env_keys.map((k) => [k, placeholder(k)])) } : {}) }
-            : { type: "http", url: t.url, ...(t.header_keys.length ? { headers: Object.fromEntries(t.header_keys.map((k) => [k, placeholder(k)])) } : {}) };
+            ? {
+                command: t.command,
+                args: t.args,
+                ...(t.env_keys.length ? { env: Object.fromEntries(t.env_keys.map((k) => [k, placeholder(k)])) } : {}),
+              }
+            : {
+                type: "http",
+                url: t.url,
+                ...(t.header_keys.length
+                  ? { headers: Object.fromEntries(t.header_keys.map((k) => [k, placeholder(k)])) }
+                  : {}),
+              };
       }
       return JSON.stringify({ mcpServers }, null, 2);
     },

@@ -1,18 +1,49 @@
 import { create } from "zustand";
+import type { DashboardSort } from "@/features/dashboard/logic";
 
-export type HostSort = "recent" | "name" | "address";
+/** The orders that need no readings (HOST-05). */
+export type ListSort = "recent" | "name" | "address";
+/** Every order of the hosts page; the resource orders apply while resource usage shows (HOST-14). */
+export type HostSort = ListSort | Exclude<DashboardSort, "list" | "name">;
+export const LIST_SORTS: ListSort[] = ["recent", "name", "address"];
+export const STATS_SORTS: Exclude<DashboardSort, "list" | "name">[] = [
+  "status",
+  "cpu",
+  "memory",
+  "disk",
+  "network",
+  "uptime",
+];
 
-/** Host list view state that survives navigating to the editor and back. */
+export const isListSort = (sort: HostSort): sort is ListSort => (LIST_SORTS as HostSort[]).includes(sort);
+
+/**
+ * Hosts page state that survives navigating to the editor and back. The view and whether resource usage shows are
+ * device-local prefs (`hosts_view`, `hosts_stats`).
+ */
 interface HostsUi {
-  selectedId: string | null;
+  /** The selected rows in the order they were picked; the arrow keys move on from the last. */
+  selection: string[];
+  /** A resource order applies while resource usage shows; otherwise the latest connection comes first. */
   sort: HostSort;
-  select(id: string | null): void;
+  favorites: boolean;
+  tags: string[];
+  select(selection: string[]): void;
   setSort(sort: HostSort): void;
+  setFavorites(favorites: boolean): void;
+  setTags(tags: string[]): void;
+  /** Shows every host again, for a search that comes from outside the page. */
+  clearFilters(): void;
 }
 
 export const useHostsUi = create<HostsUi>((set) => ({
-  selectedId: null,
+  selection: [],
   sort: "recent",
-  select: (selectedId) => set({ selectedId }),
+  favorites: false,
+  tags: [],
+  select: (selection) => set({ selection }),
   setSort: (sort) => set({ sort }),
+  setFavorites: (favorites) => set({ favorites }),
+  setTags: (tags) => set({ tags }),
+  clearFilters: () => set({ favorites: false, tags: [] }),
 }));

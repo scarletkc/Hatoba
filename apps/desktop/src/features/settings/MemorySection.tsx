@@ -1,10 +1,26 @@
 import { useEffect, useId, useRef, useState } from "react";
+import {
+  Button,
+  ErrorText,
+  FooterSpacer,
+  FormRow,
+  Group,
+  Icon,
+  IconButton,
+  PopupSelect,
+  Sheet,
+  SheetHeader,
+  Switch,
+  TextArea,
+  TextField,
+  confirm,
+  layoutStyles,
+  toast,
+  type SelectOption,
+} from "@hatoba/ui";
 import { useAllHosts } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
-import { Button, Icon, IconButton, Spinner, Switch, TextArea, TextField } from "@/components/controls";
-import { FormRow, Group, layoutStyles } from "@/components/layout";
-import { FooterSpacer, PopupSelect, Sheet, SheetHeader, confirm, toast, type SelectOption } from "@/components/overlay";
 import {
   cleanMemoryContent,
   cleanMemoryName,
@@ -49,7 +65,8 @@ type Tr = ReturnType<typeof useT>;
 function scopeLabel(t: Tr, scope: MemoryScope, hosts: readonly AnyHostView[], device: string): string {
   const { host_id, local } = scopeFields(scope);
   if (host_id !== null) return hosts.find((h) => h.id === host_id)?.name ?? t("ai.history.hostGone");
-  if (local !== null) return local === device ? t("terminal.local.thisComputer") : t("ai.place.localOn", { device: local });
+  if (local !== null)
+    return local === device ? t("terminal.local.thisComputer") : t("ai.place.localOn", { device: local });
   return t("aiSettings.memory.scope.global");
 }
 
@@ -72,7 +89,11 @@ function scopeRank(scope: MemoryScope, hosts: readonly AnyHostView[], device: st
 }
 
 /** The memories by scope, in list order, each oldest first. */
-function scopeGroups(list: readonly AiMemoryView[], hosts: readonly AnyHostView[], device: string): [MemoryScope, AiMemoryView[]][] {
+function scopeGroups(
+  list: readonly AiMemoryView[],
+  hosts: readonly AnyHostView[],
+  device: string,
+): [MemoryScope, AiMemoryView[]][] {
   const groups = new Map<MemoryScope, AiMemoryView[]>();
   for (const m of list) {
     const scope = memoryScope(m);
@@ -183,10 +204,10 @@ export function MemorySection({ enabled, settled }: { enabled: MemorySwitch | nu
 
       {(!loaded || list.length === 0) && (
         <div className={cx(layoutStyles.group, a.clip)}>
-          {!loaded && !loadError && <StatusRow icon={<Spinner />}>{t("aiSettings.loading")}</StatusRow>}
+          {!loaded && !loadError && <StatusRow tone="progress">{t("aiSettings.loading")}</StatusRow>}
           {!loaded && !!loadError && (
             <StatusRow
-              icon={<Icon name="warning-circle" color="var(--red)" />}
+              tone="error"
               action={
                 <Button size="sm" onClick={() => reads.refresh()}>
                   {t("btn.retry")}
@@ -197,7 +218,11 @@ export function MemorySection({ enabled, settled }: { enabled: MemorySwitch | nu
             </StatusRow>
           )}
           {loaded && (
-            <EmptyBlock icon="brain" title={t("aiSettings.memory.empty.title")} body={t("aiSettings.memory.empty.body")}>
+            <EmptyBlock
+              icon="brain"
+              title={t("aiSettings.memory.empty.title")}
+              body={t("aiSettings.memory.empty.body")}
+            >
               <Button variant="primary" icon="plus" onClick={() => setEditing({ memory: null })}>
                 {t("aiSettings.memory.add")}
               </Button>
@@ -212,12 +237,19 @@ export function MemorySection({ enabled, settled }: { enabled: MemorySwitch | nu
               <Icon name={scopeIcon(scope)} />
               {scopeLabel(t, scope, hosts, device)}
             </span>
-            <span>{t("aiSettings.memory.size", { n: nf.format(memoriesSize(group)), max: nf.format(MEMORY_MAX_BYTES) })}</span>
+            <span>
+              {t("aiSettings.memory.size", { n: nf.format(memoriesSize(group)), max: nf.format(MEMORY_MAX_BYTES) })}
+            </span>
           </div>
           <div className={cx(layoutStyles.group, a.clip)}>
             {group.map((memory) => (
               <div key={memory.id} className={cx(s.row, off && s.off)}>
-                <button type="button" className={s.main} title={t("aiSettings.memory.edit", { name: memory.name })} onClick={() => setEditing({ memory })}>
+                <button
+                  type="button"
+                  className={s.main}
+                  title={t("aiSettings.memory.edit", { name: memory.name })}
+                  onClick={() => setEditing({ memory })}
+                >
                   <span className={s.icon} aria-hidden>
                     <Icon name="brain" />
                   </span>
@@ -229,7 +261,12 @@ export function MemorySection({ enabled, settled }: { enabled: MemorySwitch | nu
                   </span>
                 </button>
                 <div className={s.actions}>
-                  <IconButton icon="trash" label={t("aiSettings.memory.delete", { name: memory.name })} onClick={() => void remove(memory)} />
+                  <IconButton
+                    icon="trash"
+                    label={t("aiSettings.memory.delete", { name: memory.name })}
+                    danger
+                    onClick={() => void remove(memory)}
+                  />
                 </div>
               </div>
             ))}
@@ -249,7 +286,9 @@ export function MemorySection({ enabled, settled }: { enabled: MemorySwitch | nu
             setMemories((cur) => {
               // Rust deleted the others it saved in place of, which count as one with it (AI-53).
               const rest = (cur ?? []).filter((m) => m.id === saved.id || !replaced.includes(m.id));
-              return rest.some((m) => m.id === saved.id) ? rest.map((m) => (m.id === saved.id ? saved : m)) : [...rest, saved];
+              return rest.some((m) => m.id === saved.id)
+                ? rest.map((m) => (m.id === saved.id ? saved : m))
+                : [...rest, saved];
             });
             setEditing(null);
           }}
@@ -300,7 +339,11 @@ function MemoryDialog({
     ...[...hosts].sort((x, y) => x.name.localeCompare(y.name)).map((h) => `host:${h.id}` as const),
   ];
   if (memory && !scopes.includes(memoryScope(memory))) scopes.push(memoryScope(memory));
-  const options: SelectOption<MemoryScope>[] = scopes.map((value) => ({ value, label: scopeLabel(t, value, hosts, device), icon: scopeIcon(value) }));
+  const options: SelectOption<MemoryScope>[] = scopes.map((value) => ({
+    value,
+    label: scopeLabel(t, value, hosts, device),
+    icon: scopeIcon(value),
+  }));
 
   const save = async () => {
     if (saving) return;
@@ -392,7 +435,7 @@ function MemoryDialog({
               setProblem(null);
             }}
           />
-          {problem && !nameProblem && <span className={s.problem}>{message}</span>}
+          {problem && !nameProblem && <ErrorText className={s.problem}>{message}</ErrorText>}
           <span className={cx(s.counter, used > MEMORY_MAX_BYTES && s.counterOver)}>
             {t("aiSettings.memory.size", { n: nf.format(used), max: nf.format(MEMORY_MAX_BYTES) })}
           </span>

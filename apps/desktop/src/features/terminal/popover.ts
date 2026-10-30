@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState, type RefObject } from "react";
-import { useExitAnimation, useOverlaysLocked, windowSurface, type MenuAnchor } from "@/components/overlay";
+import { useExitAnimation, useOverlaysLocked, windowSurface, type MenuAnchor } from "@hatoba/ui";
 
 /**
  * Placement and dismissal of a status bar popover: below its button and kept inside the window

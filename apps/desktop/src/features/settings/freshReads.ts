@@ -19,7 +19,11 @@ export interface FreshReads {
  * it waits while a save of the pane's is in flight, one that an edit raced is dropped and made again, and
  * one that a later read overtook is dropped.
  */
-export function useFreshReads<T>(read: () => Promise<T>, show: (data: T) => void, failed: (e: unknown) => void): FreshReads {
+export function useFreshReads<T>(
+  read: () => Promise<T>,
+  show: (data: T) => void,
+  failed: (e: unknown) => void,
+): FreshReads {
   const latest = useRef({ read, show, failed });
   latest.current = { read, show, failed };
   const state = useRef({ live: true, edits: 0, saving: 0, waiting: false, reads: 0 });

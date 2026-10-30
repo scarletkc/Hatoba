@@ -100,7 +100,7 @@ struct HostEntry {
     own: Option<Own>,
     /// Why the host is not signed in to on its own, until its versions change or **Retry**.
     hold: Option<Held>,
-    /// A server found not to run Linux, for the host's configuration then.
+    /// A server found to run neither Linux nor macOS, for the host's configuration then.
     unsupported: Option<(String, String)>,
     /// The last release's number.
     released: u64,
@@ -207,9 +207,9 @@ impl Dashboard {
             }
         }
         // What is neither read, connected nor held is forgotten. The settings the page's readings
-        // came from, and a server found not to run Linux, stay until the lock: a host read again
-        // later drops readings made with other settings, and is not signed in to again to learn
-        // that it has no `/proc`.
+        // came from, and a server found to run neither Linux nor macOS, stay until the lock: a
+        // host read again later drops readings made with other settings, and is not signed in to
+        // again to learn that it cannot be read.
         inner.hosts.retain(|_, e| {
             e.reader.is_some()
                 || e.own.is_some()

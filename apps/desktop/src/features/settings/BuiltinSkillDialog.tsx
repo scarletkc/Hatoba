@@ -1,7 +1,5 @@
 import { useState } from "react";
-import { Button, LinkButton } from "@/components/controls";
-import { Group, Section } from "@/components/layout";
-import { FooterSpacer, Sheet, SheetHeader } from "@/components/overlay";
+import { Button, FooterSpacer, Group, HintText, LinkButton, Section, Sheet, SheetHeader } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import type { BuiltinSkillView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
@@ -46,15 +44,26 @@ export function BuiltinSkillDialog({ skill, onClose }: { skill: BuiltinSkillView
         </Group>
         <Section title={t("aiSettings.skills.files")}>
           <div className={s.blockBar}>
-            <span className={s.hint}>{t("aiSettings.skills.fileCount", { n: allPaths.length })}</span>
+            <HintText>{t("aiSettings.skills.fileCount", { n: allPaths.length })}</HintText>
             <LinkButton onClick={() => setOpen(new Set(allOpen ? [] : allPaths))}>
               {allOpen ? t("aiSettings.skills.imp.collapseAll") : t("aiSettings.skills.imp.expandAll")}
             </LinkButton>
           </div>
           <Group>
-            <ContentBlock path={SKILL_MD} content={skill.body} open={open.has(SKILL_MD)} onToggle={() => toggle(SKILL_MD)} />
+            <ContentBlock
+              path={SKILL_MD}
+              content={skill.body}
+              open={open.has(SKILL_MD)}
+              onToggle={() => toggle(SKILL_MD)}
+            />
             {skill.files.map((f) => (
-              <ContentBlock key={f.path} path={f.path} content={f.content} open={open.has(f.path)} onToggle={() => toggle(f.path)} />
+              <ContentBlock
+                key={f.path}
+                path={f.path}
+                content={f.content}
+                open={open.has(f.path)}
+                onToggle={() => toggle(f.path)}
+              />
             ))}
           </Group>
         </Section>

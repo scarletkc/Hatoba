@@ -1,13 +1,11 @@
 import { useEffect, useId, useRef } from "react";
-import { Button, Icon, LinkButton, StatusDot, TextField } from "@/components/controls";
-import { PopupSelect } from "@/components/overlay";
+import { Button, ErrorText, Icon, LinkButton, PopupSelect, StatusLine, TextField, isImeEvent } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { Field } from "@/features/keys/Field";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AppError, SyncConfigInput } from "@/ipc/types";
-import { isImeEvent } from "@/lib/ime";
-import { API_TOKENS_URL, openExternal } from "./external";
+import { API_TOKENS_URL, openExternal } from "@/lib/external";
 import { EMPTY_D1, type D1Form } from "./wizardTypes";
 import { WizardFrame, WizardTitle } from "./WizardFrame";
 import s from "./Wizard.module.css";
@@ -107,7 +105,11 @@ export function D1Step({
       footer={
         <>
           <Button onClick={onBack}>{t("btn.back")}</Button>
-          <Button variant="primary" disabled={!canContinue} onClick={() => onNext(config(form.databaseId), form.initialized)}>
+          <Button
+            variant="primary"
+            disabled={!canContinue}
+            onClick={() => onNext(config(form.databaseId), form.initialized)}
+          >
             {t("btn.continue")}
           </Button>
         </>
@@ -137,29 +139,29 @@ export function D1Step({
             onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && void runVerify()}
           />
           {verify.status === "failed" && (
-            <div className={s.tokenError} role="alert">
-              <Icon name="warning-circle" />
-              <div className={s.tokenErrorText}>
-                <div>{verify.message}</div>
-                <LinkButton onClick={() => void openExternal(API_TOKENS_URL)}>
-                  <span className={s.externalLink}>
-                    {t("sync.token.edit")}
-                    <Icon name="arrow-up-right" />
-                  </span>
-                </LinkButton>
-              </div>
-            </div>
+            <ErrorText icon="warning-circle" className={s.tokenError}>
+              <div>{verify.message}</div>
+              <LinkButton onClick={() => void openExternal(API_TOKENS_URL)}>
+                <span className={s.externalLink}>
+                  {t("sync.token.edit")}
+                  <Icon name="arrow-up-right" />
+                </span>
+              </LinkButton>
+            </ErrorText>
           )}
           <div className={s.testRow}>
-            <Button size="sm" icon="seal-check" busy={verify.status === "testing"} disabled={!canVerify} onClick={() => void runVerify()}>
+            <Button
+              size="sm"
+              icon="seal-check"
+              busy={verify.status === "testing"}
+              disabled={!canVerify}
+              onClick={() => void runVerify()}
+            >
               {t("sync.d1.verify")}
             </Button>
             {verifiedLine && (
               <div className={s.testStatus} role="status">
-                <span className={s.dotSlot}>
-                  <StatusDot color="var(--green)" />
-                </span>
-                <span>{verifiedLine}</span>
+                <StatusLine tone="success">{verifiedLine}</StatusLine>
               </div>
             )}
           </div>
@@ -167,7 +169,13 @@ export function D1Step({
 
         <Field
           label={t("sync.database")}
-          hint={form.initialized ? t("sync.d1.hasVault") : verified && form.databases.length === 0 ? t("sync.d1.noDb") : undefined}
+          hint={
+            form.initialized
+              ? t("sync.d1.hasVault")
+              : verified && form.databases.length === 0
+                ? t("sync.d1.noDb")
+                : undefined
+          }
         >
           <PopupSelect
             ariaLabel={t("sync.database")}

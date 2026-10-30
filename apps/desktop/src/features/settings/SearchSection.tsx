@@ -1,11 +1,28 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, LinkButton, TextField } from "@/components/controls";
-import { FormRow, Group, layoutStyles } from "@/components/layout";
-import { PopupSelect, confirm, toast } from "@/components/overlay";
+import {
+  Button,
+  FormRow,
+  Group,
+  HintText,
+  LinkButton,
+  PopupSelect,
+  TextField,
+  confirm,
+  layoutStyles,
+  toast,
+} from "@hatoba/ui";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { AiSettingsPatch, SearchKind, SearchProviderInput, SearchProviderView } from "@/ipc/types";
-import { SEARCH_KINDS, keyForInput, normalizeBaseUrl, parseBaseUrl, searchNeedsUrl, searchProviderFor, type KeyDraft } from "./aiLogic";
+import type { AiSettingsView, SearchKind, SearchProviderInput, SearchProviderView } from "@/ipc/types";
+import {
+  SEARCH_KINDS,
+  keyForInput,
+  normalizeBaseUrl,
+  parseBaseUrl,
+  searchNeedsUrl,
+  searchProviderFor,
+  type KeyDraft,
+} from "./aiLogic";
 import { IDLE, SavedKeyField, TestConnection, aiErrorDetail, aiErrorMessage, type TestState } from "./aiShared";
 import { SettingRow } from "./shared";
 import s from "./AiPane.module.css";
@@ -36,7 +53,7 @@ export function SearchSection({
   /** `Settings.ai.native_search`. */
   native: boolean;
   /** The search provider to use, or none and whether the chat provider's own search runs instead. */
-  onChoose: (choice: Pick<AiSettingsPatch, "search_provider_id" | "native_search">) => void;
+  onChoose: (choice: Partial<Pick<AiSettingsView, "search_provider_id" | "native_search">>) => void;
   onSaved: (saved: SearchProviderView) => void;
   onRemoved: (id: string) => void;
 }) {
@@ -192,7 +209,7 @@ export function SearchSection({
   ];
 
   return (
-    <div className={layoutStyles.section}>
+    <section className={layoutStyles.section}>
       <div className={layoutStyles.sectionTitle}>{t("aiSettings.search")}</div>
       <Group>
         <SettingRow label={t("aiSettings.search.row")} hint={t("aiSettings.search.hint")}>
@@ -217,7 +234,7 @@ export function SearchSection({
                     placeholder="https://searx.example.com"
                     onChange={(e) => edit({ baseUrl: e.target.value })}
                   />
-                  <span className={s.fieldHint}>{t("aiSettings.search.baseUrlHint")}</span>
+                  <HintText>{t("aiSettings.search.baseUrlHint")}</HintText>
                 </div>
               </FormRow>
             ) : (
@@ -249,6 +266,6 @@ export function SearchSection({
           </>
         )}
       </Group>
-    </div>
+    </section>
   );
 }

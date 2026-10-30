@@ -1,0 +1,68 @@
+---
+import { formatMegabytes, messages, type Locale } from "../i18n";
+import type { Download } from "../lib/release";
+import Button from "./Button.astro";
+import CopyButton from "./CopyButton.astro";
+
+/** One file of a release: its download button, name, size and checksum. */
+interface Props {
+  locale: Locale;
+  download: Download;
+}
+
+const { locale, download } = Astro.props;
+const t = messages(locale);
+---
+
+<li class="file">
+  <Button variant="accent" icon="download" href={download.url}>
+    {t.download.files[download.bundle]}
+  </Button>
+  <p class="name">
+    <code>{download.name}</code>
+    <span>{t.download.size(formatMegabytes(locale, download.size))}</span>
+  </p>
+  <p class="sha" data-copy-scope>
+    <span>{t.download.sha256}</span>
+    <code>{download.sha256}</code>
+    <CopyButton
+      text={download.sha256}
+      label={`${t.download.copy} ${t.download.sha256}: ${download.name}`}
+      copied={t.download.copied}
+    />
+  </p>
+</li>
+
+<style>
+  .name {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4) var(--space-12);
+    align-items: baseline;
+    margin-top: var(--space-12);
+    font-size: var(--text-md);
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .name code {
+    background: none;
+    padding: 0;
+    color: var(--ink);
+  }
+
+  .sha {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-6) var(--space-10);
+    margin-top: var(--space-6);
+    font-size: var(--text-xs);
+    color: var(--ink-2);
+  }
+
+  .sha code {
+    font-size: var(--text-xs);
+    word-break: break-all;
+  }
+</style>

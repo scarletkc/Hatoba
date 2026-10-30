@@ -6,7 +6,7 @@
   container-type: inline-size;
 }
 
-/* Shared by the column header and every row (design §01: name · address · tags · last connected · action). */
+/* Shared by the column header and every row (name · address · tags · last connected · action). */
 .cols {
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 1.1fr) 104px 64px;
 }
@@ -39,6 +39,195 @@
   overflow-y: auto;
 }
 
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
+  gap: var(--space-12);
+  padding: 8px 24px 16px;
+}
+
+/* ───────── Title, filters and groups ───────── */
+
+/* A group's page: the way back to every host, the group, and its menu. */
+.crumbs {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.crumb {
+  border: 0;
+  padding: 0 4px;
+  margin-left: -4px;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--fg2);
+  font: inherit;
+  font-weight: 500;
+}
+
+.crumb:hover {
+  background: var(--fill);
+  color: var(--fg);
+}
+
+.crumbSep {
+  font-size: var(--icon-14);
+  color: var(--fg3);
+}
+
+.crumbHere {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* New Host and its chevron, joined. */
+.split {
+  display: inline-flex;
+}
+
+.split > :first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.splitCaret {
+  padding: 0 7px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  box-shadow: inset 1px 0 0 color-mix(in srgb, #fff 28%, transparent);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6);
+  padding: 0 24px 10px;
+  flex: none;
+}
+
+.toolbarGap {
+  flex: 1;
+}
+
+/* Favorites and Tags: a filter that is on stands out in the accent color. */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--fill);
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+
+.toggle:hover {
+  background: var(--fill2);
+}
+
+.toggle i {
+  font-size: var(--icon-14);
+  color: var(--fg2);
+}
+
+.toggleOn,
+.toggleOn:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+
+.toggleOn i {
+  color: var(--accent);
+}
+
+.toggle .toggleCaret {
+  font-size: var(--icon-12);
+}
+
+.statsSwitch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin: 0 4px 0 6px;
+  font-size: var(--text-sm);
+  color: var(--fg);
+  white-space: nowrap;
+}
+
+/* Every group in a row that scrolls sideways, so many groups never push the hosts down. */
+.groupBar {
+  display: flex;
+  gap: var(--space-8);
+  padding: 2px 24px 12px;
+  overflow-x: auto;
+  flex: none;
+  scrollbar-width: none;
+}
+
+/* A list item around each group's button, so the button stays a button to screen readers. */
+.groupItem {
+  display: flex;
+  flex: none;
+  min-width: 0;
+}
+
+.groupTile {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex: none;
+  max-width: 220px;
+  height: 34px;
+  padding: 0 12px 0 10px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--group);
+  box-shadow: inset 0 0 0 0.5px var(--line2);
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+
+.groupTile:hover {
+  background: var(--fill);
+}
+
+.groupIcon {
+  font-size: var(--icon-16);
+  color: var(--accent);
+  flex: none;
+}
+
+.groupName {
+  min-width: 0;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.groupCount {
+  color: var(--fg2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A narrow page shows the view switch as icons, their titles naming them. */
+@container (max-width: 620px) {
+  .viewSwitch [role="radio"] > span {
+    display: none;
+  }
+
+  .viewSwitch [role="radio"] {
+    padding: 0 10px;
+  }
+}
+
 .scroll:focus-visible {
   outline: none;
 }
@@ -62,11 +251,11 @@
 
 .row {
   display: grid;
-  gap: 16px;
+  gap: var(--space-16);
   align-items: center;
   height: var(--row);
   padding: 0 12px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   box-shadow: inset 0 -0.5px 0 var(--line);
   /* Skip layout/paint for rows that are off screen: keeps 1,000-host lists instant. */
   content-visibility: auto;
@@ -85,7 +274,7 @@
 .nameCell {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--space-8);
   min-width: 0;
 }
 
@@ -97,8 +286,8 @@
 }
 
 .fav {
-  font-size: 11px;
-  color: var(--fg3);
+  font-size: var(--icon-12);
+  color: var(--orange);
   flex: none;
 }
 
@@ -112,7 +301,7 @@
 .addrCell {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   min-width: 0;
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -132,7 +321,7 @@
 .via {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--space-4);
   flex: none;
   max-width: 45%;
   overflow: hidden;
@@ -143,12 +332,12 @@
 }
 
 .via i {
-  font-size: 12px;
+  font-size: var(--icon-12);
 }
 
 .tags {
   display: flex;
-  gap: 4px;
+  gap: var(--space-4);
   min-width: 0;
   overflow: hidden;
 }
@@ -177,6 +366,11 @@
   opacity: 1;
 }
 
+/* With several hosts selected, Connect shows only under the pointer. */
+.scroll[data-several] .rowSel:not(:hover) .connect {
+  opacity: 0;
+}
+
 /* Quick connect (HOST-12): the search field's recent targets, and Connect rows for unsaved targets. */
 /* Takes the search field's place in the header, so it shrinks the way the field does on its own. */
 .searchWrap {
@@ -191,7 +385,7 @@
   display: inline-flex;
   justify-content: center;
   width: 16px;
-  font-size: 14px;
+  font-size: var(--icon-14);
   color: var(--fg2);
   flex: none;
 }
@@ -199,27 +393,12 @@
 .quickHint {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4);
 }
 
+/* A small IconButton, shown on the row under the pointer or selected. */
 .forget {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--fg2);
-  font-size: 12px;
   opacity: 0;
-}
-
-.forget:hover {
-  background: var(--fill);
-  color: var(--fg);
 }
 
 .row:hover .forget,
@@ -230,7 +409,7 @@
 
 .problemRow {
   display: flex;
-  gap: 9px;
+  gap: var(--space-8);
   color: var(--fg2);
   font-size: var(--text-sm);
 }
@@ -254,7 +433,7 @@
   min-width: 260px;
   z-index: 20;
   padding: 5px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: var(--sheet);
   box-shadow: var(--shadow-popover);
 }
@@ -269,10 +448,10 @@
 .suggestItem {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   height: 28px;
   padding: 0 5px 0 8px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
 }
 
 .suggestItemActive {

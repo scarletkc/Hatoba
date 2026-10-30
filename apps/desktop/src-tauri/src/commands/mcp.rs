@@ -3,7 +3,7 @@
 //! model called, directly or through `call_mcp_tool` (AI-45), the prompts and resources the
 //! panel's `/` and `@` menus attach (AI-50, AI-51), and import and export in the `mcpServers`
 //! format (AI-33). The connections run in
-//! [`crate::mcp::McpManager`].
+//! [`hatoba_assistant::mcp::McpManager`].
 //!
 //! Environment and header values go one way, WebView → Rust, like API keys: views carry only
 //! their names, and an input value of `null` keeps the saved one (AI-29). SEC-04: they, the
@@ -15,6 +15,10 @@ use hatoba_ai::AiError;
 use hatoba_ai::mcp::McpError;
 use hatoba_ai::mcp::config::{ImportReport, export_json, parse_import};
 use hatoba_ai::provider::validate_base_url;
+use hatoba_assistant::mcp::{
+    DeviceState, McpEvents, config_view, core_transport, find_server, proxy_info, set_always_allow,
+    set_enabled, tool_info, transport_config, transport_view,
+};
 use hatoba_core::Vault;
 use hatoba_core::model::{Item, McpServer, McpTransport};
 use reqwest::header::{HeaderName, HeaderValue};
@@ -24,13 +28,10 @@ use zeroize::Zeroizing;
 
 use crate::dto::{
     McpImportPreview, McpImportServer, McpImportSkipped, McpPromptArgumentInput, McpProxyInfo,
-    McpSecretInput, McpServerInput, McpServerStatus, McpServerView, McpToolInfo, McpTransportInput,
+    McpSecretInput, McpServerInput, McpServerStatus, McpServerView, McpStatusEvent, McpToolInfo,
+    McpTransportInput,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
-use crate::mcp::{
-    DeviceState, McpEvents, McpManager, config_view, core_transport, tool_view, transport_config,
-    transport_view,
-};
 use crate::state::AppState;
 use crate::sync;
 
@@ -56,7 +57,7 @@ pub struct AppMcpEvents(pub AppHandle);
 
 impl McpEvents for AppMcpEvents {
     fn status(&self, status: McpServerStatus) {
-        let _ = status.emit(&self.0);
+        let _ = McpStatusEvent(status).emit(&self.0);
     }
 }
 
@@ -74,13 +75,6 @@ fn sentence(text: &str) -> String {
 }
 
 // ───────────────────────── views ─────────────────────────
-
-fn find_server(v: &Vault, id: &str) -> AppResult<McpServer> {
-    v.get(id)
-        .and_then(Item::as_mcp_server)
-        .cloned()
-        .ok_or_else(|| AppError::not_found("MCP server"))
-}
 
 pub(crate) fn server_view(id: &str, server: &McpServer, device: &DeviceState) -> McpServerView {
     let here = device.server(id);
@@ -317,56 +311,6 @@ pub(crate) fn delete_server(v: &mut Vault, id: &str) -> AppResult<()> {
     device.save(v)
 }
 
-pub(crate) fn set_enabled(v: &mut Vault, id: &str, enabled: bool) -> AppResult<()> {
-    let server = find_server(v, id)?;
-    let mut device = DeviceState::load(v);
-    device.server_mut(id, &server.transport).enabled = Some(enabled);
-    device.save(v)
-}
-
-/// AI-31 Always allow on this device: one tool (the server's own name) or the whole server.
-pub(crate) fn set_always_allow(
-    v: &mut Vault,
-    id: &str,
-    tool: Option<&str>,
-    allow: bool,
-) -> AppResult<()> {
-    let server = find_server(v, id)?;
-    let mut device = DeviceState::load(v);
-    let here = device.server_mut(id, &server.transport);
-    match tool.map(str::trim) {
-        None => here.always_allow = allow,
-        Some("") => return Err(AppError::invalid("tool", "The tool name is empty.")),
-        Some(tool) => {
-            here.always_allow_tools.retain(|t| t != tool);
-            if allow {
-                here.always_allow_tools.push(tool.to_owned());
-            }
-        }
-    }
-    device.save(v)
-}
-
-/// The tool behind a name the model called in a conversation, for the approval card (AI-31):
-/// resolved like the call itself (`McpManager::offered`), so the card names the server that runs
-/// it. `None` when the conversation's offer has no such tool, or its server was deleted.
-pub(crate) fn tool_info(
-    v: &Vault,
-    mcp: &McpManager,
-    conversation_id: &str,
-    name: &str,
-) -> Option<McpToolInfo> {
-    let tool = mcp.offered(conversation_id, name)?;
-    let server = v.get(&tool.server_id).and_then(Item::as_mcp_server)?;
-    let device = DeviceState::load(v);
-    Some(McpToolInfo {
-        server_id: tool.server_id.clone(),
-        server_name: server.name.clone(),
-        always_ask: server.always_ask,
-        tool: tool_view(&device, &tool),
-    })
-}
-
 // ───────────────────────── import and export (AI-33) ─────────────────────────
 
 fn parse(json: &str) -> AppResult<ImportReport> {
@@ -582,30 +526,6 @@ pub async fn mcp_tool_info(
     name: String,
 ) -> AppResult<Option<McpToolInfo>> {
     state.with_unlocked(|v| Ok(tool_info(v, &state.mcp, &conversation_id, &name)))
-}
-
-/// AI-45: what the approval card of a `call_mcp_tool` call needs, as `ai_tool_run` resolves the
-/// call: the tool it names, and whether it runs. A call that does not run (arguments that do not
-/// match the tool's input schema, a tool the conversation does not have, a deleted server) gets
-/// its error result without asking.
-pub(crate) fn proxy_info(
-    v: &Vault,
-    mcp: &McpManager,
-    conversation_id: &str,
-    arguments: &str,
-) -> McpProxyInfo {
-    match crate::ai::proxy_call(v, mcp, conversation_id, arguments) {
-        Ok((tool, _)) => McpProxyInfo {
-            tool: tool_info(v, mcp, conversation_id, &tool.name),
-            runs: true,
-        },
-        Err(_) => McpProxyInfo {
-            tool: hatoba_ai::mcp::deferred::parse_call(arguments)
-                .ok()
-                .and_then(|call| tool_info(v, mcp, conversation_id, &call.tool)),
-            runs: false,
-        },
-    }
 }
 
 /// The MCP tool a `call_mcp_tool` call names (AI-45), for its approval card.

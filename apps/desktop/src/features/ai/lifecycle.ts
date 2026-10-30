@@ -2,7 +2,8 @@ import { useEffect } from "react";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
 import { api } from "@/ipc/api";
-import { detachSlot, loadCatalog, openNotified, refreshAfterSync, reloadAll, reloadSlot, resetForLock } from "./actions";
+import { loadCatalog, refreshAfterSync } from "./actions/conversations";
+import { detachSlot, openNotified, reloadAll, reloadSlot, resetForLock } from "./actions/slots";
 import { applyMcpStatus, loadMcp, resetMcp, useMcp } from "./mcp";
 import { useAi } from "./store";
 
@@ -58,7 +59,8 @@ export function useAiLifecycle() {
         const open = new Set(st.tabs.map((x) => x.id));
         const { slots, selections, background } = useAi.getState();
         const held = new Set(Object.values(background));
-        for (const tab of prev.tabs) if (!open.has(tab.id) && (slots[tab.id] || selections[tab.id] || held.has(tab.id))) detachSlot(tab.id);
+        for (const tab of prev.tabs)
+          if (!open.has(tab.id) && (slots[tab.id] || selections[tab.id] || held.has(tab.id))) detachSlot(tab.id);
       }),
     [],
   );

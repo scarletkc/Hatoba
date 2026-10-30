@@ -117,52 +117,10 @@
         },
         "reasoning": false
       },
-      "qwen2-5-14b-instruct": {
-        "limit": {
-          "context": 131072,
-          "output": 8192
-        },
-        "reasoning": false
-      },
-      "qwen2-5-32b-instruct": {
-        "limit": {
-          "context": 131072,
-          "output": 8192
-        },
-        "reasoning": false
-      },
-      "qwen2-5-72b-instruct": {
-        "limit": {
-          "context": 131072,
-          "output": 8192
-        },
-        "reasoning": false
-      },
-      "qwen2-5-7b-instruct": {
-        "limit": {
-          "context": 131072,
-          "output": 8192
-        },
-        "reasoning": false
-      },
       "qwen2-5-omni-7b": {
         "limit": {
           "context": 32768,
           "output": 2048
-        },
-        "reasoning": false
-      },
-      "qwen2-5-vl-72b-instruct": {
-        "limit": {
-          "context": 131072,
-          "output": 8192
-        },
-        "reasoning": false
-      },
-      "qwen2-5-vl-7b-instruct": {
-        "limit": {
-          "context": 131072,
-          "output": 8192
         },
         "reasoning": false
       },
@@ -1081,8 +1039,7 @@
           "context": 32768,
           "output": 32768
         },
-        "reasoning": true,
-        "reasoning_options": []
+        "reasoning": false
       },
       "gemini-2.5-flash-lite": {
         "limit": {
@@ -1159,34 +1116,10 @@
           }
         ]
       },
-      "gemini-3-pro-image-preview": {
-        "limit": {
-          "context": 131072,
-          "output": 32768
-        },
-        "reasoning": true,
-        "reasoning_options": []
-      },
       "gemini-3.1-flash-image": {
         "limit": {
           "context": 131072,
           "output": 32768
-        },
-        "reasoning": true,
-        "reasoning_options": [
-          {
-            "type": "effort",
-            "values": [
-              "minimal",
-              "high"
-            ]
-          }
-        ]
-      },
-      "gemini-3.1-flash-image-preview": {
-        "limit": {
-          "context": 65536,
-          "output": 65536
         },
         "reasoning": true,
         "reasoning_options": [
@@ -1534,27 +1467,6 @@
           "output": 65536
         },
         "reasoning": false
-      },
-      "veo-3.1-fast-generate-preview": {
-        "limit": {
-          "context": 480,
-          "output": 8192
-        },
-        "reasoning": false
-      },
-      "veo-3.1-generate-preview": {
-        "limit": {
-          "context": 480,
-          "output": 8192
-        },
-        "reasoning": false
-      },
-      "veo-3.1-lite-generate-preview": {
-        "limit": {
-          "context": 480,
-          "output": 8192
-        },
-        "reasoning": false
       }
     }
   },
@@ -1588,31 +1500,10 @@
         },
         "reasoning": false
       },
-      "devstral-medium-2507": {
-        "limit": {
-          "context": 128000,
-          "output": 128000
-        },
-        "reasoning": false
-      },
       "devstral-medium-latest": {
         "limit": {
           "context": 262144,
           "output": 262144
-        },
-        "reasoning": false
-      },
-      "devstral-small-2505": {
-        "limit": {
-          "context": 128000,
-          "output": 128000
-        },
-        "reasoning": false
-      },
-      "devstral-small-2507": {
-        "limit": {
-          "context": 128000,
-          "output": 128000
         },
         "reasoning": false
       },
@@ -1697,13 +1588,6 @@
         },
         "reasoning": false
       },
-      "mistral-large-2411": {
-        "limit": {
-          "context": 131072,
-          "output": 16384
-        },
-        "reasoning": false
-      },
       "mistral-large-2512": {
         "limit": {
           "context": 262144,
@@ -1721,7 +1605,25 @@
           {
             "type": "effort",
             "values": [
-              "none",
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ]
+      },
+      "mistral-large-4-0-8": {
+        "limit": {
+          "context": 1048576,
+          "output": 262144
+        },
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
               "high"
             ]
           }
@@ -1780,13 +1682,6 @@
           }
         ]
       },
-      "mistral-nemo": {
-        "limit": {
-          "context": 128000,
-          "output": 128000
-        },
-        "reasoning": false
-      },
       "mistral-small-2506": {
         "limit": {
           "context": 128000,
@@ -1840,13 +1735,6 @@
         },
         "reasoning": false
       },
-      "pixtral-large-latest": {
-        "limit": {
-          "context": 128000,
-          "output": 128000
-        },
-        "reasoning": false
-      },
       "voxtral-small-2507": {
         "limit": {
           "context": 32768,
@@ -1894,6 +1782,40 @@
         "reasoning_options": []
       },
       "kimi-k3": {
+        "limit": {
+          "context": 1048576,
+          "output": 1048576
+        },
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "kimi-k3.1-pro": {
+        "limit": {
+          "context": 1048576,
+          "output": 1048576
+        },
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "kimi-k3.1-pro-highspeed": {
         "limit": {
           "context": 1048576,
           "output": 1048576
@@ -2434,6 +2356,27 @@
           {
             "type": "effort",
             "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      },
+      "gpt-6.1-terra": {
+        "limit": {
+          "context": 1050000,
+          "input": 922000,
+          "output": 128000
+        },
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
               "low",
               "medium",
               "high",

@@ -10,14 +10,29 @@ export const OVERVIEW = "overview";
 /** The sidebar. A reference file missing here goes under "More"; docs.test.ts requires each to be listed. */
 export const DOC_GROUPS: { title: string; slugs: string[] }[] = [
   { title: "Get started", slugs: [OVERVIEW, "hosts-and-connecting", "command-line", "settings", "shortcuts"] },
-  { title: "Terminal and files", slugs: ["terminal", "sftp", "port-forwarding", "dashboard"] },
+  { title: "Terminal and files", slugs: ["terminal", "sftp", "port-forwarding", "resource-usage"] },
   { title: "Keys and vault", slugs: ["keys-vault-and-lock"] },
   { title: "Sync", slugs: ["sync", "sync-worker"] },
   {
     title: "AI assistant",
-    slugs: ["ai-panel", "ai-tools", "ai-file-changes", "ai-attachments", "ai-history", "ai-side-questions", "ai-models", "ai-settings", "ai-chatgpt", "ai-instructions", "ai-mcp"],
+    slugs: [
+      "ai-panel",
+      "ai-tools",
+      "ai-file-changes",
+      "ai-attachments",
+      "ai-history",
+      "ai-side-questions",
+      "ai-models",
+      "ai-settings",
+      "ai-chatgpt",
+      "ai-instructions",
+      "ai-mcp",
+    ],
   },
-  { title: "Troubleshooting", slugs: ["troubleshooting", "troubleshooting-connections", "troubleshooting-sync", "troubleshooting-ai"] },
+  {
+    title: "Troubleshooting",
+    slugs: ["troubleshooting", "troubleshooting-connections", "troubleshooting-sync", "troubleshooting-ai"],
+  },
 ];
 
 /** The sections of SKILL.md that describe Hatoba to its users, which the overview shows after the introduction. */
@@ -51,7 +66,8 @@ export function workingTree(root = repoRoot()): DocsSource {
 }
 
 export function gitRef(ref: string, root = repoRoot()): DocsSource {
-  const git = (...args: string[]) => execFileSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
   git("rev-parse", "--verify", "--quiet", `${ref}^{commit}`);
   return {
     ref,
@@ -131,7 +147,12 @@ export function readDocs(source: DocsSource, version: string): Doc[] {
   const skill = source.read(skillPath).replace(/^---\n[\s\S]*?\n---\n/, "");
   const { body: skillBody } = splitTitle(skill, skillPath);
   const intro = skillBody.split(/^## /m)[0].trim();
-  const overview = { slug: OVERVIEW, path: skillPath, title: "Overview", body: [intro, ...sections(skillBody, OVERVIEW_SECTIONS, skillPath)].join("\n\n") };
+  const overview = {
+    slug: OVERVIEW,
+    path: skillPath,
+    title: "Overview",
+    body: [intro, ...sections(skillBody, OVERVIEW_SECTIONS, skillPath)].join("\n\n"),
+  };
 
   const pages = [overview, ...references];
   const titles = new Map(pages.map((page) => [page.slug, page.title]));
@@ -142,14 +163,18 @@ export function readDocs(source: DocsSource, version: string): Doc[] {
 }
 
 /** The sidebar for `docs`: DOC_GROUPS with the pages that exist, then any other page under "More". */
-export function sidebar(docs: { slug: string; title: string }[]): { title: string; pages: { slug: string; title: string }[] }[] {
+export function sidebar(
+  docs: { slug: string; title: string }[],
+): { title: string; pages: { slug: string; title: string }[] }[] {
   const bySlug = new Map(docs.map((doc) => [doc.slug, doc]));
   const listed = new Set(DOC_GROUPS.flatMap((group) => group.slugs));
   const groups = DOC_GROUPS.map((group) => ({
     title: group.title,
     pages: group.slugs.flatMap((slug) => {
       const doc = bySlug.get(slug);
-      return doc ? [{ slug, title: doc.title.replace(/^Troubleshooting: (.)/, (_, first: string) => first.toUpperCase()) }] : [];
+      return doc
+        ? [{ slug, title: doc.title.replace(/^Troubleshooting: (.)/, (_, first: string) => first.toUpperCase()) }]
+        : [];
     }),
   }));
   const more = docs.filter((doc) => !listed.has(doc.slug));

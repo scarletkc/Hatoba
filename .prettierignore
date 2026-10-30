@@ -1,0 +1,13 @@
+# Prose: Prettier would pad every table to its widest cell.
+*.md
+
+# Generated
+pnpm-lock.yaml
+workers/sync/package-lock.json
+apps/desktop/src/ipc/bindings.ts
+crates/hatoba-ai/src/models/models-dev.json
+
+# Reformatting the Worker's source changes its bundle, which needs a new Worker version and asks
+# everyone to redeploy (scripts/ci/worker-version.mjs). Remove this line in the next pull request
+# that raises the Worker version.
+workers/sync/src/

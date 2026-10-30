@@ -1,25 +1,38 @@
 import { useEffect, useId, useState } from "react";
+import {
+  Button,
+  ErrorText,
+  FooterSpacer,
+  FormRow,
+  Group,
+  HintText,
+  IconButton,
+  LinkButton,
+  Section,
+  Segmented,
+  Sheet,
+  SheetHeader,
+  Switch,
+  TextField,
+  WarningText,
+  isImeEvent,
+} from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
-import { Button, IconButton, LinkButton, Segmented, Switch, TextField } from "@/components/controls";
-import { FormRow, Group, Section } from "@/components/layout";
-import { FooterSpacer, Sheet, SheetHeader } from "@/components/overlay";
-import { openExternal } from "@/features/sync/external";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { McpServerView } from "@/ipc/types";
+import { looksLikeCommandLine, splitCommandLine } from "@/lib/commandLine";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
+import { openExternal } from "@/lib/external";
 import { SavedKeyField } from "./aiShared";
 import {
   argRows,
   hasMcpProblems,
   initialMcpForm,
-  looksLikeCommandLine,
   mcpFormToInput,
   newSecretRow,
   newUid,
   shownRowProblems,
-  splitCommandLine,
   validateMcpForm,
   type McpForm,
   type SecretKind,
@@ -73,7 +86,9 @@ export function McpServerDialog({
   const t = useT();
   const ids = { form: useId(), name: useId(), command: useId(), url: useId(), rows: useId() };
   const fromTemplate = server ? null : template;
-  const [form, setForm] = useState<McpForm>(() => (fromTemplate ? templateMcpForm(fromTemplate, otherNames) : initialMcpForm(server)));
+  const [form, setForm] = useState<McpForm>(() =>
+    fromTemplate ? templateMcpForm(fromTemplate, otherNames) : initialMcpForm(server),
+  );
   const [tokenLink] = useState<TokenLink | null>(() => {
     const row = fromTemplate && form.headers[0];
     return row ? { uid: row.uid, label: TOKEN_LINK[fromTemplate.id], url: fromTemplate.tokenUrl } : null;
@@ -102,11 +117,17 @@ export function McpServerDialog({
   const urlProblem = show(problems.url);
   const secretProblems = shownRowProblems(problems.secrets, submitted);
 
-  const nameError = rejected.name ?? (nameProblem ? t(nameProblem === "empty" ? "aiSettings.mcp.err.nameRequired" : "aiSettings.mcp.err.nameTaken") : null);
+  const nameError =
+    rejected.name ??
+    (nameProblem
+      ? t(nameProblem === "empty" ? "aiSettings.mcp.err.nameRequired" : "aiSettings.mcp.err.nameTaken")
+      : null);
   const commandError = rejected.command ?? (commandProblem ? t("aiSettings.mcp.err.commandRequired") : null);
   const urlError =
     rejected.url ??
-    (urlProblem ? t(urlProblem === "empty" ? "aiSettings.mcp.err.urlRequired" : "aiSettings.mcp.err.urlInvalid") : null);
+    (urlProblem
+      ? t(urlProblem === "empty" ? "aiSettings.mcp.err.urlRequired" : "aiSettings.mcp.err.urlInvalid")
+      : null);
 
   const splitCommand = () => {
     const words = splitCommandLine(form.command);
@@ -125,7 +146,10 @@ export function McpServerDialog({
       else {
         const i = problems.secrets.findIndex(Boolean);
         const rows = form.kind === "stdio" ? form.env : form.headers;
-        if (i >= 0) document.getElementById(rowFieldId(ids.rows, rows[i].uid, problems.secrets[i]?.key ? "key" : "value"))?.focus();
+        if (i >= 0)
+          document
+            .getElementById(rowFieldId(ids.rows, rows[i].uid, problems.secrets[i]?.key ? "key" : "value"))
+            ?.focus();
       }
       return;
     }
@@ -136,15 +160,22 @@ export function McpServerDialog({
       onClose();
     } catch (e) {
       const err = toAppError(e);
-      if (err.code === "invalid_input" && err.field === "name") setRejected({ name: t("aiSettings.mcp.err.nameRequired") });
-      else if (err.code === "invalid_input" && err.field === "command") setRejected({ command: t("aiSettings.mcp.err.commandRequired") });
-      else if (err.code === "invalid_input" && err.field === "url") setRejected({ url: t("aiSettings.mcp.err.urlRejected") });
-      else setRejected({ general: [errorMessage(t, e), err.code === "invalid_input" ? err.detail : ""].filter(Boolean).join("\n") });
+      if (err.code === "invalid_input" && err.field === "name")
+        setRejected({ name: t("aiSettings.mcp.err.nameRequired") });
+      else if (err.code === "invalid_input" && err.field === "command")
+        setRejected({ command: t("aiSettings.mcp.err.commandRequired") });
+      else if (err.code === "invalid_input" && err.field === "url")
+        setRejected({ url: t("aiSettings.mcp.err.urlRejected") });
+      else
+        setRejected({
+          general: [errorMessage(t, e), err.code === "invalid_input" ? err.detail : ""].filter(Boolean).join("\n"),
+        });
       setSaving(false);
     }
   };
 
-  const setArg = (uid: number, value: string) => patch({ args: form.args.map((a) => (a.uid === uid ? { ...a, value } : a)) });
+  const setArg = (uid: number, value: string) =>
+    patch({ args: form.args.map((a) => (a.uid === uid ? { ...a, value } : a)) });
   const addArg = (after?: number) => {
     const row = { uid: newUid(), value: "" };
     const at = after === undefined ? form.args.length : form.args.findIndex((a) => a.uid === after) + 1;
@@ -203,7 +234,9 @@ export function McpServerDialog({
                 ]}
                 onChange={(kind) => patch({ kind })}
               />
-              <span className={s.hint}>{t(form.kind === "stdio" ? "aiSettings.mcp.transport.stdioHint" : "aiSettings.mcp.transport.httpHint")}</span>
+              <HintText>
+                {t(form.kind === "stdio" ? "aiSettings.mcp.transport.stdioHint" : "aiSettings.mcp.transport.httpHint")}
+              </HintText>
             </div>
           </FormRow>
           {form.kind === "stdio" ? (
@@ -222,12 +255,12 @@ export function McpServerDialog({
                     }}
                   />
                   {looksLikeCommandLine(form.command) && form.args.length === 0 ? (
-                    <span className={cx(s.hint, s.hintWarn)}>
+                    <WarningText>
                       {splitFailed ? t("aiSettings.mcp.f.splitFailed") : t("aiSettings.mcp.f.commandLine")}{" "}
                       <LinkButton onClick={splitCommand}>{t("aiSettings.mcp.f.split")}</LinkButton>
-                    </span>
+                    </WarningText>
                   ) : (
-                    <span className={s.hint}>{t("aiSettings.mcp.f.commandHint")}</span>
+                    <HintText>{t("aiSettings.mcp.f.commandHint")}</HintText>
                   )}
                 </div>
               </FormRow>
@@ -251,7 +284,7 @@ export function McpServerDialog({
                       />
                       <IconButton
                         icon="x"
-                        size={13}
+                        size={14}
                         label={t("aiSettings.mcp.f.argRemove", { n: i + 1 })}
                         onClick={() => patch({ args: form.args.filter((a) => a.uid !== arg.uid) })}
                       />
@@ -282,7 +315,7 @@ export function McpServerDialog({
         </Group>
 
         <Section title={form.kind === "stdio" ? t("aiSettings.mcp.f.env") : t("aiSettings.mcp.f.headers")}>
-          {form.kind === "http" && <div className={s.hint}>{t("aiSettings.mcp.f.headersHint")}</div>}
+          {form.kind === "http" && <HintText>{t("aiSettings.mcp.f.headersHint")}</HintText>}
           <SecretRows
             // The two transports keep their own rows; switching must not carry one's focus or values into the other.
             key={form.kind}
@@ -299,17 +332,17 @@ export function McpServerDialog({
         <Group>
           <FormRow label={t("aiSettings.mcp.f.alwaysAsk")} top>
             <div className={s.alwaysAsk}>
-              <Switch checked={form.alwaysAsk} label={t("aiSettings.mcp.f.alwaysAsk")} onChange={(alwaysAsk) => patch({ alwaysAsk })} />
-              <span className={s.hint}>{t("aiSettings.mcp.f.alwaysAskHint")}</span>
+              <Switch
+                checked={form.alwaysAsk}
+                label={t("aiSettings.mcp.f.alwaysAsk")}
+                onChange={(alwaysAsk) => patch({ alwaysAsk })}
+              />
+              <HintText className={s.alwaysAskHint}>{t("aiSettings.mcp.f.alwaysAskHint")}</HintText>
             </div>
           </FormRow>
         </Group>
 
-        {rejected.general && (
-          <div className={cx(s.problem, s.pre, "selectable")} role="alert">
-            {rejected.general}
-          </div>
-        )}
+        {rejected.general && <ErrorText className={cx(s.problem, s.pre, "selectable")}>{rejected.general}</ErrorText>}
       </form>
     </Sheet>
   );
@@ -338,7 +371,8 @@ function SecretRows({
 }) {
   const t = useT();
   const [focusUid, setFocusUid] = useState<number | null>(null);
-  const patchRow = (uid: number, p: Partial<SecretRow>) => onChange(rows.map((r) => (r.uid === uid ? { ...r, ...p } : r)));
+  const patchRow = (uid: number, p: Partial<SecretRow>) =>
+    onChange(rows.map((r) => (r.uid === uid ? { ...r, ...p } : r)));
   const add = () => {
     const row = newSecretRow();
     onChange([...rows, row]);
@@ -346,7 +380,8 @@ function SecretRows({
   };
   const problemText = (p: SecretRowProblem): string => {
     if (p.key === "empty") return t("aiSettings.mcp.err.keyRequired");
-    if (p.key === "invalid") return t(kind === "env" ? "aiSettings.mcp.err.envKeyInvalid" : "aiSettings.mcp.err.headerKeyInvalid");
+    if (p.key === "invalid")
+      return t(kind === "env" ? "aiSettings.mcp.err.envKeyInvalid" : "aiSettings.mcp.err.headerKeyInvalid");
     if (p.key === "duplicate") return t("aiSettings.mcp.err.keyDuplicate");
     return t("aiSettings.mcp.err.valueRequired");
   };
@@ -393,22 +428,22 @@ function SecretRows({
                     />
                     <IconButton
                       icon="x"
-                      size={13}
-                      label={row.key.trim() ? t("aiSettings.mcp.f.rowRemove", { key: row.key.trim() }) : t("aiSettings.mcp.f.rowRemoveBlank")}
+                      size={14}
+                      label={
+                        row.key.trim()
+                          ? t("aiSettings.mcp.f.rowRemove", { key: row.key.trim() })
+                          : t("aiSettings.mcp.f.rowRemoveBlank")
+                      }
                       onClick={() => onChange(rows.filter((r) => r.uid !== row.uid))}
                     />
                   </div>
-                  {problem && (
-                    <div className={s.problem} role="alert">
-                      {problemText(problem)}
-                    </div>
-                  )}
+                  {problem && <ErrorText className={s.problem}>{problemText(problem)}</ErrorText>}
                   {tokenLink?.uid === row.uid && (
-                    <div className={s.hint}>
+                    <HintText>
                       <LinkButton icon="arrow-up-right" onClick={() => void openExternal(tokenLink.url)}>
                         {t(tokenLink.label)}
                       </LinkButton>
-                    </div>
+                    </HintText>
                   )}
                 </div>
               );

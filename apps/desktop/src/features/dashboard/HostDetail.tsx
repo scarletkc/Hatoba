@@ -1,17 +1,31 @@
 import { useState } from "react";
-import { Button, Icon } from "@/components/controls";
-import { FooterSpacer, Sheet } from "@/components/overlay";
-import { OsIcon } from "@/features/hosts/OsIcon";
+import { Button, FooterSpacer, Icon, Sheet, StatusLine, type StatusTone } from "@hatoba/ui";
 import { Sparkline } from "@/features/terminal/Sparkline";
-import { formatLoad, formatPercent, formatRate, formatUptime, percentOf, STATS_WINDOW_MS, type StatsReading } from "@/features/terminal/stats";
+import {
+  formatLoad,
+  formatPercent,
+  formatRate,
+  formatUptime,
+  percentOf,
+  STATS_WINDOW_MS,
+  type StatsReading,
+} from "@/features/terminal/stats";
 import { formatBytes, formatMessageTime, useT } from "@/i18n";
 import type { GroupView, HostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { OsIcon } from "@/lib/OsIcon";
 import { dashboardSwitch, openTerminal, retryHost } from "./actions";
 import { statusColor, statusText } from "./status";
 import { isStale, memPercent, readingGapMs, mountPercent, pastThreshold, rootPercent } from "./logic";
 import type { HostReadout } from "./readings";
 import s from "./HostDetail.module.css";
+
+const TONE: Record<ReturnType<typeof statusText>["tone"], StatusTone> = {
+  normal: "neutral",
+  dim: "neutral",
+  warn: "warning",
+  error: "error",
+};
 
 /** The charts span the sheet's content width. */
 const CHART_WIDTH = 484;
@@ -97,14 +111,25 @@ export function HostDetail({
           <div className={s.target}>{target}</div>
         </div>
       </div>
-      <div className={cx(s.status, s[status.tone])}>
+      <StatusLine
+        className={s.status}
+        tone={!shown ? "neutral" : phase === "connecting" ? "progress" : TONE[status.tone]}
+      >
         {!shown ? t("dashboard.leftOutBadge") : status.text}
-        {stale && reading && ` · ${t("dashboard.readAt", { time: formatMessageTime(t.locale, history[last].at, now) })}`}
-        {picked != null && index < last && ` · ${t("terminal.stats.ago", { n: Math.round((history[last].at - reading!.at) / 1000) })}`}
-      </div>
+        {stale &&
+          reading &&
+          ` · ${t("dashboard.readAt", { time: formatMessageTime(t.locale, history[last].at, now) })}`}
+        {picked != null &&
+          index < last &&
+          ` · ${t("terminal.stats.ago", { n: Math.round((history[last].at - reading!.at) / 1000) })}`}
+      </StatusLine>
       {reading && (
         <div className={cx(s.body, stale && s.stale)}>
-          <Section label={t("terminal.stats.cpu")} value={reading.cpu_percent != null ? formatPercent(reading.cpu_percent) : "—"} alert={pastThreshold(reading.cpu_percent, alerts.cpu)}>
+          <Section
+            label={t("terminal.stats.cpu")}
+            value={reading.cpu_percent != null ? formatPercent(reading.cpu_percent) : "—"}
+            alert={pastThreshold(reading.cpu_percent, alerts.cpu)}
+          >
             <Sparkline
               series={[{ values: history.map((r) => r.cpu_percent), className: s.cpuLine }]}
               times={times}
@@ -128,7 +153,17 @@ export function HostDetail({
   );
 }
 
-function Section({ label, value, alert, children }: { label: string; value?: string; alert?: boolean; children?: React.ReactNode }) {
+function Section({
+  label,
+  value,
+  alert,
+  children,
+}: {
+  label: string;
+  value?: string;
+  alert?: boolean;
+  children?: React.ReactNode;
+}) {
   return (
     <section className={s.section} aria-label={label}>
       <div className={s.row}>
@@ -150,13 +185,29 @@ function CpuDetail({ reading, t }: { reading: StatsReading; t: T }) {
   const parts = [
     reading.cpus != null ? t("terminal.stats.cores", { n: reading.cpus }) : null,
     load ? t("terminal.stats.load", { load }) : null,
-    reading.uptime_secs != null ? t("terminal.stats.uptime", { time: formatUptime(t.locale, reading.uptime_secs) }) : null,
+    reading.uptime_secs != null
+      ? t("terminal.stats.uptime", { time: formatUptime(t.locale, reading.uptime_secs) })
+      : null,
   ].filter(Boolean);
   return parts.length > 0 ? <div className={s.detail}>{parts.join(" · ")}</div> : null;
 }
 
 /** `3.1 GB / 7.8 GB` and a meter, red past the threshold. A filesystem is labelled with its mount point (`mono`). */
-function Usage({ label, mono, used, total, percent, alert }: { label: string; mono?: boolean; used: number; total: number; percent: number; alert: boolean }) {
+function Usage({
+  label,
+  mono,
+  used,
+  total,
+  percent,
+  alert,
+}: {
+  label: string;
+  mono?: boolean;
+  used: number;
+  total: number;
+  percent: number;
+  alert: boolean;
+}) {
   return (
     <div className={cx(s.usage, alert && s.alert)}>
       <div className={s.row}>
@@ -171,7 +222,14 @@ function Usage({ label, mono, used, total, percent, alert }: { label: string; mo
           {formatPercent(percent)}
         </span>
       </div>
-      <div className={s.meter} role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
+      <div
+        className={s.meter}
+        role="meter"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(percent)}
+      >
         <div className={s.meterFill} style={{ width: `${percent}%` }} />
       </div>
     </div>
@@ -184,12 +242,24 @@ function MemorySection({ reading, alert, t }: { reading: StatsReading; alert: nu
   const swapPercent = percentOf(reading.swap_used, reading.swap_total);
   return (
     <section className={s.section} aria-label={t("terminal.stats.mem")}>
-      <Usage label={t("terminal.stats.mem")} used={reading.mem_used!} total={reading.mem_total!} percent={percent} alert={pastThreshold(percent, alert)} />
+      <Usage
+        label={t("terminal.stats.mem")}
+        used={reading.mem_used!}
+        total={reading.mem_total!}
+        percent={percent}
+        alert={pastThreshold(percent, alert)}
+      />
       {reading.swap_total === 0 ? (
         <div className={s.detail}>{t("terminal.stats.noSwap")}</div>
       ) : (
         swapPercent != null && (
-          <Usage label={t("terminal.stats.swap")} used={reading.swap_used!} total={reading.swap_total!} percent={swapPercent} alert={false} />
+          <Usage
+            label={t("terminal.stats.swap")}
+            used={reading.swap_used!}
+            total={reading.swap_total!}
+            percent={swapPercent}
+            alert={false}
+          />
         )
       )}
     </section>
@@ -246,7 +316,9 @@ function NetworkSection({
         onPick={onPick}
       />
       {reading.net_rx_total != null && reading.net_tx_total != null && (
-        <div className={s.detail}>{t("dashboard.netTotal", { rx: formatBytes(reading.net_rx_total), tx: formatBytes(reading.net_tx_total) })}</div>
+        <div className={s.detail}>
+          {t("dashboard.netTotal", { rx: formatBytes(reading.net_rx_total), tx: formatBytes(reading.net_tx_total) })}
+        </div>
       )}
     </section>
   );
@@ -257,7 +329,16 @@ function FilesystemsSection({ reading, alert, t }: { reading: StatsReading; aler
   const mounts = reading.mounts.some((m) => m.mount_point === "/")
     ? reading.mounts
     : reading.disk_total != null && reading.disk_used != null && reading.disk_available != null
-      ? [{ source: "", mount_point: "/", total: reading.disk_total, used: reading.disk_used, available: reading.disk_available }, ...reading.mounts]
+      ? [
+          {
+            source: "",
+            mount_point: "/",
+            total: reading.disk_total,
+            used: reading.disk_used,
+            available: reading.disk_available,
+          },
+          ...reading.mounts,
+        ]
       : reading.mounts;
   if (mounts.length === 0) return null;
   const root = rootPercent(reading);

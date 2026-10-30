@@ -17,7 +17,7 @@ type Remote =
   | { kind: "deployed"; handle: string }
   | { kind: "existing"; handle: string; target: DeployTarget };
 
-/** Cloud Sync setup (design §05): 接入方式 → 连接 → 主密码. Mounted by the sync page while sync is off. */
+/** Cloud Sync setup: 接入方式 → 连接 → 主密码. Mounted by the sync page while sync is off. */
 export function SyncWizard() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [method, setMethod] = useState<Method>("deploy");
@@ -36,13 +36,17 @@ export function SyncWizard() {
     [],
   );
 
-  const patch = <F,>(set: Dispatch<SetStateAction<F>>) => (p: Partial<F>) => set((f) => ({ ...f, ...p }));
+  const patch =
+    <F,>(set: Dispatch<SetStateAction<F>>) =>
+    (p: Partial<F>) =>
+      set((f) => ({ ...f, ...p }));
 
   if (step === 3 && remote) {
     const submit = (() => {
       switch (remote.kind) {
         case "config":
-          return (pw: string) => (remote.join ? api.sync_join(remote.config, pw) : api.sync_configure(remote.config, pw));
+          return (pw: string) =>
+            remote.join ? api.sync_join(remote.config, pw) : api.sync_configure(remote.config, pw);
         case "deployed":
           return (pw: string) => api.deploy_setup(remote.handle, pw);
         case "existing":

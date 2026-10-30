@@ -13,15 +13,16 @@
  *   the typed text
  *
  * Before them, Rust stores the notes Hatoba writes itself when a message follows a reply the user
- * stopped, moves the conversation to another host, changes whether a terminal is attached, goes to
- * another model, is sent in another permission mode than the model was told of, starts a conversation
- * with the memories, follows a revert of a file tool's change, is sent with a connected terminal, or
- * comes with another list of deferred MCP tools (`interrupted`, `host_change`, `terminal_change`,
- * `model_change`, `permission_mode`, `memory`, `file_revert`, `terminal_state`, `mcp_tools`); the panel
+ * stopped, moves the conversation to another host, changes whether a terminal is attached, moves it to
+ * another shell of the same computer, goes to another model, is sent in another permission mode than the model was told of, starts a conversation
+ * with the memories, follows a revert of a file tool's change, is sent with a connected terminal, comes
+ * with another list of deferred MCP tools, or has other MCP servers' tools (`interrupted`, `host_change`,
+ * `terminal_change`, `shell_change`, `model_change`, `permission_mode`, `memory`, `file_revert`, `terminal_state`,
+ * `mcp_tools`, `mcp_change`); the panel
  * shows the terminal's screen as a collapsed block, hides the memories, and shows the others as dividers. The block
- * format and its escaping are specified once, in docs/hatoba-spec.md §13.3
- * ("Attachment blocks"); Rust's `title_of` (src-tauri/src/ai.rs) reads the same blocks to title a
- * conversation.
+ * format and its escaping are specified once, in docs/ai-assistant.md §13.3
+ * ("Attachment blocks"); Rust's `title_of` (crates/hatoba-assistant/src/ai/entries.rs) reads the
+ * same blocks to title a conversation.
  */
 
 import type { AiEntryView, AiPermissionMode, DroppedFile } from "@/ipc/types";
@@ -236,7 +237,9 @@ function fileAttachment(name: string, text: string): FileAttachment {
  * checks of `checkFile` and `textFile`), made into an attachment the same way, or the reason it is
  * refused. The size cap is checked again here.
  */
-export function droppedFile(result: DroppedFile): { ok: true; file: FileAttachment } | { ok: false; name: string; reason: FileRefusal } {
+export function droppedFile(
+  result: DroppedFile,
+): { ok: true; file: FileAttachment } | { ok: false; name: string; reason: FileRefusal } {
   const name = baseName(result.name);
   if (result.status === "refused") return { ok: false, name, reason: result.reason };
   if (new TextEncoder().encode(result.text).length > FILE_MAX_BYTES) return { ok: false, name, reason: "too_large" };
@@ -298,38 +301,49 @@ export function blockTitle(a: Attachment): string {
 /**
  * A note Hatoba writes before a message (§13.1, AI-05, AI-09, AI-41), never the user: the reply before
  * it was stopped by the user, or with this message the conversation moved to another host, a terminal
- * became attached or stopped being attached, it went to another model, the permission mode the model
+ * became attached or stopped being attached, it moved to another shell of the same computer (§7.5), it
+ * went to another model, the permission mode the model
  * works in changed (AI-16), or the user reverted the change a file tool call made, or this message
- * shows the attached terminal's screen (AI-46) or lists the deferred MCP tools (AI-45). `from` of a host change is empty when the earlier host no longer exists;
+ * shows the attached terminal's screen (AI-46), lists the deferred MCP tools (AI-45), or names the MCP servers whose
+ * tools became available or stopped being available (AI-30). `from` of a host change is empty when the earlier host no longer exists;
  * a model is named as `Name (id)`, or by its ID alone. A revert's `path` is the file's path as the call
  * resolved it, and `body` its text for the model; the screen counts its lines, and `alternate` says a
  * full-screen program showed it; the MCP tool list counts its servers and tools, and `body` lists them.
  */
 export type Note =
   | { kind: "interrupted" }
-  | { kind: "host_change" | "model_change"; from: string; to: string }
+  | { kind: "host_change" | "shell_change" | "model_change"; from: string; to: string }
   | { kind: "terminal_change"; to: "attached" | "detached" }
   | { kind: "permission_mode"; mode: AiPermissionMode }
   | { kind: "memory"; entries: number; host?: string; body: string }
   | { kind: "file_revert"; path: string; toolCallId: string; body: string }
   | { kind: "terminal_state"; host: string; alternate: boolean; lines: number; body: string }
-  | { kind: "mcp_tools"; servers: number; tools: number; body: string };
+  | { kind: "mcp_tools"; servers: number; tools: number; body: string }
+  | { kind: "mcp_change"; available: string[]; unavailable: string[] };
 
 /** The order Hatoba writes its notes in; a `file_revert` comes once for each reverted call. */
 const NOTE_ORDER = [
   "interrupted",
   "host_change",
   "terminal_change",
+  "shell_change",
   "model_change",
   "permission_mode",
   "memory",
   "file_revert",
   "terminal_state",
   "mcp_tools",
+  "mcp_change",
 ] as const satisfies readonly Note["kind"][];
 
-const attr = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const unattr = (s: string) => s.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+const attr = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const unattr = (s: string) =>
+  s
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
 
 /**
  * A closing tag of the block's kind inside the text gets a backslash after its `<` (and one more on
@@ -370,21 +384,44 @@ function attributes(a: Attachment): [string, string][] {
     case "diagnostics":
       return [["host", a.host]];
     case "selection":
-      return [["host", a.host], ["lines", String(a.lines)], ...(a.truncated ? [["truncated", "true"] as [string, string]] : [])];
+      return [
+        ["host", a.host],
+        ["lines", String(a.lines)],
+        ...(a.truncated ? [["truncated", "true"] as [string, string]] : []),
+      ];
     case "paste":
       return [["lines", String(a.lines)]];
     case "file":
-      return [["name", a.name], ["lines", String(a.lines)]];
+      return [
+        ["name", a.name],
+        ["lines", String(a.lines)],
+      ];
     case "host_file":
-      return [["host", a.host], ["path", a.path], ["lines", String(a.lines)]];
+      return [
+        ["host", a.host],
+        ["path", a.path],
+        ["lines", String(a.lines)],
+      ];
     case "host_directory":
-      return [["host", a.host], ["path", a.path], ["entries", String(a.entries)], ...(a.truncated ? [["truncated", "true"] as [string, string]] : [])];
+      return [
+        ["host", a.host],
+        ["path", a.path],
+        ["entries", String(a.entries)],
+        ...(a.truncated ? [["truncated", "true"] as [string, string]] : []),
+      ];
     case "mcp_resource":
-      return [["server", a.server], ["uri", a.uri], ["lines", String(a.lines)]];
+      return [
+        ["server", a.server],
+        ["uri", a.uri],
+        ["lines", String(a.lines)],
+      ];
     case "skill":
       return [["name", a.name]];
     case "mcp_prompt":
-      return [["server", a.server], ["name", a.name]];
+      return [
+        ["server", a.server],
+        ["name", a.name],
+      ];
   }
 }
 
@@ -395,7 +432,8 @@ function block(a: Attachment): string {
 const TERMINAL_BODY = {
   attached:
     "A terminal is attached from this message on. Before this message none was, so replies that said they could not read a screen or run commands were right at the time.",
-  detached: "No terminal is attached from this message on. Screens and command output before this message came from the terminal that was attached then.",
+  detached:
+    "No terminal is attached from this message on. Screens and command output before this message came from the terminal that was attached then.",
 } as const;
 
 const PERMISSION_BODY = {
@@ -404,31 +442,105 @@ const PERMISSION_BODY = {
   bypass: "From this message on, the permission mode is bypass.",
 } as const satisfies Record<AiPermissionMode, string>;
 
+const MCP_CHANGE_BODY =
+  "With this message, the MCP servers whose tools you can call changed. Replies before it had the tools offered then, so what they said about MCP tools was true at the time.";
+const MCP_AVAILABLE = "Now available:";
+const MCP_UNAVAILABLE = "No longer available:";
+
+/** The servers an `mcp_change` note's body names under each heading, as Rust's `change::block` writes them. */
+function mcpChangeServers(body: string): { available: string[]; unavailable: string[] } {
+  const servers = { available: [] as string[], unavailable: [] as string[] };
+  let list: string[] | null = null;
+  for (const line of body.split("\n")) {
+    if (line === MCP_AVAILABLE) list = servers.available;
+    else if (line === MCP_UNAVAILABLE) list = servers.unavailable;
+    else if (list && line.startsWith("- ")) list.push(line.slice(2));
+  }
+  return servers;
+}
+
 const INTERRUPTED_BODY =
   "The user stopped your previous reply before it was finished. It ends where it was cut off; anything you were still writing, tool calls included, was not kept.";
 
 /**
- * A note as Rust writes it (`interrupted_block`, `host_change_block`, `terminal_change_block`,
- * `model_change_block`, `permission_mode_block`, `memory_block`, `file_revert_block`, `terminal_state_block` and
- * `deferred::list_block` in crates/hatoba-ai). The panel never sends one; Rust adds them when it stores a message, and the mock
+ * A note as Rust writes it (`interrupted_block`, `host_change_block`, `terminal_change_block`, `shell_change_block`,
+ * `model_change_block`, `permission_mode_block`, `memory_block`, `file_revert_block`, `terminal_state_block`,
+ * `deferred::list_block` and `change::block` in crates/hatoba-ai). The panel never sends one; Rust adds them when it stores a message, and the mock
  * does the same.
  */
 export function noteBlock(n: Note): string {
-  if (n.kind === "mcp_tools") return writeBlock(n.kind, [["servers", String(n.servers)], ["tools", String(n.tools)]], n.body);
+  if (n.kind === "mcp_change") {
+    const lists: [string, string[]][] = [
+      [MCP_AVAILABLE, n.available],
+      [MCP_UNAVAILABLE, n.unavailable],
+    ];
+    const body = lists
+      .filter(([, names]) => names.length > 0)
+      .map(([heading, names]) => [heading, ...names.map((name) => `- ${name}`)].join("\n"));
+    return writeBlock(
+      n.kind,
+      [
+        ["available", String(n.available.length)],
+        ["unavailable", String(n.unavailable.length)],
+      ],
+      [MCP_CHANGE_BODY, ...body].join("\n"),
+    );
+  }
+  if (n.kind === "mcp_tools")
+    return writeBlock(
+      n.kind,
+      [
+        ["servers", String(n.servers)],
+        ["tools", String(n.tools)],
+      ],
+      n.body,
+    );
   if (n.kind === "memory")
-    return writeBlock(n.kind, [["entries", String(n.entries)], ...(n.host === undefined ? [] : [["conversation_host", noteText(n.host)] as [string, string]])], n.body);
+    return writeBlock(
+      n.kind,
+      [
+        ["entries", String(n.entries)],
+        ...(n.host === undefined ? [] : [["conversation_host", noteText(n.host)] as [string, string]]),
+      ],
+      n.body,
+    );
   if (n.kind === "terminal_state")
-    return writeBlock(n.kind, [["host", noteText(n.host)], ["alternate_screen", String(n.alternate)], ["lines", String(n.lines)]], n.body);
+    return writeBlock(
+      n.kind,
+      [
+        ["host", noteText(n.host)],
+        ["alternate_screen", String(n.alternate)],
+        ["lines", String(n.lines)],
+      ],
+      n.body,
+    );
   if (n.kind === "interrupted") return writeBlock(n.kind, [], INTERRUPTED_BODY);
   if (n.kind === "terminal_change") return writeBlock(n.kind, [["to", n.to]], TERMINAL_BODY[n.to]);
   if (n.kind === "permission_mode") return writeBlock(n.kind, [["mode", n.mode]], PERMISSION_BODY[n.mode]);
-  if (n.kind === "file_revert") return writeBlock(n.kind, [["path", noteText(n.path)], ["tool_call_id", noteText(n.toolCallId)]], n.body);
+  if (n.kind === "file_revert")
+    return writeBlock(
+      n.kind,
+      [
+        ["path", noteText(n.path)],
+        ["tool_call_id", noteText(n.toolCallId)],
+      ],
+      n.body,
+    );
   const from = noteText(n.from);
   const body =
     n.kind === "model_change"
       ? "Earlier replies in this conversation came from another model."
-      : `The conversation moved to another host. Screens and command output before this message came from ${from ? `"${from}"` : "another host"}.`;
-  return writeBlock(n.kind, [["from", from], ["to", noteText(n.to)]], body);
+      : n.kind === "shell_change"
+        ? `The conversation moved to another local terminal on the same computer, which runs "${noteText(n.to)}". Screens and command output before this message came from "${from}".`
+        : `The conversation moved to another host. Screens and command output before this message came from ${from ? `"${from}"` : "another host"}.`;
+  return writeBlock(
+    n.kind,
+    [
+      ["from", from],
+      ["to", noteText(n.to)],
+    ],
+    body,
+  );
 }
 
 /** As Rust's `MAX_SCREEN_CHARS` (AI-46): a longer screen keeps its first quarter and the rest from its end. */
@@ -496,7 +608,7 @@ export interface MessageParts {
 }
 
 const OPEN =
-  /^<(interrupted|host_change|terminal_change|model_change|permission_mode|memory|file_revert|terminal_state|mcp_tools|terminal_selection|connection_diagnostics|pasted_text|file|host_file|host_directory|mcp_resource|skill|mcp_prompt)((?: [a-z_]+="[^"]*")*)>\n/;
+  /^<(interrupted|host_change|terminal_change|shell_change|model_change|permission_mode|memory|file_revert|terminal_state|mcp_tools|mcp_change|terminal_selection|connection_diagnostics|pasted_text|file|host_file|host_directory|mcp_resource|skill|mcp_prompt)((?: [a-z_]+="[^"]*")*)>\n/;
 const DIGITS = /^\d+$/;
 
 type Block = { kind: "note"; note: Note } | { kind: "attachment"; attachment: Attachment };
@@ -510,6 +622,7 @@ function blockOf(tag: string, attrs: [string, string][], body: string): Block | 
     case "interrupted":
       return names === "" ? { kind: "note", note: { kind: tag } } : null;
     case "host_change":
+    case "shell_change":
     case "model_change":
       return names === "from,to" ? { kind: "note", note: { kind: tag, from: value(0), to: value(1) } } : null;
     case "terminal_change": {
@@ -518,40 +631,78 @@ function blockOf(tag: string, attrs: [string, string][], body: string): Block | 
     }
     case "permission_mode": {
       const mode = names === "mode" ? value(0) : "";
-      return mode === "manual" || mode === "auto" || mode === "bypass" ? { kind: "note", note: { kind: tag, mode } } : null;
+      return mode === "manual" || mode === "auto" || mode === "bypass"
+        ? { kind: "note", note: { kind: tag, mode } }
+        : null;
     }
     case "memory":
       // Notes stored before the conversation's host had its own attribute name it `host`.
       if ((names === "entries,conversation_host" || names === "entries,host") && DIGITS.test(value(0)))
         return { kind: "note", note: { kind: tag, entries: Number(value(0)), host: value(1), body } };
-      return names === "entries" && DIGITS.test(value(0)) ? { kind: "note", note: { kind: tag, entries: Number(value(0)), body } } : null;
+      return names === "entries" && DIGITS.test(value(0))
+        ? { kind: "note", note: { kind: tag, entries: Number(value(0)), body } }
+        : null;
     case "file_revert":
-      return names === "path,tool_call_id" ? { kind: "note", note: { kind: tag, path: value(0), toolCallId: value(1), body } } : null;
+      return names === "path,tool_call_id"
+        ? { kind: "note", note: { kind: tag, path: value(0), toolCallId: value(1), body } }
+        : null;
     case "terminal_state":
-      return names === "host,alternate_screen,lines" && (value(1) === "true" || value(1) === "false") && DIGITS.test(value(2))
-        ? { kind: "note", note: { kind: tag, host: value(0), alternate: value(1) === "true", lines: Number(value(2)), body } }
+      return names === "host,alternate_screen,lines" &&
+        (value(1) === "true" || value(1) === "false") &&
+        DIGITS.test(value(2))
+        ? {
+            kind: "note",
+            note: { kind: tag, host: value(0), alternate: value(1) === "true", lines: Number(value(2)), body },
+          }
         : null;
     case "mcp_tools":
       return names === "servers,tools" && DIGITS.test(value(0)) && DIGITS.test(value(1))
         ? { kind: "note", note: { kind: tag, servers: Number(value(0)), tools: Number(value(1)), body } }
         : null;
+    case "mcp_change":
+      return names === "available,unavailable" && DIGITS.test(value(0)) && DIGITS.test(value(1))
+        ? { kind: "note", note: { kind: tag, ...mcpChangeServers(body) } }
+        : null;
     case TAGS.selection:
-      if ((names === "host,lines" || (names === "host,lines,truncated" && value(2) === "true")) && DIGITS.test(value(1)))
-        return attachment({ kind: "selection", host: value(0), lines: Number(value(1)), truncated: attrs.length === 3, text: body });
+      if (
+        (names === "host,lines" || (names === "host,lines,truncated" && value(2) === "true")) &&
+        DIGITS.test(value(1))
+      )
+        return attachment({
+          kind: "selection",
+          host: value(0),
+          lines: Number(value(1)),
+          truncated: attrs.length === 3,
+          text: body,
+        });
       return null;
     case TAGS.diagnostics:
       return names === "host" ? attachment({ kind: "diagnostics", host: value(0), text: body }) : null;
     case TAGS.paste:
-      return names === "lines" && DIGITS.test(value(0)) ? attachment({ kind: "paste", lines: Number(value(0)), text: body }) : null;
+      return names === "lines" && DIGITS.test(value(0))
+        ? attachment({ kind: "paste", lines: Number(value(0)), text: body })
+        : null;
     case TAGS.file:
-      return names === "name,lines" && DIGITS.test(value(1)) ? attachment({ kind: "file", name: value(0), lines: Number(value(1)), text: body }) : null;
+      return names === "name,lines" && DIGITS.test(value(1))
+        ? attachment({ kind: "file", name: value(0), lines: Number(value(1)), text: body })
+        : null;
     case TAGS.host_file:
       return names === "host,path,lines" && DIGITS.test(value(2))
         ? attachment({ kind: "host_file", host: value(0), path: value(1), lines: Number(value(2)), text: body })
         : null;
     case TAGS.host_directory:
-      if ((names === "host,path,entries" || (names === "host,path,entries,truncated" && value(3) === "true")) && DIGITS.test(value(2)))
-        return attachment({ kind: "host_directory", host: value(0), path: value(1), entries: Number(value(2)), truncated: attrs.length === 4, text: body });
+      if (
+        (names === "host,path,entries" || (names === "host,path,entries,truncated" && value(3) === "true")) &&
+        DIGITS.test(value(2))
+      )
+        return attachment({
+          kind: "host_directory",
+          host: value(0),
+          path: value(1),
+          entries: Number(value(2)),
+          truncated: attrs.length === 4,
+          text: body,
+        });
       return null;
     case TAGS.mcp_resource:
       return names === "server,uri,lines" && DIGITS.test(value(2))
@@ -560,7 +711,9 @@ function blockOf(tag: string, attrs: [string, string][], body: string): Block | 
     case TAGS.skill:
       return names === "name" ? attachment({ kind: "skill", name: value(0), text: body }) : null;
     case TAGS.mcp_prompt:
-      return names === "server,name" ? attachment({ kind: "mcp_prompt", server: value(0), name: value(1), text: body }) : null;
+      return names === "server,name"
+        ? attachment({ kind: "mcp_prompt", server: value(0), name: value(1), text: body })
+        : null;
     default:
       return null;
   }
@@ -579,11 +732,17 @@ function leadingBlock(text: string): { block: Block; rest: string } | null {
   const attrs = [...m[2].matchAll(/ ([a-z_]+)="([^"]*)"/g)].map((a): [string, string] => [a[1], unattr(a[2])]);
   if (!blockOf(tag, attrs, "")) return null;
   const close = `\n</${tag}>`;
-  for (let from = m[0].length; ; ) {
+  for (let from = m[0].length; ;) {
     const at = text.indexOf(close, from);
     if (at < 0) return null;
     const after = text.slice(at + close.length);
-    const rest = after.startsWith("\n\n") ? after.slice(2) : after.startsWith("\n") ? after.slice(1) : after === "" ? "" : null;
+    const rest = after.startsWith("\n\n")
+      ? after.slice(2)
+      : after.startsWith("\n")
+        ? after.slice(1)
+        : after === ""
+          ? ""
+          : null;
     if (rest !== null) return { block: blockOf(tag, attrs, unescapeBody(text.slice(m[0].length, at), tag))!, rest };
     from = at + 1;
   }
@@ -603,7 +762,11 @@ export function parseMessage(text: string): MessageParts {
     if (!b) return parts;
     if (b.block.kind === "note") {
       const note = b.block.note;
-      if (parts.attachments.length > 0 || (note.kind !== "file_revert" && parts.notes.some((n) => n.kind === note.kind))) return parts;
+      if (
+        parts.attachments.length > 0 ||
+        (note.kind !== "file_revert" && parts.notes.some((n) => n.kind === note.kind))
+      )
+        return parts;
       parts.notes.push(note);
     } else {
       const a = b.block.attachment;

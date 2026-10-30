@@ -25,7 +25,11 @@ const SECTIONS = ["Context", "Changes", "Validation", "Breaking changes"];
 /** The checklist of the pull request template, by a phrase from each item. */
 const CHECKLIST = [
   { phrase: "contribution guide", text: "I have read the contribution guide" },
-  { phrase: "linked issue", text: "The linked issue is labeled `good first issue` or `help wanted`, was opened by me, or is assigned to me", issue: true },
+  {
+    phrase: "linked issue",
+    text: "The linked issue is labeled `good first issue` or `help wanted`, was opened by me, or is assigned to me",
+    issue: true,
+  },
   { phrase: "reviewed the full diff", text: "I have reviewed the full diff" },
 ];
 /** A pull request without an issue may fix documentation in at most this many changed lines. */
@@ -67,7 +71,9 @@ export function ticked(body) {
     .split(/\r?\n/)
     .filter((line) => /^\s*[-*]\s*\[[xX]\]/.test(line))
     .map((line) => line.toLowerCase());
-  return new Set(CHECKLIST.filter((item) => lines.some((line) => line.includes(item.phrase))).map((item) => item.phrase));
+  return new Set(
+    CHECKLIST.filter((item) => lines.some((line) => line.includes(item.phrase))).map((item) => item.phrase),
+  );
 }
 
 /** The issue numbers `body` links with a closing keyword or `Refs`, in the order they appear. */
@@ -80,11 +86,14 @@ export function linkedIssues(body, repo) {
   return [...new Set(numbers)];
 }
 
-/** Whether a change to the file at `path` changes the desktop app's UI, which needs screenshots. */
+/**
+ * Whether a change to the file at `path` changes the desktop app's UI, which needs screenshots: its
+ * own screens or the shared components and tokens in packages/ui.
+ */
 export function isUiFile(path) {
-  if (!path.startsWith("apps/desktop/")) return false;
   if (path === "apps/desktop/index.html" || path.startsWith("apps/desktop/src/i18n/locales/")) return true;
-  if (!path.startsWith("apps/desktop/src/") || /\.test\.tsx?$/.test(path)) return false;
+  if (!path.startsWith("apps/desktop/src/") && !path.startsWith("packages/ui/src/")) return false;
+  if (/\.test\.tsx?$/.test(path)) return false;
   return path.endsWith(".tsx") || path.endsWith(".css");
 }
 
@@ -95,7 +104,8 @@ export function isSmallDocsFix(files) {
 }
 
 /** Whether `text` shows an image or a video: Markdown, an `<img>` tag, or an uploaded attachment. */
-export const hasImage = (text) => /!\[[^\]]*\]\([^)\s]+|<img\s|https:\/\/github\.com\/user-attachments\/assets\//i.test(stripComments(text));
+export const hasImage = (text) =>
+  /!\[[^\]]*\]\([^)\s]+|<img\s|https:\/\/github\.com\/user-attachments\/assets\//i.test(stripComments(text));
 
 /**
  * What the pull request lacks, as instructions to its author; empty when nothing is missing.
@@ -119,7 +129,8 @@ export function problems({ body, author, files, issues, comments }) {
   const written = sections(text);
   const missing = SECTIONS.filter((name) => !written.has(name.toLowerCase()));
   const empty = SECTIONS.filter((name) => written.get(name.toLowerCase()) === "");
-  if (missing.length > 0) found.push(`Add the ${list(missing)} ${missing.length > 1 ? "sections" : "section"} of the template.`);
+  if (missing.length > 0)
+    found.push(`Add the ${list(missing)} ${missing.length > 1 ? "sections" : "section"} of the template.`);
   if (empty.length > 0) found.push(`Fill in the ${list(empty)} ${empty.length > 1 ? "sections" : "section"}.`);
 
   if (needsIssue) {
@@ -226,11 +237,20 @@ export async function run({ repo, number, token, dryRun }) {
   for (let round = 0; round < ROUNDS; round++) {
     const state = await read(api, repo, number);
     if (state === null) return;
-    const inputs = JSON.stringify([state.pr.body, state.pr.head.sha, state.pr.draft, state.comments.map((c) => [c.id, c.body])]);
+    const inputs = JSON.stringify([
+      state.pr.body,
+      state.pr.head.sha,
+      state.pr.draft,
+      state.comments.map((c) => [c.id, c.body]),
+    ]);
     if (inputs === checked) return;
     checked = inputs;
     const found = problems(state);
-    console.log(found.length === 0 ? `#${number} follows the contribution guide.` : `#${number} is missing:\n${found.map((p) => `  - ${p}`).join("\n")}`);
+    console.log(
+      found.length === 0
+        ? `#${number} follows the contribution guide.`
+        : `#${number} is missing:\n${found.map((p) => `  - ${p}`).join("\n")}`,
+    );
     if (dryRun) return;
     await act(api, repo, number, state, found);
   }
@@ -286,7 +306,8 @@ async function act(api, repo, number, { pr, ours }, found) {
   }
   if (ours.length === 0) return;
   // Reopens only what this check closed, not a pull request its author or a maintainer closed.
-  const closedByCheck = pr.state === "closed" && (await request("GET", `/repos/${repo}/issues/${number}`)).closed_by?.login === BOT;
+  const closedByCheck =
+    pr.state === "closed" && (await request("GET", `/repos/${repo}/issues/${number}`)).closed_by?.login === BOT;
   if (closedByCheck) await request("PATCH", `/repos/${repo}/pulls/${number}`, { state: "open" });
   const kept = oldest(ours);
   await settleComment(api, repo, number, ours, kept.body.startsWith(FAILED) ? passComment(closedByCheck) : kept.body);
@@ -306,13 +327,19 @@ async function settleComment({ request, all }, repo, number, ours, body) {
   }
   const kept = oldest(ours);
   for (const copy of ours) {
-    if (copy !== kept) await request("DELETE", `/repos/${repo}/issues/comments/${copy.id}`, undefined, { missingOk: true });
+    if (copy !== kept)
+      await request("DELETE", `/repos/${repo}/issues/comments/${copy.id}`, undefined, { missingOk: true });
   }
-  if (kept.body !== body) await request("PATCH", `/repos/${repo}/issues/comments/${kept.id}`, { body }, { missingOk: true });
+  if (kept.body !== body)
+    await request("PATCH", `/repos/${repo}/issues/comments/${kept.id}`, { body }, { missingOk: true });
 }
 
 async function main(argv) {
-  const { values, positionals } = parseArgs({ args: argv, options: { "dry-run": { type: "boolean" } }, allowPositionals: true });
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: { "dry-run": { type: "boolean" } },
+    allowPositionals: true,
+  });
   const token = process.env.GITHUB_TOKEN;
   const repo = process.env.GITHUB_REPOSITORY ?? "scarletkc/Hatoba";
   if (!token) {

@@ -17,9 +17,11 @@ authRoutes.post("/login", rateLimit("login"), limitBody(MAX_BODY_BYTES_SMALL), a
 
   const meta = await c.env.DB.prepare("SELECT auth_hash FROM meta WHERE id = 1").first<{ auth_hash: string }>();
   if (!meta) throw notInitialized();
-  if (!(await constantTimeEqual(await sha256Hex(authKey), meta.auth_hash))) throw invalidCredentials();
+  const authHash = await sha256Hex(authKey);
+  if (!(await constantTimeEqual(authHash, meta.auth_hash))) throw invalidCredentials();
 
-  const session = await createSession(c.env.DB, { deviceId, deviceName, scope: "full" });
+  const session = await createSession(c.env.DB, { deviceId, deviceName, scope: "full", credentialHash: authHash });
+  if (!session) throw invalidCredentials();
   return c.json({ session_token: session.token, expires_at: session.expiresAt });
 });
 
@@ -37,11 +39,16 @@ authRoutes.post("/recover", rateLimit("recover"), limitBody(MAX_BODY_BYTES_SMALL
     "SELECT recovery_auth_hash, recovery_vault_key, kdf_salt, kdf_params FROM meta WHERE id = 1",
   ).first<{ recovery_auth_hash: string; recovery_vault_key: string; kdf_salt: string; kdf_params: string }>();
   if (!meta) throw notInitialized();
-  if (!(await constantTimeEqual(await sha256Hex(recoveryAuth), meta.recovery_auth_hash))) {
-    throw invalidCredentials();
-  }
+  const recoveryAuthHash = await sha256Hex(recoveryAuth);
+  if (!(await constantTimeEqual(recoveryAuthHash, meta.recovery_auth_hash))) throw invalidCredentials();
 
-  const session = await createSession(c.env.DB, { deviceId, deviceName, scope: "recovery" });
+  const session = await createSession(c.env.DB, {
+    deviceId,
+    deviceName,
+    scope: "recovery",
+    credentialHash: recoveryAuthHash,
+  });
+  if (!session) throw invalidCredentials();
   return c.json({
     recovery_vault_key: meta.recovery_vault_key,
     kdf_salt: meta.kdf_salt,

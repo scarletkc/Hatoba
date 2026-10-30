@@ -1,4 +1,4 @@
-/* Sync status + conflicts (design §05b / §05c) */
+/* Sync status + conflicts */
 
 .page {
   flex: 1;
@@ -21,18 +21,18 @@
   max-width: 640px;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: var(--space-20);
   align-self: flex-start;
 }
 
 .columnTight {
-  gap: 18px;
+  gap: var(--space-16);
 }
 
 .header {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--space-12);
 }
 
 .headerText {
@@ -47,7 +47,7 @@
 }
 
 .sub {
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   color: var(--fg2);
   margin-top: 2px;
   text-wrap: pretty;
@@ -75,40 +75,35 @@
 .relogin {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
   padding: 12px 14px;
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: var(--group);
   box-shadow: inset 0 0 0 0.5px var(--line);
 }
 
 .reloginRow {
   display: flex;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .reloginRow > :first-child {
   flex: 1;
 }
 
-.reloginError {
-  font-size: var(--text-sm);
-  color: var(--red);
-}
-
 /* "N conflicts resolved automatically · Review" */
 .banner {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-8);
   padding: 10px 14px;
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--orange) 12%, transparent);
   box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--orange) 40%, transparent);
 }
 
 .bannerIcon {
-  font-size: 16px;
+  font-size: var(--icon-16);
   color: var(--orange);
 }
 
@@ -128,30 +123,20 @@
   color: var(--accent);
 }
 
-/* Devices */
+/* Devices: ListRows, a little taller for the two-line body. */
 .device {
-  display: flex;
-  align-items: center;
-  gap: 12px;
   min-height: 46px;
-  padding: 0 14px;
 }
 
 .deviceIcon {
-  font-size: 20px;
+  font-size: var(--icon-20);
   color: var(--fg2);
-}
-
-/* Keeps some room for the name, so a narrow row wraps the stale note instead. */
-.deviceText {
-  flex: 1;
-  min-width: 96px;
 }
 
 .deviceName {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .deviceNameText {
@@ -161,23 +146,9 @@
   white-space: nowrap;
 }
 
-.badge {
-  flex: none;
-  font-size: var(--text-xs);
-  color: var(--fg2);
-  padding: 1px 6px;
-  border-radius: var(--radius-xs);
-  background: var(--fill);
-}
-
 .deviceMeta {
-  font-size: 11.5px;
+  font-size: var(--text-sm);
   color: var(--fg2);
-  margin-top: 1px;
-}
-
-.device > .deviceMeta {
-  margin-top: 0;
 }
 
 .removeLink {
@@ -201,19 +172,19 @@
 /* Security note */
 .security {
   display: flex;
-  gap: 12px;
+  gap: var(--space-12);
   padding: 2px;
 }
 
 .securityIcon {
-  font-size: 18px;
+  font-size: var(--icon-20);
   color: var(--fg2);
   margin-top: 1px;
   flex: none;
 }
 
 .securityText {
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   line-height: 1.6;
   color: var(--fg2);
   text-wrap: pretty;
@@ -227,17 +198,17 @@
 .securityLinks {
   margin-top: 8px;
   display: flex;
-  gap: 16px;
+  gap: var(--space-16);
   flex-wrap: wrap;
 }
 
 .securityLink {
-  font-size: 12.5px;
+  font-size: var(--text-sm);
 }
 
 /* Conflict cards */
 .conflict {
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: var(--group);
   box-shadow: inset 0 0 0 0.5px var(--line);
   overflow: hidden;
@@ -246,13 +217,13 @@
 .conflictHead {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-8);
   padding: 12px 14px;
   min-width: 0;
 }
 
 .conflictIcon {
-  font-size: 16px;
+  font-size: var(--icon-16);
   color: var(--fg2);
   flex: none;
 }
@@ -274,7 +245,7 @@
   display: grid;
   grid-template-columns: minmax(96px, max-content) minmax(0, 1fr) minmax(0, 1fr);
   border-top: 0.5px solid var(--line);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
 }
 
 .diffRow {
@@ -289,7 +260,7 @@
 }
 
 .diffHead {
-  font-size: 11.5px;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: var(--fg2);
   border-left: 0.5px solid var(--line);
@@ -298,7 +269,7 @@
 .diffLabel {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   border-top: 0.5px solid var(--line);
 }
 
@@ -331,26 +302,15 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 10px 14px;
   border-top: 0.5px solid var(--line);
 }
 
+/* A StatusLine that takes the room before the buttons. */
 .result {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   flex: 1 1 160px;
-  min-width: 0;
-  font-size: var(--text-sm);
-  color: var(--fg2);
   text-wrap: pretty;
-}
-
-.result i {
-  color: var(--green);
-  font-size: 14px;
-  flex: none;
 }
 
 .empty {

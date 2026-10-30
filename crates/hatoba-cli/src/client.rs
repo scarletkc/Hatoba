@@ -183,10 +183,63 @@ fn copy(app: &App, source: Place, target: Place, prompt: bool) -> i32 {
 }
 
 fn absolute(local: &str) -> Result<String, String> {
+    #[cfg(windows)]
+    let local = &msys_path(
+        local,
+        std::env::var_os("MSYSTEM").is_some_and(|v| !v.is_empty()),
+    )?;
     let path = std::path::absolute(local).map_err(|e| format!("{local}: {e}"))?;
     path.into_os_string()
         .into_string()
         .map_err(|p| format!("{} is not valid text", p.to_string_lossy()))
+}
+
+/// Under Git Bash and MSYS2, which set `MSYSTEM`, a local path that starts with `/` is one of
+/// theirs: the `hatoba` launcher passes the command's own arguments as typed, so `~/a.txt` comes
+/// as `/c/Users/…/a.txt`. Their `cygpath` knows where such a path is on Windows, mounts included.
+#[cfg(windows)]
+fn msys_path(local: &str, msys: bool) -> Result<String, String> {
+    if !msys || !local.starts_with('/') {
+        return Ok(local.to_owned());
+    }
+    cygpath(local).map_err(|reason| {
+        format!(
+            "can't turn {local} into a Windows path: {reason}. \
+             Give it as a Windows path, such as C:/Users/name/file.txt"
+        )
+    })
+}
+
+/// The path goes in on stdin: an MSYS program started from a Windows one expands wildcards and
+/// quotes in its arguments.
+#[cfg(windows)]
+fn cygpath(path: &str) -> Result<String, String> {
+    let mut child = Process::new("cygpath")
+        .args(["-w", "-f", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| match e.kind() {
+            io::ErrorKind::NotFound => "cygpath is not on the PATH".to_owned(),
+            _ => format!("cygpath did not start ({e})"),
+        })?;
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(format!("{path}\n").as_bytes());
+    }
+    let out = child
+        .wait_with_output()
+        .map_err(|e| format!("cygpath did not finish ({e})"))?;
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let windows = stdout.trim_end_matches(['\r', '\n']);
+    if out.status.success() && !windows.is_empty() {
+        return Ok(windows.to_owned());
+    }
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    Err(match stderr.trim() {
+        "" => "cygpath failed".to_owned(),
+        message => format!("cygpath failed ({message})"),
+    })
 }
 
 fn size(bytes: u64) -> String {
@@ -442,6 +495,31 @@ mod tests {
         assert_eq!(size(512), "512 B");
         assert_eq!(size(1536), "1.5 KB");
         assert_eq!(size(5 * 1024 * 1024), "5.0 MB");
+    }
+
+    /// HOST-15: `hatoba cp` from Git Bash takes the local paths its shell gives it.
+    #[cfg(windows)]
+    #[test]
+    fn msys_paths_become_windows_paths() {
+        for path in ["/c/x.txt", "C:/x.txt", r"C:\x.txt", "x.txt", "./x.txt"] {
+            assert_eq!(msys_path(path, false).unwrap(), path);
+        }
+        for path in ["C:/x.txt", r"C:\x.txt", "./x.txt", r"\\server\share\x"] {
+            assert_eq!(msys_path(path, true).unwrap(), path);
+        }
+        if Process::new("cygpath").arg("--version").output().is_err() {
+            eprintln!("cygpath is not on the PATH: skipping");
+            return;
+        }
+        assert_eq!(
+            msys_path("/c/Users/a b/x[1] 'y'.txt", true).unwrap(),
+            r"C:\Users\a b\x[1] 'y'.txt"
+        );
+        assert_eq!(msys_path("/d/东京/", true).unwrap(), r"D:\东京\");
+        assert_eq!(
+            msys_path("//server/share/x", true).unwrap(),
+            r"\\server\share\x"
+        );
     }
 
     #[test]

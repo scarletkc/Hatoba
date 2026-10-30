@@ -1,20 +1,20 @@
 # Hosts and connecting
 
-## The host list
+## The hosts page
 
-The home tab shows the host list for the sidebar item that is selected: **All Hosts**, **Favorites**, **Recent** (hosts connected before), a group, or a tag. A host is a saved SSH or Telnet destination. Groups are flat (one level) and a host belongs to at most one group; tags are free text and a host can have several.
+**Hosts** in the rail opens it. A host is one saved SSH or Telnet destination, in at most one group (groups have one level), with any number of free-text tags.
 
-- The header has a search box (fuzzy match on name, address, user name and tags; Ctrl+Shift+K or ⌘⇧K focuses it), the sort button, and **New Host**. The search box also connects to hosts that are not saved; see Quick connect below.
-- Each row shows the name, `user@address:port`, the jump host if any, tags, and the time of the last connection. The dot is green when the host is connected or answers a TCP probe, grey otherwise. A host whose latest attempt in this launch failed shows **Failed** in red.
-- To connect: double-click a row, select it and press Enter, or click **Connect**. Up and down move the selection, and typing starts a search. The same host can be opened in several tabs.
-- Right-click a row for its menu.
+- The header has a search box (fuzzy match on name, address, user name and tags; Ctrl+Shift+K or ⌘⇧K), **Import**, and **New Host**, with **New Group** under the arrow beside it. It also takes unsaved targets (Quick connect below).
+- Under it: **Favorites**, **Tags** (hosts with every tag picked; × removes a tag), the sort order, **Resource Usage** (`references/resource-usage.md`) and **List** or **Cards**, which this device keeps.
+- Group buttons above the hosts open a group; **Hosts** before its name goes back. Its **…** (or a right-click on its button) has **Rename Group** and **Delete Group**, which keeps the hosts.
+- A row or card shows the name, `user@address:port`, tags, and the last connection; a row also the jump host. The dot is green when the host is connected or answers a TCP probe, grey otherwise; **Failed** (red): the last attempt this launch failed.
+- To connect: double-click, select and press Enter, or click **Connect**. Arrow keys move the selection; typing searches. A host can be open in several tabs. Right-click for its menu.
+- Ctrl+click (⌘-click on macOS) or Shift+click selects several hosts; a click beside the rows selects none. The right-click menu of several has **Connect** (a tab each), **Add to Favorites** or **Remove from Favorites**, and **Delete**, for all of them.
 
-Other labels: **Search hosts or ssh user@host**, **Sort by**, **Name**, **Address**, **Tags**, **Last Connected**, **Duplicate**, **Add to Favorites**, **Remove from Favorites**, **Copy Address**.
+Other labels: **Search hosts or ssh user@host**, **Sort by**, **Recent**, **Name**, **Address**, **Last Connected**, **Duplicate**, **Copy Address**, **Clear Filters**.
 
-- **Copy Password** (hosts with a saved password) clears the clipboard after the delay in Settings → Security.
-- **Delete…** asks for confirmation. With Cloud Sync on, the host is removed on the other devices too.
-- A group's right-click menu in the sidebar has **Rename Group** and **Delete Group**. Deleting a group moves its hosts to All Hosts; it does not delete them.
-- The reachability dots can be turned off in Settings → General (**Show host reachability**). When on, Hatoba tries a TCP connection to the listed hosts every 60 seconds, with no login attempt.
+- **Copy Password** (hosts with a saved password) clears the clipboard after the delay in Settings → Security. **Delete** asks first; with Cloud Sync on, the host goes from the other devices too.
+- **Show host reachability** in Settings → General turns the dots off. When on, Hatoba tries a TCP connection to the listed hosts every 60 seconds, without signing in.
 
 ## Quick connect
 
@@ -23,15 +23,15 @@ Typing `user@host[:port]` or an ssh command such as `ssh -p 2222 deploy@203.0.11
 - `-p` and `-l` work; `-v`, `-C`, `-t`, `-4` and the like are ignored, and `-A`, `-X`, `-Y` connect without forwarding. Other options (`-i`, `-J`, `-L` …) and remote commands show a row saying why it cannot connect; save a host for keys, jump hosts or forwards.
 - Without a user name, this computer's user name is used, as with `ssh`.
 - It connects through this device's default proxy, if Settings → Proxies has one.
-- Sign-in works like the `ssh` command: the SSH agent first, then the server's own prompts, or a password dialog (also when the server's prompts fail). The password is used once and never saved. Saved keys are not tried. A server that hangs up after rejecting too many agent keys is connected to again without the agent. The host key is checked as for any host (trust it on first use; it syncs).
-- The tab is titled `user@host`. Port forwarding is not offered, and **More actions** has **Save as Host…**, which opens the host editor filled in with the address, port and user. Once the host is saved, **Reconnect** connects the tab as that host.
+- Sign-in works like the `ssh` command: the SSH agent first, then the server's own prompts, or a password dialog (also when those fail) whose password is never saved. Saved keys are not tried. A server that hangs up after rejecting too many agent keys is connected to again without the agent. The host key is checked as for any host (trust it on first use; it syncs).
+- The tab is titled `user@host`. Port forwarding is not offered, and **More actions** has **Save as Host**, which opens the host editor filled in with the address, port and user. Once the host is saved, **Reconnect** connects the tab as that host.
 - Nothing is saved as a host by itself. Targets that connected are kept as **Recent** on this device only (at most 8, no passwords, never synced). With the search box empty and focused, they show under it (**Recent Quick Connections**); while typing, matching ones show as extra **Connect** rows. The × button removes one.
 
 Other labels: **Not saved**, **Remove from Recent**, **Username**.
 
 ## Import hosts
 
-**Import**, in the header of the host list and in the empty list, opens a menu: **SSH Config** reads `~/.ssh/config` (on Windows `%USERPROFILE%\.ssh\config`), and Xshell, FinalShell, MobaXterm, PuTTY, SecureCRT and Tabby read that client's saved sessions where it keeps them on this device. The dialog lists the SSH hosts and imports the ones you tick. Entries whose name already exists are unticked and marked **Already exists**. For sessions kept elsewhere or brought from another computer, **Choose File…** or **Choose Folder…** reads them from there:
+**Import**, in the header of the host list and in the empty list, opens a menu: **SSH Config** reads `~/.ssh/config` (on Windows `%USERPROFILE%\.ssh\config`), and Xshell, FinalShell, MobaXterm, PuTTY, SecureCRT and Tabby read that client's saved sessions where it keeps them on this device. The dialog lists the SSH hosts and imports the ones you tick. Entries whose name already exists are unticked and marked **Already exists**. For sessions kept elsewhere or brought from another computer, **Choose File** or **Choose Folder** reads them from there:
 
 - Xshell: the sessions folder in `Documents\NetSarang Computer\<version>\Xshell\Sessions`, a sessions folder kept elsewhere, or an `.xts` file from Xshell's **File → Export**.
 - FinalShell: its data folder (`%LOCALAPPDATA%\finalshell` on Windows, `~/Library/FinalShell` on macOS, `~/.finalshell` on Linux), or a copy of it.
@@ -61,7 +61,7 @@ Other labels: **Username**, **Organization & Network**.
 - **Test Connection** connects with the current form values (saved or not), authenticates, checks the host key (you may be asked to trust it), shows the latency, and disconnects. It does not save the host.
 - **Delete Host** is at the bottom of the editor for an existing host.
 - **Notes** are for you only. **AI Notes** go to the AI assistant in every request of a conversation on the host; see `references/ai-instructions.md`.
-- A host's port forwards are on the **Port Forwarding** page in the sidebar, not in the editor; see `references/port-forwarding.md`.
+- A host's port forwards are on the **Port Forwarding** page (**Forwards** in the navigation rail), not in the editor; see `references/port-forwarding.md`.
 - **Environment Variables** are sent to the server when a terminal opens; see Environment variables below.
 
 ## Authentication methods
@@ -69,7 +69,7 @@ Other labels: **Username**, **Organization & Network**.
 **Method** chooses how Hatoba signs in:
 
 - **Password**: stored encrypted in the vault. After saving, the field shows **Saved** and the password can be replaced (**Replace**, **Keep Saved Password**) but never viewed.
-- **Key**: choose a key from the Keys page (**Choose a key…**; **Manage Keys** opens the Keys page). RSA, Ed25519 and ECDSA keys work. If the key has a passphrase that was saved with it, it is used; otherwise Hatoba asks for the passphrase when connecting (**Enter the key passphrase**), and does not save it.
+- **Key**: choose a key from the Keys page (**Choose a key…**; **Manage Keys** opens the Keys page). RSA, Ed25519 and ECDSA keys work. A passphrase saved with the key is used; otherwise Hatoba asks for it when connecting (**Enter the key passphrase**) and does not save it.
 - **Ask Each Time**: Hatoba asks for the password at every connection and never saves it.
 - **SSH Agent**: uses the keys in an SSH agent. On Windows: the OpenSSH Authentication Agent service (it must be running), or Bitwarden's or 1Password's agent in its place. On macOS and Linux: the agent `ssh` uses, named by `IdentityAgent` in `~/.ssh/config` or by `SSH_AUTH_SOCK`, also when only `~/.zshrc` or `~/.bashrc` exports it. Pageant is not supported.
 - Servers that ask for a second factor (keyboard-interactive, such as a one-time code) show a dialog titled **Additional verification required** with a **Verify** button. This needs no setting.
@@ -77,7 +77,7 @@ Other labels: **Username**, **Organization & Network**.
 
 ## Jump host
 
-**Jump Host** (ProxyJump) routes the connection through another saved host. Pick it from the list; the list excludes the host itself, and a loop of jump hosts is rejected. A jump host can have its own jump host. Each hop uses its own saved settings, and a jump host must use a saved password, a key with its passphrase saved, or **SSH Agent**. Behind a jump host, the jump host's own **Proxy** setting applies. The status bar of the tab shows "via" and the jump host's name.
+**Jump Host** (ProxyJump) routes the connection through another saved host. Pick it from the list; the list excludes the host itself, and a loop of jump hosts is rejected. A jump host can have its own jump host. Each hop uses its own saved settings, and a jump host must use a saved password, a key with its passphrase saved, or **SSH Agent**. The status bar of the tab shows "via" and the jump host's name.
 
 ## Proxy
 
@@ -87,7 +87,7 @@ Other labels: **Username**, **Organization & Network**.
 - **No proxy**: always connect directly.
 - A saved proxy, by name.
 
-With a jump host, the jump host's own choice applies and the picker is disabled. Quick connections use this device's default. The reachability dots of the host list go through the same proxy as the connection. **Manage Proxies** opens Settings → Proxies, where proxies are added, edited and deleted (`references/settings.md`). Deleting a proxy switches the hosts that named it to **Device default**. When the proxy of a host, or this device's default, was deleted on another device, the picker shows **Deleted proxy** and connecting fails until another one is chosen.
+With a jump host, the jump host's own choice applies and the picker is disabled. Quick connections use this device's default. The host list's reachability dots go through the same proxy. **Manage Proxies** opens Settings → Proxies, where proxies are added, edited and deleted (`references/settings.md`). Deleting a proxy switches the hosts that named it to **Device default**. When the proxy of a host, or this device's default, was deleted on another device, the picker shows **Deleted proxy** and connecting fails until another one is chosen.
 
 ## Environment variables
 
@@ -100,7 +100,7 @@ With a jump host, the jump host's own choice applies and the picker is disabled.
 
 ## Connecting, host keys and prompts
 
-A connection opens a new terminal tab (orange dot while connecting). The connection attempt times out after 15 seconds. Dialogs that can appear:
+A connection opens a new terminal tab (orange dot while connecting) and times out after 15 seconds. Dialogs that can appear:
 
 - First connection to a server: compare the shown fingerprint with the administrator's, then **Trust and Connect** (saved to the vault and synced) or **Cancel**.
 - **New host key for …** appears when a hop offers none of the key types saved for it, and **Host key has changed** blocks a saved type's changed key (**Disconnect** is the default). See `references/troubleshooting-connections.md` for both.
@@ -110,7 +110,7 @@ Other labels: **Fingerprint**, **Trusted fingerprint**, **Fingerprint received n
 
 ## When a connection fails or ends
 
-- A failed attempt shows a card over the terminal titled "Can’t connect to" plus the host name. It gives the reason, a short code (for example ETIMEDOUT) with the time, and the buttons **Copy Diagnostics**, **Ask AI** (opens the AI panel with the diagnostics attached; nothing is sent until the user sends it, see `references/ai-attachments.md`), **Edit Host** and **Retry**. Diagnostics hold the host, user, auth method, error and time, and no secrets. A quick connection has no **Edit Host** button. See `references/troubleshooting-connections.md` for each reason.
+- A failed attempt shows a card over the terminal titled "Can’t connect to" plus the host name. It gives the reason, a short code (for example ETIMEDOUT) with the time, and the buttons **Copy Diagnostics**, **Ask AI** (attaches the diagnostics in the AI panel without sending them; see `references/ai-attachments.md`), **Edit Host** and **Retry**. Diagnostics hold the host, user, auth method, error and time, and no secrets. A quick connection has no **Edit Host** button. See `references/troubleshooting-connections.md` for each reason.
 - A connection that ends later (the server closed it, the network dropped, keepalives went unanswered) shows the banner **Connection closed** with **Reconnect**. Hatoba never reconnects by itself. **More actions** has Reconnect and Disconnect too.
 - Closing a tab (the × on the tab, middle-click, or Ctrl+Shift+W / ⌘W) ends its session.
 - Locking keeps open sessions connected in the background unless **Disconnect all sessions when locked** is on (Settings → Security).

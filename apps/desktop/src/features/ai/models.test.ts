@@ -9,7 +9,15 @@ const provider = (id: string, models: string[]): AiProviderView => ({
   base_url: "https://example.com/v1",
   has_api_key: true,
   auth_header: "authorization",
-  models: models.map((m) => ({ id: m, name: m, context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null })),
+  models: models.map((m) => ({
+    id: m,
+    name: m,
+    context_window: null,
+    max_output_tokens: null,
+    efforts: null,
+    adaptive_thinking: null,
+  })),
+  chatgpt: null,
   updated_at: 0,
 });
 
@@ -28,7 +36,18 @@ const reply = (provider_id: string, model_id: string): AiEntryView => ({
 
 describe("conversationModel (AI-05)", () => {
   const providers = [provider("a", []), provider("b", ["b1", "b2"]), provider("c", ["c1"])];
-  const settings = { default_model: { provider_id: "c", model_id: "c1" }, default_effort: null, search_provider_id: null, native_search: true, builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: true, memory: true, judge_model: null };
+  const settings = {
+    default_model: { provider_id: "c", model_id: "c1" },
+    default_effort: null,
+    search_provider_id: null,
+    native_search: true,
+    builtin_skill_enabled: true,
+    custom_instructions: "",
+    send_terminal_screen: true,
+    memory: true,
+    text_size: 13,
+    judge_model: null,
+  };
 
   it("uses the default model for a new conversation", () => {
     expect(conversationModel([], providers, settings)).toEqual({ provider_id: "c", model_id: "c1" });
@@ -39,7 +58,10 @@ describe("conversationModel (AI-05)", () => {
   });
 
   it("prefers the user's pick, and falls back when a model is gone", () => {
-    expect(conversationModel([reply("b", "b2")], providers, settings, { provider_id: "b", model_id: "b1" })).toEqual({ provider_id: "b", model_id: "b1" });
+    expect(conversationModel([reply("b", "b2")], providers, settings, { provider_id: "b", model_id: "b1" })).toEqual({
+      provider_id: "b",
+      model_id: "b1",
+    });
     expect(conversationModel([reply("x", "gone")], providers, settings)).toEqual({ provider_id: "c", model_id: "c1" });
     expect(conversationModel([], providers, null)).toEqual({ provider_id: "b", model_id: "b1" });
     expect(conversationModel([], [provider("a", [])], null)).toBeNull();
@@ -55,7 +77,10 @@ describe("conversationModel (AI-05)", () => {
     const onJev = { provider_id: "j", model_id: "jev-latest" };
     const all = [jev, ...providers];
     // The user's pick, the model a conversation used last, and the default all fall through.
-    expect(conversationModel([reply("j", "jev-latest")], all, { ...settings, default_model: onJev }, onJev)).toEqual({ provider_id: "b", model_id: "b1" });
+    expect(conversationModel([reply("j", "jev-latest")], all, { ...settings, default_model: onJev }, onJev)).toEqual({
+      provider_id: "b",
+      model_id: "b1",
+    });
     expect(conversationModel([], [jev], null)).toBeNull();
     expect(hasModels([jev])).toBe(false);
   });
@@ -68,7 +93,7 @@ describe("sortConversations (AI-23)", () => {
     host_id: null,
     quick_target: null,
     origin: null,
-      local: null,
+    local: null,
     pinned,
     context_start: null,
     effort: null,
@@ -78,7 +103,12 @@ describe("sortConversations (AI-23)", () => {
   });
 
   it("puts pinned conversations first, then the newest", () => {
-    const sorted = sortConversations([conv("old", false, 1), conv("pin-old", true, 0), conv("new", false, 9), conv("pin-new", true, 5)]);
+    const sorted = sortConversations([
+      conv("old", false, 1),
+      conv("pin-old", true, 0),
+      conv("new", false, 9),
+      conv("pin-new", true, 5),
+    ]);
     expect(sorted.map((c) => c.id)).toEqual(["pin-new", "pin-old", "new", "old"]);
   });
 });

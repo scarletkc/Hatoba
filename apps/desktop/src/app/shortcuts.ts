@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import type { Platform } from "@/lib/platform";
 
-export type ShortcutAction = "search" | "newTab" | "newLocal" | "closeTab" | "nextTab" | "prevTab" | "settings" | "lock" | "aiPanel";
+export type ShortcutAction =
+  "search" | "newTab" | "newLocal" | "closeTab" | "nextTab" | "prevTab" | "settings" | "lock" | "aiPanel";
 
 /**
  * App-level shortcuts (WIN-04). On Windows/Linux every app shortcut uses Ctrl+Shift so that plain
@@ -50,9 +51,32 @@ export function matchShortcut(e: KeyboardEvent, platform: Platform, inTerminal: 
   return null;
 }
 
-/** True when the event is an app shortcut, so the terminal must not consume it. */
+export type ZoomAction = "in" | "out" | "reset";
+
+/**
+ * The zoom keys (TERM-13): Ctrl+= or Ctrl++ makes larger, Ctrl+- smaller, Ctrl+0 the default size;
+ * ⌘ on macOS. They go by the character typed, so the number pad's + - 0 count and so do layouts
+ * that type = with Shift. Ctrl+Shift+- types `_` and still reaches the terminal as `^_`, and Ctrl+0
+ * on the number pad with Num Lock off is Ctrl+Insert, which copies (WIN-05).
+ */
+export function matchZoom(e: KeyboardEvent, platform: Platform): ZoomAction | null {
+  const mod = platform === "macos" ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+  if (!mod || e.altKey || e.isComposing) return null;
+  switch (e.key) {
+    case "=":
+    case "+":
+      return "in";
+    case "-":
+      return "out";
+    case "0":
+      return "reset";
+  }
+  return null;
+}
+
+/** True when the event is an app shortcut or a zoom key, so the terminal must not consume it. */
 export function isAppShortcut(e: KeyboardEvent, platform: Platform): boolean {
-  return matchShortcut(e, platform, true) !== null;
+  return matchShortcut(e, platform, true) !== null || matchZoom(e, platform) !== null;
 }
 
 export function useShortcuts(platform: Platform, handler: (action: ShortcutAction) => void) {

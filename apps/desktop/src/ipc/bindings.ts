@@ -12,6 +12,11 @@ export const commands = {
 	/**  Opens the Windows 11 Snap Layouts flyout (hovering the custom maximize button, WIN-01). */
 	windowSnapOverlay: () => __TAURI_INVOKE<void>("window_snap_overlay"),
 	/**
+	 *  Zooms the interface (TERM-13) to the step nearest `percent`, no more than the screen the window
+	 *  is on allows, and says what applies. The device-local preference is saved by `prefs_save`.
+	 */
+	windowZoom: (percent: number) => __TAURI_INVOKE<ZoomView>("window_zoom", { percent }),
+	/**
 	 *  Whether the Linux main window shows its painted chrome: false while maximized, fullscreen
 	 *  or tiled, false without a compositor, and false on other platforms.
 	 */
@@ -142,6 +147,10 @@ export const commands = {
 	dashboardUnwatch: (watchId: number) => __TAURI_INVOKE<void>("dashboard_unwatch", { watchId }),
 	/**  **Retry**: signs in to a held host again, and tries an offline or failed one now. */
 	dashboardRetry: (hostId: string) => __TAURI_INVOKE<void>("dashboard_retry", { hostId }),
+	/**
+	 *  Reads `source` from `path`, a file or folder the user chose, or else from where the client keeps
+	 *  its sessions.
+	 */
 	hostsImportPreview: (source: ImportSource, path: string | null) => __TAURI_INVOKE<ImportPreview>("hosts_import_preview", { source, path }),
 	/**
 	 *  Creates hosts for the chosen entries of `source`, read again from `path`. It imports as keys
@@ -153,6 +162,10 @@ export const commands = {
 	hostsImport: (source: ImportSource, path: string | null, ids: string[], keyFiles: string[]) => __TAURI_INVOKE<ImportResult>("hosts_import", { source, path, ids, keyFiles }),
 	proxiesList: () => __TAURI_INVOKE<ProxyView[]>("proxies_list"),
 	proxySave: (input: ProxyInput) => __TAURI_INVOKE<ProxyView>("proxy_save", { input }),
+	/**
+	 *  Hosts that named the proxy go back to the device default; this device stops using it as its
+	 *  default.
+	 */
 	proxyDelete: (id: string) => __TAURI_INVOKE<null>("proxy_delete", { id }),
 	keysList: () => __TAURI_INVOKE<KeyView[]>("keys_list"),
 	/**  KEY-01 / WIN-09: OpenSSH, PEM and PuTTY .ppk, from a file or pasted text, with clear errors. */
@@ -210,6 +223,7 @@ export const commands = {
 	/**  Writes bytes as they are, for xterm's binary mouse reports (see `ssh_write_bytes`). */
 	localWriteBytes: (sessionId: string, data: number[]) => __TAURI_INVOKE<null>("local_write_bytes", { sessionId, data }),
 	localResize: (sessionId: string, cols: number, rows: number) => __TAURI_INVOKE<null>("local_resize", { sessionId, cols, rows }),
+	/**  Ends the shell and the console programs it started. */
 	localClose: (sessionId: string) => __TAURI_INVOKE<null>("local_close", { sessionId }),
 	telnetHostsList: () => __TAURI_INVOKE<TelnetHostView[]>("telnet_hosts_list"),
 	telnetHostSave: (input: TelnetHostInput) => __TAURI_INVOKE<TelnetHostView>("telnet_host_save", { input }),
@@ -263,6 +277,37 @@ export const commands = {
 	sftpRemove: (sessionId: string, path: string, isDir: boolean) => __TAURI_INVOKE<null>("sftp_remove", { sessionId, path, isDir }),
 	sftpMkdir: (sessionId: string, path: string) => __TAURI_INVOKE<null>("sftp_mkdir", { sessionId, path }),
 	transferCancel: (transferId: string) => __TAURI_INVOKE<void>("transfer_cancel", { transferId }),
+	/**
+	 *  SFTP-05: opens `path` in the editor set in Settings, downloading it into a copy that uploads
+	 *  with every save, over the tab's connection.
+	 */
+	sftpEditOpen: (tabId: string, sessionId: string, path: string) => __TAURI_INVOKE<RemoteEditView>("sftp_edit_open", { tabId, sessionId, path }),
+	/**  SFTP-05: opens an edited file's copy in the editor again. */
+	sftpEditReopen: (editId: string) => __TAURI_INVOKE<null>("sftp_edit_reopen", { editId }),
+	/**  SFTP-05: the session the tab is connected with, or `None`; saves that waited for it upload. */
+	sftpEditSession: (tabId: string, sessionId: string | null) => __TAURI_INVOKE<void>("sftp_edit_session", { tabId, sessionId }),
+	/**
+	 *  SFTP-05: uploads an edited file now, as a retry, or over a change made on the server when
+	 *  `overwrite`.
+	 */
+	sftpEditUpload: (editId: string, overwrite: boolean) => __TAURI_INVOKE<null>("sftp_edit_upload", { editId, overwrite }),
+	/**  SFTP-05: replaces an edited file's copy with the server's file. */
+	sftpEditDiscard: (editId: string) => __TAURI_INVOKE<null>("sftp_edit_discard", { editId }),
+	/**
+	 *  SFTP-05: stops editing a file, uploading its last save first if `upload`. Returns whether
+	 *  editing ended; a save that cannot upload yet, as behind the lock screen, keeps it going until
+	 *  it does.
+	 */
+	sftpEditStop: (editId: string, upload: boolean) => __TAURI_INVOKE<boolean>("sftp_edit_stop", { editId, upload }),
+	/**
+	 *  SFTP-05: whether an edited file's copy holds a save the server does not have, also one not
+	 *  noticed yet.
+	 */
+	sftpEditChanged: (editId: string) => __TAURI_INVOKE<boolean>("sftp_edit_changed", { editId }),
+	/**  SFTP-05: the files being edited. */
+	sftpEditList: () => __TAURI_INVOKE<RemoteEditView[]>("sftp_edit_list"),
+	/**  SFTP-05: quits once the user has answered for the edits' saves that did not upload. */
+	sftpEditQuit: () => __TAURI_INVOKE<void>("sftp_edit_quit"),
 	syncStatus: () => __TAURI_INVOKE<SyncStatus>("sync_status"),
 	/**  Wizard "Test connection": Worker `/v1/health`, or (D1 mode) token check + database list. */
 	syncTest: (config: SyncConfigInput) => __TAURI_INVOKE<SyncTestResult>("sync_test", { config }),
@@ -295,6 +340,7 @@ export const commands = {
 	syncRevokeDevice: (deviceId: string) => __TAURI_INVOKE<null>("sync_revoke_device", { deviceId }),
 	/**  §6.4: conflicts are resolved automatically; this lists the unreviewed ones (P1). */
 	syncConflicts: () => __TAURI_INVOKE<ConflictView[]>("sync_conflicts"),
+	/**  `keep`: accept the automatic resolution. `restore`: re-apply the losing version as a new edit. */
 	syncConflictResolve: (id: number, action: ConflictAction) => __TAURI_INVOKE<null>("sync_conflict_resolve", { id, action }),
 	/**
 	 *  Step 1 (DEPLOY-02): checks the API token. The token crosses to Rust here once; every later
@@ -341,14 +387,16 @@ export const commands = {
 	 */
 	deployUpgrade: (handle: string, target: UpgradeTarget, progress: Channel<DeployProgress>) => __TAURI_INVOKE<DeployOutcome>("deploy_upgrade", { handle, target, progress }),
 	settingsGet: () => __TAURI_INVOKE<SettingsView>("settings_get"),
+	/**  Writes the fields `patch` sets over the stored settings; the others keep their stored values. */
 	settingsSave: (patch: SettingsPatch) => __TAURI_INVOKE<null>("settings_save", { patch }),
 	/**  Readable while locked: the unlock screen needs the language. */
 	prefsGet: () => __TAURI_INVOKE<LocalPrefs>("prefs_get"),
 	prefsSave: (prefs: LocalPrefs) => __TAURI_INVOKE<null>("prefs_save", { prefs }),
-	/**  The sidebar's star prompt (spec §9). The first read records when this device started waiting. */
+	/**  The home tab's star prompt (spec §9). The first read records when this device started waiting. */
 	starPromptGet: () => __TAURI_INVOKE<StarPrompt>("star_prompt_get"),
 	/**  The user starred, opened the bug report form, or closed the prompt: it never shows again. */
 	starPromptDone: () => __TAURI_INVOKE<null>("star_prompt_done"),
+	/**  AI-01: the providers. API keys go one way to Rust and never come back. */
 	aiProvidersList: () => __TAURI_INVOKE<AiProviderView[]>("ai_providers_list"),
 	aiProviderSave: (input: AiProviderInput) => __TAURI_INVOKE<AiProviderView>("ai_provider_save", { input }),
 	aiProviderDelete: (id: string) => __TAURI_INVOKE<null>("ai_provider_delete", { id }),
@@ -371,12 +419,14 @@ export const commands = {
 	 *  way, and the provider keeps its account for the next sign-in.
 	 */
 	aiChatgptSignOut: (providerId: string) => __TAURI_INVOKE<boolean>("ai_chatgpt_sign_out", { providerId }),
+	/**  AI-14: the search providers behind `web_search`. */
 	searchProvidersList: () => __TAURI_INVOKE<SearchProviderView[]>("search_providers_list"),
 	searchProviderSave: (input: SearchProviderInput) => __TAURI_INVOKE<SearchProviderView>("search_provider_save", { input }),
 	searchProviderDelete: (id: string) => __TAURI_INVOKE<null>("search_provider_delete", { id }),
 	/**  A real query through a saved or unsaved search provider. */
 	searchProviderTest: (input: SearchProviderInput) => __TAURI_INVOKE<AiTestResult>("search_provider_test", { input }),
 	aiSettingsGet: () => __TAURI_INVOKE<AiSettingsView>("ai_settings_get"),
+	/**  Writes the fields `patch` sets, like `settings_save`. */
 	aiSettingsSave: (patch: AiSettingsPatch) => __TAURI_INVOKE<null>("ai_settings_save", { patch }),
 	/**  Every conversation, unsorted; the panel sorts by `last_activity`, pinned first. */
 	aiConversationsList: () => __TAURI_INVOKE<AiConversationView[]>("ai_conversations_list"),
@@ -603,6 +653,8 @@ export const events = {
 	appLaunch: makeEvent<LaunchEvent>("app://launch"),
 	appNotificationClick: makeEvent<NotificationTarget>("app://notification-click"),
 	cliActivity: makeEvent<CliActivityEvent>("cli://activity"),
+	sftpEdit: makeEvent<RemoteEditEvent>("sftp://edit"),
+	sftpQuit: makeEvent<RemoteEditQuitEvent>("sftp://quit"),
 	sshAuthPrompt: makeEvent<AuthPrompt>("ssh://auth-prompt"),
 	sshConnections: makeEvent<ConnectionsEvent>("ssh://connections"),
 	sshForwardsLost: makeEvent<ForwardsLostEvent>("ssh://forwards-lost"),
@@ -614,6 +666,7 @@ export const events = {
 	vaultLocked: makeEvent<VaultLockedEvent>("vault://locked"),
 	windowChrome: makeEvent<WindowChromeEvent>("window://chrome"),
 	windowClosePrompt: makeEvent<ClosePromptEvent>("window://close-prompt"),
+	windowZoom: makeEvent<ZoomView>("window://zoom"),
 };
 
 /* Types */
@@ -1090,6 +1143,8 @@ export type AiSettingsPatch = {
 	send_terminal_screen?: boolean | null,
 	judge_model?: AiModelRef | null,
 	memory?: boolean | null,
+	/**  Kept within 11 to 24. */
+	text_size?: number | null,
 };
 
 /**  The synced `Settings.ai` (§5.1). */
@@ -1119,6 +1174,8 @@ export type AiSettingsView = {
 	judge_model: AiModelRef | null,
 	/**  Conversations start with the memories, and the assistant saves them (AI-53). */
 	memory: boolean,
+	/**  The AI panel's conversation and input text size in px, 11 to 24 (TERM-13). */
+	text_size: number,
 };
 
 /**  The answer to a side question (AI-42), which nothing stores. */
@@ -1287,14 +1344,21 @@ export type AiUsage = {
 	estimated: boolean,
 };
 
+/**  Every command rejects with this shape. `detail` is technical English text, safe to show. */
 export type AppError = {
 	code: ErrorCode,
 	detail: string,
+	/**  `throttled`: unlock is allowed again at this time. */
 	retry_at: number | null,
+	/**  `invalid_input`: the offending field's name. */
 	field: string | null,
+	/**  `ssh`: the classified SSH failure. */
 	ssh_kind: SshErrorKind | null,
+	/**  `key_parse`: why the private key could not be read. */
 	key_kind: KeyParseErrorKind | null,
+	/**  `cloudflare_permission`: the permission the API token lacks. */
 	permission: CloudflarePermission | null,
+	/**  `cloudflare`: Cloudflare's numeric error code, when it sent one. */
 	cf_code: number | null,
 	/**  `ai`: the HTTP status the provider answered with. */
 	http_status: number | null,
@@ -1305,6 +1369,7 @@ export type AppError = {
 export type AppInfo = {
 	version: string,
 	platform: Platform,
+	/**  Windows 11 Mica is active (WIN-07). */
 	mica: boolean,
 	/**
 	 *  The local user name, which quick connect (HOST-12) uses when the target names no user;
@@ -1327,6 +1392,7 @@ export type Appearance = "system" | "light" | "dark";
 
 export type AuthKind = "password" | "key" | "agent" | "ask";
 
+/**  A keyboard-interactive (2FA) prompt (SSH-08). */
 export type AuthPrompt = {
 	request_id: string,
 	session_id: string | null,
@@ -1437,6 +1503,10 @@ export type CloudflarePermission = "workers_scripts" | "d1";
 export type ConflictAction = "keep" | "restore";
 
 export type ConflictField = {
+	/**
+	 *  A field key the interface translates, such as `port`, `jump_host`, `tags`, `name` or
+	 *  `state`.
+	 */
 	field: string,
 	local: string | null,
 	remote: string | null,
@@ -1454,6 +1524,7 @@ export type ConflictView = {
 	remote_updated_at: number | null,
 	local_deleted: boolean,
 	remote_deleted: boolean,
+	/**  Only the fields that differ; secrets are never included. */
 	fields: ConflictField[],
 	created_at: number,
 };
@@ -1463,6 +1534,7 @@ export type ConnectOptions = {
 	rows: number,
 	/**  `ask` auth (SSH-03): used once, never stored. */
 	password: string | null,
+	/**  For a passphrase-protected key whose passphrase isn't saved. */
 	passphrase: string | null,
 };
 
@@ -1502,8 +1574,8 @@ export type DashboardEvent =
 /**  A reading, one per interval. */
 { kind: "stats"; host_id: string; stats: ServerStatsView } | 
 /**
- *  The server does not run Linux, so only its online status shows. `system` is its name,
- *  or empty when unknown.
+ *  The server runs neither Linux nor macOS, so only its online status shows. `system` is
+ *  its name, or empty when unknown.
  */
 { kind: "unsupported"; host_id: string; system: string } | 
 /**
@@ -1528,8 +1600,6 @@ export type DashboardHold =
 "host_key_changed" | 
 /**  The server rejected the saved credentials. Not tried again until **Retry**. */
 "sign_in_failed";
-
-export type DashboardLayout = "cards" | "table";
 
 export type Density = "regular" | "compact";
 
@@ -1659,7 +1729,9 @@ export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "
  */
 "ai" | 
 /**  A downloaded update does not carry a valid signature from the release key (spec §11). */
-"update_signature" | "cancelled" | "io" | "internal";
+"update_signature" | 
+/**  SFTP-05: no editor opened the copy of a remote file. */
+"editor" | "cancelled" | "io" | "internal";
 
 /**
  *  A forward that failed to start on its host's connection, until it starts or stops: a port in
@@ -1677,12 +1749,15 @@ export type FileEntry = {
 	is_symlink: boolean,
 	size: number,
 	modified: number | null,
+	/**  Such as `drwxr-xr-x`. */
 	permissions: string,
 };
 
 export type ForwardInput = {
 	id: string | null,
 	host_id: string,
+	/**  Trimmed; empty for none. */
+	name: string,
 	kind: ForwardKind,
 	bind_address: string,
 	bind_port: number,
@@ -1717,8 +1792,11 @@ export type ForwardOptions = {
 export type ForwardView = {
 	id: string,
 	host_id: string,
+	/**  Empty for a forward named by its rule. */
+	name: string,
 	kind: ForwardKind,
 	bind_address: string,
+	/**  0 picks a free port (on the server for a remote forward). */
 	bind_port: number,
 	/**
 	 *  As the server reaches it, or as this computer does for a remote forward; empty and 0 for
@@ -1726,6 +1804,7 @@ export type ForwardView = {
 	 */
 	dest_host: string,
 	dest_port: number,
+	/**  FWD-02: starts whenever Hatoba connects to the host. */
 	auto_start: boolean,
 };
 
@@ -1777,6 +1856,7 @@ export type HostEnvVar = {
 };
 
 export type HostInput = {
+	/**  `None` creates a new host. */
 	id: string | null,
 	name: string,
 	address: string,
@@ -1807,6 +1887,10 @@ export type HostKeyPrompt = {
 	port: number,
 	key_type: string,
 	fingerprint: string,
+	/**
+	 *  `new`: the first connection (TOFU). `changed`: the fingerprint differs from the saved one,
+	 *  and the connection is blocked (SSH-04).
+	 */
 	kind: HostKeyPromptKind,
 	known_fingerprint: string | null,
 	known_key_type: string | null,
@@ -1821,6 +1905,7 @@ export type HostView = {
 	port: number,
 	username: string,
 	auth_kind: AuthKind,
+	/**  A password is saved (HOST-08: it can be replaced but never read back). */
 	has_password: boolean,
 	key_id: string | null,
 	group_id: string | null,
@@ -1835,6 +1920,7 @@ export type HostView = {
 	/**  What the AI assistant is told about the host (AI-37). */
 	ai_notes: string,
 	updated_at: number,
+	/**  Device-local, never synced (HOST-06). */
 	last_connected_at: number | null,
 	/**
 	 *  The server's operating system from its SSH identification string on the last connection
@@ -1854,6 +1940,8 @@ export type HostView = {
 	/**  Environment variables the terminal asks the server to set (SSH-14). */
 	env: HostEnvVar[],
 };
+
+export type HostsView = "list" | "cards";
 
 /**  A host an import can create. */
 export type ImportCandidate = {
@@ -1923,7 +2011,9 @@ export type KeyGenerateInput = {
 
 export type KeyImportInput = {
 	name: string,
+	/**  Pasted private key text; ignored when `path` is set. */
 	private_key: string | null,
+	/**  A file chosen in the native dialog, which Rust reads. */
 	path: string | null,
 	passphrase: string | null,
 };
@@ -1941,10 +2031,11 @@ export type KeyView = {
 	has_passphrase: boolean,
 	created_at: number,
 	updated_at: number,
+	/**  IDs of the hosts that use this key (KEY-03, KEY-05). */
 	used_by: string[],
 };
 
-export type Language = "system" | "zh-CN" | "en" | "ja";
+export type Language = "system" | "zh-CN" | "zh-TW" | "en" | "ja";
 
 /**  A second launch handed its arguments to this window (HOST-13); `launch_take` returns them. */
 export type LaunchEvent = null;
@@ -1959,6 +2050,12 @@ export type LocalPrefs = {
 	language: Language,
 	appearance: Appearance,
 	density: Density,
+	/**
+	 *  TERM-13: the interface zoom in percent, one of [`crate::platform::window::ZOOM_STEPS`]. Kept
+	 *  per device, since the right size depends on the screen.
+	 */
+	ui_zoom: number,
+	/**  HOST-10: the TCP reachability dots. */
 	host_probe: boolean,
 	/**
 	 *  Check GitHub for a newer release once after the first unlock of each launch (spec §11).
@@ -1988,9 +2085,14 @@ export type LocalPrefs = {
 	lock_disconnects_sessions: boolean,
 	/**  SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it. */
 	clipboard_clear_secs: number,
-	/**  HOST-14: the dashboard shows cards or a table. */
-	dashboard_layout: DashboardLayout,
-	/**  HOST-14: the table columns turned off. */
+	/**  HOST-05: the hosts page lists the hosts or shows them as cards. */
+	hosts_view: HostsView,
+	/**
+	 *  HOST-14: the hosts page shows resource usage, which reads the listed hosts in the
+	 *  background.
+	 */
+	hosts_stats: boolean,
+	/**  HOST-14: the resource usage columns turned off. */
 	dashboard_hidden_columns: string[],
 	/**  HOST-14: seconds between readings, 1 to 60. */
 	dashboard_interval_secs: number,
@@ -2008,6 +2110,11 @@ export type LocalPrefs = {
 	 *  while `None` or when the shell is gone.
 	 */
 	local_shell: string | null,
+	/**
+	 *  SFTP-05: the program that edits remote files on this device; the app the system opens each
+	 *  kind of file with while `None`.
+	 */
+	sftp_editor: string | null,
 };
 
 /**  What kind of shell a local tab runs (§7.5). */
@@ -2174,6 +2281,7 @@ export type McpToolView = {
 
 export type McpTransportInput = { kind: "stdio"; command: string; args: string[]; env: McpSecretInput[] } | { kind: "http"; url: string; headers: McpSecretInput[] };
 
+/**  Environment and header values never reach the WebView, only their names (AI-29). */
 export type McpTransportView = { kind: "stdio"; command: string; args: string[]; env_keys: string[] } | { kind: "http"; url: string; header_keys: string[] };
 
 /**  One mounted filesystem's space, in bytes, as `df -P` reports it. */
@@ -2221,6 +2329,7 @@ export type ProbeResult = {
 };
 
 export type ProxyInput = {
+	/**  `None` creates a new proxy. */
 	id: string | null,
 	name: string,
 	kind: ProxyKind,
@@ -2250,6 +2359,7 @@ export type ProxyView = {
 	port: number,
 	/**  Empty when the proxy needs no sign-in. */
 	username: string,
+	/**  A password is saved (as HOST-08: it can be replaced but never read back). */
 	has_password: boolean,
 	/**  Hosts that name this proxy (not those that use it as the device default). */
 	host_ids: string[],
@@ -2267,11 +2377,54 @@ export type QuickTarget = {
 	username: string,
 };
 
+/**  `edit` is `None` once editing has ended and the copy is gone. */
+export type RemoteEditEvent = {
+	edit_id: string,
+	edit: RemoteEditView | null,
+};
+
+/**
+ *  Hatoba is quitting with files being edited: the WebView asks about saves that did not upload,
+ *  then quits with `sftp_edit_quit`.
+ */
+export type RemoteEditQuitEvent = null;
+
+/**  SFTP-05: where the copy of a file edited in a local editor stands. */
+export type RemoteEditState = 
+/**  The server has the copy's content. */
+"saved" | 
+/**  A save waits to upload: until the file settles, or until the tab connects again. */
+"pending" | "uploading" | 
+/**  The last upload failed (`error`), or was cancelled (no `error`). */
+"failed" | 
+/**  The file changed on the server since it was downloaded or uploaded. */
+"conflict";
+
+/**  SFTP-05: a remote file being edited in a local editor. */
+export type RemoteEditView = {
+	edit_id: string,
+	/**  The terminal tab it was opened from, whose connection it uploads over. */
+	tab_id: string,
+	/**  The name it was opened as, which the copy keeps. */
+	name: string,
+	/**  The file written back: the path opened, or a symlink's target. */
+	remote_path: string,
+	state: RemoteEditState,
+	error: string | null,
+	/**
+	 *  The vault locked before the last save uploaded: editing ended, and the copy waits until
+	 *  the user uploads or discards it.
+	 */
+	held: boolean,
+};
+
 export type RightClick = "copy_paste" | "menu";
 
 /**  A forward running on its host's connection. */
 export type RunningForwardView = {
 	forward_id: string,
+	/**  Its rule's name, kept current while it runs; empty for none. */
+	name: string,
 	kind: ForwardKind,
 	/**
 	 *  The port it actually listens on (differs from `bind_port` when that was 0), on the server
@@ -2354,8 +2507,10 @@ export type SessionStateEvent = {
 	/**  `None` for a quick-connect session (HOST-12). */
 	host_id: string | null,
 	state: SessionState,
+	/**  The connection's round-trip time, once connected. */
 	latency_ms: number | null,
 	error: AppError | null,
+	/**  The remote exit status of a clean `disconnected`. */
 	exit_status: number | null,
 };
 
@@ -2367,6 +2522,7 @@ export type SettingsPatch = {
 	terminal?: TerminalSettingsPatch,
 };
 
+/**  The synced settings item (spec §5.1 `Settings`). */
 export type SettingsView = {
 	terminal: TerminalSettings,
 };
@@ -2439,7 +2595,7 @@ export type SshErrorKind = "dns" | "refused" | "timeout" | "unreachable" | "auth
 /**  SSH-13: the host or the device default names a proxy that was deleted. */
 "proxy_missing" | "other";
 
-/**  Device-local state of the sidebar's GitHub star prompt (spec §9; never synced). */
+/**  Device-local state of the home tab's GitHub star prompt (spec §9; never synced). */
 export type StarPrompt = {
 	/**  When this device first read the state, Unix ms. The prompt waits a day from then. */
 	first_seen_at: number,
@@ -2452,8 +2608,8 @@ export type StatsEvent =
 /**  A reading, one per interval. */
 { kind: "stats"; stats: ServerStatsView } | 
 /**
- *  The server does not run Linux; the last event. `system` is its name, such as `FreeBSD`,
- *  or empty when unknown.
+ *  The server runs neither Linux nor macOS; the last event. `system` is its name, such as
+ *  `FreeBSD`, or empty when unknown.
  */
 { kind: "unsupported"; system: string } | 
 /**  Sampling stopped on its own (the script failed or the connection ended); the last event. */
@@ -2475,11 +2631,15 @@ export type SyncState = "off" | "idle" | "syncing" | "offline" | "auth_failed" |
 
 export type SyncStatus = {
 	kind: SyncKind,
+	/**  The Worker's host, or `api.cloudflare.com` in D1 direct mode. */
 	endpoint: string | null,
+	/**  D1 direct mode: the database's ID. */
 	database: string | null,
 	state: SyncState,
 	last_synced_at: number | null,
+	/**  Local changes not pushed yet. */
 	pending: number,
+	/**  Automatically resolved conflicts not reviewed yet (§6.4). */
 	conflicts: number,
 	auto_sync: boolean,
 	message: string | null,
@@ -2498,9 +2658,11 @@ export type SyncStatus = {
 
 export type SyncTestResult = {
 	ok: boolean,
+	/**  The remote already holds a vault. */
 	initialized: boolean,
 	version: string | null,
 	latency_ms: number | null,
+	/**  D1 direct mode: the databases the token can see, to pick from once the token is verified. */
 	databases: D1Database[] | null,
 	error: AppError | null,
 };
@@ -2565,7 +2727,9 @@ export type TerminalSettings = {
 	light_scheme: string | null,
 	cursor_style: CursorChoice,
 	scrollback: number,
+	/**  WIN-05: PuTTY-style right click, or a context menu. */
 	right_click: RightClick,
+	/**  TERM-04: ask before pasting text with line breaks. */
 	confirm_multiline_paste: boolean,
 };
 
@@ -2712,10 +2876,14 @@ export type VaultState = "uninitialized" | "locked" | "unlocked";
 
 export type VaultStatus = {
 	state: VaultState,
+	/**  Consecutive failed unlock attempts (SEC-06). */
 	failed_attempts: number,
+	/**  While throttled, the next attempt is allowed at this time. */
 	retry_at: number | null,
 	sync_kind: SyncKind,
+	/**  Windows Hello or Touch ID is available on this device. */
 	biometric_available: boolean,
+	/**  Biometric unlock is enrolled for this vault. */
 	biometric_enabled: boolean,
 	/**  SEC-11: a PIN is set on this device. */
 	pin_enabled: boolean,
@@ -2749,6 +2917,17 @@ export type WorkerUpdateKind =
 "required" | 
 /**  A newer `api` than this app speaks: sync is paused until Hatoba is updated. */
 "app_required";
+
+/**
+ *  The interface zoom in effect (TERM-13). Also sent as `window://zoom` when the window moves to a
+ *  screen that changes it.
+ */
+export type ZoomView = {
+	/**  The zoom applied, in percent. */
+	zoom: number,
+	/**  The largest step the screen the window is on allows. */
+	max: number,
+};
 
 /* Tauri Specta runtime */
 type EventEmit<T> = [T] extends [null] ? () => Promise<void> : (payload: T) => Promise<void>;

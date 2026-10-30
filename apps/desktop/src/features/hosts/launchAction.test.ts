@@ -10,7 +10,10 @@ const hosts = [
   host("twin-a", "twin", "10.0.0.7"),
   host("twin-b", "Twin", "10.0.0.8"),
 ];
-const target = (address: string, port: number, username: string | null) => ({ kind: "target", target: { address, port, username } });
+const target = (address: string, port: number, username: string | null) => ({
+  kind: "target",
+  target: { address, port, username },
+});
 
 describe("launchAction", () => {
   it("only brings the window up without arguments", () => {
@@ -44,7 +47,10 @@ describe("launchAction", () => {
 
   it("shows why ssh syntax cannot connect, and searches other words", () => {
     expect(launchAction(["root@db", "uptime"], hosts)).toEqual({ kind: "search", text: "ssh root@db uptime" });
-    expect(launchAction(["-L", "8080:localhost:80", "web"], hosts)).toEqual({ kind: "search", text: "ssh -L 8080:localhost:80 web" });
+    expect(launchAction(["-L", "8080:localhost:80", "web"], hosts)).toEqual({
+      kind: "search",
+      text: "ssh -L 8080:localhost:80 web",
+    });
     expect(launchAction(["ssh", "-p", "99999", "web"], hosts)).toEqual({ kind: "search", text: "ssh -p 99999 web" });
     expect(launchAction(["prod", "api"], hosts)).toEqual({ kind: "search", text: "prod api" });
     expect(launchAction(["ssh"], hosts)).toEqual({ kind: "search", text: "ssh" });

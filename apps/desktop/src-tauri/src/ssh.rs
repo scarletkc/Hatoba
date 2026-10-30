@@ -11,6 +11,7 @@ use hatoba_core::vault::Vault;
 use hatoba_ssh::{
     AuthMethod, ConnectConfig, HostKeyInfo, HostKeyVerifier, JumpHop, KeyboardInteractive,
     PromptRequest, ProxyConfig, ProxyKind, SftpClient, ShellHandle, SshSession, StatsHandle,
+    target_label,
 };
 use tauri::AppHandle;
 use tauri_specta::Event;
@@ -665,15 +666,6 @@ pub async fn connect_unattended(
         .map_err(AppError::from);
     attempt.log_end(&result);
     (result, outcome)
-}
-
-/// `user@host:port`, with an IPv6 address in brackets.
-pub fn target_label(username: &str, host: &str, port: u16) -> String {
-    if host.contains(':') {
-        format!("{username}@[{host}]:{port}")
-    } else {
-        format!("{username}@{host}:{port}")
-    }
 }
 
 /// Connects to a saved host for a short task (key deploy, connection test).

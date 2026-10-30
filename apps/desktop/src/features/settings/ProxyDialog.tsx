@@ -1,8 +1,6 @@
 import { useId, useState } from "react";
+import { Button, ErrorText, FooterSpacer, FormRow, Group, Segmented, Sheet, SheetHeader, TextField } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
-import { Button, Segmented, TextField } from "@/components/controls";
-import { FormRow, Group } from "@/components/layout";
-import { FooterSpacer, Sheet, SheetHeader } from "@/components/overlay";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { ProxyInput, ProxyKind, ProxyView } from "@/ipc/types";
@@ -46,7 +44,15 @@ function initialForm(p: ProxyView | null): Form {
 }
 
 /** Add or edit a SOCKS5 or HTTP proxy (SSH-13). A saved password behaves like a host's (HOST-08). */
-export function ProxyDialog({ proxy, onClose, onSaved }: { proxy: ProxyView | null; onClose: () => void; onSaved: (p: ProxyView) => void }) {
+export function ProxyDialog({
+  proxy,
+  onClose,
+  onSaved,
+}: {
+  proxy: ProxyView | null;
+  onClose: () => void;
+  onSaved: (p: ProxyView) => void;
+}) {
   const t = useT();
   const ids = { form: useId(), name: useId(), address: useId(), port: useId(), username: useId(), password: useId() };
   const [form, setForm] = useState<Form>(() => initialForm(proxy));
@@ -106,7 +112,8 @@ export function ProxyDialog({ proxy, onClose, onSaved }: { proxy: ProxyView | nu
     if (saving) return;
     const found = validateProxy({ ...form, password: typedPassword });
     const e: Errors = {};
-    for (const [field, key] of Object.entries(found)) e[field as ProxyField] = t(`settings.proxy.err.${key}` as MessageKey);
+    for (const [field, key] of Object.entries(found))
+      e[field as ProxyField] = t(`settings.proxy.err.${key}` as MessageKey);
     if (Object.keys(e).length) {
       setErrors(e);
       const first = (["name", "address", "port", "username", "password"] as const).find((k) => e[k]);
@@ -235,11 +242,7 @@ export function ProxyDialog({ proxy, onClose, onSaved }: { proxy: ProxyView | nu
           )}
         </Group>
 
-        {errors.general && (
-          <div className={s.problem} role="alert">
-            {errors.general}
-          </div>
-        )}
+        {errors.general && <ErrorText>{errors.general}</ErrorText>}
       </form>
     </Sheet>
   );

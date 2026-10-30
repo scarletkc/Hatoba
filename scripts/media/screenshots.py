@@ -1,10 +1,12 @@
 """Capture the website's screenshots from the frontend's mock backend.
 
-usage: python scripts/media/screenshots.py [--locale en|zh-CN|ja] [--out DIR] [--url URL]
+usage: python scripts/media/screenshots.py [--locale en|zh-CN|zh-TW|ja] [--out DIR] [--url URL]
 
 Needs `pnpm dev` running; --url defaults to http://localhost:1420. The English screenshots go to
 docs/media and the Chinese and Japanese ones to apps/site/src/assets/screenshots/<locale>, where
-the website's pages in each language use them.
+the website's pages in each language use them. The home page shows only a region of ai-approval and
+sync-deploy, AI_PANEL and DEPLOY_DIALOG in apps/site/src/pages/[...lang]/index.astro, in screenshot
+pixels: when the layout moves the AI panel or the dialog, measure them again.
 """
 import argparse
 import re
@@ -27,8 +29,9 @@ LOCALES = {
         "show_ai": "Show AI Panel",
         "run": "Run",
         "fixed": "Fixed.",
-        "dashboard": "Dashboard",
-        "sync": "Cloud Sync",
+        "cards": "Cards",
+        "stats": "Resource Usage",
+        "sync": "Sync",
         "continue": "Continue",
         "deploy": "Deploy",
         "deployed": "Sync Worker Deployed",
@@ -39,9 +42,23 @@ LOCALES = {
         "show_ai": "显示 AI 面板",
         "run": "运行",
         "fixed": "修好了。",
-        "dashboard": "仪表盘",
+        "cards": "卡片",
+        "stats": "资源占用",
         "sync": "云同步",
         "continue": "继续",
+        "deploy": "部署",
+        "deployed": "同步 Worker 已部署",
+    },
+    "zh-TW": {
+        "browser": "zh-TW",
+        "prompt": "這台機器上的 nginx 一直回傳 502，找出原因並修好它。",
+        "show_ai": "顯示 AI 面板",
+        "run": "執行",
+        "fixed": "修好了。",
+        "cards": "卡片",
+        "stats": "資源使用量",
+        "sync": "雲端同步",
+        "continue": "繼續",
         "deploy": "部署",
         "deployed": "同步 Worker 已部署",
     },
@@ -51,8 +68,9 @@ LOCALES = {
         "show_ai": "AI パネルを表示",
         "run": "実行",
         "fixed": "修正しました。",
-        "dashboard": "ダッシュボード",
-        "sync": "クラウド同期",
+        "cards": "カード",
+        "stats": "リソース使用状況",
+        "sync": "同期",
         "continue": "続ける",
         "deploy": "デプロイ",
         "deployed": "同期 Worker をデプロイしました",
@@ -110,9 +128,10 @@ def main():
         pg.wait_for_timeout(5000)  # the answer finishes streaming
         shot(pg, "ai-assistant")
 
-        # Dashboard: every host's status and resource usage, once the first readings are in
+        # Resource usage: the hosts page as cards with every host's readings, once the first are in
         pg = page()
-        pg.get_by_text(label["dashboard"], exact=True).first.click()
+        pg.get_by_role("radio", name=label["cards"]).click()
+        pg.get_by_role("switch", name=label["stats"]).click()
         pg.wait_for_timeout(4000)
         shot(pg, "dashboard")
 

@@ -1,10 +1,10 @@
 import { useRef } from "react";
+import { Button, Icon, LinkButton, Spinner, toast, useExitAnimation } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
-import { Button, Icon, Spinner } from "@/components/controls";
-import { toast, useExitAnimation } from "@/components/overlay";
 import { useT } from "@/i18n";
+import { appError } from "@/ipc/api";
 import type { AppError, HostView, QuickTarget } from "@/ipc/types";
-import { writeClipboard } from "./clipboard";
+import { writeClipboard } from "@/lib/clipboard";
 import { clockTime, diagnosticsText, errorCode } from "./diagnostics";
 import s from "./Overlays.module.css";
 
@@ -23,7 +23,7 @@ export function ConnectingOverlay({ name, local = false }: { name: string; local
   );
 }
 
-/** Connection failed (SSH-05): what happened, in words, plus retry (design §03b). */
+/** Connection failed (SSH-05): what happened, in words, plus retry. */
 export function ErrorCard({
   name,
   host,
@@ -48,11 +48,12 @@ export function ErrorCard({
   onAskAi(diagnostics: string): void;
 }) {
   const t = useT();
-  const err: AppError = error ?? { code: "internal", detail: "" };
+  const err: AppError = error ?? appError("internal", "");
   const when = clockTime(at ?? Date.now());
-  const meta = attempts > 1
-    ? t("terminal.err.metaRetries", { code: errorCode(err), n: attempts - 1, time: when })
-    : t("terminal.err.meta", { code: errorCode(err), time: when });
+  const meta =
+    attempts > 1
+      ? t("terminal.err.metaRetries", { code: errorCode(err), n: attempts - 1, time: when })
+      : t("terminal.err.meta", { code: errorCode(err), time: when });
 
   const copyDiagnostics = async () => {
     try {
@@ -77,24 +78,20 @@ export function ErrorCard({
         </div>
         <div className={s.meta}>{meta}</div>
         <div className={s.cardActions}>
-          <button type="button" className={s.linkButton} onClick={() => void copyDiagnostics()}>
-            <Icon name="copy" size={13} />
+          <LinkButton tone="muted" icon="copy" onClick={() => void copyDiagnostics()}>
             {t("terminal.err.copyDiag")}
-          </button>
+          </LinkButton>
           <div className={s.grow} />
-          <button type="button" className={s.darkButton} onClick={() => onAskAi(diagnosticsText(host ?? target, name, err, at ?? Date.now(), attempts))}>
-            <Icon name="sparkle" size={13} />
+          <Button
+            icon="sparkle"
+            onClick={() => onAskAi(diagnosticsText(host ?? target, name, err, at ?? Date.now(), attempts))}
+          >
             {t("terminal.err.askAi")}
-          </button>
-          {host && (
-            <button type="button" className={s.darkButton} onClick={onEdit}>
-              {t("terminal.err.editHost")}
-            </button>
-          )}
-          <button type="button" className={s.primaryButton} onClick={onRetry}>
-            <Icon name="arrow-clockwise" size={13} />
+          </Button>
+          {host && <Button onClick={onEdit}>{t("terminal.err.editHost")}</Button>}
+          <Button variant="primary" icon="arrow-clockwise" onClick={onRetry}>
             {t("btn.retry")}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -118,7 +115,11 @@ export function TelnetErrorCard({
 }) {
   const t = useT();
   const where = { host: target?.address, port: target?.port, timeoutSec: 15 };
-  const body = !error ? "" : error.ssh_kind === "refused" ? t("terminal.telnet.refused", { host: where.host ?? "", port: where.port ?? 23 }) : errorMessage(t, error, where);
+  const body = !error
+    ? ""
+    : error.ssh_kind === "refused"
+      ? t("terminal.telnet.refused", { host: where.host ?? "", port: where.port ?? 23 })
+      : errorMessage(t, error, where);
   return (
     <div className={s.scrim}>
       <div role="alertdialog" aria-labelledby="term-err-title" className={s.card}>
@@ -159,13 +160,18 @@ export function LocalErrorCard({ name, error, onRetry }: { name: string; error: 
           </div>
         </div>
         {/* What the system said, as it said it: why a program does not start is rarely worth a translation. */}
-        <div className={s.cardBody}>{!error ? "" : error.code === "not_found" ? t("terminal.local.shellGone") : error.detail || errorMessage(t, error)}</div>
+        <div className={s.cardBody}>
+          {!error
+            ? ""
+            : error.code === "not_found"
+              ? t("terminal.local.shellGone")
+              : error.detail || errorMessage(t, error)}
+        </div>
         <div className={s.cardActions}>
           <div className={s.grow} />
-          <button type="button" className={s.primaryButton} onClick={onRetry}>
-            <Icon name="arrow-clockwise" size={13} />
+          <Button variant="primary" icon="arrow-clockwise" onClick={onRetry}>
             {t("btn.retry")}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -176,7 +182,15 @@ export function LocalErrorCard({ name, error, onRetry }: { name: string; error: 
  * SSH-07: the session ended; reconnecting is always an explicit action. A local tab's shell that
  * exited with an error says so and offers to start it again (LOCAL-01).
  */
-export function DisconnectedBanner({ reason, local, onReconnect }: { reason: string | null; local: string | null; onReconnect(): void }) {
+export function DisconnectedBanner({
+  reason,
+  local,
+  onReconnect,
+}: {
+  reason: string | null;
+  local: string | null;
+  onReconnect(): void;
+}) {
   const t = useT();
   const text = local
     ? reason

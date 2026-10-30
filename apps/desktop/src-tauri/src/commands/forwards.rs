@@ -5,6 +5,7 @@ use hatoba_core::model::{ForwardKind, Item, PortForward};
 use tauri::{AppHandle, State};
 use zeroize::Zeroizing;
 
+use super::hosts::MAX_NAME_CHARS;
 use crate::dto::{ConnectionsEvent, ForwardInput, ForwardOptions, ForwardView};
 use crate::error::{AppError, AppResult};
 use crate::ssh::Overrides;
@@ -15,6 +16,7 @@ fn view(id: &str, f: &PortForward) -> ForwardView {
     ForwardView {
         id: id.to_owned(),
         host_id: f.host_id.clone(),
+        name: f.name.clone(),
         kind: f.kind.into(),
         bind_address: f.bind_address.clone(),
         bind_port: f.bind_port,
@@ -55,6 +57,10 @@ pub fn forward_save(
     state: State<'_, AppState>,
     input: ForwardInput,
 ) -> AppResult<ForwardView> {
+    let name = input.name.trim();
+    if name.chars().count() > MAX_NAME_CHARS {
+        return Err(AppError::invalid("name", "name is too long"));
+    }
     let kind = ForwardKind::from(input.kind);
     // A remote forward listens where `ssh -R` does by default.
     let bind_address = match (unbracketed(&input.bind_address), kind) {
@@ -91,6 +97,7 @@ pub fn forward_save(
         let (dest_host, dest_port) = dest.unzip();
         let forward = PortForward {
             host_id: input.host_id.clone(),
+            name: name.to_owned(),
             kind,
             bind_address,
             bind_port: input.bind_port,
@@ -108,6 +115,7 @@ pub fn forward_save(
         Ok(view(&id, &f))
     })?;
     sync::local_change(&app);
+    connection::rules_changed(&app);
     Ok(saved)
 }
 

@@ -10,14 +10,15 @@ import {
   RECOVERY_AUTH,
   call,
   change,
+  changePassword,
   envelope,
+  key32,
   login,
   passwordChange,
+  pausedBeforeBatch,
   push,
   setupVault,
 } from "./helpers";
-
-const changePassword = (token: string, json: unknown) => call("/v1/vault/password", { method: "PUT", token, json });
 
 describe("GET /v1/vault", () => {
   it("returns the key material, KDF info and current seq", async () => {
@@ -84,7 +85,10 @@ describe("PUT /v1/vault/password", () => {
     const row = await env.DB.prepare("SELECT auth_hash, recovery_auth_hash FROM meta").first<Record<string, string>>();
     expect(row!.auth_hash).toBe(await sha256Hex(Uint8Array.from(atob(NEW_AUTH_KEY), (c) => c.charCodeAt(0))));
     // recovery secret not rotated
-    expect((await call("/v1/recover", { json: { recovery_auth: RECOVERY_AUTH, device_id: "d", device_name: envelope() } })).status).toBe(200);
+    expect(
+      (await call("/v1/recover", { json: { recovery_auth: RECOVERY_AUTH, device_id: "d", device_name: envelope() } }))
+        .status,
+    ).toBe(200);
   });
 
   it("rotates the recovery material when recovery_vault_key and recovery_auth are sent", async () => {
@@ -111,6 +115,50 @@ describe("PUT /v1/vault/password", () => {
     ).body.session_token as string;
     await changePassword(caller.session_token, passwordChange());
     expect((await changePassword(recovery, passwordChange())).status).toBe(401);
+  });
+
+  it("changes nothing when another password change revoked the caller meanwhile", async () => {
+    await setupVault();
+    const owner = await login("device-a");
+    const other = await login("device-b");
+    const res = await call("/v1/vault/password", {
+      method: "PUT",
+      token: other.session_token,
+      json: passwordChange({ auth_key: key32(9), protected_vault_key: envelope("pvk-b") }),
+      env: {
+        DB: pausedBeforeBatch(async () => {
+          expect((await changePassword(owner.session_token, passwordChange())).status).toBe(200);
+        }),
+      },
+    });
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe("invalid_session");
+
+    const vault = await call("/v1/vault", { token: owner.session_token });
+    expect(vault.status).toBe(200);
+    expect(vault.body.protected_vault_key).toBe(envelope("pvk2"));
+    expect((await login("device-c", NEW_AUTH_KEY)).session_token).toBeTruthy();
+  });
+
+  it("revokes nothing when a recovery session is revoked while it changes the password", async () => {
+    await setupVault();
+    const owner = await login("device-a");
+    const recovery = (
+      await call("/v1/recover", { json: { recovery_auth: RECOVERY_AUTH, device_id: "dr", device_name: envelope() } })
+    ).body.session_token as string;
+    const res = await call("/v1/vault/password", {
+      method: "PUT",
+      token: recovery,
+      json: passwordChange({ auth_key: key32(9) }),
+      env: {
+        DB: pausedBeforeBatch(async () => {
+          expect((await changePassword(owner.session_token, passwordChange())).status).toBe(200);
+        }),
+      },
+    });
+    expect(res.status).toBe(401);
+    expect((await call("/v1/vault", { token: owner.session_token })).status).toBe(200);
+    expect((await login("device-c", NEW_AUTH_KEY)).session_token).toBeTruthy();
   });
 
   it("leaves items untouched", async () => {

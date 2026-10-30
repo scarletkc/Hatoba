@@ -1,61 +1,111 @@
 /*
  * Hatoba's site: the night sea of the app icon (a pier standing in seigaiha water) frames the page,
- * and the content between sits on plain paper. Colors come from app-icon.svg.
+ * and the content between sits on plain paper. The values come from tokens.css.
  */
-:root {
-  --night: #0d1735;
-  --night-deep: #091027;
-  --harbor: #24408a;
-  --sea: #22a6e8;
-  --deep: #0d4590;
-  --foam: #e3eeff;
 
-  --paper: #ffffff;
-  --mist: #f1f5fb;
-  --ink: #0f1d3d;
-  --ink-2: #4b5a7a;
-  --line: #d9e1ee;
-  --link: #0d4590;
-  --code-bg: #e9eff8;
-
-  --on-night: #ffffff;
-  --on-night-2: rgb(227 238 255 / 0.74);
-
-  --cjk: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC";
-  --font: "Archivo Variable", var(--cjk), system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-
-  --gutter: 24px;
-  --max: 1180px;
-  --radius: 12px;
-  --body-leading: 1.7;
-
-  color-scheme: light;
+/*
+ * Arial scaled to Archivo's widths and line metrics, for the moment before Archivo arrives, so text
+ * doesn't move when it swaps in: one face per weight and width the site uses, each covering only the
+ * characters Archivo's Latin files do. Measured in Chrome against archivo-latin-wdth-normal.woff2;
+ * Liberation Sans has Arial's metrics.
+ */
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Arial"), local("ArialMT"), local("Liberation Sans"), local("Helvetica");
+  font-weight: 100 449;
+  font-stretch: 50% 109%;
+  size-adjust: 98.6%;
+  ascent-override: 89.2%;
+  descent-override: 21.3%;
+  line-gap-override: 0%;
+  unicode-range:
+    U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F,
+    U+A720-A7FF, U+FEFF, U+FFFD;
 }
 
-:root:lang(ja) {
-  --cjk: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans CJK JP", "Source Han Sans JP";
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Arial"), local("ArialMT"), local("Liberation Sans"), local("Helvetica");
+  font-weight: 450 549;
+  font-stretch: 50% 109%;
+  size-adjust: 100.2%;
+  ascent-override: 87.8%;
+  descent-override: 21%;
+  line-gap-override: 0%;
+  unicode-range:
+    U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F,
+    U+A720-A7FF, U+FEFF, U+FFFD;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #0b1430;
-    --mist: #0f1a3b;
-    --ink: #e6eefc;
-    --ink-2: #a5b4d2;
-    --line: #22325c;
-    --link: #6cc4f2;
-    --code-bg: #182651;
-    color-scheme: dark;
-  }
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT"), local("Liberation Sans Bold"), local("Helvetica Bold");
+  font-weight: 550 649;
+  font-stretch: 50% 109%;
+  size-adjust: 95.6%;
+  ascent-override: 92.1%;
+  descent-override: 22%;
+  line-gap-override: 0%;
+  unicode-range:
+    U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F,
+    U+A720-A7FF, U+FEFF, U+FFFD;
 }
 
-@media (max-width: 640px) {
-  :root {
-    --gutter: 16px;
-  }
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT"), local("Liberation Sans Bold"), local("Helvetica Bold");
+  font-weight: 650 749;
+  font-stretch: 50% 109%;
+  size-adjust: 98.7%;
+  ascent-override: 89.2%;
+  descent-override: 21.3%;
+  line-gap-override: 0%;
+  unicode-range:
+    U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F,
+    U+A720-A7FF, U+FEFF, U+FFFD;
 }
 
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT"), local("Liberation Sans Bold"), local("Helvetica Bold");
+  font-weight: 750 1000;
+  font-stretch: 50% 109%;
+  size-adjust: 103.3%;
+  ascent-override: 85.2%;
+  descent-override: 20.3%;
+  line-gap-override: 0%;
+  unicode-range:
+    U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F,
+    U+A720-A7FF, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT"), local("Liberation Sans Bold"), local("Helvetica Bold");
+  font-weight: 750 1000;
+  font-stretch: 110% 121%;
+  size-adjust: 121.9%;
+  ascent-override: 72.2%;
+  descent-override: 17.2%;
+  line-gap-override: 0%;
+  unicode-range:
+    U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F,
+    U+A720-A7FF, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Archivo Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT"), local("Liberation Sans Bold"), local("Helvetica Bold");
+  font-weight: 750 1000;
+  font-stretch: 122% 200%;
+  size-adjust: 129%;
+  ascent-override: 68.2%;
+  descent-override: 16.3%;
+  line-gap-override: 0%;
+  unicode-range:
+    U+0000-02FF, U+1D00-1EFF, U+2000-206F, U+20A0-20C0, U+2113, U+2122, U+2191, U+2193, U+2212, U+2215, U+2C60-2C7F,
+    U+A720-A7FF, U+FEFF, U+FFFD;
+}
 *,
 *::before,
 *::after {
@@ -64,7 +114,13 @@
 
 html {
   -webkit-text-size-adjust: 100%;
-  scroll-padding-top: 24px;
+  scroll-padding-top: var(--space-24);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 body {
@@ -72,8 +128,8 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font);
-  font-size: 17px;
-  line-height: var(--body-leading);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
   font-variation-settings: normal;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -86,20 +142,29 @@ video {
   height: auto;
 }
 
+/* A link's underline is faint until the pointer is on it; the colour fades, the line stays put. */
 a {
   color: var(--link);
   text-underline-offset: 0.18em;
   text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  transition:
+    color var(--duration-fast) var(--ease-standard),
+    text-decoration-color var(--duration-fast) var(--ease-standard);
 }
 
 a:hover {
-  text-decoration-thickness: 2px;
+  text-decoration-color: currentColor;
 }
 
 :focus-visible {
-  outline: 2px solid var(--sea);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 3px;
-  border-radius: 4px;
+}
+
+/* A text link's ring follows its words; controls keep their own shape. */
+a:not(.button):focus-visible {
+  border-radius: var(--radius-sm);
 }
 
 code {
@@ -107,7 +172,7 @@ code {
   font-size: 0.88em;
   background: var(--code-bg);
   padding: 0.12em 0.36em;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   overflow-wrap: anywhere;
 }
 
@@ -116,7 +181,7 @@ h2,
 h3 {
   margin: 0;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: var(--leading-tight);
   letter-spacing: 0;
   text-wrap: balance;
 }
@@ -142,17 +207,17 @@ p {
 
 .skip {
   position: absolute;
-  left: 12px;
+  left: var(--space-12);
   top: -48px;
   z-index: 10;
   background: var(--paper);
   color: var(--ink);
-  padding: 8px 14px;
-  border-radius: 8px;
+  padding: var(--space-8) var(--space-16);
+  border-radius: var(--radius-md);
 }
 
 .skip:focus {
-  top: 12px;
+  top: var(--space-12);
 }
 
 /*
@@ -164,101 +229,7 @@ p {
   letter-spacing: -0.01em;
 }
 
-/* Buttons: the white of the pier on the night sea, or the deep blue of the water on paper. */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 48px;
-  padding: 0 22px;
-  border-radius: 999px;
-  font: inherit;
-  font-weight: 600;
-  font-size: 16px;
-  line-height: 1.2;
-  text-decoration: none;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.btn:hover {
-  text-decoration: none;
-}
-
-.btn svg {
-  flex: none;
-}
-
-.btn-pier {
-  background: #ffffff;
-  color: var(--night);
-}
-
-.btn-pier:hover {
-  background: var(--foam);
-}
-
-.btn-outline {
-  color: var(--on-night);
-  border-color: rgb(227 238 255 / 0.35);
-}
-
-.btn-outline:hover {
-  border-color: rgb(227 238 255 / 0.75);
-}
-
-.btn-deep {
-  background: var(--deep);
-  color: #ffffff;
-}
-
-.btn-deep:hover {
-  background: #0b3a7a;
-}
-
-@media (prefers-color-scheme: dark) {
-  .btn-deep {
-    background: var(--sea);
-    color: var(--night);
-  }
-
-  .btn-deep:hover {
-    background: #4bb8ee;
-  }
-}
-
-/* The night band that heads every page. */
-.night {
-  position: relative;
-  background: linear-gradient(180deg, var(--night) 0%, var(--harbor) 100%);
-  color: var(--on-night);
-}
-
-.night a:not(.btn) {
-  color: var(--on-night);
-}
-
-/* A screenshot of the app, framed as its window. */
-.window {
-  border-radius: var(--radius);
-  overflow: hidden;
-  background: #1c1d21;
-  box-shadow:
-    0 0 0 1px rgb(255 255 255 / 0.08),
-    0 30px 80px rgb(5 12 40 / 0.45),
-    0 8px 24px rgb(5 12 40 / 0.25);
-}
-
-.window img {
-  width: 100%;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation: none !important;
-    transition: none !important;
-  }
-}
+/*
+ * Reduced motion: the movement durations in tokens.css drop to zero, and components drop their own
+ * movement (the try button's lift). Colour and opacity fades stay, so hover and press still respond.
+ */

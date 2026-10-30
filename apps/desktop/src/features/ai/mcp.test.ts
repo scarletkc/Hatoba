@@ -5,7 +5,12 @@ import { failedServers, menuSources, toolsMenuRows, transportLabel } from "./mcp
 const server = (id: string, name: string, enabled = true): McpServerView => ({
   id,
   name,
-  transport: { kind: "stdio", command: "npx", args: ["-y", "@modelcontextprotocol/server-github"], env_keys: ["GITHUB_TOKEN"] },
+  transport: {
+    kind: "stdio",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-github"],
+    env_keys: ["GITHUB_TOKEN"],
+  },
   always_ask: false,
   enabled,
   always_allow: false,
@@ -22,7 +27,13 @@ const status = (server_id: string, state: McpServerStatus["state"], tools = 0): 
     name: `mcp__${server_id}__t${i}`,
     tool: `t${i}`,
     description: "",
-    annotations: { title: null, read_only_hint: null, destructive_hint: null, idempotent_hint: null, open_world_hint: null },
+    annotations: {
+      title: null,
+      read_only_hint: null,
+      destructive_hint: null,
+      idempotent_hint: null,
+      open_world_hint: null,
+    },
     always_allow: false,
   })),
   prompts: [],
@@ -35,7 +46,13 @@ describe("/mcp (AI-30)", () => {
   it("lists the servers enabled on this device by name, with their state and tools", () => {
     const rows = toolsMenuRows(servers, { b: status("b", "running", 3), a: status("a", "failed") }, []);
     expect(rows.map((r) => r.server.name)).toEqual(["filesystem", "github"]);
-    expect(rows[0]).toMatchObject({ state: "failed", error: "exited with status 1", stderr: ["npm ERR! 404"], tools: 0, on: true });
+    expect(rows[0]).toMatchObject({
+      state: "failed",
+      error: "exited with status 1",
+      stderr: ["npm ERR! 404"],
+      tools: 0,
+      on: true,
+    });
     expect(rows[1]).toMatchObject({ state: "running", tools: 3, on: true });
   });
 
@@ -75,11 +92,22 @@ describe("/mcp (AI-30)", () => {
   });
 
   it("shows the full command line or the URL", () => {
-    expect(transportLabel({ kind: "stdio", command: "npx", args: ["-y", "@scope/pkg", "--root", "C:\\My Files"], env_keys: [] })).toBe(
-      'npx -y @scope/pkg --root "C:\\My Files"',
+    expect(
+      transportLabel({
+        kind: "stdio",
+        command: "npx",
+        args: ["-y", "@scope/pkg", "--root", "C:\\My Files"],
+        env_keys: [],
+      }),
+    ).toBe('npx -y @scope/pkg --root "C:\\My Files"');
+    expect(transportLabel({ kind: "stdio", command: "uvx", args: ['say "hi"', ""], env_keys: [] })).toBe(
+      'uvx "say \\"hi\\"" ""',
     );
-    expect(transportLabel({ kind: "stdio", command: "uvx", args: ['say "hi"', ""], env_keys: [] })).toBe('uvx "say \\"hi\\"" ""');
-    expect(transportLabel({ kind: "stdio", command: "node", args: ["server.js\r--evil"], env_keys: [] })).toBe('node "server.js\\r--evil"');
-    expect(transportLabel({ kind: "http", url: "https://mcp.example.com/mcp", header_keys: ["Authorization"] })).toBe("https://mcp.example.com/mcp");
+    expect(transportLabel({ kind: "stdio", command: "node", args: ["server.js\r--evil"], env_keys: [] })).toBe(
+      'node "server.js\\r--evil"',
+    );
+    expect(transportLabel({ kind: "http", url: "https://mcp.example.com/mcp", header_keys: ["Authorization"] })).toBe(
+      "https://mcp.example.com/mcp",
+    );
   });
 });

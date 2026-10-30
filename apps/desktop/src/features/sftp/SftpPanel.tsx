@@ -1,23 +1,37 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import {
+  ErrorText,
+  HintText,
+  Icon,
+  IconButton,
+  LinkButton,
+  Menu,
+  Spinner,
+  confirm,
+  isImeEvent,
+  toast,
+  useMenu,
+  type MenuEntry,
+} from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
-import { Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
-import { confirm, Menu, toast, useMenu, type MenuEntry } from "@/components/overlay";
-import { writeClipboard } from "@/features/terminal/clipboard";
+import { useApp } from "@/app/store";
 import { formatBytes, formatDate, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AppError, FileEntry } from "@/ipc/types";
+import { writeClipboard } from "@/lib/clipboard";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
+import { editFile } from "@/session/edits";
+import { useTransfers } from "@/session/transfers";
+import { EditList } from "./EditList";
 import { pickSavePath, pickUploadFiles } from "./native";
 import { joinPath, parentPath, splitLastSegment } from "./paths";
 import { TransferList } from "./TransferList";
-import { useTransfers } from "./transfers";
 import { useFileDrop } from "./useFileDrop";
 import s from "./SftpPanel.module.css";
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
-/** Folders first, then names (dot-files sort before letters, like the design's list). */
+/** Folders first, then names (dot-files sort before letters). */
 function sortEntries(list: FileEntry[]): FileEntry[] {
   return [...list].sort((a, b) => Number(b.is_dir) - Number(a.is_dir) || collator.compare(a.name, b.name));
 }
@@ -30,10 +44,17 @@ function shortDate(ms: number | null): string {
 
 /** SFTP-04: permissions, exact size and modification time on hover. */
 function tooltip(e: FileEntry): string {
-  const lines = [e.name, [e.permissions, e.is_dir ? null : `${formatBytes(e.size)} (${e.size.toLocaleString()} B)`].filter(Boolean).join(" · ")];
+  const lines = [
+    e.name,
+    [e.permissions, e.is_dir ? null : `${formatBytes(e.size)} (${e.size.toLocaleString()} B)`]
+      .filter(Boolean)
+      .join(" · "),
+  ];
   if (e.modified != null) {
     const d = new Date(e.modified);
-    lines.push(`${formatDate(e.modified)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
+    lines.push(
+      `${formatDate(e.modified)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`,
+    );
   }
   return lines.join("\n");
 }
@@ -46,17 +67,21 @@ function fileIcon(e: FileEntry): { name: string; fill: boolean; color: string } 
 }
 
 interface Props {
+  /** The terminal tab, whose edited files (SFTP-05) outlive a reconnect. */
+  tabId: string;
   sessionId: string;
   hostName: string;
-  /** Only the visible tab's panel reacts to native file drops. */
+  /** Only the visible tab's panel reacts to native file drops, and only while unlocked. */
   active: boolean;
 }
 
-/** Remote file browser to the right of a terminal (design §03, SFTP-01..04). */
-export function SftpPanel({ sessionId, hostName, active }: Props) {
+/** Remote file browser to the right of a terminal (SFTP-01..05). */
+export function SftpPanel({ tabId, sessionId, hostName, active }: Props) {
   const t = useT();
   const rootRef = useRef<HTMLDivElement>(null);
   const requestSeq = useRef(0);
+  /** The folder of the latest load, which the unlock retries when the lock refused it. */
+  const requested = useRef<string | null>(null);
   const [cwd, setCwd] = useState<string | null>(null);
   const cwdRef = useRef<string | null>(null);
   const [entries, setEntries] = useState<FileEntry[]>([]);
@@ -72,6 +97,7 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
   const load = useCallback(
     async (path: string | null) => {
       const seq = ++requestSeq.current;
+      requested.current = path;
       setLoading(true);
       setError(null);
       try {
@@ -109,6 +135,13 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
       refresh();
     }
   }, [uploadsDone, refresh]);
+
+  // SEC-03: nothing reaches the server behind the lock screen; a load refused there runs again
+  // after the unlock.
+  const unlocked = useApp((st) => st.phase === "unlocked");
+  useEffect(() => {
+    if (unlocked && error?.code === "locked") void load(requested.current);
+  }, [unlocked, error, load]);
 
   const fail = (e: unknown) => toast(errorMessage(t, e), "error");
 
@@ -189,7 +222,7 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
 
   const pickAndUpload = async () => upload(await pickUploadFiles());
 
-  const { dragging, html5 } = useFileDrop(rootRef, active, (paths) => void upload(paths));
+  const { dragging, html5 } = useFileDrop(rootRef, active && unlocked, (paths) => void upload(paths));
 
   const showMenu = (e: MouseEvent, entry: FileEntry | null) => {
     e.preventDefault();
@@ -201,12 +234,25 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
       { label: t("sftp.menu.refresh"), icon: "arrows-clockwise", onSelect: refresh },
     ];
     if (!entry) {
-      setMenuEntries([...common, { kind: "separator" }, { label: t("sftp.menu.copyPath"), icon: "copy", disabled: !cwd, onSelect: () => cwd && void copyPath(cwd) }]);
+      setMenuEntries([
+        ...common,
+        { kind: "separator" },
+        { label: t("sftp.menu.copyPath"), icon: "copy", disabled: !cwd, onSelect: () => cwd && void copyPath(cwd) },
+      ]);
     } else {
       setMenuEntries([
         entry.is_dir
           ? { label: t("sftp.menu.open"), icon: "folder-open", onSelect: () => open(entry) }
           : { label: t("sftp.menu.download"), icon: "download-simple", onSelect: () => void download(entry) },
+        ...(entry.is_dir
+          ? []
+          : [
+              {
+                label: t("sftp.menu.edit"),
+                icon: "note-pencil",
+                onSelect: () => void editFile(tabId, sessionId, entry.path, entry.name),
+              },
+            ]),
         { label: t("sftp.menu.rename"), icon: "pencil-simple", onSelect: () => setRenaming(entry.path) },
         { label: t("sftp.menu.delete"), icon: "trash", danger: true, onSelect: () => void remove(entry) },
         { kind: "separator" },
@@ -253,22 +299,32 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
         <span className={s.title}>{t("sftp.title")}</span>
         <span className={s.host}>{hostName}</span>
         <div className={s.grow} />
-        <IconButton icon="upload-simple" label={t("sftp.upload")} className={s.iconBtn} onClick={() => void pickAndUpload()} />
-        <IconButton icon="folder-plus" label={t("sftp.newFolder")} className={s.iconBtn} disabled={!cwd} onClick={() => setCreating(true)} />
+        <IconButton
+          icon="upload-simple"
+          label={t("sftp.upload")}
+          className={s.iconBtn}
+          onClick={() => void pickAndUpload()}
+        />
+        <IconButton
+          icon="folder-plus"
+          label={t("sftp.newFolder")}
+          className={s.iconBtn}
+          disabled={!cwd}
+          onClick={() => setCreating(true)}
+        />
         <IconButton icon="arrows-clockwise" label={t("sftp.refresh")} className={s.iconBtn} onClick={refresh} />
       </div>
 
       <div className={s.pathBar}>
-        <button
-          type="button"
+        <IconButton
+          small
+          icon="caret-left"
+          size={14}
+          label={t("sftp.parent")}
           className={s.back}
-          aria-label={t("sftp.parent")}
-          title={t("sftp.parent")}
           disabled={!cwd || cwd === "/"}
           onClick={() => cwd && void load(parentPath(cwd))}
-        >
-          <Icon name="caret-left" size={13} />
-        </button>
+        />
         <span className={cx(s.path, "selectable")} title={cwd ?? undefined}>
           {dirPrefix}
           <span className={s.pathLast}>{dirLast}</span>
@@ -297,7 +353,12 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
           <div className={s.row}>
             <span className={s.nameCell}>
               <Icon name="folder-simple" fill size={14} color="var(--accent)" />
-              <NameInput initial={t("sftp.newFolderName")} selectAll onCommit={(v) => void createFolder(v)} onCancel={() => setCreating(false)} />
+              <NameInput
+                initial={t("sftp.newFolderName")}
+                selectAll
+                onCommit={(v) => void createFolder(v)}
+                onCancel={() => setCreating(false)}
+              />
             </span>
             <span />
             <span />
@@ -319,7 +380,11 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
               <span className={s.nameCell}>
                 <Icon name={icon.name} fill={icon.fill} size={14} color={icon.color} />
                 {renaming === entry.path ? (
-                  <NameInput initial={entry.name} onCommit={(v) => void rename(entry, v)} onCancel={() => setRenaming(null)} />
+                  <NameInput
+                    initial={entry.name}
+                    onCommit={(v) => void rename(entry, v)}
+                    onCancel={() => setRenaming(null)}
+                  />
                 ) : (
                   <span className={s.name}>{entry.name}</span>
                 )}
@@ -331,14 +396,14 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
         })}
         {loading && entries.length === 0 && (
           <div className={s.message}>
-            <Spinner size={13} />
+            <Spinner size={14} />
             {t("sftp.loading")}
           </div>
         )}
         {error && (
-          <div className={cx(s.message, s.messageError)}>
-            <div>{t("sftp.loadFailed")}</div>
-            <div className={s.errorDetail}>{errorMessage(t, error)}</div>
+          <div className={s.message}>
+            <ErrorText>{t("sftp.loadFailed")}</ErrorText>
+            <HintText>{errorMessage(t, error)}</HintText>
             <LinkButton icon="arrows-clockwise" onClick={refresh}>
               {t("btn.retry")}
             </LinkButton>
@@ -347,11 +412,12 @@ export function SftpPanel({ sessionId, hostName, active }: Props) {
         {!loading && !error && entries.length === 0 && !creating && <div className={s.message}>{t("sftp.empty")}</div>}
       </div>
 
+      <EditList tabId={tabId} />
       <TransferList sessionId={sessionId} />
 
       {dragging && (
         <div className={s.drop}>
-          <Icon name="upload-simple" size={22} />
+          <Icon name="upload-simple" size={24} />
           <span>{t("sftp.dropHere", { path: cwd ?? "~" })}</span>
         </div>
       )}

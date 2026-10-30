@@ -1,0 +1,198 @@
+/* Mid-level patterns built from the controls: list rows, status lines, field messages, chips and cards. */
+
+/* List row: leading · body (title over status) · trailing. A row too narrow for both puts the trailing
+   controls under a body that would be narrower than 160px. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-12);
+  min-height: 40px;
+  padding: 6px 8px 6px 14px;
+  min-width: 0;
+}
+
+/* Dense, for popovers and menus: the leading icon and the trailing action stay level with the title. */
+.rowSmall {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: var(--space-6);
+  min-height: 0;
+  padding: 5px 4px;
+  border-radius: var(--radius-xs);
+}
+
+/* Fades like the global controls (base.css): quickly in, more slowly out. */
+.rowInteractive {
+  transition: background-color var(--motion-fade) var(--ease-out);
+}
+
+.rowInteractive:hover {
+  background: var(--fill);
+  transition-duration: var(--motion-hover);
+}
+
+.rowSelected,
+.rowSelected:hover {
+  background: var(--rowsel);
+}
+
+.rowLeading {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.rowBody {
+  flex: 1 1 160px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rowSmall .rowBody {
+  flex: 1;
+  gap: var(--space-2);
+}
+
+/* Its controls are the row's own flex items, so a narrow row wraps them one by one. */
+.rowTrailing {
+  display: contents;
+}
+
+/* Status line: an icon and a short message under a row's title. */
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--fg2);
+}
+
+.status > i {
+  flex: none;
+  font-size: var(--icon-14);
+}
+
+.statusSuccess > i {
+  color: var(--green);
+}
+
+.statusWarning > i {
+  color: var(--orange);
+}
+
+/* A failure's message can be long: it wraps, and the icon stays by its first line. */
+.statusError {
+  align-items: flex-start;
+  color: var(--red);
+}
+
+.statusError > i {
+  margin-top: 1px;
+}
+
+/* The message's own elements (e.g. an address that truncates) sit in the line as they are. */
+.statusText {
+  display: contents;
+}
+
+.statusError .statusText {
+  display: block;
+  min-width: 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+/* Hint and error lines under a field. */
+.hint,
+.warning,
+.error {
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--fg2);
+  text-wrap: pretty;
+}
+
+.warning {
+  color: var(--orange);
+}
+
+.error {
+  color: var(--red);
+}
+
+.messageIcon {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+}
+
+.messageIcon > i {
+  flex: none;
+  margin-top: 2px;
+  font-size: var(--icon-14);
+}
+
+/* Chips: short labels and states in a line of text. */
+.chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  background: var(--fill);
+  color: var(--fg2);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.chip > i {
+  font-size: var(--icon-12);
+}
+
+.chipMono {
+  font-family: var(--font-mono);
+}
+
+.chipSuccess {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+}
+
+.chipError {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+
+.chipWarning {
+  color: var(--orange);
+  background: color-mix(in srgb, var(--orange) 13%, transparent);
+}
+
+.chipAccent {
+  color: var(--accent);
+  background: var(--accenttint);
+}
+
+/* Card: a raised group of content that stands on its own, e.g. a dashboard tile. */
+.card {
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--group);
+  box-shadow: inset 0 0 0 0.5px var(--line2);
+}
+
+.cardInteractive {
+  transition: background-color var(--motion-fade) var(--ease-out);
+}
+
+.cardInteractive:hover {
+  background: var(--fill);
+  transition-duration: var(--motion-hover);
+}

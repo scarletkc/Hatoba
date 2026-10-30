@@ -51,7 +51,7 @@ process-wrap = { version = "10", default-features = false, features = ["tokio1",
 regex-syntax = "0.8"
 # Skills (spec §13.8): SKILL.md frontmatter and .zip import / export.
 serde_yaml_ng = "0.10"
-zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip = { version = "9.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [target.'cfg(windows)'.dependencies]
 # CREATE_NO_WINDOW for MCP stdio servers, in the type process-wrap's `CreationFlags` takes.

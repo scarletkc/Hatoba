@@ -30,6 +30,12 @@
     "typed": "q"
   },
   {
+    "name": "a shell change comes after a terminal change",
+    "text": "<terminal_change to=\"attached\">\nx\n</terminal_change>\n\n<shell_change from=\"Ubuntu\" to=\"PowerShell\">\nx\n</shell_change>\n\n<model_change from=\"a\" to=\"b\">\nx\n</model_change>\n\nq",
+    "blocks": 3,
+    "typed": "q"
+  },
+  {
     "name": "a second note of a kind is typed text",
     "text": "<model_change from=\"a\" to=\"b\">\nx\n</model_change>\n\n<model_change from=\"b\" to=\"c\">\nx\n</model_change>\n\nq",
     "blocks": 1,

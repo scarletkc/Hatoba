@@ -388,6 +388,8 @@ pub async fn ssh_stats_start(
     session_id: String,
     channel: Channel<StatsEvent>,
 ) -> AppResult<u64> {
+    // SEC-03: nothing runs on the server behind the lock screen.
+    state.with_unlocked(|_| Ok(()))?;
     // Taken before the round trip to the server, so ids follow the order the starts arrived in.
     let id = NEXT_STATS_ID.fetch_add(1, Ordering::Relaxed);
     let live = state.ssh.get(&session_id)?;

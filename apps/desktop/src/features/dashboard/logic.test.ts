@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { StatsReading } from "@/features/terminal/stats";
+import { appError } from "@/ipc/api";
 import type { DashboardEvent, GroupView, HostView, ServerStatsView } from "@/ipc/types";
 import {
   DASHBOARD_COLUMNS,
   fitColumns,
   fullestMount,
-  groupSections,
   isStale,
   leftOutBy,
   netRate,
@@ -67,9 +67,20 @@ const host = (id: string, patch: Partial<HostView> = {}): HostView => ({
   ...patch,
 });
 
-const group = (id: string, sort: number, dashboard = true): GroupView => ({ id, name: id, parent_id: null, sort, dashboard });
+const group = (id: string, sort: number, dashboard = true): GroupView => ({
+  id,
+  name: id,
+  parent_id: null,
+  sort,
+  dashboard,
+});
 
-const reads = (...readings: StatsReading[]): HostReadout => ({ ...NO_READOUT, phase: "reading", online: true, history: readings });
+const reads = (...readings: StatsReading[]): HostReadout => ({
+  ...NO_READOUT,
+  phase: "reading",
+  online: true,
+  history: readings,
+});
 
 describe("dashboard events (HOST-14)", () => {
   const T0 = Date.UTC(2026, 9, 12, 12);
@@ -94,7 +105,7 @@ describe("dashboard events (HOST-14)", () => {
   it("keeps the readings when the host stops answering", () => {
     const r = apply([
       { kind: "stats", host_id: "h", stats: stats() },
-      { kind: "failed", host_id: "h", error: { code: "ssh", detail: "reset", ssh_kind: "disconnected" } },
+      { kind: "failed", host_id: "h", error: appError("ssh", "reset", { ssh_kind: "disconnected" }) },
       { kind: "probe", host_id: "h", online: false },
     ])!;
     expect(r.phase).toBe("offline");
@@ -119,7 +130,12 @@ describe("dashboard events (HOST-14)", () => {
   it("holds a host that needs the user and clears the hold once it reads", () => {
     const held = apply([
       { kind: "probe", host_id: "h", online: true },
-      { kind: "held", host_id: "h", hold: "sign_in_failed", error: { code: "ssh", detail: "denied", ssh_kind: "auth_failed" } },
+      {
+        kind: "held",
+        host_id: "h",
+        hold: "sign_in_failed",
+        error: appError("ssh", "denied", { ssh_kind: "auth_failed" }),
+      },
     ])!;
     expect(held.phase).toBe("held");
     expect(held.hold).toBe("sign_in_failed");
@@ -153,16 +169,6 @@ describe("dashboard view", () => {
     expect(leftOutBy(host("c", { group_id: "on" }), groups)).toBeNull();
   });
 
-  it("puts each group's hosts in a section, in the sidebar's order, then the rest", () => {
-    const hosts = [host("a", { group_id: "g2" }), host("b"), host("c", { group_id: "g1" }), host("d", { group_id: "gone" }), host("e", { group_id: "g2" })];
-    const sections = groupSections(hosts, [group("g1", 0), group("g2", 1), group("empty", 2)]);
-    expect(sections.map((s) => [s.group?.id ?? null, s.hosts.map((h) => h.id)])).toEqual([
-      ["g1", ["c"]],
-      ["g2", ["a", "e"]],
-      [null, ["b", "d"]],
-    ]);
-  });
-
   it("sorts by a value, highest first, hosts without one last and ties in list order", () => {
     const hosts = [host("a"), host("b"), host("c"), host("d")];
     const readouts: Record<string, HostReadout> = {
@@ -171,7 +177,8 @@ describe("dashboard view", () => {
       c: { ...NO_READOUT, phase: "offline", online: false },
       d: reads(reading(1, { cpu_percent: 20 })),
     };
-    const order = (sort: Parameters<typeof sortForDashboard>[1]) => sortForDashboard(hosts, sort, readouts, "en").map((h) => h.id);
+    const order = (sort: Parameters<typeof sortForDashboard>[1]) =>
+      sortForDashboard(hosts, sort, readouts, "en").map((h) => h.id);
     expect(order("cpu")).toEqual(["b", "a", "d", "c"]);
     expect(order("list")).toEqual(["a", "b", "c", "d"]);
     // Problems first.

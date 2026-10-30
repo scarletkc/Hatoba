@@ -1,6 +1,14 @@
 import { create } from "zustand";
 import { useApp } from "@/app/store";
-import type { AiConversationView, AiEntryView, AiFileChange, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView } from "@/ipc/types";
+import type {
+  AiConversationView,
+  AiEntryView,
+  AiFileChange,
+  AiModelRef,
+  AiPermissionMode,
+  AiProviderView,
+  AiSettingsView,
+} from "@/ipc/types";
 import type { Attachment, DiagnosticsAttachment, SelectionAttachment, SelectionState } from "./attachments";
 import type { EffortPick } from "./effort";
 import type { SideQuestion } from "./side";
@@ -263,7 +271,13 @@ export function offersHomeConversation(slot: Slot, home: Slot | undefined): bool
 /** Keeps a conversation's history entry in step with what a command returned. */
 export function updateConversation(view: AiConversationView) {
   useAi.setState((st) => ({
-    history: st.history?.some((c) => c.id === view.id) ? st.history.map((c) => (c.id === view.id ? view : c)) : st.history ? [view, ...st.history] : null,
-    slots: Object.fromEntries(Object.entries(st.slots).map(([k, s]) => [k, s.conversationId === view.id ? { ...s, conversation: view } : s])),
+    history: st.history?.some((c) => c.id === view.id)
+      ? st.history.map((c) => (c.id === view.id ? view : c))
+      : st.history
+        ? [view, ...st.history]
+        : null,
+    slots: Object.fromEntries(
+      Object.entries(st.slots).map(([k, s]) => [k, s.conversationId === view.id ? { ...s, conversation: view } : s]),
+    ),
   }));
 }

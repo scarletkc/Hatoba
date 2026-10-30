@@ -2,7 +2,7 @@
 .savedRow {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-8);
 }
 
 .savedField {
@@ -11,9 +11,9 @@
   height: var(--field-height);
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-6);
   padding: 0 8px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--fill);
   box-shadow: inset 0 0 0 0.5px var(--line);
   color: var(--fg2);
@@ -21,13 +21,13 @@
 
 .savedField i {
   color: var(--green);
-  font-size: 14px;
+  font-size: var(--icon-14);
 }
 
 .keyRow {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
 }
 
 .keyRow > :first-child {
@@ -40,46 +40,31 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
+/* A StatusLine, with the provider's words under it. */
 .testResult {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  max-width: 100%;
-  font-size: var(--text-sm);
-  line-height: 1.5;
-}
-
-.testResult > :first-child {
-  margin-top: 5px;
-}
-
-.testText {
-  min-width: 0;
+  transition: opacity var(--motion-fade) var(--ease-out);
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-4);
+  max-width: 100%;
 }
 
-.testFail {
-  color: var(--red);
+.testStale {
+  opacity: 0.5;
 }
 
+/* A Chip after the failure. */
 .testStatus {
   margin-left: 8px;
-  padding: 0 5px;
-  border-radius: var(--radius-xs);
-  background: var(--fill);
-  color: var(--fg2);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  white-space: nowrap;
+  vertical-align: 1px;
 }
 
-/* The provider's own words, kept as sent. */
+/* The provider's own words, kept as sent, in line with the status text past its icon. */
 .testDetail {
+  padding-left: 20px;
   color: var(--fg2);
   font-family: var(--font-mono);
   font-size: var(--text-xs);

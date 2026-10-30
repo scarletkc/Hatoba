@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
+import { Group, HintText, layoutStyles, toast } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
-import { toast } from "@/components/overlay";
 import { useT } from "@/i18n";
 import type { LocalPrefs, SettingsView, TerminalSettings } from "@/ipc/types";
 import s from "./shared.module.css";
@@ -42,10 +42,20 @@ export function SettingRow({
     <div className={top ? `${s.row} ${s.rowTop}` : s.row}>
       <div className={s.text}>
         <span className={s.label}>{label}</span>
-        {hint && <span className={s.hint}>{hint}</span>}
+        {hint && <HintText>{hint}</HintText>}
       </div>
       {children && <div className={s.control}>{children}</div>}
     </div>
+  );
+}
+
+/** A titled group of rows; a pane's lone rows stay in an untitled `Group`. */
+export function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className={layoutStyles.section}>
+      <div className={layoutStyles.sectionTitle}>{title}</div>
+      <Group>{children}</Group>
+    </section>
   );
 }
 

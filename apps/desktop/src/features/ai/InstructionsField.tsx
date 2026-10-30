@@ -1,4 +1,4 @@
-import { TextArea } from "@/components/controls";
+import { ErrorText, TextArea } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { textSize } from "./instructions";
@@ -50,7 +50,7 @@ export function InstructionsField({
         onBlur={onBlur}
       />
       <div className={s.foot}>
-        {problem && <span className={s.problem}>{problem}</span>}
+        {problem && <ErrorText>{problem}</ErrorText>}
         <span id={sizeId} className={cx(s.size, size.over && s.over)}>
           {t("ai.instructions.size", { n: nf.format(size.bytes), max: nf.format(max), tokens: nf.format(size.tokens) })}
         </span>

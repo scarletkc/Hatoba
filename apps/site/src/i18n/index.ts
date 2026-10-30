@@ -1,16 +1,22 @@
 import { en, type Messages } from "./en";
 import { ja } from "./ja";
 import { zh } from "./zh";
+import { zhTW } from "./zhTW";
 
-export const LOCALES = ["en", "zh", "ja"] as const;
+export const LOCALES = ["en", "zh-cn", "zh-tw", "ja"] as const;
 export type Locale = (typeof LOCALES)[number];
 
-const MESSAGES: Record<Locale, Messages> = { en, zh, ja };
+const MESSAGES: Record<Locale, Messages> = { en, "zh-cn": zh, "zh-tw": zhTW, ja };
 
 /** The language tag of each locale, for `lang`, hreflang, and the sitemap. */
-export const LANG: Record<Locale, string> = { en: "en", zh: "zh-CN", ja: "ja" };
-export const OG_LOCALE: Record<Locale, string> = { en: "en_US", zh: "zh_CN", ja: "ja_JP" };
-export const LANGUAGE_NAME: Record<Locale, string> = { en: "English", zh: "简体中文", ja: "日本語" };
+export const LANG: Record<Locale, string> = { en: "en", "zh-cn": "zh-CN", "zh-tw": "zh-TW", ja: "ja" };
+export const OG_LOCALE: Record<Locale, string> = { en: "en_US", "zh-cn": "zh_CN", "zh-tw": "zh_TW", ja: "ja_JP" };
+export const LANGUAGE_NAME: Record<Locale, string> = {
+  en: "English",
+  "zh-cn": "简体中文",
+  "zh-tw": "繁體中文",
+  ja: "日本語",
+};
 
 export function messages(locale: Locale): Messages {
   return MESSAGES[locale];
@@ -31,5 +37,7 @@ export function formatDate(locale: Locale, iso: string): string {
 }
 
 export function formatMegabytes(locale: Locale, bytes: number): string {
-  return new Intl.NumberFormat(LANG[locale], { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(bytes / 1024 / 1024);
+  return new Intl.NumberFormat(LANG[locale], { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(
+    bytes / 1024 / 1024,
+  );
 }

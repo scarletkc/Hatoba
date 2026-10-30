@@ -1,4 +1,4 @@
-import { API_TOKENS_URL } from "@/features/sync/external";
+import { API_TOKENS_URL } from "@/lib/external";
 import { freeServerName, initialMcpForm, newSecretRow, type McpForm, type SecretRow } from "./mcpLogic";
 
 /*
@@ -40,7 +40,8 @@ export const MCP_TEMPLATES: readonly McpTemplate[] = [
     name: "github",
     url: "https://api.githubcopilot.com/mcp/",
     headers: [{ key: "Authorization", placeholder: "github_pat_…" }],
-    tokenUrl: "https://github.com/settings/personal-access-tokens/new?name=Hatoba+MCP&contents=write&issues=write&pull_requests=write",
+    tokenUrl:
+      "https://github.com/settings/personal-access-tokens/new?name=Hatoba+MCP&contents=write&issues=write&pull_requests=write",
   },
   {
     // linear.app/docs/mcp: an API key in `Authorization: Bearer` instead of the OAuth flow.
@@ -86,6 +87,11 @@ export function templateMcpForm(template: McpTemplate, otherNames: readonly stri
     name: freeServerName(template.name, otherNames),
     kind: "http",
     url: template.url,
-    headers: template.headers.map((h): SecretRow => ({ ...newSecretRow(), key: h.key, placeholder: h.placeholder, optional: h.optional })),
+    headers: template.headers.map((h): SecretRow => ({
+      ...newSecretRow(),
+      key: h.key,
+      placeholder: h.placeholder,
+      optional: h.optional,
+    })),
   };
 }

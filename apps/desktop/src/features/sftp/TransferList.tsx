@@ -1,8 +1,8 @@
-import { Icon } from "@/components/controls";
+import { Icon, IconButton } from "@hatoba/ui";
 import { formatBytes, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import { cx } from "@/lib/cx";
-import { formatProgress, useTransfers, type TransferItem } from "./transfers";
+import { formatProgress, useTransfers, type TransferItem } from "@/session/transfers";
 import s from "./TransferList.module.css";
 
 /** The "Transfers" section at the bottom of the SFTP panel (SFTP-02). */
@@ -25,7 +25,8 @@ function TransferRow({ item }: { item: TransferItem }) {
   const t = useT();
   const running = item.state === "running";
   const failed = item.state === "failed";
-  const pct = item.state === "done" ? 100 : item.total > 0 ? Math.min(100, Math.floor((item.bytes / item.total) * 100)) : 0;
+  const pct =
+    item.state === "done" ? 100 : item.total > 0 ? Math.min(100, Math.floor((item.bytes / item.total) * 100)) : 0;
 
   const eta = () => {
     const sec = Math.ceil((item.total - item.bytes) / item.bytes_per_sec);
@@ -45,25 +46,29 @@ function TransferRow({ item }: { item: TransferItem }) {
   }
 
   const close = () =>
-    running ? void api.transfer_cancel(item.transfer_id).catch(() => {}) : useTransfers.getState().dismiss(item.transfer_id);
+    running
+      ? void api.transfer_cancel(item.transfer_id).catch(() => {})
+      : useTransfers.getState().dismiss(item.transfer_id);
 
   return (
     <div className={cx(s.transfer, item.fading && s.fading)}>
       <div className={s.top}>
-        <Icon name={item.direction === "upload" ? "upload-simple" : "download-simple"} size={13} color={failed ? "var(--red)" : "var(--accent)"} />
+        <Icon
+          name={item.direction === "upload" ? "upload-simple" : "download-simple"}
+          size={14}
+          color={failed ? "var(--red)" : "var(--accent)"}
+        />
         <span className={s.name} title={item.name}>
           {item.name}
         </span>
         <span className={s.pct}>{pct}%</span>
-        <button
-          type="button"
+        <IconButton
+          small
+          icon="x"
+          label={running ? t("sftp.cancelTransfer") : t("sftp.dismissTransfer")}
           className={s.close}
-          aria-label={running ? t("sftp.cancelTransfer") : t("sftp.dismissTransfer")}
-          title={running ? t("sftp.cancelTransfer") : t("sftp.dismissTransfer")}
           onClick={close}
-        >
-          <Icon name="x" size={11} />
-        </button>
+        />
       </div>
       <div className={s.track} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
         <div className={cx(s.fill, failed && s.fillFailed)} style={{ width: `${pct}%` }} />

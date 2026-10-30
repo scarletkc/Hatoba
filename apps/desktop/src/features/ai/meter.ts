@@ -76,7 +76,12 @@ export function contextUsage({ entries, contextStart, model, contextWindow, pend
   const added = rest.reduce((n, e) => n + estimateTokens(entryText(e)), 0) + estimateTokens(pending);
 
   const last = [...entries].reverse().find((e) => e.role === "assistant");
-  if (model && last?.role === "assistant" && (last.provider_id !== model.provider_id || last.model_id !== model.model_id)) estimated = true;
+  if (
+    model &&
+    last?.role === "assistant" &&
+    (last.provider_id !== model.provider_id || last.model_id !== model.model_id)
+  )
+    estimated = true;
 
   const tokens = base + added;
   const window = contextWindow && contextWindow > 0 ? contextWindow : null;
@@ -103,7 +108,8 @@ export function messageFit(current: MeterState, messageTokens: number): MessageF
   if (current.window === null) return { level: "ok" };
   const tokens = current.tokens + messageTokens;
   const ratio = tokens / current.window;
-  if (messageTokens > current.window) return { level: "over", tokens: messageTokens, window: current.window, ratio: messageTokens / current.window };
+  if (messageTokens > current.window)
+    return { level: "over", tokens: messageTokens, window: current.window, ratio: messageTokens / current.window };
   if (ratio >= WARN_RATIO) return { level: "warn", tokens, window: current.window, ratio };
   return { level: "ok" };
 }

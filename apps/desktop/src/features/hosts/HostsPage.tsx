@@ -10,24 +10,68 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
+import {
+  Button,
+  EmptyState,
+  Icon,
+  IconButton,
+  LinkButton,
+  Menu,
+  PageHeader,
+  SearchField,
+  Segmented,
+  Switch,
+  Tag,
+  TagChip,
+  confirm,
+  isImeEvent,
+  layoutStyles,
+  toast,
+  useMenu,
+  type MenuEntry,
+} from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
-import { useApp, type HostFilter } from "@/app/store";
+import { useApp } from "@/app/store";
 import { useTabs, type TabStatus } from "@/app/tabs";
-import { Button, Icon, LinkButton } from "@/components/controls";
-import { EmptyState, PageHeader, SearchField, Tag, layoutStyles } from "@/components/layout";
-import { Menu, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
+import { dashboardSwitch, retryHost, setShownOnDashboard } from "@/features/dashboard/actions";
+import { HostDetail } from "@/features/dashboard/HostDetail";
+import {
+  DASHBOARD_COLUMNS,
+  leftOutBy,
+  shownOnDashboard,
+  sortForDashboard,
+  type DashboardColumn,
+} from "@/features/dashboard/logic";
+import { useDashboardWatch, useReadoutMap } from "@/features/dashboard/readings";
+import {
+  HostCard,
+  StatsHead,
+  StatsRow,
+  canRetry,
+  fitStatsColumns,
+  useWidth,
+  type Alerts,
+  type ListState,
+  type View,
+} from "@/features/dashboard/views";
 import { durationLabel } from "@/features/settings/durations";
-import { connectHost, connectTarget, connectTelnetHost, connectTelnetTarget } from "@/features/terminal/connect";
-import { formatRelative, useT, type Locale } from "@/i18n";
+import { usePrefs } from "@/features/settings/shared";
+import { formatRelative, useT, type Locale, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
-import { isTelnetHost, type AnyHostView, type ImportSource, type QuickTarget } from "@/ipc/types";
+import {
+  isTelnetHost,
+  type AnyHostView,
+  type GroupView,
+  type ImportSource,
+  type LocalPrefs,
+  type QuickTarget,
+} from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
 import { copyText } from "@/lib/native";
-import { shortcutLabel } from "@/lib/platform";
-import { IMPORT_APPS, ImportDialog } from "./ImportDialog";
-import { OsIcon } from "./OsIcon";
+import { OsIcon } from "@/lib/OsIcon";
+import { isMac, shortcutLabel } from "@/lib/platform";
+import { connectHost, connectTarget, connectTelnetHost, connectTelnetTarget } from "@/session/connect";
 import {
   bracketHost,
   formatTarget,
@@ -40,11 +84,14 @@ import {
   type QuickProblem,
   type TelnetTarget,
   type TypedTarget,
-} from "./quickConnect";
+} from "@/session/quickConnect";
+import { useRecentTargets } from "@/session/recent";
+import { GroupDialog, deleteGroup } from "./GroupDialog";
+import { IMPORT_APPS, ImportDialog } from "./ImportDialog";
 import { applyFilter, sortHosts } from "./order";
-import { useRecentTargets } from "./recent";
 import { buildHostIndex, searchHosts } from "./search";
-import { useHostsUi, type HostSort } from "./ui";
+import { ALONE, pickHost, type PickKeys } from "./selection";
+import { LIST_SORTS, STATS_SORTS, isListSort, useHostsUi, type HostSort, type ListSort } from "./ui";
 import s from "./HostsPage.module.css";
 
 const PROBE_INTERVAL_MS = 60_000;
@@ -58,8 +105,10 @@ const TYPED_ROW = "quick:typed";
 /** Row id of a typed Telnet target (TELNET-05). */
 const TELNET_ROW = "quick:telnet";
 const SUGGESTIONS_ID = "recent-targets";
+/** A card's list state while resource usage shows, which then has no use for it. */
+const NO_LIST: ListState = { dot: "var(--fg3)", last: "", failed: false };
 
-/** A Connect row for a target that is not a saved host: the one typed, or a recent one. */
+/** A Connect row for a target that is not a saved host: the one typed, a recent one, or a typed Telnet target. */
 type QuickRowItem =
   | {
       id: string;
@@ -70,26 +119,49 @@ type QuickRowItem =
     }
   | { id: string; target?: undefined; telnet: TelnetTarget; recent: null };
 
-export function HostsPage({ filter }: { filter: HostFilter }) {
+/**
+ * Every saved host, or a group's (HOST-03), narrowed to favorites and tags, as a list or cards. With resource usage
+ * on, the listed hosts are read in the background as the dashboard did (HOST-14).
+ */
+export function HostsPage({ group: requested }: { group: string | null }) {
   const t = useT();
   const platform = useApp((st) => st.info.platform);
   const hostProbe = useApp((st) => st.prefs.host_probe);
   const searchTick = useApp((st) => st.searchFocusTick);
   const navigate = useApp((st) => st.navigate);
+  const [prefs, savePrefs] = usePrefs();
   const hosts = useVaultData((st) => st.hosts);
   const telnetHosts = useVaultData((st) => st.telnetHosts);
   // TELNET-01: Telnet hosts are listed with the SSH hosts.
   const allHosts = useMemo<AnyHostView[]>(() => [...hosts, ...telnetHosts], [hosts, telnetHosts]);
   const groups = useVaultData((st) => st.groups);
+  const tagList = useVaultData((st) => st.tags);
   const tabs = useTabs((st) => st.tabs);
   const recents = useRecentTargets((st) => st.targets);
-  const { selectedId, sort, select, setSort } = useHostsUi();
+  const {
+    selection,
+    sort,
+    favorites,
+    tags: pickedTags,
+    select,
+    setSort,
+    setFavorites,
+    setTags,
+    clearFilters,
+  } = useHostsUi();
+  const view = prefs.hosts_view;
+  const stats = prefs.hosts_stats;
+  const readouts = useReadoutMap();
 
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [probe, setProbe] = useState<Record<string, boolean>>({});
   const [importing, setImporting] = useState<ImportSource | null>(null);
-  const [ctxHost, setCtxHost] = useState<AnyHostView | null>(null);
+  /** The hosts the row menu acts on: the one right-clicked, or every selected host it is one of. */
+  const [ctxIds, setCtxIds] = useState<string[]>([]);
+  const [ctxGroup, setCtxGroup] = useState<GroupView | null>(null);
+  const [editingGroup, setEditingGroup] = useState<GroupView | "new" | null>(null);
+  const [detail, setDetail] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [searchFocused, setSearchFocused] = useState(false);
   const [suggestDismissed, setSuggestDismissed] = useState(false);
@@ -98,51 +170,75 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   const [pickedFor, setPickedFor] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const cardsRef = useRef<HTMLDivElement>(null);
   const rowMenu = useMenu();
   const openRowMenu = rowMenu.openAt;
+  const groupMenu = useMenu();
   const sortMenu = useMenu();
   const sortButton = useRef<HTMLButtonElement>(null);
+  const tagsMenu = useMenu();
+  const tagsButton = useRef<HTMLButtonElement>(null);
+  const columnsMenu = useMenu();
   const importMenu = useMenu();
   const importButton = useRef<HTMLButtonElement>(null);
+  const newMenu = useMenu();
+  const newMenuButton = useRef<HTMLButtonElement>(null);
 
-  const title = useMemo(() => {
-    switch (filter.kind) {
-      case "all":
-        return t("sidebar.all");
-      case "favorites":
-        return t("sidebar.favorites");
-      case "recent":
-        return t("sidebar.recent");
-      case "group":
-        return groups.find((g) => g.id === filter.id)?.name ?? t("sidebar.groups");
-      case "tag":
-        return filter.name;
-    }
-  }, [filter, groups, t]);
+  const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
+  const scope = requested ? groupMap.get(requested) : undefined;
+  // A group that sync or another window deleted leaves every host.
+  const group = scope ? requested : null;
+  const title = scope?.name ?? t("hosts.title");
+  // Tags no host has any more drop out of the filter.
+  const activeTags = useMemo(
+    () => pickedTags.filter((tag) => tagList.some((x) => x.name === tag)),
+    [pickedTags, tagList],
+  );
+  const filtering = favorites || activeTags.length > 0;
 
   // Filter + sort only when inputs change; typing in the search box touches neither.
-  const base = useMemo(() => sortHosts(applyFilter(allHosts, filter), sort, t.locale), [allHosts, filter, sort, t.locale]);
+  const filtered = useMemo(
+    () => applyFilter(allHosts, { group, favorites, tags: activeTags }),
+    [allHosts, group, favorites, activeTags],
+  );
+  const listSort: ListSort = isListSort(sort) ? sort : "recent";
+  const base = useMemo(() => sortHosts(filtered, listSort, t.locale), [filtered, listSort, t.locale]);
   const index = useMemo(() => buildHostIndex(base), [base]);
   // HOST-12: `user@host` and `ssh …` input is also a target to connect to, and TELNET-05:
   // `telnet host [port]`. The list is then filtered by its destination, without the syntax around it.
   const telnetTyped = useMemo(() => parseTelnet(deferredQuery), [deferredQuery]);
   const parsed = useMemo(() => (telnetTyped ? null : parseQuickConnect(deferredQuery)), [telnetTyped, deferredQuery]);
   const searchText = telnetTyped ? telnetTyped.search : parsed ? parsed.search : deferredQuery;
+  const searching = deferredQuery.trim() !== "";
   const found = useMemo(() => searchHosts(index, searchText), [index, searchText]);
+  // HOST-14: a resource order sorts again with each reading; a search keeps its ranking.
+  const statsSort = stats && !isListSort(sort) && !searching ? sort : null;
+  const ordered = useMemo(
+    () => (statsSort ? sortForDashboard(found, statsSort, readouts, t.locale) : found),
+    [found, statsSort, readouts, t.locale],
+  );
   // A typed target that is a saved host connects as that host, with its key and jump host.
   const exact = useMemo<AnyHostView | undefined>(
     () =>
-      telnetTyped ? savedTelnetHostFor(telnetHosts, telnetTyped.target) : parsed?.ok ? savedHostFor(hosts, parsed.target) : undefined,
+      telnetTyped
+        ? savedTelnetHostFor(telnetHosts, telnetTyped.target)
+        : parsed?.ok
+          ? savedHostFor(hosts, parsed.target)
+          : undefined,
     [telnetTyped, telnetHosts, parsed, hosts],
   );
-  const visible = useMemo(() => (exact && !found.includes(exact) ? [exact, ...found] : found), [exact, found]);
+  const visible = useMemo(() => (exact && !ordered.includes(exact) ? [exact, ...ordered] : ordered), [exact, ordered]);
   // Recent targets that have been saved as hosts since show as those hosts.
   const unsavedRecents = useMemo(() => recents.filter((r) => !savedHostFor(hosts, r)), [recents, hosts]);
   const quickRows = useMemo(() => {
     const rows: QuickRowItem[] = [];
     if (telnetTyped && !exact) rows.push({ id: TELNET_ROW, telnet: telnetTyped.target, recent: null });
     if (parsed?.ok && !exact)
-      rows.push({ id: TYPED_ROW, target: parsed.target, recent: unsavedRecents.find((r) => sameTarget(r, parsed.target)) ?? null });
+      rows.push({
+        id: TYPED_ROW,
+        target: parsed.target,
+        recent: unsavedRecents.find((r) => sameTarget(r, parsed.target)) ?? null,
+      });
     const q = searchText.trim().toLowerCase();
     if (q)
       for (const r of unsavedRecents)
@@ -153,7 +249,13 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   const problem = parsed && !parsed.ok ? parsed.problem : null;
   const notice = parsed?.ok ? parsed.notice : undefined;
 
-  const hostName = useMemo(() => new Map(hosts.map((h) => [h.id, h.name])), [hosts]);
+  const hostById = useMemo(() => new Map(allHosts.map((h) => [h.id, h])), [allHosts]);
+  // Each group button's count, worked out once per reload rather than on every batch of readings.
+  const groupCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const h of allHosts) if (h.group_id) counts.set(h.group_id, (counts.get(h.group_id) ?? 0) + 1);
+    return counts;
+  }, [allHosts]);
 
   // The latest tab per host tells us whether the last attempt failed (design: red "连接失败").
   const tabStatus = useMemo(() => {
@@ -165,33 +267,89 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     return m;
   }, [tabs]);
 
-  const rowIds = useMemo(() => [...quickRows.map((r) => r.id), ...visible.map((h) => h.id)], [quickRows, visible]);
-  // The typed target, or the saved host it is, is selected until the user picks another row; otherwise
-  // the best saved host is, even with recent targets listed above it.
+  // HOST-14: the listed hosts are read while resource usage shows; the search does not change which.
+  const interval = prefs.dashboard_interval_secs;
+  const watched = useMemo(
+    () => filtered.filter((h) => !isTelnetHost(h) && shownOnDashboard(h, groupMap)).map((h) => h.id),
+    [filtered, groupMap],
+  );
+  useDashboardWatch(watched, interval, stats);
+  const { dashboard_cpu_alert: cpuAlert, dashboard_mem_alert: memAlert, dashboard_disk_alert: diskAlert } = prefs;
+  const alerts: Alerts = useMemo(
+    () => ({ cpu: cpuAlert, mem: memAlert, disk: diskAlert }),
+    [cpuAlert, memAlert, diskAlert],
+  );
+  const hiddenColumns = prefs.dashboard_hidden_columns;
+  const [measureTable, tableWidth] = useWidth();
+  const columns = useMemo(
+    () =>
+      fitStatsColumns(
+        DASHBOARD_COLUMNS.filter((c) => !hiddenColumns.includes(c)),
+        tableWidth,
+      ),
+    [hiddenColumns, tableWidth],
+  );
+
+  const hostIds = useMemo(() => visible.map((h) => h.id), [visible]);
+  const rowIds = useMemo(() => [...quickRows.map((r) => r.id), ...hostIds], [quickRows, hostIds]);
+  // The typed target, or the saved host it is, is selected until the user picks rows; otherwise a search selects
+  // its best saved host, even with recent targets listed above it. Picked rows the list does not show are not
+  // selected, so nothing acts on a host out of sight.
   const typedRow = quickRows[0]?.id === TYPED_ROW || quickRows[0]?.id === TELNET_ROW ? quickRows[0].id : null;
   const preferred = exact?.id ?? typedRow;
-  const effectiveId = useMemo(() => {
-    const picked = pickedFor === deferredQuery;
-    if (selectedId && rowIds.includes(selectedId) && (picked || (!preferred && !problem))) return selectedId;
+  const selected = useMemo(() => {
+    const listed = new Set(rowIds);
+    const shown = selection.filter((id) => listed.has(id));
+    if (pickedFor === deferredQuery || (shown.length > 0 && !preferred && !problem)) return shown;
     // An ssh command quick connect cannot run selects nothing, so Enter does not connect a saved
     // host with other settings than the ones typed.
-    if (problem) return null;
-    return preferred ?? visible[0]?.id ?? quickRows[0]?.id ?? null;
-  }, [rowIds, selectedId, preferred, problem, pickedFor, deferredQuery, visible, quickRows]);
+    if (problem || !searching) return [];
+    const best = preferred ?? visible[0]?.id ?? quickRows[0]?.id;
+    return best ? [best] : [];
+  }, [rowIds, selection, preferred, problem, pickedFor, deferredQuery, searching, visible, quickRows]);
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+  /** The row the arrow keys move on from, and Space shows. */
+  const focusId = selected.length > 0 ? selected[selected.length - 1] : null;
+  const several = selected.length > 1;
 
   // The row callbacks read these through a ref, so they stay stable and memoized rows skip re-rendering.
-  const latest = useRef({ deferredQuery, quickRows });
+  const latest = useRef({ deferredQuery, quickRows, hostIds, selected });
   useLayoutEffect(() => {
-    latest.current = { deferredQuery, quickRows };
+    latest.current = { deferredQuery, quickRows, hostIds, selected };
   });
+  /** The host Shift picks from: the one last picked without it. */
+  const anchor = useRef<string | null>(null);
 
-  const pick = useCallback(
-    (id: string) => {
+  const pickRows = useCallback(
+    (ids: string[]) => {
       setPickedFor(latest.current.deferredQuery);
-      select(id);
+      select(ids);
     },
     [select],
   );
+
+  /** Picks a saved host with Shift and Ctrl (⌘ on macOS) as `keys` say, or any row alone. */
+  const pickWith = useCallback(
+    (id: string, keys: PickKeys) => {
+      const { hostIds, selected } = latest.current;
+      const from = anchor.current ?? selected[selected.length - 1] ?? id;
+      anchor.current = keys.range ? from : id;
+      pickRows(pickHost(hostIds, selected, from, id, keys));
+    },
+    [pickRows],
+  );
+
+  const pick = useCallback((id: string) => pickWith(id, ALONE), [pickWith]);
+
+  const clickHost = useCallback(
+    (e: MouseEvent, id: string) => pickWith(id, { range: e.shiftKey, add: isMac(platform) ? e.metaKey : e.ctrlKey }),
+    [pickWith, platform],
+  );
+
+  const selectNone = () => {
+    anchor.current = null;
+    pickRows([]);
+  };
 
   // Recent targets under the empty field (HOST-12).
   const suggestions = query.trim() ? [] : unsavedRecents;
@@ -217,11 +375,11 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     void connectTarget(target);
   };
 
-  // Relative times ("2 min ago") refresh once a minute.
+  // Relative times ("2 min ago") refresh once a minute; with readings, old ones show as old within seconds.
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    const timer = window.setInterval(() => setNow(Date.now()), stats ? 5000 : 60_000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [stats]);
 
   // Ctrl+Shift+K focuses the search field (a page mounted by the shortcut handles the tick too).
   useEffect(() => {
@@ -236,7 +394,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
 
   useEffect(() => {
     if (searchTick === handledSearchTick) listRef.current?.focus({ preventScroll: true });
-    // Only on mount: don't steal focus when the filter changes.
+    // Only on mount: don't steal focus when the group changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -276,14 +434,13 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   }, [probeKey, hostProbe]);
 
   const newHost = useCallback(
-    () =>
-      navigate({ kind: "host-edit", hostId: null, groupId: filter.kind === "group" ? filter.id : null, back: filter }),
-    [navigate, filter],
+    () => navigate({ kind: "host-edit", hostId: null, groupId: group, back: group }),
+    [navigate, group],
   );
   const editHost = useCallback(
     (host: AnyHostView) =>
-      navigate({ kind: isTelnetHost(host) ? "telnet-edit" : "host-edit", hostId: host.id, groupId: null, back: filter }),
-    [navigate, filter],
+      navigate({ kind: isTelnetHost(host) ? "telnet-edit" : "host-edit", hostId: host.id, groupId: null, back: group }),
+    [navigate, group],
   );
 
   const connect = useCallback(
@@ -294,60 +451,132 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
         else void connectTarget(quick.target);
         return;
       }
-      select(id);
+      anchor.current = id;
+      select([id]);
       if (useVaultData.getState().telnetHosts.some((h) => h.id === id)) connectTelnetHost(id);
       else void connectHost(id);
     },
     [select],
   );
 
+  /**
+   * A tab on each host, one host after another, so the passwords asked before connecting come one at a time; the
+   * host key and sign-in questions asked while connecting wait in line on their own.
+   */
+  const connectAll = async (list: AnyHostView[]) => {
+    for (const host of list) {
+      if (isTelnetHost(host)) connectTelnetHost(host.id);
+      else await connectHost(host.id);
+    }
+  };
+
   const onContext = useCallback(
     (e: MouseEvent, host: AnyHostView) => {
       e.preventDefault();
-      select(host.id);
-      setCtxHost(host);
+      const { hostIds, selected } = latest.current;
+      // On one of several selected hosts, the menu acts on all of them; on another host, it selects that one.
+      if (selected.length > 1 && selected.includes(host.id)) {
+        const picked = new Set(selected);
+        setCtxIds(hostIds.filter((id) => picked.has(id)));
+      } else {
+        pick(host.id);
+        setCtxIds([host.id]);
+      }
       openRowMenu({ x: e.clientX, y: e.clientY });
     },
-    [select, openRowMenu],
+    [pick, openRowMenu],
   );
+
+  // Each card's last connection, made only without resource usage, so a batch of readings leaves every card's
+  // props as they were and only the hosts that changed render again.
+  const listStates = useMemo(() => {
+    if (stats) return null;
+    const states = new Map<string, ListState>();
+    for (const h of visible) {
+      const status = tabStatus.get(h.id);
+      const failed = status === "failed";
+      states.set(h.id, {
+        dot:
+          status === "connected" ? "var(--green)" : failed ? "var(--red)" : probe[h.id] ? "var(--green)" : "var(--fg3)",
+        last: failed
+          ? t("hosts.failed")
+          : h.last_connected_at
+            ? formatRelative(t.locale, h.last_connected_at, now)
+            : t("hosts.neverConnected"),
+        failed,
+      });
+    }
+    return states;
+  }, [stats, visible, tabStatus, probe, t, now]);
+
+  const tagRow = useMemo(() => visible.some((h) => h.tags.length > 0), [visible]);
+  const itemView: View = useMemo(
+    () => ({
+      t,
+      now,
+      interval,
+      alerts,
+      groups: groupMap,
+      stats,
+      tagRow,
+      connectLabel: t("hosts.connect"),
+      onSelect: clickHost,
+      onConnect: connect,
+      onContext,
+    }),
+    [t, now, interval, alerts, groupMap, stats, tagRow, clickHost, connect, onContext],
+  );
+
+  const openGroupMenu = (e: MouseEvent, g: GroupView) => {
+    e.preventDefault();
+    setCtxGroup(g);
+    groupMenu.openAt({ x: e.clientX, y: e.clientY });
+  };
 
   const fail = (e: unknown) => toast(errorMessage(t, e), "error");
 
-  const toggleFavorite = async (host: AnyHostView) => {
+  const markFavorite = async (list: AnyHostView[], favorite: boolean) => {
     try {
-      await (isTelnetHost(host) ? api.telnet_host_set_favorite : api.host_set_favorite)(host.id, !host.favorite);
-      await useVaultData.getState().reload();
+      for (const host of list)
+        if (host.favorite !== favorite)
+          await (isTelnetHost(host) ? api.telnet_host_set_favorite : api.host_set_favorite)(host.id, favorite);
     } catch (e) {
       fail(e);
     }
+    // Also after a failure, as the hosts before it changed.
+    await useVaultData.getState().reload().catch(fail);
   };
 
   const duplicate = async (host: AnyHostView) => {
     try {
       const copy = await (isTelnetHost(host) ? api.telnet_host_duplicate : api.host_duplicate)(host.id);
       await useVaultData.getState().reload();
-      select(copy.id);
+      anchor.current = copy.id;
+      select([copy.id]);
       toast(t("hosts.duplicated", { name: copy.name }), "success");
     } catch (e) {
       fail(e);
     }
   };
 
-  const remove = async (host: AnyHostView) => {
+  const remove = async (list: AnyHostView[]) => {
+    if (list.length === 0) return;
+    const one = list.length === 1 ? list[0] : null;
     const ok = await confirm({
-      title: t("hosts.deleteTitle", { name: host.name }),
+      title: one ? t("hosts.deleteTitle", { name: one.name }) : t("hosts.deleteManyTitle", { n: list.length }),
       body: t("hosts.deleteBody"),
       confirmLabel: t("btn.delete"),
       danger: true,
     });
     if (!ok) return;
     try {
-      await (isTelnetHost(host) ? api.telnet_host_delete : api.host_delete)(host.id);
-      await useVaultData.getState().reload();
-      toast(t("hosts.deleted", { name: host.name }));
+      for (const host of list) await (isTelnetHost(host) ? api.telnet_host_delete : api.host_delete)(host.id);
+      toast(one ? t("hosts.deleted", { name: one.name }) : t("hosts.deletedMany", { n: list.length }));
     } catch (e) {
       fail(e);
     }
+    // Also after a failure, as the hosts before it are gone.
+    await useVaultData.getState().reload().catch(fail);
   };
 
   const copyAddress = async (host: AnyHostView) => {
@@ -367,10 +596,38 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     try {
       await (isTelnetHost(host) ? api.telnet_host_copy_password : api.host_copy_password)(host.id);
       const secs = useApp.getState().prefs.clipboard_clear_secs;
-      toast(secs ? t("hosts.passwordCopied", { time: durationLabel(t, secs) }) : t("hosts.passwordCopiedKept"), "success");
+      toast(
+        secs ? t("hosts.passwordCopied", { time: durationLabel(t, secs) }) : t("hosts.passwordCopiedKept"),
+        "success",
+      );
     } catch (e) {
       fail(e);
     }
+  };
+
+  // HOST-14: with resource usage showing, the host's detail, Retry, and whether it is read.
+  const statsEntries = (host: AnyHostView): MenuEntry[] => {
+    if (!stats || isTelnetHost(host)) return [];
+    const r = readouts[host.id];
+    const included = shownOnDashboard(host, groupMap);
+    const toggle = dashboardSwitch(host, groupMap);
+    return [
+      { kind: "separator" },
+      ...(included
+        ? [
+            {
+              label: t("hosts.menu.details"),
+              icon: "chart-line",
+              hint: t("hosts.menu.detailsKey"),
+              onSelect: () => setDetail(host.id),
+            },
+          ]
+        : []),
+      ...((canRetry(r) || r?.phase === "offline") && included
+        ? [{ label: t("btn.retry"), icon: "arrow-clockwise", onSelect: () => retryHost(host.id) }]
+        : []),
+      { label: t(toggle.key), icon: toggle.icon, onSelect: toggle.run },
+    ];
   };
 
   const menuEntries = (host: AnyHostView): MenuEntry[] => [
@@ -380,27 +637,81 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     {
       label: host.favorite ? t("hosts.menu.unfavorite") : t("hosts.menu.favorite"),
       icon: "star",
-      onSelect: () => void toggleFavorite(host),
+      onSelect: () => void markFavorite([host], !host.favorite),
     },
     { label: t("hosts.menu.copyAddress"), icon: "clipboard-text", onSelect: () => void copyAddress(host) },
     ...(host.has_password
       ? [{ label: t("hosts.menu.copyPassword"), icon: "password", onSelect: () => void copyPassword(host) }]
       : []),
+    ...statsEntries(host),
     { kind: "separator" },
-    { label: t("hosts.menu.delete"), icon: "trash", danger: true, onSelect: () => void remove(host) },
+    { label: t("hosts.menu.delete"), icon: "trash", danger: true, onSelect: () => void remove([host]) },
   ];
 
-  const move = (delta: 1 | -1) => {
+  /** The menu of several selected hosts: what applies to all of them at once. */
+  const severalEntries = (list: AnyHostView[]): MenuEntry[] => {
+    const favorite = list.every((h) => h.favorite);
+    return [
+      {
+        label: t("hosts.menu.connect"),
+        icon: "plugs-connected",
+        onSelect: () => void connectAll(list),
+      },
+      {
+        label: favorite ? t("hosts.menu.unfavorite") : t("hosts.menu.favorite"),
+        icon: "star",
+        onSelect: () => void markFavorite(list, !favorite),
+      },
+      { kind: "separator" },
+      { label: t("hosts.menu.delete"), icon: "trash", danger: true, onSelect: () => void remove(list) },
+    ];
+  };
+  const ctxHosts = ctxIds.flatMap((id) => hostById.get(id) ?? []);
+
+  const groupEntries = (g: GroupView): MenuEntry[] => [
+    { label: t("sidebar.renameGroup"), icon: "pencil-simple", onSelect: () => setEditingGroup(g) },
+    ...(stats
+      ? [
+          g.dashboard
+            ? {
+                label: t("dashboard.leaveOutGroup"),
+                icon: "eye-slash",
+                onSelect: () => void setShownOnDashboard(g.id, false),
+              }
+            : { label: t("dashboard.includeGroup"), icon: "eye", onSelect: () => void setShownOnDashboard(g.id, true) },
+        ]
+      : []),
+    { kind: "separator" },
+    {
+      label: t("sidebar.deleteGroup"),
+      icon: "trash",
+      danger: true,
+      onSelect: () =>
+        void deleteGroup(t, g).then((deleted) => {
+          if (deleted && group === g.id) navigate({ kind: "hosts", group: null });
+        }),
+    },
+  ];
+
+  /** The number of cards in a row, for ↑/↓ in the cards view. */
+  const cardsPerRow = () => {
+    const el = cardsRef.current;
+    if (!el) return 1;
+    return Math.max(1, getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean).length);
+  };
+
+  /** Moves the selection by `delta` rows; with `range`, over the saved hosts from the anchor on. */
+  const move = (delta: number, range: boolean) => {
     if (rowIds.length === 0) return;
-    const i = effectiveId ? rowIds.indexOf(effectiveId) : -1;
+    const i = focusId ? rowIds.indexOf(focusId) : -1;
     const next = rowIds[Math.max(0, Math.min(rowIds.length - 1, i + delta))];
-    pick(next);
+    pickWith(next, { range: range && hostIds.includes(next), add: false });
     requestAnimationFrame(() =>
       listRef.current?.querySelector(`[data-id="${CSS.escape(next)}"]`)?.scrollIntoView({ block: "nearest" }),
     );
   };
 
-  // ↑/↓ move the selection, Enter connects (HOST-07). Works from the list and from the search field.
+  // ↑/↓ move the selection, Enter connects (HOST-07); among cards ←/→ too. Works from the list and from the search field.
   const onKeyDown = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement;
     const inSearch = target === searchRef.current;
@@ -427,10 +738,35 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
         return;
       }
     }
+    const amongCards = view === "cards" && !quickRows.some((r) => r.id === focusId);
+    const mod = isMac(platform) ? e.metaKey : e.ctrlKey;
+    const selectedHosts = () => visible.filter((h) => selectedSet.has(h.id));
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      move(e.key === "ArrowDown" ? 1 : -1);
-    } else if (e.key === "Enter" && effectiveId === TELNET_ROW) {
+      const step = amongCards ? cardsPerRow() : 1;
+      move(e.key === "ArrowDown" ? step : -step, e.shiftKey);
+    } else if (onList && amongCards && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
+      e.preventDefault();
+      move(e.key === "ArrowRight" ? 1 : -1, e.shiftKey);
+    } else if (onList && e.key === " " && stats && focusId && hosts.some((h) => h.id === focusId)) {
+      // Space shows the selected host's detail, as Quick Look does.
+      e.preventDefault();
+      setDetail(focusId);
+    } else if (onList && mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "a") {
+      // Every listed host, the one the arrows move on from still last.
+      e.preventDefault();
+      anchor.current = focusId;
+      pickRows(focusId && hostIds.includes(focusId) ? [...hostIds.filter((id) => id !== focusId), focusId] : hostIds);
+    } else if (onList && e.key === "Escape" && selected.length > 0) {
+      e.preventDefault();
+      selectNone();
+    } else if (onList && (e.key === "Delete" || (isMac(platform) && e.metaKey && e.key === "Backspace"))) {
+      e.preventDefault();
+      void remove(selectedHosts());
+    } else if (e.key === "Enter" && several) {
+      e.preventDefault();
+      void connectAll(selectedHosts());
+    } else if (e.key === "Enter" && focusId === TELNET_ROW) {
       e.preventDefault();
       // The list may still show an earlier keystroke: connect what the field says now.
       const typed = parseTelnet(query);
@@ -438,7 +774,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
       const saved = savedTelnetHostFor(telnetHosts, typed.target);
       if (saved) connect(saved.id);
       else connectTelnetTarget(typed.target.address, typed.target.port);
-    } else if (e.key === "Enter" && effectiveId === TYPED_ROW) {
+    } else if (e.key === "Enter" && focusId === TYPED_ROW) {
       e.preventDefault();
       // The list may still show an earlier keystroke: connect what the field says now.
       const typed = parseQuickConnect(query);
@@ -446,19 +782,44 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
       const saved = savedHostFor(hosts, typed.target);
       if (saved) connect(saved.id);
       else void connectTarget(typed.target);
-    } else if (e.key === "Enter" && effectiveId) {
+    } else if (e.key === "Enter" && focusId) {
       e.preventDefault();
-      connect(effectiveId);
+      connect(focusId);
     } else if (onList && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && e.key !== " ") {
       // Type to search.
       searchRef.current?.focus();
     }
   };
 
-  const newButton = (
-    <Button variant="primary" icon="plus" onClick={newHost}>
-      {t("hosts.newHost")}
-    </Button>
+  // New Host, with New Group under the chevron beside it, as in Termius.
+  const newControls = (
+    <span className={s.split}>
+      <Button variant="primary" icon="plus" onClick={newHost}>
+        {t("hosts.newHost")}
+      </Button>
+      <Button
+        ref={newMenuButton}
+        variant="primary"
+        icon="caret-down"
+        className={s.splitCaret}
+        aria-label={t("hosts.newMenu")}
+        title={t("hosts.newMenu")}
+        aria-haspopup="menu"
+        aria-expanded={!!newMenu.anchor}
+        onClick={() => newMenuButton.current && newMenu.openBelow(newMenuButton.current, true)}
+      />
+      {newMenu.anchor && (
+        <Menu
+          anchor={newMenu.anchor}
+          onClose={newMenu.close}
+          minWidth={160}
+          entries={[
+            { label: t("hosts.newHost"), icon: "hard-drives", onSelect: newHost },
+            { label: t("sidebar.newGroup"), icon: "folder-simple-plus", onSelect: () => setEditingGroup("new") },
+          ]}
+        />
+      )}
+    </span>
   );
 
   // SSH-11, SSH-12, SSH-15: `~/.ssh/config`, then the other SSH clients.
@@ -491,7 +852,21 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
       )}
     </>
   );
-  const importDialog = importing && <ImportDialog source={importing} onClose={() => setImporting(null)} />;
+  const dialogs = (
+    <>
+      {importing && <ImportDialog source={importing} onClose={() => setImporting(null)} />}
+      {editingGroup && (
+        <GroupDialog
+          group={editingGroup === "new" ? null : editingGroup}
+          count={groups.length}
+          onClose={() => setEditingGroup(null)}
+        />
+      )}
+      {groupMenu.anchor && ctxGroup && (
+        <Menu anchor={groupMenu.anchor} onClose={groupMenu.close} entries={groupEntries(ctxGroup)} />
+      )}
+    </>
+  );
 
   const searchField = (
     <div className={s.searchWrap}>
@@ -524,20 +899,57 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     </div>
   );
 
-  // The vault has no hosts at all: design §01b. Quick connect still works from the search field.
+  // A group's page is a step down from every host, with the group's menu beside its name.
+  const titleNode = scope ? (
+    <span className={s.crumbs}>
+      <button type="button" className={s.crumb} onClick={() => navigate({ kind: "hosts", group: null })}>
+        {t("hosts.title")}
+      </button>
+      <Icon name="caret-right" className={s.crumbSep} />
+      <span className={s.crumbHere}>{scope.name}</span>
+      <IconButton icon="dots-three" label={t("dashboard.groupMenu")} onClick={(e) => openGroupMenu(e, scope)} />
+    </span>
+  ) : (
+    title
+  );
+
+  // At the top level, the groups to step into, as in Termius; every host is listed below them.
+  const groupBar = group === null && groups.length > 0 && (
+    <div className={s.groupBar} role="list" aria-label={t("sidebar.groups")}>
+      {groups.map((g) => (
+        <div key={g.id} role="listitem" className={s.groupItem}>
+          <button
+            type="button"
+            className={s.groupTile}
+            onClick={() => navigate({ kind: "hosts", group: g.id })}
+            onContextMenu={(e) => openGroupMenu(e, g)}
+          >
+            <Icon name="folder-simple" className={s.groupIcon} />
+            <span className={s.groupName}>{g.name}</span>
+            <span className={s.groupCount}>{groupCounts.get(g.id) ?? 0}</span>
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+
+  // No hosts at all, though groups made meanwhile stay reachable. Quick connect still works from the search field.
   if (allHosts.length === 0 && !query.trim()) {
     return (
       <div className={s.page} onKeyDown={onKeyDown}>
-        <PageHeader title={title} search={searchField}>
-          {newButton}
+        <PageHeader title={titleNode} search={searchField}>
+          {newControls}
         </PageHeader>
+        {groupBar}
         <EmptyState
           icon="hard-drives"
           title={t("hosts.empty.title")}
           body={t("hosts.empty.body")}
           actions={
             <>
-              {newButton}
+              <Button variant="primary" icon="plus" onClick={newHost}>
+                {t("hosts.newHost")}
+              </Button>
               {importControls}
             </>
           }
@@ -548,134 +960,329 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
             </>
           }
         />
-        {importDialog}
+        {dialogs}
       </div>
     );
   }
 
-  const sortLabels: Record<HostSort, string> = {
-    recent: t("hosts.sort.recent"),
-    name: t("hosts.sort.name"),
-    address: t("hosts.sort.address"),
-  };
+  const sortLabel = (k: HostSort) =>
+    t(isListSort(k) ? (`hosts.sort.${k}` as MessageKey) : (`dashboard.sort.${k}` as MessageKey));
+  const shownSort = stats ? sort : listSort;
 
-  const searching = deferredQuery.trim() !== "";
   const hasQuick = quickRows.length > 0 || problem !== null;
   const emptyBody = (() => {
-    if (base.length === 0 && allHosts.length > 0 && !hasQuick && !exact) {
-      switch (filter.kind) {
-        case "favorites":
-          return { icon: "star", key: "hosts.emptyFav" } as const;
-        case "recent":
-          return { icon: "clock-counter-clockwise", key: "hosts.emptyRecent" } as const;
-        case "tag":
-          return { icon: "tag", key: "hosts.emptyTag" } as const;
-        default:
-          return { icon: "folder-simple", key: "hosts.emptyGroup" } as const;
-      }
-    }
-    return null;
+    if (base.length > 0 || allHosts.length === 0 || hasQuick || exact) return null;
+    return filtering ? ("filter" as const) : ("group" as const);
   })();
+
+  const toolbar = (
+    <div className={s.toolbar}>
+      <button
+        type="button"
+        className={cx(s.toggle, favorites && s.toggleOn)}
+        aria-pressed={favorites}
+        onClick={() => setFavorites(!favorites)}
+      >
+        <Icon name="star" fill={favorites} />
+        {t("sidebar.favorites")}
+      </button>
+      <button
+        ref={tagsButton}
+        type="button"
+        className={cx(s.toggle, activeTags.length > 0 && s.toggleOn)}
+        aria-haspopup="menu"
+        aria-expanded={!!tagsMenu.anchor}
+        onClick={() => tagsButton.current && tagsMenu.openBelow(tagsButton.current)}
+      >
+        <Icon name="tag" />
+        {t("sidebar.tags")}
+        <Icon name="caret-down" className={s.toggleCaret} />
+      </button>
+      {activeTags.map((tag) => (
+        <TagChip
+          key={tag}
+          name={tag}
+          removeLabel={t("hosts.tags.remove", { tag })}
+          onRemove={() => setTags(activeTags.filter((x) => x !== tag))}
+        />
+      ))}
+      <span className={s.toolbarGap} />
+      <Button
+        ref={sortButton}
+        size="sm"
+        trailingIcon="caret-down"
+        aria-haspopup="menu"
+        aria-expanded={!!sortMenu.anchor}
+        aria-label={t("hosts.sort")}
+        onClick={() => sortButton.current && sortMenu.openBelow(sortButton.current, true)}
+      >
+        {sortLabel(shownSort)}
+      </Button>
+      <label className={s.statsSwitch} title={t("hosts.stats.hint")}>
+        <Switch checked={stats} label={t("hosts.stats")} onChange={(hosts_stats) => savePrefs({ hosts_stats })} />
+        <span>{t("hosts.stats")}</span>
+      </label>
+      <Segmented<LocalPrefs["hosts_view"]>
+        ariaLabel={t("hosts.view")}
+        className={s.viewSwitch}
+        value={view}
+        options={[
+          { value: "list", label: t("hosts.view.list"), title: t("hosts.view.list"), icon: "rows" },
+          {
+            value: "cards",
+            label: t("dashboard.layout.cards"),
+            title: t("dashboard.layout.cards"),
+            icon: "squares-four",
+          },
+        ]}
+        onChange={(hosts_view) => savePrefs({ hosts_view })}
+      />
+    </div>
+  );
+
+  const quickList = (
+    <>
+      {problem && <ProblemRow problem={problem} />}
+      {notice && <NoticeRow />}
+      {quickRows.map((r) => (
+        <QuickRow
+          key={r.id}
+          item={r}
+          selected={selectedSet.has(r.id)}
+          connectLabel={t("hosts.connect")}
+          hint={r.recent ? t("hosts.quick.recent") : t("hosts.quick.notSaved")}
+          removeLabel={t("hosts.quick.forget")}
+          onSelect={pick}
+          onConnect={connect}
+          onRemove={(target) => void removeRecent(target)}
+        />
+      ))}
+    </>
+  );
+
+  let body;
+  if (emptyBody === "filter") {
+    body = (
+      <EmptyState
+        icon="funnel"
+        title={t("hosts.emptyFilter.title")}
+        body={t("hosts.emptyFilter.body")}
+        actions={<Button onClick={clearFilters}>{t("hosts.emptyFilter.clear")}</Button>}
+      />
+    );
+  } else if (emptyBody === "group") {
+    body = (
+      <EmptyState
+        icon="folder-simple"
+        title={t("hosts.emptyGroup.title")}
+        body={t("hosts.emptyGroup.body")}
+        actions={
+          <Button variant="primary" icon="plus" onClick={newHost}>
+            {t("hosts.newHost")}
+          </Button>
+        }
+      />
+    );
+  } else if (visible.length === 0 && searching && !hasQuick) {
+    body = (
+      <EmptyState
+        icon="magnifying-glass"
+        title={t("hosts.noResults.title")}
+        body={t("hosts.noResults.body", { q: deferredQuery.trim() })}
+        actions={<Button onClick={() => setQuery("")}>{t("hosts.noResults.clear")}</Button>}
+      />
+    );
+  } else {
+    body = (
+      <div
+        ref={listRef}
+        className={s.scroll}
+        tabIndex={0}
+        role="listbox"
+        aria-label={title}
+        aria-multiselectable
+        data-several={several || undefined}
+        onMouseDown={(e) => {
+          // Shift+click picks hosts rather than selecting their text.
+          if (!e.shiftKey) return;
+          e.preventDefault();
+          listRef.current?.focus({ preventScroll: true });
+        }}
+        onClick={(e) => {
+          // A click beside the rows selects none.
+          if (!(e.target as Element).closest('[role="option"], button')) selectNone();
+        }}
+      >
+        {view === "list" &&
+          (stats ? (
+            <StatsHead
+              columns={columns}
+              t={t}
+              measure={measureTable}
+              columnsOpen={!!columnsMenu.anchor}
+              onColumns={(anchor) => columnsMenu.openBelow(anchor, true)}
+            />
+          ) : (
+            <div className={cx(layoutStyles.tableHead, s.cols, s.head)}>
+              <span className={s.headName}>{t("hosts.col.name")}</span>
+              <span>{t("hosts.col.address")}</span>
+              <span>{t("hosts.col.tags")}</span>
+              <span>{t("hosts.col.last")}</span>
+              <span />
+            </div>
+          ))}
+        {view === "list" ? (
+          <div className={s.rows}>
+            {quickList}
+            {visible.map((h) =>
+              stats ? (
+                <StatsRow
+                  key={h.id}
+                  host={h}
+                  selected={selectedSet.has(h.id)}
+                  readout={readouts[h.id]}
+                  leftOut={isTelnetHost(h) ? null : leftOutBy(h, groupMap)}
+                  columns={columns}
+                  view={itemView}
+                />
+              ) : (
+                <HostRow
+                  key={h.id}
+                  host={h}
+                  selected={selectedSet.has(h.id)}
+                  jumpName={!isTelnetHost(h) && h.jump_host_id ? (hostById.get(h.jump_host_id)?.name ?? null) : null}
+                  status={tabStatus.get(h.id)}
+                  online={probe[h.id]}
+                  now={now}
+                  locale={t.locale}
+                  connectLabel={t("hosts.connect")}
+                  failedLabel={t("hosts.failed")}
+                  viaTitle={
+                    !isTelnetHost(h) && h.jump_host_id
+                      ? t("hosts.viaTitle", { name: hostById.get(h.jump_host_id)?.name ?? "" })
+                      : ""
+                  }
+                  onSelect={clickHost}
+                  onConnect={connect}
+                  onContext={onContext}
+                />
+              ),
+            )}
+          </div>
+        ) : (
+          <>
+            {(hasQuick || notice) && <div className={s.rows}>{quickList}</div>}
+            <div ref={cardsRef} className={s.cards}>
+              {visible.map((h) => (
+                <HostCard
+                  key={h.id}
+                  host={h}
+                  selected={selectedSet.has(h.id)}
+                  readout={stats ? readouts[h.id] : undefined}
+                  leftOut={stats && !isTelnetHost(h) ? leftOutBy(h, groupMap) : null}
+                  list={listStates?.get(h.id) ?? NO_LIST}
+                  view={itemView}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  const detailHost = detail ? hosts.find((h) => h.id === detail) : undefined;
+  const sortEntries: MenuEntry[] = [
+    ...LIST_SORTS.map((k) => ({ label: sortLabel(k), checked: shownSort === k, onSelect: () => setSort(k) })),
+    ...(stats
+      ? [
+          { kind: "separator" } as const,
+          ...STATS_SORTS.map((k) => ({ label: sortLabel(k), checked: sort === k, onSelect: () => setSort(k) })),
+        ]
+      : []),
+  ];
 
   return (
     <div className={s.page} onKeyDown={onKeyDown}>
-      <PageHeader title={title} count={t("hosts.count", { n: visible.length })} search={searchField}>
-        <Button
-          ref={sortButton}
-          trailingIcon="caret-down"
-          aria-haspopup="menu"
-          aria-expanded={!!sortMenu.anchor}
-          aria-label={t("hosts.sort")}
-          onClick={() => sortButton.current && sortMenu.openBelow(sortButton.current, true)}
-        >
-          {sortLabels[sort]}
-        </Button>
+      <PageHeader title={titleNode} count={t("hosts.count", { n: visible.length })} search={searchField}>
         {importControls}
-        {newButton}
+        {newControls}
       </PageHeader>
-
-      {emptyBody ? (
-        <EmptyState
-          icon={emptyBody.icon}
-          title={t(`${emptyBody.key}.title` as "hosts.emptyFav.title")}
-          body={t(`${emptyBody.key}.body` as "hosts.emptyFav.body")}
-          actions={
-            filter.kind === "group" ? (
-              <Button variant="primary" icon="plus" onClick={newHost}>
-                {t("hosts.newHost")}
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : visible.length === 0 && searching && !hasQuick ? (
-        <EmptyState
-          icon="magnifying-glass"
-          title={t("hosts.noResults.title")}
-          body={t("hosts.noResults.body", { q: deferredQuery.trim() })}
-          actions={<Button onClick={() => setQuery("")}>{t("hosts.noResults.clear")}</Button>}
-        />
-      ) : (
-        <div ref={listRef} className={s.scroll} tabIndex={0} role="listbox" aria-label={title}>
-          <div className={cx(layoutStyles.tableHead, s.cols, s.head)}>
-            <span className={s.headName}>{t("hosts.col.name")}</span>
-            <span>{t("hosts.col.address")}</span>
-            <span>{t("hosts.col.tags")}</span>
-            <span>{t("hosts.col.last")}</span>
-            <span />
-          </div>
-          <div className={s.rows}>
-            {problem && <ProblemRow problem={problem} />}
-            {notice && <NoticeRow />}
-            {quickRows.map((r) => (
-              <QuickRow
-                key={r.id}
-                item={r}
-                selected={r.id === effectiveId}
-                connectLabel={t("hosts.connect")}
-                hint={r.recent ? t("hosts.quick.recent") : t("hosts.quick.notSaved")}
-                removeLabel={t("hosts.quick.forget")}
-                onSelect={pick}
-                onConnect={connect}
-                onRemove={(target) => void removeRecent(target)}
-              />
-            ))}
-            {visible.map((h) => (
-              <HostRow
-                key={h.id}
-                host={h}
-                selected={h.id === effectiveId}
-                jumpName={!isTelnetHost(h) && h.jump_host_id ? (hostName.get(h.jump_host_id) ?? null) : null}
-                status={tabStatus.get(h.id)}
-                online={probe[h.id]}
-                now={now}
-                locale={t.locale}
-                connectLabel={t("hosts.connect")}
-                failedLabel={t("hosts.failed")}
-                viaTitle={!isTelnetHost(h) && h.jump_host_id ? t("hosts.viaTitle", { name: hostName.get(h.jump_host_id) ?? "" }) : ""}
-                telnetLabel={t("hosts.telnet")}
-                onSelect={pick}
-                onConnect={connect}
-                onContext={onContext}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+      {toolbar}
+      {groupBar}
+      {body}
 
       {sortMenu.anchor && (
+        <Menu anchor={sortMenu.anchor} onClose={sortMenu.close} minWidth={150} entries={sortEntries} />
+      )}
+      {tagsMenu.anchor && (
         <Menu
-          anchor={sortMenu.anchor}
-          onClose={sortMenu.close}
-          minWidth={140}
-          entries={(Object.keys(sortLabels) as HostSort[]).map((k) => ({
-            label: sortLabels[k],
-            checked: sort === k,
-            onSelect: () => setSort(k),
+          anchor={tagsMenu.anchor}
+          onClose={tagsMenu.close}
+          minWidth={180}
+          entries={
+            tagList.length === 0
+              ? [{ label: t("hosts.tags.none"), disabled: true, onSelect: () => {} }]
+              : [
+                  ...tagList.map((tag) => ({
+                    label: tag.name,
+                    hint: String(tag.count),
+                    checked: activeTags.includes(tag.name),
+                    keepOpen: true,
+                    onSelect: () =>
+                      setTags(
+                        activeTags.includes(tag.name)
+                          ? activeTags.filter((x) => x !== tag.name)
+                          : [...activeTags, tag.name],
+                      ),
+                  })),
+                  ...(activeTags.length > 0
+                    ? [
+                        { kind: "separator" } as const,
+                        { label: t("hosts.tags.clear"), icon: "x", onSelect: () => setTags([]) },
+                      ]
+                    : []),
+                ]
+          }
+        />
+      )}
+      {columnsMenu.anchor && (
+        <Menu
+          anchor={columnsMenu.anchor}
+          onClose={columnsMenu.close}
+          minWidth={150}
+          entries={DASHBOARD_COLUMNS.map((c: DashboardColumn) => ({
+            label: t(`dashboard.col.${c}` as MessageKey),
+            checked: !hiddenColumns.includes(c),
+            keepOpen: true,
+            onSelect: () =>
+              savePrefs({
+                dashboard_hidden_columns: hiddenColumns.includes(c)
+                  ? hiddenColumns.filter((x) => x !== c)
+                  : [...hiddenColumns, c],
+              }),
           }))}
         />
       )}
-      {rowMenu.anchor && ctxHost && <Menu anchor={rowMenu.anchor} onClose={rowMenu.close} entries={menuEntries(ctxHost)} />}
-      {importDialog}
+      {rowMenu.anchor && ctxHosts.length > 0 && (
+        <Menu
+          anchor={rowMenu.anchor}
+          onClose={rowMenu.close}
+          entries={ctxHosts.length === 1 ? menuEntries(ctxHosts[0]) : severalEntries(ctxHosts)}
+        />
+      )}
+      {detailHost && (
+        <HostDetail
+          host={detailHost}
+          readout={readouts[detailHost.id]}
+          shown={shownOnDashboard(detailHost, groupMap)}
+          groups={groupMap}
+          interval={interval}
+          alerts={alerts}
+          onClose={() => setDetail(null)}
+        />
+      )}
+      {dialogs}
     </div>
   );
 }
@@ -691,9 +1298,7 @@ interface RowProps {
   connectLabel: string;
   failedLabel: string;
   viaTitle: string;
-  /** What marks a Telnet host's row. */
-  telnetLabel: string;
-  onSelect: (id: string) => void;
+  onSelect: (e: MouseEvent, id: string) => void;
   onConnect: (id: string) => void;
   onContext: (e: MouseEvent, host: AnyHostView) => void;
 }
@@ -709,12 +1314,10 @@ const HostRow = memo(function HostRow({
   connectLabel,
   failedLabel,
   viaTitle,
-  telnetLabel,
   onSelect,
   onConnect,
   onContext,
 }: RowProps) {
-  const telnet = isTelnetHost(host);
   const failed = status === "failed";
   const dot = status === "connected" ? "var(--green)" : failed ? "var(--red)" : online ? "var(--green)" : "var(--fg3)";
   const last = failed
@@ -728,22 +1331,25 @@ const HostRow = memo(function HostRow({
       aria-selected={selected}
       data-id={host.id}
       className={cx(s.row, s.cols, selected && s.rowSel)}
-      onClick={() => onSelect(host.id)}
+      onClick={(e) => onSelect(e, host.id)}
       onDoubleClick={() => onConnect(host.id)}
       onContextMenu={(e) => onContext(e, host)}
     >
       <div className={s.nameCell}>
-        {telnet ? <OsIcon os={null} icon="network" badge={dot} /> : <OsIcon os={host.os} badge={dot} />}
+        {isTelnetHost(host) ? <OsIcon os={null} icon="network" badge={dot} /> : <OsIcon os={host.os} badge={dot} />}
         <span className={s.name}>{host.name}</span>
         {host.favorite && <Icon name="star" fill className={s.fav} />}
-        {telnet && <span className={s.protocol}>{telnetLabel}</span>}
       </div>
       <div className={s.addrCell}>
-        <span className={s.addr}>
-          {host.username && <span className={s.dim}>{host.username}@</span>}
-          {host.address}
-          <span className={s.dim}>:{host.port}</span>
-        </span>
+        {isTelnetHost(host) ? (
+          <TelnetText target={host} />
+        ) : (
+          <span className={s.addr}>
+            {host.username && <span className={s.dim}>{host.username}@</span>}
+            {host.address}
+            <span className={s.dim}>:{host.port}</span>
+          </span>
+        )}
         {jumpName && (
           <span className={s.via} title={viaTitle}>
             <Icon name="path" />
@@ -786,6 +1392,16 @@ function TargetText({ target }: { target: TypedTarget }) {
   );
 }
 
+/** `telnet host:port` in the address column's style (TELNET-01). */
+function TelnetText({ target }: { target: TelnetTarget }) {
+  return (
+    <span className={s.addr}>
+      <span className={s.dim}>telnet </span>
+      {formatTelnetTarget(target)}
+    </span>
+  );
+}
+
 interface QuickRowProps {
   item: QuickRowItem;
   selected: boolean;
@@ -814,32 +1430,23 @@ function QuickRow({ item, selected, connectLabel, hint, removeLabel, onSelect, o
         <span className={s.name}>{connectLabel}</span>
       </div>
       <div className={s.addrCell}>
-        {item.telnet ? (
-          <span className={s.addr}>
-            <span className={s.dim}>telnet </span>
-            {formatTelnetTarget(item.telnet)}
-          </span>
-        ) : (
-          <TargetText target={item.target} />
-        )}
+        {item.telnet ? <TelnetText target={item.telnet} /> : <TargetText target={item.target} />}
       </div>
       <div className={s.tags} />
       <div className={cx(s.last, s.quickHint)}>
         <span>{hint}</span>
         {recent && (
-          <button
-            type="button"
+          <IconButton
+            small
+            icon="x"
             tabIndex={-1}
             className={s.forget}
-            aria-label={removeLabel}
-            title={removeLabel}
+            label={removeLabel}
             onClick={(e) => {
               e.stopPropagation();
               onRemove(recent);
             }}
-          >
-            <Icon name="x" />
-          </button>
+          />
         )}
       </div>
       <div className={s.action}>
@@ -919,19 +1526,17 @@ function RecentSuggestions({ targets, active, title, removeLabel, onHover, onCon
             <span className={s.suggestLabel}>
               <TargetText target={target} />
             </span>
-            <button
-              type="button"
+            <IconButton
+              small
+              icon="x"
               tabIndex={-1}
               className={s.forget}
-              aria-label={removeLabel}
-              title={removeLabel}
+              label={removeLabel}
               onClick={(e) => {
                 e.stopPropagation();
                 onRemove(target);
               }}
-            >
-              <Icon name="x" />
-            </button>
+            />
           </div>
         ))}
       </div>

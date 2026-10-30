@@ -33,7 +33,9 @@ export interface ParsedProxyUrl {
  * cannot use (`https://` proxies, SOCKS4).
  */
 export function parseProxyUrl(text: string): ParsedProxyUrl | null {
-  const m = /^(socks5h?|socks|http):\/\/(?:([^:@/]*)(?::([^@/]*))?@)?(\[[^\]]+\]|[^:/@[\]]+)(?::(\d{1,5}))?\/?$/i.exec(text.trim());
+  const m = /^(socks5h?|socks|http):\/\/(?:([^:@/]*)(?::([^@/]*))?@)?(\[[^\]]+\]|[^:/@[\]]+)(?::(\d{1,5}))?\/?$/i.exec(
+    text.trim(),
+  );
   if (!m) return null;
   const decode = (s: string | undefined) => {
     try {
@@ -60,7 +62,9 @@ export function parseProxyUrl(text: string): ParsedProxyUrl | null {
 export function signInFromUrl(url: ParsedProxyUrl, hasSaved: boolean): { username: string; password: KeyDraft } {
   return {
     username: url.username,
-    password: url.password ? { mode: "replace", value: url.password } : { mode: hasSaved ? "clear" : "keep", value: "" },
+    password: url.password
+      ? { mode: "replace", value: url.password }
+      : { mode: hasSaved ? "clear" : "keep", value: "" },
   };
 }
 
@@ -86,7 +90,12 @@ export interface ProxyFormValues {
 /** Which field is wrong and why, as message keys (the backend checks the same rules). */
 export function validateProxy(
   f: ProxyFormValues,
-): Partial<Record<ProxyField, "nameRequired" | "addressRequired" | "addressInvalid" | "portInvalid" | "usernameColon" | "tooLong">> {
+): Partial<
+  Record<
+    ProxyField,
+    "nameRequired" | "addressRequired" | "addressInvalid" | "portInvalid" | "usernameColon" | "tooLong"
+  >
+> {
   const e: ReturnType<typeof validateProxy> = {};
   if (!f.name.trim()) e.name = "nameRequired";
   const address = f.address.trim().replace(/^\[(.*)\]$/, "$1");

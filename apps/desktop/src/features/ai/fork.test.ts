@@ -17,11 +17,28 @@ const assistant = (id: string, calls: string[] = [], model = "m1"): AiEntryView 
   finish: calls.length > 0 ? "tool_calls" : "stop",
   usage: null,
 });
-const tool = (id: string, call: string): AiEntryView => ({ role: "tool", entry_id: id, created_at: 0, tool_call_id: call, status: "ok", content: "output", auto: null });
+const tool = (id: string, call: string): AiEntryView => ({
+  role: "tool",
+  entry_id: id,
+  created_at: 0,
+  tool_call_id: call,
+  status: "ok",
+  content: "output",
+  auto: null,
+});
 const summary = (id: string): AiEntryView => ({ role: "summary", entry_id: id, created_at: 0, text: "Summary." });
 
 describe("forkCopies", () => {
-  const entries = [user("u1"), assistant("a1", ["c1", "c2"]), tool("t1", "c1"), tool("t2", "c2"), assistant("a2"), summary("s1"), user("u2"), assistant("a3")];
+  const entries = [
+    user("u1"),
+    assistant("a1", ["c1", "c2"]),
+    tool("t1", "c1"),
+    tool("t2", "c2"),
+    assistant("a2"),
+    summary("s1"),
+    user("u2"),
+    assistant("a3"),
+  ];
 
   it("copies everything up to the point, and the results of a reply's calls with it", () => {
     expect(forkCopies(entries, 1)).toEqual([0, 1, 2, 3]);
@@ -39,7 +56,14 @@ describe("forkCopies", () => {
   });
 
   it("takes a result stored after the point, as when it arrived from another device later", () => {
-    const merged = [user("u1"), assistant("a1", ["c1"]), user("u2"), tool("t1", "c1"), assistant("a2", ["c2"]), tool("t2", "c2")];
+    const merged = [
+      user("u1"),
+      assistant("a1", ["c1"]),
+      user("u2"),
+      tool("t1", "c1"),
+      assistant("a2", ["c2"]),
+      tool("t2", "c2"),
+    ];
     expect(forkCopies(merged, 1)).toEqual([0, 1, 3]);
     expect(forkCopies(merged, 2)).toEqual([0, 1, 2, 3]);
     // A reused call ID: each call keeps the result that answers it.
@@ -51,15 +75,38 @@ describe("forkCopies", () => {
 
 describe("forkPoints", () => {
   it("lists the user's stored messages and the replies whose calls all have results", () => {
-    const entries = [user("u1"), assistant("a1", ["c1"]), tool("t1", "c1"), assistant("a2"), summary("s1"), user("u2"), assistant("a3", ["c2"]), user("~local")];
+    const entries = [
+      user("u1"),
+      assistant("a1", ["c1"]),
+      tool("t1", "c1"),
+      assistant("a2"),
+      summary("s1"),
+      user("u2"),
+      assistant("a3", ["c2"]),
+      user("~local"),
+    ];
     expect([...forkPoints(entries)]).toEqual(["u1", "a1", "a2", "u2"]);
-    for (const id of forkPoints(entries)) expect(forkCopies(entries, entries.findIndex((e) => e.entry_id === id))).not.toBeNull();
+    for (const id of forkPoints(entries))
+      expect(
+        forkCopies(
+          entries,
+          entries.findIndex((e) => e.entry_id === id),
+        ),
+      ).not.toBeNull();
   });
 });
 
 describe("forkModel", () => {
   it("goes on with the model that answered the message, when it was another one", () => {
-    const entries = [user("u1"), assistant("a1", [], "m1"), user("u2"), assistant("a2", [], "m2"), user("u3"), user("u4"), assistant("a3", [], "m2")];
+    const entries = [
+      user("u1"),
+      assistant("a1", [], "m1"),
+      user("u2"),
+      assistant("a2", [], "m2"),
+      user("u3"),
+      user("u4"),
+      assistant("a3", [], "m2"),
+    ];
     expect(forkModel(entries, "u2")).toEqual({ provider_id: "p", model_id: "m2" });
     expect(forkModel(entries, "u1")).toEqual({ provider_id: "p", model_id: "m1" });
     // The same model as the newest copied reply, a message without its own reply, or a reply: no choice.
@@ -101,7 +148,7 @@ describe("forkTitle", () => {
   });
 
   it("cuts a long title so the mark still fits in 200 characters", () => {
-    for (const locale of ["en", "zh-CN", "ja"] as const) {
+    for (const locale of ["en", "zh-CN", "zh-TW", "ja"] as const) {
       const title = forkTitle(tr(locale), "日".repeat(200), []);
       expect([...title].length).toBe(200);
       expect(title.endsWith(translate(locale, "ai.fork.title", { title: "" }).trim())).toBe(true);

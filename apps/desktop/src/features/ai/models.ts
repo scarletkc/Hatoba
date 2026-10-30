@@ -9,7 +9,10 @@ export function chats(provider: AiProviderView): boolean {
   return provider.protocol !== "system_one";
 }
 
-export function findModel(providers: AiProviderView[], ref: AiModelRef | null | undefined): { provider: AiProviderView; model: AiModel } | null {
+export function findModel(
+  providers: AiProviderView[],
+  ref: AiModelRef | null | undefined,
+): { provider: AiProviderView; model: AiModel } | null {
   if (!ref) return null;
   const provider = providers.find((p) => p.id === ref.provider_id);
   const model = provider?.models.find((m) => m.id === ref.model_id);

@@ -30,6 +30,7 @@ on:
       - apps/desktop/index.html
       - apps/desktop/package.json
       - apps/desktop/vite.config.ts
+      - packages/ui/**
       - crates/hatoba-ai/src/skills/builtin/hatoba/**
       - docs/media/**
       - apps/desktop/src-tauri/app-icon.svg
@@ -75,13 +76,18 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile --filter @hatoba/site --filter @hatoba/desktop
+      # `...` also installs the workspace packages the desktop app depends on (@hatoba/ui).
+      - run: pnpm install --frozen-lockfile --filter @hatoba/site --filter "@hatoba/desktop..."
       - run: pnpm --filter @hatoba/site typecheck
       - run: pnpm --filter @hatoba/site test
       - run: pnpm --filter @hatoba/site demo
       - run: pnpm --filter @hatoba/site build
       # Uses the runner's Chrome.
       - run: pnpm --filter @hatoba/site demo:check
+      # The Chinese and Japanese pages' visitors have CJK fonts. Without them, Chrome picks a fallback
+      # for CJK text from whichever Latin font is current, so the font swap would reflow those pages.
+      - run: sudo apt-get update > /dev/null && sudo apt-get install -y --no-install-recommends fonts-noto-cjk > /dev/null
+      - run: pnpm --filter @hatoba/site layout:check
       - if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:

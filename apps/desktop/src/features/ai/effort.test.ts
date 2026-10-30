@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { translate } from "@/i18n";
 import type { AiConversationView, AiModel, AiSettingsView } from "@/ipc/types";
-import { EFFORTS, UNKNOWN_EFFORTS, chosenEffort, effectiveEffort, effortKey, modelEfforts, sortEfforts } from "./effort";
+import {
+  EFFORTS,
+  UNKNOWN_EFFORTS,
+  chosenEffort,
+  effectiveEffort,
+  effortKey,
+  modelEfforts,
+  sortEfforts,
+} from "./effort";
 
 const model = (efforts: AiModel["efforts"]): AiModel => ({
   id: "m",
@@ -18,7 +26,7 @@ const conversation = (effort: AiConversationView["effort"]): AiConversationView 
   host_id: null,
   quick_target: null,
   origin: null,
-      local: null,
+  local: null,
   pinned: false,
   context_start: null,
   effort,
@@ -36,6 +44,7 @@ const settings = (default_effort: AiSettingsView["default_effort"]): AiSettingsV
   custom_instructions: "",
   send_terminal_screen: true,
   memory: true,
+  text_size: 13,
   judge_model: null,
 });
 
@@ -72,12 +81,26 @@ describe("thinking levels (AI-05)", () => {
 
   it("sorts levels and labels every one in every language", () => {
     expect(sortEfforts(["max", "low", "high", "low"])).toEqual(["low", "high", "max"]);
-    for (const locale of ["zh-CN", "en", "ja"] as const) {
+    for (const locale of ["zh-CN", "zh-TW", "en", "ja"] as const) {
       const labels = [null, ...EFFORTS].map((e) => translate(locale, effortKey(e)));
       expect(new Set(labels).size).toBe(6);
       for (const label of labels) expect(label).not.toMatch(/^ai\.effort/);
     }
-    expect([null, ...EFFORTS].map((e) => translate("en", effortKey(e)))).toEqual(["Default", "Low", "Medium", "High", "Extra High", "Max"]);
-    expect([null, ...EFFORTS].map((e) => translate("zh-CN", effortKey(e)))).toEqual(["默认", "低", "中", "高", "超高", "最高"]);
+    expect([null, ...EFFORTS].map((e) => translate("en", effortKey(e)))).toEqual([
+      "Default",
+      "Low",
+      "Medium",
+      "High",
+      "Extra High",
+      "Max",
+    ]);
+    expect([null, ...EFFORTS].map((e) => translate("zh-CN", effortKey(e)))).toEqual([
+      "默认",
+      "低",
+      "中",
+      "高",
+      "超高",
+      "最高",
+    ]);
   });
 });

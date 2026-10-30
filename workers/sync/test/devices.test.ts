@@ -32,7 +32,9 @@ describe("GET /v1/devices", () => {
     await call("/v1/recover", {
       json: { recovery_auth: RECOVERY_AUTH, device_id: "device-r", device_name: envelope() },
     });
-    await env.DB.prepare("UPDATE sessions SET expires_at = ? WHERE device_id = 'device-old'").bind(Date.now() - 1).run();
+    await env.DB.prepare("UPDATE sessions SET expires_at = ? WHERE device_id = 'device-old'")
+      .bind(Date.now() - 1)
+      .run();
 
     const res = await call("/v1/devices", { token: a.session_token });
     expect(res.body.devices.map((d: { device_id: string }) => d.device_id)).toEqual(["device-a"]);
@@ -42,7 +44,9 @@ describe("GET /v1/devices", () => {
     await setupVault();
     const a = await login("device-a");
     await login("device-b");
-    await env.DB.prepare("UPDATE sessions SET last_seen = ? WHERE device_id = 'device-b'").bind(Date.now() + 5000).run();
+    await env.DB.prepare("UPDATE sessions SET last_seen = ? WHERE device_id = 'device-b'")
+      .bind(Date.now() + 5000)
+      .run();
     const res = await call("/v1/devices", { token: a.session_token });
     expect(res.body.devices.map((d: { device_id: string }) => d.device_id)).toEqual(["device-b", "device-a"]);
   });

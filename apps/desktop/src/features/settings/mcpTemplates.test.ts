@@ -38,7 +38,11 @@ describe("MCP templates", () => {
     expect(github.headers.map((h) => h.key)).toEqual(["Authorization"]);
     const token = new URL(github.tokenUrl);
     expect(token.pathname).toBe("/settings/personal-access-tokens/new");
-    expect(["contents", "issues", "pull_requests"].map((p) => token.searchParams.get(p))).toEqual(["write", "write", "write"]);
+    expect(["contents", "issues", "pull_requests"].map((p) => token.searchParams.get(p))).toEqual([
+      "write",
+      "write",
+      "write",
+    ]);
   });
 
   it("show the token without Bearer, which saving adds", () => {
@@ -49,7 +53,14 @@ describe("MCP templates", () => {
 describe("templateMcpForm", () => {
   it("fills in an HTTP server with the header names and empty values", () => {
     const f = templateMcpForm(template("github"), []);
-    expect(f).toMatchObject({ name: "github", kind: "http", url: "https://api.githubcopilot.com/mcp/", command: "", args: [], env: [] });
+    expect(f).toMatchObject({
+      name: "github",
+      kind: "http",
+      url: "https://api.githubcopilot.com/mcp/",
+      command: "",
+      args: [],
+      env: [],
+    });
     expect(f.headers).toMatchObject([
       { key: "Authorization", saved: false, draft: { mode: "replace", value: "" }, placeholder: "github_pat_…" },
     ]);
@@ -66,7 +77,10 @@ describe("templateMcpForm", () => {
   });
 
   it("gives each row its own uid, also across two forms", () => {
-    const uids = [...templateMcpForm(template("github"), []).headers, ...templateMcpForm(template("github"), []).headers].map((r) => r.uid);
+    const uids = [
+      ...templateMcpForm(template("github"), []).headers,
+      ...templateMcpForm(template("github"), []).headers,
+    ].map((r) => r.uid);
     expect(new Set(uids).size).toBe(uids.length);
   });
 
@@ -81,7 +95,11 @@ describe("templateMcpForm", () => {
   it("leaves Context7's key out while it stays empty", () => {
     const f = templateMcpForm(template("context7"), []);
     expect(f.headers).toMatchObject([{ key: "Authorization", placeholder: "ctx7sk-…", optional: true }]);
-    expect(mcpFormToInput(null, f).transport).toEqual({ kind: "http", url: "https://mcp.context7.com/mcp", headers: [] });
+    expect(mcpFormToInput(null, f).transport).toEqual({
+      kind: "http",
+      url: "https://mcp.context7.com/mcp",
+      headers: [],
+    });
     expect(mcpFormToInput(null, typed(f, "Authorization", "ctx7sk-x")).transport).toMatchObject({
       headers: [{ key: "Authorization", value: "Bearer ctx7sk-x" }],
     });

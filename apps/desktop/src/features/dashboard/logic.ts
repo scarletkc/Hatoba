@@ -2,9 +2,8 @@ import { percentOf, type StatsReading } from "@/features/terminal/stats";
 import type { GroupView, HostView, MountView } from "@/ipc/types";
 import type { HostPhase, HostReadout } from "./readings";
 
-/** How the dashboard orders hosts within a group (HOST-14). `list` keeps the host list's order. */
+/** How the hosts page orders hosts by their readings (HOST-14). `list` keeps the host list's order. */
 export type DashboardSort = "list" | "name" | "status" | "cpu" | "memory" | "disk" | "network" | "uptime";
-export const DASHBOARD_SORTS: DashboardSort[] = ["list", "name", "status", "cpu", "memory", "disk", "network", "uptime"];
 
 /** The table's columns that can be turned off; the name always shows. */
 export type DashboardColumn = "status" | "cpu" | "memory" | "disk" | "network" | "load" | "uptime";
@@ -50,23 +49,6 @@ export function leftOutBy(host: HostView, groups: ReadonlyMap<string, GroupView>
 /** Whether the dashboard shows a host: neither it nor its group was left out on this device. */
 export function shownOnDashboard(host: HostView, groups: ReadonlyMap<string, GroupView>): boolean {
   return leftOutBy(host, groups) === null;
-}
-
-export interface DashboardSection {
-  /** null for the hosts without a group. */
-  group: GroupView | null;
-  hosts: HostView[];
-}
-
-/** A section per group, in the sidebar's order, then the hosts without a group (or in a group that is gone). */
-export function groupSections(hosts: HostView[], groups: GroupView[]): DashboardSection[] {
-  const known = new Set(groups.map((g) => g.id));
-  const sections: DashboardSection[] = groups
-    .map((group) => ({ group, hosts: hosts.filter((h) => h.group_id === group.id) }))
-    .filter((s) => s.hosts.length > 0);
-  const rest = hosts.filter((h) => h.group_id === null || !known.has(h.group_id));
-  if (rest.length > 0) sections.push({ group: null, hosts: rest });
-  return sections;
 }
 
 export function latestReading(readout: HostReadout | undefined): StatsReading | undefined {
@@ -143,22 +125,22 @@ const STATUS_RANK: Record<HostPhase, number> = {
  * Orders `hosts`, which come in the host list's order. Values sort highest first and hosts without one last;
  * ties keep the host list's order.
  */
-export function sortForDashboard(
-  hosts: HostView[],
+export function sortForDashboard<T extends Pick<HostView, "id" | "name">>(
+  hosts: T[],
   sort: DashboardSort,
   readouts: Record<string, HostReadout>,
   locale: string,
-): HostView[] {
+): T[] {
   if (sort === "list") return hosts;
   if (sort === "name") {
     const collator = new Intl.Collator(locale, { numeric: true, sensitivity: "base" });
     return [...hosts].sort((a, b) => collator.compare(a.name, b.name));
   }
   if (sort === "status") {
-    const rank = (h: HostView) => STATUS_RANK[readouts[h.id]?.phase ?? "waiting"];
+    const rank = (h: T) => STATUS_RANK[readouts[h.id]?.phase ?? "waiting"];
     return [...hosts].sort((a, b) => rank(a) - rank(b));
   }
-  const value = (h: HostView): number | null => {
+  const value = (h: T): number | null => {
     const r = latestReading(readouts[h.id]);
     switch (sort) {
       case "cpu":

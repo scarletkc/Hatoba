@@ -6,7 +6,7 @@ import {
   SECRET_KEY_BYTES,
 } from "../config";
 import type { AppEnv } from "../env";
-import { notInitialized } from "../errors";
+import { invalidSession, notInitialized } from "../errors";
 import { limitBody, requireSession } from "../middleware";
 import { sha256Hex } from "../util";
 import {
@@ -37,7 +37,9 @@ vaultRoutes.get("/vault", requireSession(), async (c) => {
 
 /**
  * Changes the master password. Accepts a full session or the restricted session from
- * /v1/recover. The meta update and the session revocation run in one D1 batch (a transaction).
+ * /v1/recover. The meta update and the session revocation run in one D1 batch (a transaction),
+ * and both require the caller's session to still exist: when another password change revoked it
+ * while this request ran, nothing changes and the request fails with 401.
  *
  * - full session: every other session is revoked, the caller stays logged in.
  * - recovery session: every session including the caller's is revoked; the client must log in
@@ -68,29 +70,38 @@ vaultRoutes.put(
     const { tokenHash, scope } = c.get("session");
     const db = c.env.DB;
     const authHash = await sha256Hex(authKey);
+    const callerExists = "EXISTS (SELECT 1 FROM sessions WHERE token_hash = ?)";
 
     const updateMeta = recovery
       ? db
           .prepare(
             `UPDATE meta SET kdf_salt = ?, kdf_params = ?, auth_hash = ?, protected_vault_key = ?,
                             recovery_vault_key = ?, recovery_auth_hash = ?
-             WHERE id = 1`,
+             WHERE id = 1 AND ${callerExists}`,
           )
-          .bind(kdfSalt, kdfParams, authHash, protectedVaultKey, recovery.vaultKey, recovery.authHash)
+          .bind(kdfSalt, kdfParams, authHash, protectedVaultKey, recovery.vaultKey, recovery.authHash, tokenHash)
       : db
           .prepare(
             `UPDATE meta SET kdf_salt = ?, kdf_params = ?, auth_hash = ?, protected_vault_key = ?
-             WHERE id = 1`,
+             WHERE id = 1 AND ${callerExists}`,
           )
-          .bind(kdfSalt, kdfParams, authHash, protectedVaultKey);
+          .bind(kdfSalt, kdfParams, authHash, protectedVaultKey, tokenHash);
 
+    // The caller's own session goes in a separate statement, after the others, so the
+    // `callerExists` check cannot change while other sessions are being deleted.
+    const revokeOthers = db
+      .prepare(`DELETE FROM sessions WHERE token_hash != ? AND ${callerExists}`)
+      .bind(tokenHash, tokenHash);
     const revokeSessions =
       scope === "full"
-        ? db.prepare("DELETE FROM sessions WHERE token_hash != ?").bind(tokenHash)
-        : db.prepare("DELETE FROM sessions");
+        ? [revokeOthers]
+        : [revokeOthers, db.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(tokenHash)];
 
-    const [metaResult] = await db.batch([updateMeta, revokeSessions]);
-    if (!metaResult || metaResult.meta.changes === 0) throw notInitialized();
+    const [metaResult] = await db.batch([updateMeta, ...revokeSessions]);
+    if (!metaResult || metaResult.meta.changes === 0) {
+      const initialized = await db.prepare("SELECT 1 FROM meta WHERE id = 1").first();
+      throw initialized ? invalidSession() : notInitialized();
+    }
 
     return c.json({ ok: true, relogin_required: scope === "recovery" });
   },

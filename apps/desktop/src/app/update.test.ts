@@ -1,7 +1,8 @@
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppError, AvailableUpdate, PackageManager, UpdateCheck, UpdateProgress } from "@/ipc/types";
+import { appError } from "@/ipc/api";
+import type { AvailableUpdate, PackageManager, UpdateCheck, UpdateProgress } from "@/ipc/types";
 
 const backend = vi.hoisted(() => ({
   calls: 0,
@@ -28,7 +29,9 @@ vi.mock("@/ipc/api", async (importActual) => ({
 
 vi.mock("./store", () => {
   const state = () => ({ prefs: { auto_update_check: backend.autoCheck }, info: { package_manager: backend.manager } });
-  return { useApp: Object.assign((select: (st: ReturnType<typeof state>) => unknown) => select(state()), { getState: state }) };
+  return {
+    useApp: Object.assign((select: (st: ReturnType<typeof state>) => unknown) => select(state()), { getState: state }),
+  };
 });
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -36,11 +39,16 @@ vi.mock("./store", () => {
 const found = (version: string | null): UpdateCheck => ({
   current_version: "0.1.0",
   update: version
-    ? { version, notes: "## New\n\nThings.", published_at: 1_790_856_000_000, release_url: `https://github.com/scarletkc/Hatoba/releases/tag/v${version}` }
+    ? {
+        version,
+        notes: "## New\n\nThings.",
+        published_at: 1_790_856_000_000,
+        release_url: `https://github.com/scarletkc/Hatoba/releases/tag/v${version}`,
+      }
     : null,
 });
-const offline: AppError = { code: "sync_offline", detail: "GitHub could not be reached" };
-const badSignature: AppError = { code: "update_signature", detail: "Minisign error" };
+const offline = appError("sync_offline", "GitHub could not be reached");
+const badSignature = appError("update_signature", "Minisign error");
 
 // Each test gets fresh module state: the store and the automatic check's once-per-launch start.
 async function load() {
@@ -48,7 +56,7 @@ async function load() {
   return import("./update");
 }
 
-/** What the sidebar dot and the tray menu offer, read as a component reads it. */
+/** What the Settings button's dot and the tray menu offer, read as a component reads it. */
 function offered({ useOfferedUpdate }: Awaited<ReturnType<typeof load>>): AvailableUpdate | null {
   let update: AvailableUpdate | null = null;
   const Probe = () => {
@@ -71,7 +79,7 @@ beforeEach(() => {
 });
 
 describe("update check", () => {
-  it("records a newer release, which lights the sidebar dot", async () => {
+  it("records a newer release, which lights the Settings button's dot", async () => {
     const update = await load();
     backend.answer = async () => found("0.2.0");
     await update.useUpdate.getState().check();

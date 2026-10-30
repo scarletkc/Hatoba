@@ -1,7 +1,7 @@
 {
   "name": "hatoba",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.7.6",
   "description": "Open-source desktop SSH client with an AI assistant and end-to-end encrypted sync through your own Cloudflare account",
   "license": "MIT",
   "packageManager": "pnpm@10.18.3",
@@ -11,7 +11,13 @@
     "build": "pnpm --filter @hatoba/desktop build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "pnpm -r test",
     "worker:bundle": "node scripts/worker/bundle.mjs"
+  },
+  "devDependencies": {
+    "prettier": "3.9.10",
+    "prettier-plugin-astro": "1.1.1"
   }
 }

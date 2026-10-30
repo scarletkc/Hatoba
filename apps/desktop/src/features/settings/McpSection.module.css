@@ -2,22 +2,7 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
-}
-
-.hint {
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--fg2);
-  text-wrap: pretty;
-}
-
-.hintWarn {
-  color: var(--orange);
-}
-
-.hintWarn i {
-  vertical-align: -1px;
+  gap: var(--space-8);
 }
 
 /* ───────── Server rows ───────── */
@@ -30,7 +15,7 @@
 .row {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-2);
   padding-right: 8px;
 }
 
@@ -39,7 +24,7 @@
   min-width: 0;
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 10px 6px 10px 12px;
   border: 0;
   background: transparent;
@@ -53,7 +38,7 @@
 .caret {
   flex: none;
   margin-top: 2px;
-  font-size: 12px;
+  font-size: var(--icon-12);
   color: var(--fg3);
   transition: transform var(--motion-fast) var(--ease-out);
 }
@@ -67,14 +52,14 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-2);
 }
 
 .nameLine {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px 8px;
+  gap: var(--space-2) var(--space-8);
   min-width: 0;
 }
 
@@ -104,26 +89,6 @@
   }
 }
 
-.badge {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: var(--radius-xs);
-  background: var(--fill);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--fg2);
-  white-space: nowrap;
-}
-
-.badgeAsk {
-  background: color-mix(in srgb, var(--orange) 14%, transparent);
-  color: var(--orange);
-  font-family: inherit;
-}
-
 .summary {
   min-width: 0;
   overflow: hidden;
@@ -134,26 +99,17 @@
   color: var(--fg2);
 }
 
-.state {
-  font-size: var(--text-xs);
-  color: var(--fg2);
-}
-
 /* An open row shows the whole command line or URL, wrapped. */
 .open .summary {
   white-space: normal;
   overflow-wrap: anywhere;
 }
 
-.stateFailed {
-  color: var(--red);
-}
-
 .actions {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   color: var(--fg2);
 }
 
@@ -162,7 +118,7 @@
 .details {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
   padding: 4px 14px 14px 34px;
 }
 
@@ -171,7 +127,7 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 8px 12px;
+  gap: var(--space-8) var(--space-12);
 }
 
 .statusText {
@@ -182,15 +138,15 @@
 
 .statusButtons {
   display: flex;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .failure {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-8);
   padding: 10px 12px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--red) 9%, transparent);
 }
 
@@ -212,7 +168,7 @@
   max-height: 140px;
   overflow: auto;
   padding: 8px 10px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--field);
   box-shadow: inset 0 0 0 0.5px var(--line);
   font-family: var(--font-mono);
@@ -225,9 +181,9 @@
 .allowAll {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
   padding: 9px 12px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: var(--fill);
 }
 
@@ -236,7 +192,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-2);
 }
 
 .allowAllLabel {
@@ -246,7 +202,7 @@
 .toolsHead {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .toolsTitle {
@@ -263,7 +219,7 @@
 .tools {
   display: flex;
   flex-direction: column;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: var(--group);
   box-shadow: inset 0 0 0 0.5px var(--line);
 }
@@ -275,7 +231,7 @@
 .tool {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-4);
   padding: 9px 12px 10px;
 }
 
@@ -283,7 +239,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-12);
 }
 
 .toolTitle {
@@ -292,12 +248,12 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
+  gap: var(--space-4) var(--space-8);
 }
 
 .toolName {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   font-weight: 500;
   overflow-wrap: anywhere;
 }
@@ -307,28 +263,11 @@
   color: var(--fg2);
 }
 
-.chip {
-  display: inline-flex;
-  align-items: center;
-  height: 17px;
-  padding: 0 6px;
-  border-radius: var(--radius-xs);
-  background: var(--fill);
-  font-size: 10.5px;
-  color: var(--fg2);
-  white-space: nowrap;
-}
-
-.chipDanger {
-  background: color-mix(in srgb, var(--red) 12%, transparent);
-  color: var(--red);
-}
-
 .allow {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   font-size: var(--text-sm);
   color: var(--fg2);
 }
@@ -356,13 +295,13 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--space-16);
 }
 
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
   min-width: 0;
 }
 
@@ -370,25 +309,23 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 28px;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .alwaysAsk {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: var(--space-12);
   padding-top: 3px;
 }
 
-.alwaysAsk .hint {
+.alwaysAskHint {
   flex: 1;
   min-width: 0;
 }
 
+/* An ErrorText that breaks a long path or command anywhere. */
 .problem {
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--red);
   overflow-wrap: anywhere;
 }
 
@@ -396,31 +333,25 @@
   white-space: pre-wrap;
 }
 
-.note {
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  color: var(--fg2);
-}
-
 /* Environment and header rows */
 .secretTable {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 8px 10px 10px;
 }
 
 .secret {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-4);
 }
 
 .secretRow {
   display: grid;
   grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.3fr) 28px;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .secretName {
@@ -428,11 +359,11 @@
   display: flex;
   align-items: center;
   padding: 0 8px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--fill);
   box-shadow: inset 0 0 0 0.5px var(--line);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -444,7 +375,7 @@
   max-height: 160px;
   overflow: auto;
   padding: 9px 11px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: var(--field);
   box-shadow: inset 0 0 0 0.5px var(--fieldline);
   color: var(--fg);
@@ -465,7 +396,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-12);
 }
 
 .pasteLabel {
@@ -476,7 +407,7 @@
 
 .json {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -491,14 +422,14 @@
 .found {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-4);
   padding: 10px 14px;
 }
 
 .foundHead {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .foundName {

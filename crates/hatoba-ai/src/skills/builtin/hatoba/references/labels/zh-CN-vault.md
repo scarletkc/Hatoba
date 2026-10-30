@@ -21,7 +21,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Print | 打印 |
 | Finish Setup | 完成设置 |
 | Recovery Code | 恢复码 |
-| Generate New Code… | 生成新的恢复码… |
+| Generate New Code | 生成新的恢复码 |
 | Weak | 弱 |
 | Fair | 一般 |
 | Strong | 强 |
@@ -65,10 +65,10 @@ The labels that these files name in English, as the interface shows them in Simp
 |---|---|
 | Clear Clipboard | 清除剪贴板 |
 | Master Password | 主密码 |
-| Change… | 更改主密码… |
+| Change | 更改主密码 |
 | Change Master Password | 更改主密码 |
 | Export Encrypted Backup | 导出加密备份 |
-| Export… | 导出… |
+| Export | 导出 |
 | General | 通用 |
 | Copy Password | 复制密码 |
 
@@ -76,10 +76,9 @@ The labels that these files name in English, as the interface shows them in Simp
 
 | en | zh-CN |
 |---|---|
-| Vault | 保险库 |
 | Keys | 密钥库 |
 | Search keys | 搜索密钥 |
-| Import… | 导入… |
+| Import | 导入 |
 | Generate Key | 生成新密钥 |
 | Name | 名称 |
 | Type | 类型 |
@@ -94,12 +93,12 @@ The labels that these files name in English, as the interface shows them in Simp
 | Copy public key | 复制公钥 |
 | Copy | 复制 |
 | Rename | 重命名 |
-| Deploy to Host… | 部署到主机… |
-| Delete… | 删除… |
+| Deploy to Host | 部署到主机 |
+| Delete | 删除 |
 | Import Private Key | 导入私钥 |
 | Choose File | 选择文件 |
 | Paste Text | 粘贴文本 |
-| Choose File… | 选择文件… |
+| Choose File | 选择文件 |
 | Passphrase (optional) | 口令（可选） |
 | Ed25519 | Ed25519 |
 | RSA 4096 | RSA 4096 |
@@ -130,10 +129,16 @@ The labels that these files name in English, as the interface shows them in Simp
 
 | en | zh-CN |
 |---|---|
-| Right-Click in Terminal | 终端中的右键 |
-| Copy if selected, otherwise paste | 有选中则复制，否则粘贴 |
-| Show context menu | 弹出菜单 |
-| Confirm before pasting multiple lines | 粘贴多行文本前确认 |
+| Window and Notifications | 窗口与通知 |
+| Notifications | 通知 |
+| Command Line | 命令行 |
+| Host Monitoring | 主机监控 |
+| Language | 语言 |
+| System Default | 跟随系统 |
+| 简体中文 | 简体中文 |
+| 繁體中文 | 繁體中文 |
+| English | English |
+| 日本語 | 日本語 |
 | Show host reachability | 显示主机在线状态 |
 | Close Button | 关闭窗口时 |
 | Ask every time | 每次询问 |
@@ -146,7 +151,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Details | 详情 |
 | Refresh interval | 刷新间隔 |
 | Export Encrypted Backup | 导出加密备份 |
-| Export… | 导出… |
+| Export | 导出 |
 
 ### Appearance
 
@@ -155,18 +160,13 @@ The labels that these files name in English, as the interface shows them in Simp
 | Light | 浅色 |
 | Dark | 深色 |
 | Auto | 跟随系统 |
-| Terminal Colors | 终端配色 |
-| Always Dark | 始终深色 |
-| Always Light | 始终浅色 |
-| Match Appearance | 跟随外观 |
 | List Density | 列表密度 |
 | Regular | 标准 |
 | Compact | 紧凑 |
-| Language | 语言 |
-| System Default | 跟随系统 |
-| 简体中文 | 简体中文 |
-| English | English |
-| 日本語 | 日本語 |
+| Zoom | 缩放 |
+| AI Panel | AI 面板 |
+| Text Size | 文字大小 |
+| Terminal | 终端 |
 
 ### Proxies
 
@@ -184,6 +184,9 @@ The labels that these files name in English, as the interface shows them in Simp
 
 | en | zh-CN |
 |---|---|
+| Protection | 保护 |
+| Unlock | 解锁 |
+| Password and Recovery | 密码与恢复码 |
 | Auto-Lock | 自动锁定 |
 | Lock when the computer sleeps | 电脑睡眠时锁定 |
 | Disconnect all sessions when locked | 锁定时断开所有会话 |
@@ -193,9 +196,9 @@ The labels that these files name in English, as the interface shows them in Simp
 | Unlock with PIN | 使用 PIN 解锁 |
 | Require the master password after a restart | 重启后需要输入主密码 |
 | Master Password | 主密码 |
-| Change… | 更改主密码… |
+| Change | 更改主密码 |
 | Recovery Code | 恢复码 |
-| Generate New Code… | 生成新的恢复码… |
+| Generate New Code | 生成新的恢复码 |
 | Lock Now | 立即锁定 |
 | Lock | 锁定 |
 
@@ -252,7 +255,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | No vault has been created yet. | 尚未创建保险库。 |
 | A vault already exists. | 保险库已存在。 |
 | Forgot it? Use your recovery code | 忘记主密码？使用恢复码 |
-| Generate New Code… | 生成新的恢复码… |
+| Generate New Code | 生成新的恢复码 |
 | Too many attempts. Try again in {s} s. | 尝试次数过多，请在 {s} 秒后重试。 |
 
 ### Files, forwards and other messages

@@ -2,7 +2,7 @@
 
 Cloud Sync keeps the vault the same on several devices. It is optional and off until set up. Hatoba has no sync server: the data goes to a Worker and a D1 database in the user's own Cloudflare account (or straight to D1), always encrypted on the device first, so the cloud holds ciphertext only. Setting up, deploying and upgrading the Worker is in `references/sync-worker.md`.
 
-Open it from the sidebar (**Cloud Sync**, under **Vault**). The sync button at the bottom of the sidebar shows the current state and opens the same page.
+Open it from the navigation rail (**Sync**, at the bottom). Its icon shows the current state, and pointing at it says the state and when the last sync was.
 
 Other labels: **Sync is off**, **Stored on this device only**, **Will retry automatically**, **Enter your master password again**, **Resolved automatically, review pending**.
 
@@ -65,4 +65,4 @@ The review page lists each item with **This PC** and **Cloud** versions. **Keep 
 At the bottom of the status page:
 
 - **Generate New Recovery Code** and **Change Master Password** work like their Settings → Security counterparts. After a password change, the other devices are signed out and must sign in with the new one.
-- **Disconnect…** stops syncing on this device, after a confirmation ("Disconnect Cloud Sync?"). Data stays on the device and nothing is deleted from the cloud. You can reconnect through the wizard later.
+- **Disconnect** stops syncing on this device, after a confirmation ("Disconnect Cloud Sync?"). Data stays on the device and nothing is deleted from the cloud. You can reconnect through the wizard later.

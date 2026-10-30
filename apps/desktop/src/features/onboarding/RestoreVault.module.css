@@ -1,7 +1,7 @@
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .label {
@@ -9,31 +9,17 @@
   font-weight: 500;
 }
 
-.fieldError {
-  font-size: 11.5px;
-  color: var(--red);
-}
-
 .testRow {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: var(--space-12);
 }
 
+/* Holds the StatusLine beside the Test button, level with its label. */
 .status {
   flex: 1;
   min-width: 0;
-  padding-top: 6px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: var(--text-sm);
-  color: var(--fg2);
-  line-height: 1.5;
-}
-
-.statusError {
-  color: var(--red);
+  padding-top: 7px;
 }
 
 .busyText {

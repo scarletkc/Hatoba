@@ -1,0 +1,63 @@
+.files {
+  display: flex;
+  flex-direction: column;
+  max-height: 232px;
+  margin: 12px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 0.5px solid var(--line);
+  border-radius: var(--radius-md);
+  list-style: none;
+}
+
+.file + .file {
+  border-top: 0.5px solid var(--line);
+}
+
+/* The icon and the state stay by the path, the first line. */
+.fileRow {
+  align-items: flex-start;
+}
+
+.fileIcon {
+  margin-top: 2px;
+  color: var(--fg2);
+}
+
+.path {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.server {
+  font-size: var(--text-xs);
+  color: var(--fg2);
+  overflow-wrap: anywhere;
+}
+
+.status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 18px;
+}
+
+.note {
+  margin-top: 10px;
+}
+
+.lines {
+  display: inline-flex;
+  gap: var(--space-4);
+  margin-left: 6px;
+  font-family: var(--font-mono);
+}
+
+.added {
+  color: var(--green);
+}
+
+.removed {
+  color: var(--red);
+}

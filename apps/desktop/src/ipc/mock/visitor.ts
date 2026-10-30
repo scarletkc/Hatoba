@@ -1,5 +1,5 @@
 import { detectLocale, LOCALES, type Locale } from "@/i18n";
-import type { AppInfo } from "../types";
+import type { Platform } from "../types";
 
 /**
  * The website's demo (`pnpm build:demo`, or `pnpm dev --mode demo` to try it): what a visitor to
@@ -13,7 +13,7 @@ export const VISITOR = import.meta.env.MODE === "demo";
 /** The host the demo connects to, whose terminal the `showcase` fix runs in. */
 export const VISITOR_HOST = "prod-api-tokyo";
 
-/** `?lang=en|zh-CN|ja`: the language the page passes in, which the language pref and the sample text follow. */
+/** `?lang=en|zh-CN|zh-TW|ja`: the language the page passes in, which the language pref and the sample text follow. */
 export function passedLocale(): Locale | null {
   const lang = new URLSearchParams(location.search).get("lang");
   return LOCALES.find((l) => l === lang) ?? null;
@@ -25,7 +25,7 @@ export function mockLocale(): Locale {
 }
 
 /** The visitor's OS, so the window and the shortcuts are the ones they would install. */
-export function visitorPlatform(): AppInfo["platform"] {
+export function visitorPlatform(): Platform {
   const agent = navigator.userAgent;
   if (/Mac|iPhone|iPad/.test(agent)) return "macos";
   if (/Windows/.test(agent)) return "windows";

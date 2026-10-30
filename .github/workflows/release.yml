@@ -1,7 +1,7 @@
 name: Release
 
-# Publishes the version in Cargo.toml as a GitHub Release of the selected commit, after approval in
-# the release environment. docs/releasing.md describes the steps.
+# Publishes the version in Cargo.toml as a GitHub Release of the commit that set it on the selected
+# branch, after approval in the release environment. docs/releasing.md describes the steps.
 on:
   workflow_dispatch:
 
@@ -22,6 +22,7 @@ jobs:
       # Reads the CI runs and the release environment.
       actions: read
     outputs:
+      sha: ${{ steps.commit.outputs.sha }}
       version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
       prerelease: ${{ steps.release.outputs.prerelease }}
@@ -34,6 +35,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # The release commit, where the release pull request set the version, or a later fix to the
+      # version's release note: what is merged after it goes into the next release. The steps below
+      # and the other jobs use that commit.
+      - id: commit
+        run: |
+          sha=$(node scripts/release/release.mjs commit)
+          git checkout --quiet --detach "$sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - run: node --test "scripts/**/*.test.mjs"
       - run: node scripts/release/release.mjs check
       - id: release
@@ -61,6 +70,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.preflight.outputs.sha }}
           persist-credentials: false
       # No Rust cache: the installer is built from a clean target directory.
       - uses: dtolnay/rust-toolchain@stable
@@ -93,6 +103,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.preflight.outputs.sha }}
           persist-credentials: false
       - name: System dependencies
         run: |
@@ -128,6 +139,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.preflight.outputs.sha }}
           persist-credentials: false
       # No Rust cache: the app is built from a clean target directory.
       - uses: dtolnay/rust-toolchain@stable
@@ -163,6 +175,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.preflight.outputs.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -227,6 +240,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.preflight.outputs.sha }}
           persist-credentials: false
       - name: Set the version in the PKGBUILD
         run: sed -i -e "s/^pkgver=.*/pkgver=${VERSION}/" -e 's/^pkgrel=.*/pkgrel=1/' packaging/aur/PKGBUILD

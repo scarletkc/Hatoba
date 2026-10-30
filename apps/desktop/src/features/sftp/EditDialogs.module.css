@@ -1,0 +1,17 @@
+.files {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  list-style: none;
+  max-height: 140px;
+  overflow-y: auto;
+  border-radius: var(--radius-sm);
+  background: var(--fill2);
+  font-size: var(--text-sm);
+}
+
+.file {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.6;
+}

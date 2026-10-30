@@ -62,21 +62,27 @@ export const ja: Messages = {
         text: "グループ、タグ、お気に入り、あいまい検索。~/.ssh/config を読み込めるほか、ProxyJump や SOCKS5、HTTP プロキシ経由で接続でき、ssh user@host と入力すればホストを保存せずに接続できます。",
       },
       {
-        term: "ダッシュボード",
-        text: "保存したすべてのホストの状態、CPU、メモリ、ディスク、ネットワークを 1 ページで確認できます。SSH 経由で読み取るので、サーバーには何もインストールしません。",
+        term: "リソース使用状況",
+        text: "保存したすべてのホストの状態、CPU、メモリ、ディスク、ネットワークをホストページでそのまま確認できます。SSH 経由で読み取るので、サーバーには何もインストールしません。",
       },
       {
         term: "ターミナル",
         text: "タブ、トゥルーカラー、日本語などの入力メソッド、検索、クリックできるリンクに対応。複数行を貼り付ける前には確認します。",
       },
-      { term: "SFTP", text: "ターミナルの横のファイルパネル。ドラッグ＆ドロップでアップロードでき、ダウンロードはいつでもキャンセルできます。" },
-      { term: "ポートフォワーディング", text: "ローカル、リモート、SOCKS のフォワーディングを、接続と同時に、またはターミナルを開かずに開始できます。" },
+      {
+        term: "SFTP",
+        text: "ターミナルの横のファイルパネル。ドラッグ＆ドロップでアップロードでき、ダウンロードはいつでもキャンセルできます。リモートのファイルは手元のエディターで編集でき、保存するたびにアップロードされます。",
+      },
+      {
+        term: "ポートフォワーディング",
+        text: "ローカル、リモート、SOCKS のフォワーディングを、接続と同時に、またはターミナルを開かずに開始できます。",
+      },
       {
         term: "鍵",
         text: "パスワード、Ed25519・ECDSA・RSA 鍵、ssh-agent、キーボードインタラクティブ認証（2 要素認証）に対応。OpenSSH、PEM、PuTTY の鍵を読み込むことも、新しく生成することもできます。",
       },
     ],
-    alt: "各ホストの CPU、メモリ、ディスクの使用状況を表示したダッシュボード",
+    alt: "各ホストの CPU、メモリ、ディスクの使用状況を表示したカード表示のホストページ",
   },
   security: {
     title: "データはデバイス上で暗号化",
@@ -92,7 +98,9 @@ export const ja: Messages = {
     releases: "リリース",
     report: "問題を報告",
     security: "セキュリティポリシー",
+    privacy: "プライバシーポリシー",
     contributing: "コントリビュート",
+    sponsor: "スポンサー",
     license: "Hatoba は MIT ライセンスで公開しています。",
   },
   download: {
@@ -103,7 +111,8 @@ export const ja: Messages = {
     thisDevice: "このデバイス向け",
     requirements: {
       windows: "Windows 10 または 11（x64）。",
-      linux: "x86_64。同期は認証情報を Secret Service に保存するため、GNOME Keyring、KWallet などの Secret Service プロバイダーが必要です。",
+      linux:
+        "x86_64。同期は認証情報を Secret Service に保存するため、GNOME Keyring、KWallet などの Secret Service プロバイダーが必要です。",
       macos: "Apple シリコン、macOS 13 以降。このビルドは試験的なものです。",
     },
     files: {
@@ -116,7 +125,8 @@ export const ja: Messages = {
     install: "インストール方法",
     packageManager: "パッケージマネージャー",
     packages: {
-      windows: "[Scoop](https://scoop.sh) の Extras バケットから Hatoba をインストールできます。その後は `scoop update hatoba` で更新します。",
+      windows:
+        "[Scoop](https://scoop.sh) の Extras バケットから Hatoba をインストールできます。その後は `scoop update hatoba` で更新します。",
       linux:
         "Arch Linux とその派生ディストリビューションでは、yay などの AUR ヘルパーで AUR から [`hatoba-bin`](https://aur.archlinux.org/packages/hatoba-bin) をインストールできます。その後はシステムと一緒に更新されます。",
     },
@@ -126,7 +136,8 @@ export const ja: Messages = {
     checksums: "に、このリリースのすべてのファイルのチェックサムがあります。",
     allReleases: "すべてのリリース",
     source: "ソースからビルド",
-    testing: "Hatoba は主に Windows で開発しているため、Linux 版と macOS 版はテストが十分ではありません。うまく動かない場合は Issue でお知らせください。",
+    testing:
+      "Hatoba は主に Windows で開発しているため、Linux 版と macOS 版はテストが十分ではありません。うまく動かない場合は Issue でお知らせください。",
     issue: "Issue を作成",
   },
   notFound: {

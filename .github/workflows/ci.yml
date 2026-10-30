@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
-    paths-ignore: ['**.md', 'docs/**']
+    paths-ignore: ["**.md", "docs/**"]
   # No paths filter: the ruleset on main requires these checks, so a skipped run would block the PR.
   pull_request:
   workflow_dispatch:
@@ -35,9 +35,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @hatoba/desktop typecheck
-      - run: pnpm --filter @hatoba/desktop lint
-      - run: pnpm --filter @hatoba/desktop test
+      - run: pnpm format:check
+      - run: pnpm --filter @hatoba/ui --filter @hatoba/desktop typecheck
+      - run: pnpm --filter @hatoba/ui --filter @hatoba/desktop lint
+      - run: pnpm --filter @hatoba/ui --filter @hatoba/desktop test
       - run: pnpm --filter @hatoba/desktop build
 
   worker:
@@ -162,7 +163,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @hatoba/desktop build
-      - run: cargo test -p hatoba-core -p hatoba-ssh -p hatoba-ai -p hatoba-local -p hatoba-desktop
+      - run: cargo test -p hatoba-core -p hatoba-ssh -p hatoba-ai -p hatoba-local -p hatoba-telnet -p hatoba-ipc -p hatoba-assistant -p hatoba-cli -p hatoba-desktop
 
   windows-installer:
     name: Windows installer

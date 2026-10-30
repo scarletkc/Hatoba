@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Icon } from "@/components/controls";
-import { StatusTile } from "@/components/layout";
-import { toast } from "@/components/overlay";
+import { Button, Icon, StatusLine, StatusTile, toast } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { formatRelative, useT, type MessageKey } from "@/i18n";
@@ -30,7 +28,7 @@ const TYPE_ICON: Record<ConflictView["item_type"], string> = {
   mcp_server: "plugs",
 };
 
-/** Fields whose values read better in the monospace face (as in the design). */
+/** Fields whose values read better in the monospace face. */
 const MONO_FIELDS = new Set(["name", "address", "port", "username", "key", "fingerprint", "base_url", "path", "env"]);
 
 /** Fields the backend sends as "true" or "false". */
@@ -57,7 +55,7 @@ function describe(t: T, c: ConflictView): string {
   return t("sync.cf.desc.both", { type });
 }
 
-/** Differing fields, plus a state row when one side deleted the item (design §05c). */
+/** Differing fields, plus a state row when one side deleted the item. */
 function rowsOf(c: ConflictView): Row[] {
   const rows: Row[] = [...c.fields];
   if ((c.local_deleted || c.remote_deleted) && !rows.some((r) => r.field === "state")) {
@@ -93,7 +91,8 @@ function ConflictCard({
     if (field === "jump_host" && v === "deleted") return { text: t("sync.value.jump_host.deleted"), dim: false };
     // A host's proxy (SSH-13): "proxy:" and a saved proxy's name, or one of these three.
     if (field === "proxy" && v?.startsWith("proxy:")) return { text: v.slice("proxy:".length), dim: false };
-    if (field === "proxy" && (v === "device_default" || v === "direct" || v === "deleted")) return { text: t(`sync.value.proxy.${v}`), dim: false };
+    if (field === "proxy" && (v === "device_default" || v === "direct" || v === "deleted"))
+      return { text: t(`sync.value.proxy.${v}`), dim: false };
     if (v === null || v === "") return { text: deleted ? "—" : t("sync.cf.none"), dim: true };
     return { text: v, dim: false };
   };
@@ -125,17 +124,20 @@ function ConflictCard({
                 <span className={s.diffDot} />
                 {fieldLabel(t, r.field)}
               </span>
-              <span className={`${s.diffValue} ${mono ? s.mono : ""} ${local.dim ? s.dim : ""} selectable`}>{local.text}</span>
-              <span className={`${s.diffValue} ${mono ? s.mono : ""} ${remote.dim ? s.dim : ""} selectable`}>{remote.text}</span>
+              <span className={`${s.diffValue} ${mono ? s.mono : ""} ${local.dim ? s.dim : ""} selectable`}>
+                {local.text}
+              </span>
+              <span className={`${s.diffValue} ${mono ? s.mono : ""} ${remote.dim ? s.dim : ""} selectable`}>
+                {remote.text}
+              </span>
             </div>
           );
         })}
       </div>
       <div className={s.conflictFoot}>
-        <span className={s.result}>
-          <Icon name="check-circle" fill />
+        <StatusLine tone="success" className={s.result}>
           {t(`sync.cf.result.${c.resolution}` as MessageKey)}
-        </span>
+        </StatusLine>
         <Button size="sm" busy={busy === "keep"} disabled={busy !== null} onClick={() => onResolve("keep")}>
           {t("sync.cf.keep")}
         </Button>

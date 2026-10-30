@@ -1,0 +1,54 @@
+---
+import CopyButton from "./CopyButton.astro";
+
+/**
+ * A block of code or commands with a Copy button in its corner. The docs' Markdown code blocks get
+ * the same frame (frameCodeBlocks in lib/markdown.ts) and their button from the docs page, so the
+ * frame's styles are global.
+ */
+interface Props {
+  code: string;
+  /** The Copy button's accessible name and tooltip. */
+  copyLabel: string;
+  copied: string;
+}
+
+const { code, copyLabel, copied } = Astro.props;
+---
+
+<div class="code-block" data-copy-scope>
+  <pre><code>{code}</code></pre>
+  <CopyButton label={copyLabel} copied={copied} />
+</div>
+
+<style is:global>
+  .code-block {
+    position: relative;
+  }
+
+  .code-block pre {
+    margin: 0;
+    /* Room for the Copy button in the corner. */
+    padding: var(--space-12) var(--space-56) var(--space-12) var(--space-16);
+    border-radius: var(--radius-md);
+    background: var(--code-bg);
+    color: var(--code-fg);
+    font-size: var(--text-sm);
+    line-height: var(--leading-snug);
+    overflow-x: auto;
+  }
+
+  .code-block pre code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+    overflow-wrap: normal;
+  }
+
+  .code-block .copy {
+    position: absolute;
+    top: var(--space-6);
+    right: var(--space-6);
+    background: var(--code-bg);
+  }
+</style>

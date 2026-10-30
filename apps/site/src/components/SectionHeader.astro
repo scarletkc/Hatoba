@@ -1,0 +1,56 @@
+---
+/**
+ * A section's heading and the paragraph that leads into it. Its size follows its role: `h1` for a
+ * page or the closing call, `h2` for a section, `title` for a docs page. On the night band the lead
+ * takes the night's muted text.
+ */
+interface Props {
+  title: string;
+  as?: "h1" | "h2";
+  size?: "h1" | "h2" | "title";
+  lead?: string;
+  align?: "start" | "center";
+  class?: string;
+}
+
+const { title, as: Tag = "h2", size = Tag, lead, align = "start", class: className } = Astro.props;
+---
+
+<header class:list={["section-header", align, className]}>
+  <Tag class={`size-${size}`}>{title}</Tag>
+  {lead && <p class="lead">{lead}</p>}
+  <slot />
+</header>
+
+<style>
+  .size-h1 {
+    font-size: var(--text-h1);
+  }
+
+  .size-h2 {
+    font-size: var(--text-h2);
+  }
+
+  .size-title {
+    font-size: var(--text-title);
+  }
+
+  .lead {
+    max-width: 36em;
+    margin-top: var(--space-20);
+    font-size: var(--text-lg);
+    color: var(--ink-2);
+  }
+
+  :global(.night) .lead {
+    color: var(--on-night-2);
+  }
+
+  .center {
+    text-align: center;
+  }
+
+  .center .lead {
+    margin-inline: auto;
+  }
+</style>

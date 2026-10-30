@@ -1,9 +1,11 @@
 //! App info and window helpers.
 
 use tauri::ipc::Channel;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
-use crate::dto::{AppInfo, NotificationInput, TrayMenuInput, UpdateCheck, UpdateProgress};
+use crate::dto::{
+    AppInfo, NotificationInput, TrayMenuInput, UpdateCheck, UpdateProgress, ZoomView,
+};
 use crate::error::{AppError, AppResult};
 use crate::platform;
 use crate::state::AppState;
@@ -44,6 +46,17 @@ pub async fn update_install(app: AppHandle, progress: Channel<UpdateProgress>) -
 #[specta::specta]
 pub fn window_snap_overlay() {
     platform::window::snap_overlay();
+}
+
+/// Zooms the interface (TERM-13) to the step nearest `percent`, no more than the screen the window
+/// is on allows, and says what applies. The device-local preference is saved by `prefs_save`.
+#[tauri::command]
+#[specta::specta]
+pub fn window_zoom(app: AppHandle, percent: u32) -> AppResult<ZoomView> {
+    let window = app
+        .get_webview_window(platform::window::MAIN)
+        .ok_or_else(|| AppError::internal("the main window is gone"))?;
+    platform::window::apply_zoom(&window, percent).map_err(|e| AppError::internal(e.to_string()))
 }
 
 /// Whether the Linux main window shows its painted chrome: false while maximized, fullscreen

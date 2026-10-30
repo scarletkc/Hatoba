@@ -1,0 +1,37 @@
+[package]
+name = "hatoba-assistant"
+description = "The Hatoba AI assistant's runtime, MCP servers, skills and settings, independent of Tauri"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+hatoba-ai.workspace = true
+hatoba-core.workspace = true
+hatoba-ipc.workspace = true
+hatoba-local.workspace = true
+hatoba-ssh.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+specta.workspace = true
+# `specta_typescript::Number`, the generated type of a float that is never `null`.
+specta-typescript.workspace = true
+tracing.workspace = true
+zeroize.workspace = true
+futures.workspace = true
+# Provider and search requests. Same features and TLS stack as hatoba-ai's.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "system-proxy"] }
+# The system prompt names today's local date (spec §13.1).
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+[dev-dependencies]
+# `KdfParams::for_tests()`, so tests can create a vault without the production Argon2 cost.
+hatoba-core = { workspace = true, features = ["test-util"] }
+# The turn tests run against a mock model provider.
+wiremock = "0.6"
+uuid.workspace = true

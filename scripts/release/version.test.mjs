@@ -4,13 +4,22 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { planNote } from "./bump.mjs";
-import { ROOT, WORKER_VERSION_FILES, compareVersions, nextVersion, parseVersion, planBump, readVersion } from "./version.mjs";
+import {
+  ROOT,
+  WORKER_VERSION_FILES,
+  compareVersions,
+  nextVersion,
+  parseVersion,
+  planBump,
+  readVersion,
+} from "./version.mjs";
 
 const npm = (json) => `${JSON.stringify(json, null, 2)}\n`;
 
 // Each file also holds an unrelated 0.1.0 that a bump must leave alone.
 const APP_FIXTURE = {
-  "Cargo.toml": '[workspace]\nmembers = ["crates/hatoba-core"]\n\n[workspace.package]\nversion = "0.1.0"\nedition = "2024"\n\n[workspace.dependencies]\nserde = { version = "0.1.0" }\n',
+  "Cargo.toml":
+    '[workspace]\nmembers = ["crates/hatoba-core"]\n\n[workspace.package]\nversion = "0.1.0"\nedition = "2024"\n\n[workspace.dependencies]\nserde = { version = "0.1.0" }\n',
   "Cargo.lock":
     'version = 4\n\n[[package]]\nname = "hatoba-core"\nversion = "0.1.0"\ndependencies = [\n "serde",\n]\n\n[[package]]\nname = "serde"\nversion = "0.1.0"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n',
   "package.json": npm({ name: "hatoba", private: true, version: "0.1.0" }),
@@ -26,7 +35,8 @@ const WORKER_FIXTURE = {
     lockfileVersion: 3,
     packages: { "": { name: "@hatoba/sync-worker", version: "0.5.0" }, "node_modules/hono": { version: "0.1.0" } },
   }),
-  "workers/sync/src/config.ts": 'export const API_VERSION = 1;\n/** Keep in sync with package.json (enforced by a test). */\nexport const VERSION = "0.5.0";\n',
+  "workers/sync/src/config.ts":
+    'export const API_VERSION = 1;\n/** Keep in sync with package.json (enforced by a test). */\nexport const VERSION = "0.5.0";\n',
 };
 
 const FIXTURE = { ...APP_FIXTURE, ...WORKER_FIXTURE };
@@ -49,7 +59,14 @@ test("rejects versions outside MAJOR.MINOR.PATCH with an optional alpha, beta, o
 
 test("orders prereleases before their final release", () => {
   const versions = ["1.2.3", "1.2.3-rc.1", "1.2.3-alpha.10", "1.2.2", "1.2.3-beta.1", "1.2.3-alpha.9"];
-  assert.deepEqual(versions.sort(compareVersions), ["1.2.2", "1.2.3-alpha.9", "1.2.3-alpha.10", "1.2.3-beta.1", "1.2.3-rc.1", "1.2.3"]);
+  assert.deepEqual(versions.sort(compareVersions), [
+    "1.2.2",
+    "1.2.3-alpha.9",
+    "1.2.3-alpha.10",
+    "1.2.3-beta.1",
+    "1.2.3-rc.1",
+    "1.2.3",
+  ]);
 });
 
 test("computes the next version", () => {
@@ -75,8 +92,14 @@ test("a bump changes only the release version in every app file", (t) => {
   assert.equal(readVersion(root), "0.2.0");
   assert.equal(readVersion(root, WORKER_VERSION_FILES), "0.5.0");
   const read = (path) => readFileSync(join(root, path), "utf8");
-  assert.equal(read("Cargo.toml"), FIXTURE["Cargo.toml"].replace('version = "0.1.0"\nedition', 'version = "0.2.0"\nedition'));
-  assert.equal(read("Cargo.lock"), FIXTURE["Cargo.lock"].replace('"hatoba-core"\nversion = "0.1.0"', '"hatoba-core"\nversion = "0.2.0"'));
+  assert.equal(
+    read("Cargo.toml"),
+    FIXTURE["Cargo.toml"].replace('version = "0.1.0"\nedition', 'version = "0.2.0"\nedition'),
+  );
+  assert.equal(
+    read("Cargo.lock"),
+    FIXTURE["Cargo.lock"].replace('"hatoba-core"\nversion = "0.1.0"', '"hatoba-core"\nversion = "0.2.0"'),
+  );
   assert.match(read("apps/desktop/package.json"), /"react": "\^0\.1\.0"/);
 });
 
@@ -94,7 +117,11 @@ test("a Worker bump changes only the Worker version", (t) => {
 
 test("names each file when the versions disagree", (t) => {
   const root = fixture(t, { "apps/desktop/package.json": npm({ name: "@hatoba/desktop", version: "0.1.1" }) });
-  assert.throws(() => readVersion(root), (error) => error.message.includes("apps/desktop/package.json: 0.1.1") && error.message.includes("Cargo.toml: 0.1.0"));
+  assert.throws(
+    () => readVersion(root),
+    (error) =>
+      error.message.includes("apps/desktop/package.json: 0.1.1") && error.message.includes("Cargo.toml: 0.1.0"),
+  );
 });
 
 test("refuses JSON that a rewrite would reformat", (t) => {

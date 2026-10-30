@@ -22,8 +22,10 @@ serde_json.workspace = true
 
 [dependencies]
 hatoba-ai.workspace = true
+hatoba-assistant.workspace = true
 hatoba-cli.workspace = true
 hatoba-core.workspace = true
+hatoba-ipc.workspace = true
 hatoba-local.workspace = true
 hatoba-telnet.workspace = true
 hatoba-ssh.workspace = true
@@ -40,7 +42,7 @@ tauri-plugin-single-instance = "2.5"
 tauri-plugin-updater = { version = "2.13", default-features = false, features = ["rustls-tls", "system-proxy"] }
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 specta.workspace = true
-specta-typescript = "0.0.12"
+specta-typescript.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 serde.workspace = true
@@ -57,16 +59,16 @@ dirs = "6"
 bytes.workspace = true
 async-trait.workspace = true
 futures.workspace = true
+# SFTP-05: whether a copy of a remote file changed since it was last written back.
+sha2.workspace = true
 # The update check's status probe. Same features and TLS stack as hatoba-core's sync transport.
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "system-proxy"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-# The AI assistant's system prompt names today's local date (spec §13.1).
-chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # Host import from other SSH clients (SSH-15): their ANSI and UTF-16 files, Tabby's YAML config,
 # and Xshell's `.xts` exports, which are zip files. Versions match hatoba-ai's own.
 encoding_rs = "0.8"
 serde_yaml_ng = "0.10"
-zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip = { version = "9.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 # SecureCRT's XML export. The version tauri already builds.
 quick-xml = "0.42"
 
@@ -88,6 +90,7 @@ windows = { version = "0.62", features = [
   "Win32_Globalization",
   "Win32_System_Power",
   "Win32_System_SystemInformation",
+  "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
   "Security_Credentials",
   "Security_Credentials_UI",

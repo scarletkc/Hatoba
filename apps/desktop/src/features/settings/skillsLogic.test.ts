@@ -29,7 +29,14 @@ const draft = (extra: Partial<SkillDraft> = {}): SkillDraft => ({
   ...extra,
 });
 
-const view = (id: string, name: string): SkillView => ({ id, name, description: "d", enabled: true, files: [], updated_at: 1 });
+const view = (id: string, name: string): SkillView => ({
+  id,
+  name,
+  description: "d",
+  enabled: true,
+  files: [],
+  updated_at: 1,
+});
 
 describe("skill names", () => {
   it("accepts 1 to 64 lowercase letters, digits and hyphens", () => {
@@ -40,7 +47,8 @@ describe("skill names", () => {
   });
 
   it("rejects everything else", () => {
-    for (const bad of ["", "Nginx", "nginx_ops", "nginx ops", "nginx.ops", "日本語", "-é"]) expect(isValidSkillName(bad)).toBe(false);
+    for (const bad of ["", "Nginx", "nginx_ops", "nginx ops", "nginx.ops", "日本語", "-é"])
+      expect(isValidSkillName(bad)).toBe(false);
   });
 
   it("tells empty, invalid, and taken names apart", () => {
@@ -95,7 +103,18 @@ describe("normalizeSkillPath", () => {
   });
 
   it("rejects paths that leave the folder", () => {
-    for (const bad of ["../x", "a/../b", "/etc/passwd", "\\\\host\\share\\x", "C:\\x", "c:/x", "", ".", "a\u0000b", "a\nb"]) {
+    for (const bad of [
+      "../x",
+      "a/../b",
+      "/etc/passwd",
+      "\\\\host\\share\\x",
+      "C:\\x",
+      "c:/x",
+      "",
+      ".",
+      "a\u0000b",
+      "a\nb",
+    ]) {
       expect(normalizeSkillPath(bad)).toBeNull();
     }
   });
@@ -142,7 +161,13 @@ describe("validateSkill", () => {
       { uid: 4, path: "references/a.md", content: "" },
       { uid: 5, path: "references\\A.md", content: "" },
     ];
-    expect(validateSkill(draft({ files })).files).toEqual(["path_empty", "path_invalid", "path_skill_md", null, "path_duplicate"]);
+    expect(validateSkill(draft({ files })).files).toEqual([
+      "path_empty",
+      "path_invalid",
+      "path_skill_md",
+      null,
+      "path_duplicate",
+    ]);
   });
 
   it("flags too many files", () => {
@@ -160,7 +185,15 @@ describe("validateSkill", () => {
 
 describe("toSkillInput", () => {
   it("trims the name and description and normalizes the file paths", () => {
-    const input = toSkillInput("s1", false, draft({ name: " nginx-ops ", description: " Operate. ", files: [{ uid: 1, path: " references\\a.md ", content: "x" }] }));
+    const input = toSkillInput(
+      "s1",
+      false,
+      draft({
+        name: " nginx-ops ",
+        description: " Operate. ",
+        files: [{ uid: 1, path: " references\\a.md ", content: "x" }],
+      }),
+    );
     expect(input).toEqual({
       id: "s1",
       name: "nginx-ops",
@@ -185,7 +218,11 @@ describe("drafts", () => {
   };
 
   it("builds the form from a saved skill", () => {
-    expect(draftFromDetail(detail)).toMatchObject({ name: "nginx-ops", body: "# Steps", files: [{ path: "a.md", content: "A" }] });
+    expect(draftFromDetail(detail)).toMatchObject({
+      name: "nginx-ops",
+      body: "# Steps",
+      files: [{ path: "a.md", content: "A" }],
+    });
   });
 
   it("compares text, not row identities", () => {
@@ -202,9 +239,16 @@ describe("describeIssue", () => {
     expect(describeIssue({ kind: "missing_skill_md" })).toEqual({ kind: "missing_skill_md", params: {} });
     expect(describeIssue({ kind: "invalid_name", name: "Bad" }).params).toEqual({ name: "Bad" });
     expect(describeIssue({ kind: "description_too_long", chars: 1300 }).params).toEqual({ chars: 1300, max: 1024 });
-    expect(describeIssue({ kind: "file_too_large", path: "a.md", size: 50_000 }).params).toEqual({ path: "a.md", size: 50_000, max: 32_768 });
+    expect(describeIssue({ kind: "file_too_large", path: "a.md", size: 50_000 }).params).toEqual({
+      path: "a.md",
+      size: 50_000,
+      max: 32_768,
+    });
     expect(describeIssue({ kind: "too_many_files", count: 250 }).params).toEqual({ count: 250, max: 200 });
-    expect(describeIssue({ kind: "too_large", bytes: 6_000_000 }).params).toEqual({ bytes: 6_000_000, max: 5 * 1024 * 1024 });
+    expect(describeIssue({ kind: "too_large", bytes: 6_000_000 }).params).toEqual({
+      bytes: 6_000_000,
+      max: 5 * 1024 * 1024,
+    });
   });
 });
 

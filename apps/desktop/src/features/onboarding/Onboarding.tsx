@@ -1,7 +1,7 @@
 import { useState } from "react";
+import { Button, FooterSpacer, Icon } from "@hatoba/ui";
+import { AppLogo } from "@/app/AppLogo";
 import { WindowChrome } from "@/app/TitleBar";
-import { AppLogo, Button, Icon } from "@/components/controls";
-import { FooterSpacer } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { CreatePassword, CreateRecovery } from "./CreateVault";
@@ -94,7 +94,7 @@ export function Onboarding() {
   );
 }
 
-/** Radio card styled like the design's sync-wizard method picker. */
+/** Radio card styled like the sync wizard's method picker. */
 function OptionCard({
   selected,
   icon,
@@ -109,7 +109,13 @@ function OptionCard({
   onSelect: () => void;
 }) {
   return (
-    <button type="button" role="radio" aria-checked={selected} className={cx(s.option, selected && s.optionOn)} onClick={onSelect}>
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      className={cx(s.option, selected && s.optionOn)}
+      onClick={onSelect}
+    >
       <span className={cx(s.radio, selected && s.radioOn)}>{selected && <span className={s.radioDot} />}</span>
       <span className={s.optionText}>
         <span className={s.optionTitle}>{title}</span>

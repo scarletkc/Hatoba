@@ -1,6 +1,6 @@
 import type { KeyboardEvent } from "react";
-import { DEFAULT_SCHEME, schemeFor, schemesFor, type TermMode, type TermScheme } from "@/features/terminal/schemes";
 import { cx } from "@/lib/cx";
+import { DEFAULT_SCHEME, schemeFor, schemesFor, type TermMode, type TermScheme } from "@/session/schemes";
 import s from "./SchemePicker.module.css";
 
 /** The built-in colour schemes of one mode, as miniature terminals (TERM-06). */
@@ -25,7 +25,14 @@ export function SchemePicker({
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const at = schemes.findIndex((x) => x.id === picked);
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
-    const next = e.key === "Home" ? 0 : e.key === "End" ? schemes.length - 1 : step ? (at + step + schemes.length) % schemes.length : -1;
+    const next =
+      e.key === "Home"
+        ? 0
+        : e.key === "End"
+          ? schemes.length - 1
+          : step
+            ? (at + step + schemes.length) % schemes.length
+            : -1;
     if (next < 0) return;
     e.preventDefault();
     e.currentTarget.querySelectorAll<HTMLElement>("[role=radio]")[next]?.focus();
@@ -50,12 +57,22 @@ function Card({ scheme, selected, onSelect }: { scheme: TermScheme; selected: bo
   // Hatoba Dark sits on the app's terminal background, which differs between light and dark.
   const background = scheme.id === DEFAULT_SCHEME.dark ? "var(--term)" : c.background;
   return (
-    <button type="button" role="radio" aria-checked={selected} tabIndex={selected ? 0 : -1} className={s.card} onClick={onSelect}>
-      <span className={cx(s.term, s[scheme.mode], selected && s.termOn)} style={{ background, color: c.foreground }} aria-hidden>
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      tabIndex={selected ? 0 : -1}
+      className={s.card}
+      onClick={onSelect}
+    >
+      <span
+        className={cx(s.term, s[scheme.mode], selected && s.termOn)}
+        style={{ background, color: c.foreground }}
+        aria-hidden
+      >
         <span className={s.line}>
           <span style={{ color: c.green }}>❯</span> <span style={{ color: c.blue }}>~/hatoba</span>{" "}
-          <span style={{ color: c.magenta }}>main</span>{" "}
-          <span className={s.cursor} style={{ background: c.cursor }} />
+          <span style={{ color: c.magenta }}>main</span> <span className={s.cursor} style={{ background: c.cursor }} />
         </span>
         <span className={s.line}>
           <span style={{ color: c.cyan }}>src</span> README <span style={{ color: c.yellow }}>run.sh</span>

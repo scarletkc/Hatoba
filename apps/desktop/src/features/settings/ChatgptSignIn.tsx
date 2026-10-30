@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, Spinner } from "@/components/controls";
-import { Dialog, toast } from "@/components/overlay";
-import { openExternal } from "@/features/sync/external";
+import { Button, Dialog, Spinner, toast } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AiChatgptSignIn, AiChatgptStatus, AiProviderView } from "@/ipc/types";
+import { openExternal } from "@/lib/external";
 import { aiErrorMessage } from "./aiShared";
 import s from "./AiPane.module.css";
 
@@ -25,14 +24,21 @@ export function chatgptRowKey(status: AiChatgptStatus) {
   }
 }
 
-type Phase = { state: "waiting" } | { state: "failed"; message: string } | { state: "welcome"; provider: AiProviderView };
+type Phase =
+  { state: "waiting" } | { state: "failed"; message: string } | { state: "welcome"; provider: AiProviderView };
 
 /**
  * AI-52: Continue with ChatGPT for a new account. The browser opens for the sign-in while this
  * dialog waits; the first sign-in of an account ends with the note that requests now use the ChatGPT
  * plan, with a link to manage its usage.
  */
-export function ChatgptSignInDialog({ onDone, onClose }: { onDone: (provider: AiProviderView) => void; onClose: () => void }) {
+export function ChatgptSignInDialog({
+  onDone,
+  onClose,
+}: {
+  onDone: (provider: AiProviderView) => void;
+  onClose: () => void;
+}) {
   const t = useT();
   const [phase, setPhase] = useState<Phase>({ state: "waiting" });
   const [attempt, setAttempt] = useState(0);

@@ -1,8 +1,7 @@
 import { useCallback, useState, type FormEvent } from "react";
+import { Button, Dialog, ErrorText, FooterSpacer, Sheet, SheetHeader, TextField, toast } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
-import { Button, TextField } from "@/components/controls";
-import { Dialog, FooterSpacer, Sheet, SheetHeader, toast } from "@/components/overlay";
 import { NewPasswordFields, useNewPassword } from "@/features/onboarding/PasswordStrength";
 import { RecoveryCodeSection } from "@/features/onboarding/RecoveryCode";
 import { useT } from "@/i18n";
@@ -72,11 +71,9 @@ export function VerifyPasswordDialog({
             setError(null);
           }}
         />
-        {error && (
-          <div className={s.error} role="alert">
-            {error}
-          </div>
-        )}
+        <div className={s.errorSlot} role="alert">
+          {error}
+        </div>
         <button type="submit" hidden />
       </form>
     </Dialog>
@@ -149,11 +146,7 @@ export function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
               setCurrentError(null);
             }}
           />
-          {currentError && (
-            <div className={s.error} role="alert">
-              {currentError}
-            </div>
-          )}
+          {currentError && <ErrorText>{currentError}</ErrorText>}
         </div>
         <NewPasswordFields
           state={pw}
@@ -161,11 +154,7 @@ export function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
           passwordLabel={t("settings.change.new")}
           confirmLabel={t("vault.field.confirm")}
         />
-        {error && (
-          <div className={s.error} role="alert">
-            {error}
-          </div>
-        )}
+        {error && <ErrorText>{error}</ErrorText>}
         <button type="submit" hidden />
       </form>
     </Sheet>
@@ -245,11 +234,7 @@ export function SetPinDialog({ onClose }: { onClose: () => void }) {
               setPasswordError(null);
             }}
           />
-          {passwordError && (
-            <div className={s.error} role="alert">
-              {passwordError}
-            </div>
-          )}
+          {passwordError && <ErrorText>{passwordError}</ErrorText>}
         </div>
         <div className={s.field}>
           <label className={s.label} htmlFor="pin-new">
@@ -268,7 +253,7 @@ export function SetPinDialog({ onClose }: { onClose: () => void }) {
               setError(null);
             }}
           />
-          {tooShort && <div className={s.error}>{t("settings.pin.tooShort")}</div>}
+          {tooShort && <ErrorText>{t("settings.pin.tooShort")}</ErrorText>}
         </div>
         <div className={s.field}>
           <label className={s.label} htmlFor="pin-confirm">
@@ -287,13 +272,9 @@ export function SetPinDialog({ onClose }: { onClose: () => void }) {
               setError(null);
             }}
           />
-          {mismatch && <div className={s.error}>{t("settings.pin.mismatch")}</div>}
+          {mismatch && <ErrorText>{t("settings.pin.mismatch")}</ErrorText>}
         </div>
-        {error && (
-          <div className={s.error} role="alert">
-            {error}
-          </div>
-        )}
+        {error && <ErrorText>{error}</ErrorText>}
         <button type="submit" hidden />
       </form>
     </Sheet>

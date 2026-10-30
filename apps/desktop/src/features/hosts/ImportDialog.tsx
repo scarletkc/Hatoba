@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { Button, Checkbox, ErrorText, FooterSpacer, Icon, Sheet, SheetHeader, Spinner, toast } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
-import { Button, Checkbox, Icon, Spinner } from "@/components/controls";
-import { FooterSpacer, Sheet, SheetHeader, toast } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { ImportPreview, ImportSource } from "@/ipc/types";
@@ -93,14 +92,20 @@ export function ImportDialog({ source, onClose }: { source: ImportSource; onClos
   const allPicked = useMemo(() => !!items && items.length > 0 && items.every((c) => picked.has(c.id)), [items, picked]);
   // The key files that importing keys reads: those of the ticked hosts, once each.
   const keyFiles = useMemo(
-    () => [...new Set((items ?? []).filter((c) => picked.has(c.id) && c.identity_file_found).flatMap((c) => c.identity_file ?? []))],
+    () => [
+      ...new Set(
+        (items ?? []).filter((c) => picked.has(c.id) && c.identity_file_found).flatMap((c) => c.identity_file ?? []),
+      ),
+    ],
     [items, picked],
   );
 
   const chooseOther = async (choice: Choice) => {
     if (!app) return;
     const chosen = await pickOpenPath(
-      "directory" in choice ? { directory: true } : { filter: { name: t("hosts.import.filter", { app }), extensions: choice.extensions } },
+      "directory" in choice
+        ? { directory: true }
+        : { filter: { name: t("hosts.import.filter", { app }), extensions: choice.extensions } },
     ).catch(() => null);
     if (chosen) setPath(chosen);
   };
@@ -138,7 +143,12 @@ export function ImportDialog({ source, onClose }: { source: ImportSource; onClos
             </Button>
           )}
           {CHOOSE[source].map((choice) => (
-            <Button key={"directory" in choice ? "folder" : "file"} size="sm" disabled={busy} onClick={() => void chooseOther(choice)}>
+            <Button
+              key={"directory" in choice ? "folder" : "file"}
+              size="sm"
+              disabled={busy}
+              onClick={() => void chooseOther(choice)}
+            >
               {"directory" in choice ? t("hosts.import.chooseFolder") : t("hosts.import.chooseFile")}
             </Button>
           ))}
@@ -154,14 +164,11 @@ export function ImportDialog({ source, onClose }: { source: ImportSource; onClos
     >
       <SheetHeader
         title={app ? t("hosts.import.titleFrom", { app }) : t("hosts.import.title")}
-        subtitle={location && (!app || (items && items.length > 0)) ? t("hosts.import.subtitle", { path: location }) : undefined}
+        subtitle={
+          location && (!app || (items && items.length > 0)) ? t("hosts.import.subtitle", { path: location }) : undefined
+        }
       />
-      {error && (
-        <div className={s.error} role="alert">
-          <Icon name="warning-circle" size={15} />
-          {error}
-        </div>
-      )}
+      {error && <ErrorText icon="warning-circle">{error}</ErrorText>}
       {!items && !error && (
         <div className={s.note}>
           <Spinner /> {app ? t("hosts.import.loadingFrom", { app }) : t("hosts.import.loading")}
@@ -201,7 +208,9 @@ export function ImportDialog({ source, onClose }: { source: ImportSource; onClos
               {c.identity_file && (
                 <span
                   className={cx(s.via, !c.identity_file_found && s.missing)}
-                  title={c.identity_file_found ? c.identity_file : t("hosts.import.keyMissing", { path: c.identity_file })}
+                  title={
+                    c.identity_file_found ? c.identity_file : t("hosts.import.keyMissing", { path: c.identity_file })
+                  }
                 >
                   <Icon name="key" />
                   <span className={s.chipText}>{fileName(c.identity_file)}</span>

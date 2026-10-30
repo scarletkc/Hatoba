@@ -1,4 +1,4 @@
-# Japanese labels: the window, the host list, connecting and the dashboard
+# Japanese labels: the window, the hosts page, connecting and resource usage
 
 The labels that these files name in English, as the interface shows them in Japanese (ja). Quote them exactly; the same English label can read differently in another file or section. A word in braces, such as {host}, stands for the value the interface fills in.
 
@@ -8,19 +8,14 @@ The labels that these files name in English, as the interface shows them in Japa
 
 | en | ja |
 |---|---|
-| Settings | 設定 |
-| Show or hide the sidebar | サイドバーの表示／非表示 |
-| Dashboard | ダッシュボード |
-| All Hosts | すべてのホスト |
-| Favorites | お気に入り |
-| Recent | 最近の接続 |
-| Groups | グループ |
-| New Group | 新規グループ |
-| Tags | タグ |
-| Vault | 保管庫 |
-| Keys | 鍵 |
-| Cloud Sync | クラウド同期 |
 | Lock | ロック |
+| Settings | 設定 |
+| Hosts | ホスト |
+| Forwards | ポート転送 |
+| Port Forwarding | ポートフォワーディング |
+| Keys | 鍵 |
+| Sync | 同期 |
+| Cloud Sync | クラウド同期 |
 | New Local Terminal | 新しいローカル ターミナル |
 | This Computer | このコンピューター |
 | New Tab | 新しいタブ |
@@ -39,7 +34,6 @@ The labels that these files name in English, as the interface shows them in Japa
 | Connection failed | 接続に失敗 |
 | Disconnected | 切断済み |
 | Find in terminal | ターミナル内を検索 |
-| Port Forwarding | ポートフォワーディング |
 | SFTP | SFTP |
 | More actions | その他の操作 |
 | General | 一般 |
@@ -63,18 +57,24 @@ The labels that these files name in English, as the interface shows them in Japa
 
 ## `references/hosts-and-connecting.md`
 
-### The host list
+### The hosts page
 
 | en | ja |
 |---|---|
-| All Hosts | すべてのホスト |
-| Favorites | お気に入り |
-| Recent | 最近の接続 |
+| Hosts | ホスト |
 | Search hosts or ssh user@host | ホストを検索、または ssh user@host |
+| Import | インポート |
+| New Host | 新規ホスト |
+| New Group | 新規グループ |
+| Favorites | お気に入り |
+| Tags | タグ |
+| Resource Usage | リソース使用状況 |
+| List | リスト |
+| Cards | カード |
 | Sort by | 並べ替え |
+| Recent | 最近の接続 |
 | Name | 名前 |
 | Address | アドレス |
-| New Host | 新規ホスト |
 | Tags | タグ |
 | Last Connected | 最終接続 |
 | Connect | 接続 |
@@ -85,9 +85,10 @@ The labels that these files name in English, as the interface shows them in Japa
 | Remove from Favorites | お気に入りから削除 |
 | Copy Address | アドレスをコピー |
 | Copy Password | パスワードをコピー |
-| Delete… | 削除… |
+| Delete | 削除 |
 | Rename Group | グループ名を変更 |
 | Delete Group | グループを削除 |
+| Clear Filters | 絞り込みを解除 |
 | General | 一般 |
 | Show host reachability | ホストの接続状態を表示 |
 
@@ -100,7 +101,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Recent | 最近 |
 | Recent Quick Connections | 最近のクイック接続 |
 | Remove from Recent | 履歴から削除 |
-| Save as Host… | ホストとして保存… |
+| Save as Host | ホストとして保存 |
 | Username | ユーザー名 |
 
 ### Import hosts
@@ -115,8 +116,8 @@ The labels that these files name in English, as the interface shows them in Japa
 | ProxyCommand not imported | ProxyCommand は取り込みません |
 | Proxy not imported | プロキシは取り込みません |
 | Key stays in {app} | 鍵は {app} に残ります |
-| Choose File… | ファイルを選択… |
-| Choose Folder… | フォルダーを選択… |
+| Choose File | ファイルを選択 |
+| Choose Folder | フォルダーを選択 |
 
 ### The host editor
 
@@ -202,18 +203,25 @@ The labels that these files name in English, as the interface shows them in Japa
 | Disconnect all sessions when locked | ロック時にすべてのセッションを切断 |
 | Security | セキュリティ |
 
-## `references/dashboard.md`
+## `references/resource-usage.md`
 
 | en | ja |
 |---|---|
-| Dashboard | ダッシュボード |
-| Cards | カード |
-| Table | 表 |
-| Columns | 列 |
-| Host List Order | ホスト一覧の順序 |
-| No Group | グループなし |
+| Resource Usage | リソース使用状況 |
 | Open Terminal | ターミナルを開く |
 | Filesystems | ファイルシステム |
+
+### On the hosts page
+
+| en | ja |
+|---|---|
+| Favorites | お気に入り |
+| Tags | タグ |
+| Cards | カード |
+| List | リスト |
+| Columns | 列 |
+| Show Details | 詳細を表示 |
+| Connect | 接続 |
 
 ### How hosts are read
 
@@ -246,12 +254,11 @@ The labels that these files name in English, as the interface shows them in Japa
 
 | en | ja |
 |---|---|
-| Leave Out of Dashboard | ダッシュボードから除外 |
-| Include in Dashboard | ダッシュボードに含める |
-| Leave Group Out of Dashboard | グループをダッシュボードから除外 |
-| Include Group in Dashboard | グループをダッシュボードに含める |
-| Show | 表示 |
-| Left Out | 除外中 |
+| Don’t Read Usage | 使用状況を読み取らない |
+| Read Usage | 使用状況を読み取る |
+| Don’t Read the Group’s Usage | グループの使用状況を読み取らない |
+| Read the Group’s Usage | グループの使用状況を読み取る |
+| Not Read | 読み取りなし |
 
 ## `references/command-line.md`
 
@@ -266,6 +273,8 @@ The labels that these files name in English, as the interface shows them in Japa
 | en | ja |
 |---|---|
 | Let other programs use saved hosts | 他のプログラムに保存済みのホストを使わせる |
+| Skill for coding agents | コーディングエージェント用スキル |
+| Copy Command | コマンドをコピー |
 | Recent use | 最近の利用 |
 | Details | 詳細 |
 
@@ -283,3 +292,13 @@ The labels that these files name in English, as the interface shows them in Japa
 | Hide AI Panel | AI パネルを隠す |
 | Search hosts or ssh user@host | ホストを検索、または ssh user@host |
 | Right-Click in Terminal | ターミナルでの右クリック |
+
+### Zoom
+
+| en | ja |
+|---|---|
+| Font Size | フォントサイズ |
+| Appearance | 外観 |
+| AI Panel | AI パネル |
+| Text Size | 文字サイズ |
+| Zoom | ズーム |

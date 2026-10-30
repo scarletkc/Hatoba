@@ -91,7 +91,7 @@ export class FakeTelnet {
         [
           "Cisco IOS Software, C2960X Software (C2960X-UNIVERSALK9-M), Version 15.2(7)E8",
           `${this.hostname} uptime is 41 weeks, 3 days, 2 hours, 17 minutes`,
-          "System image file is \"flash:c2960x-universalk9-mz.152-7.E8.bin\"",
+          'System image file is "flash:c2960x-universalk9-mz.152-7.E8.bin"',
           "",
         ].join("\r\n"),
       );

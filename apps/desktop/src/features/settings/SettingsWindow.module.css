@@ -6,13 +6,15 @@
   max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
-  border-radius: var(--radius-window);
+  border-radius: var(--radius-xl);
   overflow: hidden;
   background: var(--win);
   color: var(--fg);
   font-size: var(--text-md);
   line-height: 1.35;
-  box-shadow: 0 0 0 0.5px var(--winline), var(--shadow);
+  box-shadow:
+    0 0 0 0.5px var(--winline),
+    var(--shadow);
   animation: rise var(--motion-base) var(--ease-out);
 }
 
@@ -59,7 +61,7 @@
 .tabs {
   display: flex;
   justify-content: center;
-  gap: 4px;
+  gap: var(--space-4);
   padding: 2px 0 8px;
 }
 
@@ -68,16 +70,16 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-2);
   padding: 5px 0;
   border: 0;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg2);
 }
 
 .tab i {
-  font-size: 20px;
+  font-size: var(--icon-20);
 }
 
 .tab span {

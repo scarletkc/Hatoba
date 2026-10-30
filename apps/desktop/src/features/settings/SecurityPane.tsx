@@ -1,15 +1,13 @@
 import { useState } from "react";
+import { Button, Group, PopupSelect, Switch, toast } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
-import { Button, Switch } from "@/components/controls";
-import { Group } from "@/components/layout";
-import { PopupSelect, toast } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import { shortcutLabel } from "@/lib/platform";
 import { ChangePasswordDialog, NewRecoveryDialog, SetPinDialog, VerifyPasswordDialog } from "./dialogs";
 import { durationLabel } from "./durations";
-import { Pane, SettingRow, usePrefs } from "./shared";
+import { Pane, Section, SettingRow, usePrefs } from "./shared";
 import s from "./SecurityPane.module.css";
 
 const AUTO_LOCK_MINUTES = [1, 5, 15, 30, 60, 240, 480, 0];
@@ -66,18 +64,25 @@ export function SecurityPane() {
 
   return (
     <Pane>
-      <Group>
+      <Section title={t("settings.section.protection")}>
         <SettingRow label={t("settings.sec.autoLock")}>
           <PopupSelect
             ariaLabel={t("settings.sec.autoLock")}
             value={prefs.auto_lock_minutes}
             minWidth={140}
-            options={withValue(AUTO_LOCK_MINUTES, prefs.auto_lock_minutes).map((m) => ({ value: m, label: durationLabel(t, m * 60) }))}
+            options={withValue(AUTO_LOCK_MINUTES, prefs.auto_lock_minutes).map((m) => ({
+              value: m,
+              label: durationLabel(t, m * 60),
+            }))}
             onChange={(auto_lock_minutes) => setPrefs({ auto_lock_minutes })}
           />
         </SettingRow>
         <SettingRow label={t("settings.sec.sleep")}>
-          <Switch label={t("settings.sec.sleep")} checked={prefs.lock_on_sleep} onChange={(lock_on_sleep) => setPrefs({ lock_on_sleep })} />
+          <Switch
+            label={t("settings.sec.sleep")}
+            checked={prefs.lock_on_sleep}
+            onChange={(lock_on_sleep) => setPrefs({ lock_on_sleep })}
+          />
         </SettingRow>
         <SettingRow label={t("settings.sec.disconnect")} hint={t("settings.sec.disconnect.hint")}>
           <Switch
@@ -91,10 +96,16 @@ export function SecurityPane() {
             ariaLabel={t("settings.sec.clipboard")}
             value={prefs.clipboard_clear_secs}
             minWidth={140}
-            options={withValue(CLIPBOARD_CLEAR_SECS, prefs.clipboard_clear_secs).map((n) => ({ value: n, label: durationLabel(t, n) }))}
+            options={withValue(CLIPBOARD_CLEAR_SECS, prefs.clipboard_clear_secs).map((n) => ({
+              value: n,
+              label: durationLabel(t, n),
+            }))}
             onChange={(clipboard_clear_secs) => setPrefs({ clipboard_clear_secs })}
           />
         </SettingRow>
+      </Section>
+
+      <Section title={t("settings.section.unlock")}>
         {vault?.biometric_available && (
           <SettingRow label={biometricLabel}>
             <Switch label={biometricLabel} checked={vault.biometric_enabled} onChange={(on) => void setBiometric(on)} />
@@ -112,9 +123,9 @@ export function SecurityPane() {
             />
           </SettingRow>
         )}
-      </Group>
+      </Section>
 
-      <Group>
+      <Section title={t("settings.section.recovery")}>
         <SettingRow label={t("settings.sec.password")}>
           <Button icon="lock-key" onClick={() => setDialog("password")}>
             {t("settings.sec.password.button")}
@@ -125,7 +136,7 @@ export function SecurityPane() {
             {t("settings.sec.recovery.button")}
           </Button>
         </SettingRow>
-      </Group>
+      </Section>
 
       <Group>
         <SettingRow label={t("settings.sec.lockNow")}>

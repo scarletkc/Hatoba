@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { IconButton, LinkButton, TextField } from "@/components/controls";
-import { Group, Section } from "@/components/layout";
+import { ErrorText, Group, HintText, IconButton, LinkButton, Section, TextField } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import {
@@ -63,7 +62,8 @@ export function EnvVarsSection({
     if (p.name === "tooLong") text.push(t("hosts.env.err.nameTooLong", { max: ENV_NAME_MAX_CHARS }));
     if (p.name === "duplicate") text.push(t("hosts.env.err.nameDuplicate"));
     if (p.value === "invalid") text.push(t("hosts.env.err.valueInvalid"));
-    if (p.value === "tooLong") text.push(t("hosts.env.err.valueTooLong", { max: ENV_VALUE_MAX_CHARS.toLocaleString(t.locale) }));
+    if (p.value === "tooLong")
+      text.push(t("hosts.env.err.valueTooLong", { max: ENV_VALUE_MAX_CHARS.toLocaleString(t.locale) }));
     return text.join(" ");
   };
 
@@ -100,17 +100,13 @@ export function EnvVarsSection({
                 />
                 <IconButton
                   icon="x"
-                  size={13}
+                  size={14}
                   className={s.remove}
                   label={name ? t("hosts.env.remove", { name }) : t("hosts.env.removeBlank")}
                   onClick={() => onChange(rows.filter((r) => r.uid !== row.uid))}
                 />
               </div>
-              {problem && (
-                <div className={s.problem} role="alert">
-                  {problemText(problem)}
-                </div>
-              )}
+              {problem && <ErrorText className={s.problem}>{problemText(problem)}</ErrorText>}
             </div>
           );
         })}
@@ -123,11 +119,11 @@ export function EnvVarsSection({
         </div>
       </Group>
       {(error || tooLarge) && (
-        <div className={s.error} role="alert">
+        <ErrorText className={s.message}>
           {error || t("hosts.env.err.tooLarge", { max: `${ENV_MAX_BYTES / 1024} KB` })}
-        </div>
+        </ErrorText>
       )}
-      <div className={s.hint}>{t("hosts.env.hint")}</div>
+      <HintText className={s.message}>{t("hosts.env.hint")}</HintText>
     </Section>
   );
 }

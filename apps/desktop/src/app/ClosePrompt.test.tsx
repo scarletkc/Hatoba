@@ -135,7 +135,12 @@ describe("useTrayMenu", () => {
 
   const found = (version: string) => ({
     current_version: "0.1.0",
-    update: { version, notes: null, published_at: null, release_url: `https://github.com/scarletkc/Hatoba/releases/tag/v${version}` },
+    update: {
+      version,
+      notes: null,
+      published_at: null,
+      release_url: `https://github.com/scarletkc/Hatoba/releases/tag/v${version}`,
+    },
   });
 
   it("labels the menu in the app's language and enables Lock only while unlocked", async () => {

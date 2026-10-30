@@ -7,6 +7,7 @@ import { VISITOR_HOST } from "./visitor";
 const QUESTION: Record<Locale, string> = {
   en: "Users are getting 502s from nginx on this box. Find out why and fix it.",
   "zh-CN": "这台机器上的 nginx 一直返回 502，找出原因并修好它。",
+  "zh-TW": "這台機器上的 nginx 一直回傳 502，找出原因並修好它。",
   ja: "nginx が 502 を返しています。原因を調べて直してください。",
 };
 
@@ -41,5 +42,10 @@ function fillSecrets() {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   };
   const scan = () => document.querySelectorAll<HTMLInputElement>("input[type=password]").forEach(fill);
-  new MutationObserver(scan).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "readonly"] });
+  new MutationObserver(scan).observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["disabled", "readonly"],
+  });
 }

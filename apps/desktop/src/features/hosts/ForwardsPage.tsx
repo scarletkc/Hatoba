@@ -1,23 +1,35 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Button,
+  EmptyState,
+  ErrorText,
+  Group,
+  IconButton,
+  ListRow,
+  PageHeader,
+  Section,
+  StatusLine,
+  Switch,
+  confirm,
+  toast,
+} from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
-import { Button, Icon, IconButton, Switch } from "@/components/controls";
-import { EmptyState, Group, PageHeader, Section } from "@/components/layout";
-import { confirm, toast } from "@/components/overlay";
-import { writeClipboard } from "@/features/terminal/clipboard";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { ForwardInput, ForwardView, HostView, RunningForwardView } from "@/ipc/types";
+import { forwardDest, forwardLabel, forwardRule, hostPort } from "@/lib/address";
+import { writeClipboard } from "@/lib/clipboard";
 import { cx } from "@/lib/cx";
-import { forwardRule, hostPort } from "./address";
+import { forwardFailure, runningForward, useConnections } from "@/session/connections";
+import { dropForwardRule, putForwardRule, startForward, stopForward, useForwardRules } from "@/session/forwards";
 import { ForwardDialog } from "./ForwardDialog";
-import { forwardFailure, runningForward, useConnections } from "./connections";
-import { dropForwardRule, putForwardRule, startForward, stopForward, useForwardRules } from "./forwards";
 import s from "./ForwardsPage.module.css";
 
 const toInput = (f: ForwardView, patch: Partial<ForwardInput> = {}): ForwardInput => ({
   id: f.id,
   host_id: f.host_id,
+  name: f.name,
   kind: f.kind,
   bind_address: f.bind_address,
   bind_port: f.bind_port,
@@ -47,6 +59,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
   const [dialog, setDialog] = useState<{ forward: ForwardView | null } | null>(null);
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const [starting, setStarting] = useState<ReadonlySet<string>>(new Set());
+  const [stopping, setStopping] = useState<ReadonlySet<string>>(new Set());
   const [failures, setFailures] = useState<Readonly<Record<string, string>>>({});
   const connections = useConnections();
   const focused = useRef<HTMLDivElement>(null);
@@ -79,10 +92,11 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
 
   const markPending = (id: string, on: boolean) => setPending((p) => toggled(p, id, on));
   const markStarting = (id: string, on: boolean) => setStarting((p) => toggled(p, id, on));
+  const markStopping = (id: string, on: boolean) => setStopping((p) => toggled(p, id, on));
   const setFailure = (id: string, message: string | null) =>
     setFailures(({ [id]: _old, ...rest }) => (message === null ? rest : { ...rest, [id]: message }));
 
-  const rule = (f: ForwardView) => forwardRule(t, f);
+  const label = (f: ForwardView) => forwardLabel(t, f);
 
   const setAutoStart = async (f: ForwardView, auto_start: boolean) => {
     markPending(f.id, true);
@@ -99,7 +113,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
 
   const remove = async (f: ForwardView) => {
     const ok = await confirm({
-      title: t("hosts.fwd.removeTitle", { rule: rule(f) }),
+      title: t("hosts.fwd.removeTitle", { rule: label(f) }),
       confirmLabel: t("btn.delete"),
       danger: true,
     });
@@ -128,13 +142,13 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
   };
 
   const stop = async (f: ForwardView) => {
-    markStarting(f.id, true);
+    markStopping(f.id, true);
     try {
       await stopForward(f.host_id, f.id);
     } catch (err) {
       toast(errorMessage(t, err), "error");
     } finally {
-      markStarting(f.id, false);
+      markStopping(f.id, false);
     }
   };
 
@@ -149,7 +163,12 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
 
   const title = t("sidebar.forwards");
   const addButton = (
-    <Button variant="primary" icon="plus" disabled={!ready || hosts.length === 0} onClick={() => setDialog({ forward: null })}>
+    <Button
+      variant="primary"
+      icon="plus"
+      disabled={!ready || hosts.length === 0}
+      onClick={() => setDialog({ forward: null })}
+    >
       {t("hosts.fwd.add")}
     </Button>
   );
@@ -171,7 +190,12 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
       <div className={s.page}>
         <PageHeader title={title} count={t("hosts.fwd.count", { n: 0 })} />
         <div className={s.emptyWrap}>
-          <EmptyState icon="arrows-left-right" title={t("hosts.fwd.empty")} body={t("hosts.fwd.emptyBody")} actions={addButton} />
+          <EmptyState
+            icon="arrows-left-right"
+            title={t("hosts.fwd.empty")}
+            body={t("hosts.fwd.emptyBody")}
+            actions={addButton}
+          />
         </div>
         {dialogs}
       </div>
@@ -185,12 +209,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
       </PageHeader>
       <div className={s.scroll}>
         <div className={s.column}>
-          {loadFailed && (
-            <span className={s.error}>
-              <Icon name="warning-circle" size={14} />
-              {t("hosts.fwd.loadFailed")}
-            </span>
-          )}
+          {loadFailed && <ErrorText icon="warning-circle">{t("hosts.fwd.loadFailed")}</ErrorText>}
           {sections.map(({ host, forwards }) => {
             const conn = connections.find((x) => x.host_id === host.id);
             return (
@@ -198,73 +217,83 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
                 <Section title={<HostTitle host={host} />}>
                   <Group>
                     {forwards.map((f) => {
-                      const label = rule(f);
+                      const rule = forwardRule(t, f);
                       const running = runningForward(conn, f.id);
                       const address = running?.address ?? null;
                       const failed = forwardFailure(conn, f.id);
                       const failure = address === null ? (failures[f.id] ?? (failed && errorMessage(t, failed))) : null;
                       const bind = hostPort(f.bind_address, f.bind_port || t("hosts.fwd.autoPort"));
+                      const status = running ? (
+                        <StatusLine tone="success">
+                          <RunningAddress running={running} onCopy={(a) => void copy(a)} />
+                        </StatusLine>
+                      ) : starting.has(f.id) ? (
+                        <StatusLine tone="progress">{t("terminal.fwd.starting")}</StatusLine>
+                      ) : (
+                        failure && <StatusLine tone="error">{failure}</StatusLine>
+                      );
                       return (
-                        <div key={f.id} className={s.row}>
-                          <div className={s.body}>
-                            <span className={s.rule} title={label}>
-                              {f.kind === "remote" ? t("terminal.fwd.onServer", { addr: bind }) : bind}
-                              {f.kind === "dynamic" ? (
-                                <span className={s.arrow}>{t("terminal.fwd.socks")}</span>
-                              ) : (
-                                <>
-                                  <span className={s.arrow}>→</span>
-                                  {hostPort(f.dest_host, f.dest_port)}
-                                </>
-                              )}
+                        <ListRow
+                          key={f.id}
+                          status={status}
+                          trailing={
+                            <>
+                              <label className={s.auto}>
+                                {t("hosts.fwd.autoStart")}
+                                <Switch
+                                  checked={f.auto_start}
+                                  disabled={pending.has(f.id)}
+                                  label={t("hosts.fwd.autoStartFor", { rule: label(f) })}
+                                  onChange={(on) => void setAutoStart(f, on)}
+                                />
+                              </label>
+                              <Button
+                                size="xs"
+                                className={s.toggle}
+                                disabled={pending.has(f.id) || starting.has(f.id) || stopping.has(f.id)}
+                                onClick={() => void (address !== null ? stop(f) : start(f))}
+                              >
+                                {address !== null
+                                  ? t("terminal.fwd.stop")
+                                  : failure
+                                    ? t("btn.retry")
+                                    : t("terminal.fwd.start")}
+                              </Button>
+                              <span className={s.actions}>
+                                <IconButton
+                                  icon="pencil-simple"
+                                  label={t("btn.edit")}
+                                  disabled={pending.has(f.id)}
+                                  onClick={() => setDialog({ forward: f })}
+                                />
+                                <IconButton
+                                  icon="trash"
+                                  label={t("btn.delete")}
+                                  danger
+                                  disabled={pending.has(f.id)}
+                                  onClick={() => void remove(f)}
+                                />
+                              </span>
+                            </>
+                          }
+                        >
+                          {f.name && (
+                            <span className={s.name} title={f.name}>
+                              {f.name}
                             </span>
-                            {running && (
-                              <span className={s.status}>
-                                <Icon name="check-circle" fill size={13} className={s.running} />
-                                <RunningAddress running={running} onCopy={(a) => void copy(a)} />
-                              </span>
+                          )}
+                          <span className={cx(s.rule, f.name && s.ruleDetail)} title={rule}>
+                            {f.kind === "remote" ? t("terminal.fwd.onServer", { addr: bind }) : bind}
+                            {f.kind === "dynamic" ? (
+                              <span className={s.arrow}>{t("terminal.fwd.socks")}</span>
+                            ) : (
+                              <>
+                                <span className={s.arrow}>→</span>
+                                {forwardDest(t, f)}
+                              </>
                             )}
-                            {failure && (
-                              <span className={cx(s.status, s.failed)}>
-                                <Icon name="warning-circle" fill size={13} />
-                                <span className={s.failure}>{failure}</span>
-                              </span>
-                            )}
-                          </div>
-                          <label className={s.auto}>
-                            {t("hosts.fwd.autoStart")}
-                            <Switch
-                              checked={f.auto_start}
-                              disabled={pending.has(f.id)}
-                              label={t("hosts.fwd.autoStartFor", { rule: label })}
-                              onChange={(on) => void setAutoStart(f, on)}
-                            />
-                          </label>
-                          <Button
-                            size="xs"
-                            className={s.toggle}
-                            busy={starting.has(f.id)}
-                            disabled={pending.has(f.id)}
-                            onClick={() => void (address !== null ? stop(f) : start(f))}
-                          >
-                            {address !== null ? t("terminal.fwd.stop") : failure ? t("btn.retry") : t("terminal.fwd.start")}
-                          </Button>
-                          <span className={s.actions}>
-                            <IconButton
-                              icon="pencil-simple"
-                              label={t("btn.edit")}
-                              disabled={pending.has(f.id)}
-                              onClick={() => setDialog({ forward: f })}
-                            />
-                            <IconButton
-                              icon="trash"
-                              label={t("btn.delete")}
-                              className={s.remove}
-                              disabled={pending.has(f.id)}
-                              onClick={() => void remove(f)}
-                            />
                           </span>
-                        </div>
+                        </ListRow>
                       );
                     })}
                   </Group>
@@ -283,11 +312,23 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
  * Where a running forward listens, as it started: an edit to its rule applies at its next start. This computer's
  * address copies; a remote forward's is on the server, where nothing here connects to it.
  */
-function RunningAddress({ running: { kind, address }, onCopy }: { running: RunningForwardView; onCopy(address: string): void }) {
+function RunningAddress({
+  running: { kind, address },
+  onCopy,
+}: {
+  running: RunningForwardView;
+  onCopy(address: string): void;
+}) {
   const t = useT();
-  if (kind === "remote") return <span className={s.serverAddress}>{t("terminal.fwd.onServer", { addr: address })}</span>;
+  if (kind === "remote")
+    return <span className={s.serverAddress}>{t("terminal.fwd.onServer", { addr: address })}</span>;
   return (
-    <button type="button" className={s.address} title={t("terminal.fwd.copy", { addr: address })} onClick={() => onCopy(address)}>
+    <button
+      type="button"
+      className={s.address}
+      title={t("terminal.fwd.copy", { addr: address })}
+      onClick={() => onCopy(address)}
+    >
       {address}
     </button>
   );

@@ -1,4 +1,4 @@
-/* The AI panel, styled like the SFTP panel (a right-side panel of the design's terminal page). */
+/* The AI panel, styled like the SFTP panel beside the terminal. */
 .panel {
   position: relative;
   flex: none;
@@ -49,6 +49,7 @@
 .resizing,
 .resizing * {
   cursor: col-resize !important;
+  -webkit-user-select: none !important;
   user-select: none !important;
 }
 
@@ -57,7 +58,7 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-2);
   padding: 0 6px 0 12px;
   border-bottom: 0.5px solid var(--line);
   min-width: 0;
@@ -74,7 +75,7 @@
   min-width: 0;
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: var(--space-6);
   margin-right: 4px;
 }
 
@@ -97,12 +98,6 @@
   color: var(--fg2);
 }
 
-.iconBtn {
-  width: 26px;
-  height: 26px;
-  color: var(--fg2);
-}
-
 .notices {
   flex: none;
   display: flex;
@@ -113,7 +108,7 @@
 .notice {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 7px 10px 7px 12px;
   font-size: var(--text-sm);
   line-height: 1.45;
@@ -150,51 +145,10 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 24px;
   font-size: var(--text-sm);
   color: var(--fg2);
-}
-
-.empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 32px 24px;
-  text-align: center;
-}
-
-.emptyIcon {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 4px;
-  border-radius: var(--radius-panel);
-  background: var(--accenttint);
-  color: var(--accent);
-}
-
-.emptyTitle {
-  font-size: var(--text-lg);
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.emptyBody {
-  max-width: 300px;
-  font-size: var(--text-sm);
-  line-height: 1.55;
-  color: var(--fg2);
-  text-wrap: pretty;
-}
-
-.empty :global(button) {
-  margin-top: 6px;
 }
 
 /* AI-35: the drop target while text files are dragged over the panel. */
@@ -206,9 +160,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--space-8);
   border: 1.5px dashed color-mix(in srgb, var(--accent) 70%, transparent);
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--accent) 8%, var(--win));
   color: var(--accent);
   font-size: var(--text-sm);

@@ -61,21 +61,24 @@ export const zh: Messages = {
         text: "分组、标签、收藏和模糊搜索。可以导入 ~/.ssh/config，通过 ProxyJump 或 SOCKS5、HTTP 代理连接，也可以直接输入 ssh user@host 连接，不必先保存主机。",
       },
       {
-        term: "仪表盘",
-        text: "在一个页面上查看所有已保存主机的状态、CPU、内存、磁盘和网络。数据通过 SSH 读取，服务器上无需安装任何东西。",
+        term: "资源占用",
+        text: "直接在主机页查看所有已保存主机的状态、CPU、内存、磁盘和网络。数据通过 SSH 读取，服务器上无需安装任何东西。",
       },
       {
         term: "终端",
         text: "多标签、真彩色、中日韩输入法、搜索和可点击的链接，粘贴多行内容前会先确认。",
       },
-      { term: "SFTP", text: "终端旁的文件面板，支持拖放上传，下载可以随时取消。" },
+      {
+        term: "SFTP",
+        text: "终端旁的文件面板，支持拖放上传，下载可以随时取消，远程文件可以用你自己的编辑器编辑，每次保存都会上传。",
+      },
       { term: "端口转发", text: "本地、远程和 SOCKS 转发，可以随连接一起启动，也可以不开终端在后台运行。" },
       {
         term: "密钥",
         text: "支持密码、Ed25519、ECDSA 和 RSA 密钥、ssh-agent 以及键盘交互式双重验证。可以导入 OpenSSH、PEM 和 PuTTY 密钥，也可以生成新密钥。",
       },
     ],
-    alt: "仪表盘，显示每台主机的 CPU、内存和磁盘使用情况",
+    alt: "卡片视图的主机页，显示每台主机的 CPU、内存和磁盘使用情况",
   },
   security: {
     title: "在你的设备上加密",
@@ -91,7 +94,9 @@ export const zh: Messages = {
     releases: "版本发布",
     report: "报告问题",
     security: "安全策略",
+    privacy: "隐私政策",
     contributing: "参与贡献",
+    sponsor: "赞助",
     license: "Hatoba 以 MIT 许可证发布。",
   },
   download: {
@@ -102,7 +107,8 @@ export const zh: Messages = {
     thisDevice: "适用于此设备",
     requirements: {
       windows: "Windows 10 或 11（x64）。",
-      linux: "x86_64。同步把凭据保存在 Secret Service 中，因此需要 GNOME Keyring、KWallet 或其他 Secret Service 提供程序。",
+      linux:
+        "x86_64。同步把凭据保存在 Secret Service 中，因此需要 GNOME Keyring、KWallet 或其他 Secret Service 提供程序。",
       macos: "Apple 芯片，macOS 13 或更高版本。此版本为实验性版本。",
     },
     files: {
@@ -116,7 +122,8 @@ export const zh: Messages = {
     packageManager: "使用包管理器",
     packages: {
       windows: "从 [Scoop](https://scoop.sh) 的 Extras bucket 安装 Hatoba，之后用 `scoop update hatoba` 更新：",
-      linux: "在 Arch Linux 及其衍生发行版上，用 yay 等 AUR 助手从 AUR 安装 [`hatoba-bin`](https://aur.archlinux.org/packages/hatoba-bin)，之后它会随系统一起更新：",
+      linux:
+        "在 Arch Linux 及其衍生发行版上，用 yay 等 AUR 助手从 AUR 安装 [`hatoba-bin`](https://aur.archlinux.org/packages/hatoba-bin)，之后它会随系统一起更新：",
     },
     sha256: "SHA-256",
     copy: "复制",

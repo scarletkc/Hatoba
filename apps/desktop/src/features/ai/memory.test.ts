@@ -32,7 +32,8 @@ describe("memories (AI-53)", () => {
     expect(memoryScope({ host_id: "h1", local: null })).toBe("host:h1");
     expect(memoryScope({ host_id: null, local: "DEMO-PC" })).toBe("local:DEMO-PC");
     expect(memoryScope({ host_id: "h1", local: "DEMO-PC" })).toBe("host:h1");
-    for (const scope of ["global", "host:h1", "local:DEMO-PC"] as const) expect(memoryScope(scopeFields(scope))).toBe(scope);
+    for (const scope of ["global", "host:h1", "local:DEMO-PC"] as const)
+      expect(memoryScope(scopeFields(scope))).toBe(scope);
   });
 
   it("refuses what Rust refuses", () => {
@@ -69,11 +70,17 @@ describe("memories (AI-53)", () => {
     ];
     expect(editedIds(saved, null, "global", "web-1 sudo")).toEqual([]);
     expect(editedIds(saved, "desktop", "global", " web-1 sudo ")).toEqual(["desktop", "laptop"]);
-    expect(memoryProblem(saved, editedIds(saved, "desktop", "global", "web-1 sudo"), "global", "web-1 sudo", "merged")).toBeNull();
+    expect(
+      memoryProblem(saved, editedIds(saved, "desktop", "global", "web-1 sudo"), "global", "web-1 sudo", "merged"),
+    ).toBeNull();
     // A rename or a move leaves the others alone, and one onto another memory's name is refused.
     expect(editedIds(saved, "desktop", "global", "web-1 doas")).toEqual(["desktop"]);
     expect(editedIds(saved, "desktop", "local:DEMO-PC", "web-1 sudo")).toEqual(["desktop"]);
-    expect(memoryProblem(saved, editedIds(saved, "x", "global", "web-1 sudo"), "global", "web-1 sudo", "c")).toBe("taken");
-    expect(memoryProblem(saved, editedIds(saved, "desktop", "host:h1", "web-1 sudo"), "host:h1", "web-1 sudo", "b")).toBe("taken");
+    expect(memoryProblem(saved, editedIds(saved, "x", "global", "web-1 sudo"), "global", "web-1 sudo", "c")).toBe(
+      "taken",
+    );
+    expect(
+      memoryProblem(saved, editedIds(saved, "desktop", "host:h1", "web-1 sudo"), "host:h1", "web-1 sudo", "b"),
+    ).toBe("taken");
   });
 });

@@ -1,8 +1,7 @@
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ErrorText, Icon, LinkButton, Spinner, overlayStyles, type MenuAnchor } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
-import { Icon, Spinner } from "@/components/controls";
-import { overlayStyles, type MenuAnchor } from "@/components/overlay";
 import { formatBytes, useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { useStatusPopover } from "./popover";
@@ -51,7 +50,10 @@ export function StatsPopover({
   const [picked, setPicked] = useState<number | null>(null);
   const state = stats?.state ?? { kind: "starting" };
   const history = stats?.history ?? [];
-  const { pos, locked } = useStatusPopover(ref, anchor, onClose, "[data-stats-trigger]", [state.kind, history.length > 0]);
+  const { pos, locked } = useStatusPopover(ref, anchor, onClose, "[data-stats-trigger]", [
+    state.kind,
+    history.length > 0,
+  ]);
 
   const last = history.length - 1;
   const index = picked != null && picked <= last ? picked : last;
@@ -62,7 +64,9 @@ export function StatsPopover({
   if (state.kind === "unsupported") {
     body = (
       <div className={s.note}>
-        {state.system ? t("terminal.stats.unsupportedSystem", { system: state.system }) : t("terminal.stats.unsupported")}
+        {state.system
+          ? t("terminal.stats.unsupportedSystem", { system: state.system })
+          : t("terminal.stats.unsupported")}
       </div>
     );
   } else if (state.kind === "failed" && !reading) {
@@ -83,7 +87,9 @@ export function StatsPopover({
         <NetworkSection history={history} reading={reading} picked={picked} onPick={setPicked} />
         <DiskSection reading={reading} />
         {reading.uptime_secs != null && (
-          <div className={cx(s.section, s.detail)}>{t("terminal.stats.uptime", { time: formatUptime(t.locale, reading.uptime_secs) })}</div>
+          <div className={cx(s.section, s.detail)}>
+            {t("terminal.stats.uptime", { time: formatUptime(t.locale, reading.uptime_secs) })}
+          </div>
         )}
       </>
     );
@@ -91,7 +97,13 @@ export function StatsPopover({
 
   if (locked) return null;
   return createPortal(
-    <div ref={ref} role="dialog" aria-label={t("terminal.stats")} className={cx(s.popover, overlayStyles.popIn)} style={pos}>
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={t("terminal.stats")}
+      className={cx(s.popover, overlayStyles.popIn)}
+      style={pos}
+    >
       <div className={s.header}>
         <span>{t("terminal.stats")}</span>
         {agoSecs > 0 && <span className={s.ago}>{t("terminal.stats.ago", { n: agoSecs })}</span>}
@@ -118,10 +130,10 @@ function Failed({ message, onRetry }: { message: string; onRetry(): void }) {
   const t = useT();
   return (
     <div className={cx(s.note, s.noteError)}>
-      <span className={s.noteText}>{t("terminal.stats.failed", { error: message })}</span>
-      <button type="button" className={s.retry} onClick={onRetry}>
+      <ErrorText className={s.noteText}>{t("terminal.stats.failed", { error: message })}</ErrorText>
+      <LinkButton className={s.retry} onClick={onRetry}>
         {t("btn.retry")}
-      </button>
+      </LinkButton>
     </div>
   );
 }
@@ -136,7 +148,10 @@ interface ChartProps {
 function CpuSection({ history, reading, picked, onPick }: ChartProps) {
   const t = useT();
   const load = formatLoad(reading.load);
-  const details = [reading.cpus != null ? t("terminal.stats.cores", { n: reading.cpus }) : null, load ? t("terminal.stats.load", { load }) : null];
+  const details = [
+    reading.cpus != null ? t("terminal.stats.cores", { n: reading.cpus }) : null,
+    load ? t("terminal.stats.load", { load }) : null,
+  ];
   return (
     <div className={s.section}>
       <div className={s.row}>
@@ -193,7 +208,19 @@ function DiskSection({ reading }: { reading: StatsReading }) {
 }
 
 /** A labelled meter: `3.1 GB / 7.8 GB  41%`, the fill turning orange and then red as it fills. */
-function Usage({ label, sub, used, total, percent }: { label: string; sub?: string; used: number; total: number; percent: number }) {
+function Usage({
+  label,
+  sub,
+  used,
+  total,
+  percent,
+}: {
+  label: string;
+  sub?: string;
+  used: number;
+  total: number;
+  percent: number;
+}) {
   const level = meterLevel(percent);
   return (
     <>

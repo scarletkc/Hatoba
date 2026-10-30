@@ -56,6 +56,7 @@ pub fn settings_get(state: State<'_, AppState>) -> AppResult<SettingsView> {
     state.with_unlocked(|v| Ok(settings_view(&v.settings())))
 }
 
+/// Writes the fields `patch` sets over the stored settings; the others keep their stored values.
 #[tauri::command]
 #[specta::specta]
 pub fn settings_save(
@@ -169,6 +170,7 @@ pub fn prefs_get(state: State<'_, AppState>) -> AppResult<LocalPrefs> {
 #[specta::specta]
 pub fn prefs_save(state: State<'_, AppState>, mut prefs: LocalPrefs) -> AppResult<()> {
     prefs.auto_lock_minutes = prefs.auto_lock_minutes.min(MAX_AUTO_LOCK_MINUTES);
+    prefs.ui_zoom = crate::platform::window::zoom_step(prefs.ui_zoom);
     prefs.dashboard_interval_secs = prefs.dashboard_interval_secs.clamp(1, 60);
     for alert in [
         &mut prefs.dashboard_cpu_alert,
@@ -243,7 +245,7 @@ pub fn adopt_legacy_prefs_after_unlock(vault: &mut Vault) -> AppResult<bool> {
     adopt_legacy_prefs(vault)
 }
 
-/// The sidebar's star prompt (spec §9). The first read records when this device started waiting.
+/// The home tab's star prompt (spec §9). The first read records when this device started waiting.
 #[tauri::command]
 #[specta::specta]
 pub fn star_prompt_get(state: State<'_, AppState>) -> AppResult<StarPrompt> {

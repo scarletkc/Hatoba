@@ -1,6 +1,7 @@
 import { defineCollection } from "astro:content";
 import { z } from "astro/zod";
 import { gitRef, readDocs, workingTree, type DocsSource } from "./lib/docs";
+import { frameCodeBlocks } from "./lib/markdown";
 import { loadRelease } from "./lib/release";
 
 /**
@@ -21,8 +22,13 @@ const docs = defineCollection({
         try {
           source = gitRef(ref);
         } catch {
-          if (process.env.CI) throw new Error(`The docs come from ${ref}, which this checkout does not have. Check it out with its tags (fetch-depth: 0).`);
-          logger.warn(`This checkout does not have ${ref}, so the docs come from the working tree. Run git fetch --tags to build them from ${ref}.`);
+          if (process.env.CI)
+            throw new Error(
+              `The docs come from ${ref}, which this checkout does not have. Check it out with its tags (fetch-depth: 0).`,
+            );
+          logger.warn(
+            `This checkout does not have ${ref}, so the docs come from the working tree. Run git fetch --tags to build them from ${ref}.`,
+          );
           source = workingTree();
         }
       }
@@ -30,7 +36,13 @@ const docs = defineCollection({
       store.clear();
       for (const doc of readDocs(source, version ?? "development")) {
         const { slug, body, ...data } = doc;
-        store.set({ id: slug, data: { ...data, version }, body, rendered: await renderMarkdown(body) });
+        const rendered = await renderMarkdown(body);
+        store.set({
+          id: slug,
+          data: { ...data, version },
+          body,
+          rendered: { ...rendered, html: frameCodeBlocks(rendered.html) },
+        });
       }
     },
   },

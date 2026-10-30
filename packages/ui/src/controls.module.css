@@ -1,0 +1,619 @@
+/* Buttons, fields and small controls. */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+  height: var(--control-height);
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--btn);
+  box-shadow: var(--shadow-btn);
+  font-size: var(--text-md);
+  white-space: nowrap;
+  flex: none;
+  position: relative;
+}
+
+.buttonLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: inherit;
+  transition: opacity var(--motion-fade) var(--ease-out);
+}
+
+/* Transparent rather than hidden, so the label still names the button. */
+.buttonLabelHidden {
+  opacity: 0;
+}
+
+.buttonBusy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: busyIn var(--motion-fade) var(--ease-out);
+}
+
+@keyframes busyIn {
+  from {
+    opacity: 0;
+  }
+}
+
+.button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--btn) 92%, var(--fg) 8%);
+}
+
+.button:active:not(:disabled),
+.button[aria-expanded="true"]:not(.primary, .danger) {
+  background: color-mix(in srgb, var(--btn) 86%, var(--fg) 14%);
+}
+
+.button:disabled {
+  opacity: 0.4;
+}
+
+.button .icon {
+  font-size: var(--icon-14);
+  color: var(--fg2);
+}
+
+.primary {
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 500;
+  box-shadow: none;
+  padding: 0 14px;
+}
+
+.primary .icon {
+  color: #ffffff;
+  font-size: var(--icon-14);
+}
+
+.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 90%, #000000 10%);
+}
+
+.primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 80%, #000000 20%);
+}
+
+.danger {
+  background: var(--red);
+  color: #ffffff;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--red) 88%, #000000 12%);
+}
+
+.small {
+  height: var(--field-height);
+  padding: 0 12px;
+  font-size: var(--text-sm);
+}
+
+.tiny {
+  height: 22px;
+  padding: 0 10px;
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--accent);
+  font-size: var(--text-sm);
+}
+
+.link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.link:disabled {
+  opacity: 0.5;
+}
+
+.linkDanger {
+  color: var(--red);
+  font-size: var(--text-md);
+}
+
+.linkMuted {
+  color: var(--fg2);
+}
+
+.iconButton {
+  width: 28px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font-size: var(--icon-16);
+}
+
+.iconButton:hover:not(:disabled) {
+  background: var(--fill);
+}
+
+.iconButton:disabled {
+  color: var(--fg3);
+}
+
+.iconButtonSmall {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-xs);
+  font-size: var(--icon-12);
+}
+
+.iconButtonDanger:hover:not(:disabled) {
+  color: var(--red);
+}
+
+.iconButtonActive {
+  background: var(--fill2);
+  color: var(--accent);
+}
+
+/* Text fields */
+.field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: var(--field-height);
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  background: var(--field);
+  box-shadow: 0 0 0 0.5px var(--fieldline);
+  min-width: 0;
+  transition: box-shadow var(--motion-fade) var(--ease-out);
+}
+
+.field:focus-within {
+  box-shadow: var(--focus-ring);
+}
+
+.fieldLarge {
+  height: var(--control-height);
+  padding: 0 9px;
+}
+
+.fieldInvalid,
+.fieldInvalid:focus-within {
+  box-shadow: var(--error-ring);
+}
+
+.field input,
+.textarea {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  outline: none;
+  font-size: inherit;
+}
+
+.field input::placeholder,
+.textarea::placeholder {
+  color: var(--fg3);
+}
+
+.fieldMono {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.fieldSecret input {
+  letter-spacing: 1px;
+}
+
+.fieldAdornment {
+  display: inline-flex;
+  align-items: center;
+  color: var(--fg2);
+  font-size: var(--icon-14);
+  flex: none;
+}
+
+.fieldAdornmentButton {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--fg2);
+  font-size: var(--icon-14);
+  display: inline-flex;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 64px;
+  padding: 9px 11px;
+  border-radius: var(--radius-lg);
+  background: var(--field);
+  box-shadow: 0 0 0 0.5px var(--fieldline);
+  line-height: 1.55;
+  resize: vertical;
+  font-family: inherit;
+  transition: box-shadow var(--motion-fade) var(--ease-out);
+}
+
+.textarea:focus {
+  box-shadow: var(--focus-ring);
+}
+
+/* Segmented control. It keeps the width of its segments, in a grid cell or a flex column alike. */
+.segmented {
+  position: relative;
+  display: inline-flex;
+  width: fit-content;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--fill);
+  justify-self: start;
+  /* Too narrow for its segments, it wraps them onto more rows rather than overflowing. */
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+/* The selected segment's raised look, which slides to the segment chosen next. */
+.segmentPill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: var(--radius-xs);
+  background: var(--segon);
+  box-shadow: var(--shadow-seg);
+  pointer-events: none;
+}
+
+.segmentPill[data-placed] {
+  transition:
+    transform var(--motion-base) var(--ease-out),
+    width var(--motion-base) var(--ease-out),
+    height var(--motion-base) var(--ease-out);
+}
+
+.segment {
+  position: relative;
+  height: 22px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  font-size: var(--text-sm);
+  color: var(--fg2);
+  white-space: nowrap;
+}
+
+.segment i {
+  font-size: var(--icon-14);
+}
+
+/* Each label is as wide as its selected weight, so selecting a segment never resizes the control. */
+.segment span {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.segment span::after {
+  content: attr(data-label);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 500;
+}
+
+.segment:hover:not(:disabled, .segmentOn) {
+  color: var(--fg);
+}
+
+.segmentOn {
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.segment:disabled {
+  color: var(--fg3);
+}
+
+/* Switch */
+.switch {
+  position: relative;
+  width: 32px;
+  height: 19px;
+  flex: none;
+  border: 0;
+  padding: 0;
+  border-radius: var(--radius-lg);
+  background: var(--fill2);
+  transition: background-color var(--motion-fade) var(--ease-out);
+}
+
+.switchOn {
+  background: var(--accent);
+}
+
+.switchKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition:
+    transform var(--motion-base) var(--ease-out),
+    width var(--motion-fast) var(--ease-out);
+}
+
+.switchOn .switchKnob {
+  transform: translateX(13px);
+}
+
+/* Pressed, the knob stretches toward the side it will move to, as on macOS and iOS. */
+.switch:active:not(:disabled) .switchKnob {
+  width: 18px;
+}
+
+.switchOn:active:not(:disabled) .switchKnob {
+  transform: translateX(10px);
+}
+
+/* Checkbox */
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  border: 0;
+  padding: 0;
+  background: none;
+  text-align: left;
+}
+
+.checkboxBox {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: var(--radius-xs);
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--fieldline);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color var(--motion-fade) var(--ease-out),
+    box-shadow var(--motion-fade) var(--ease-out);
+}
+
+.checkboxOn .checkboxBox {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 1px transparent;
+}
+
+/* The check stays in the box while hidden: the box's baseline, and so the line it sits on, stay put. */
+.checkboxBox i {
+  font-size: var(--icon-10);
+  color: #ffffff;
+  visibility: hidden;
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity var(--motion-fade) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out),
+    visibility var(--motion-fade);
+}
+
+.checkboxOn .checkboxBox i {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+}
+
+/* Popup button (design: button with caret-up-down) */
+.popup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: var(--field-height);
+  padding: 0 8px 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--btn);
+  box-shadow: var(--shadow-btn);
+  min-width: 0;
+  max-width: 100%;
+  text-align: left;
+}
+
+.popup:disabled {
+  opacity: 0.45;
+}
+
+/* Its menu is open. */
+.popup[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--btn) 86%, var(--fg) 14%);
+}
+
+.popupLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.popupIcon {
+  font-size: var(--icon-14);
+  color: var(--fg2);
+}
+
+.popupCaret {
+  font-size: var(--icon-12);
+  color: var(--fg2);
+}
+
+/* In a narrow button, it gives up its room before the label does. */
+.popupHint {
+  flex: 0 4 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--fg2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A disclosure's caret turns as it opens (DisclosureCaret), and what it shows drops into place. */
+.disclosureCaret {
+  display: inline-block;
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+
+.disclosureCaretOpen {
+  transform: rotate(90deg);
+}
+
+.reveal {
+  animation: reveal var(--motion-fast) var(--ease-out);
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--motion-rise) / -2));
+  }
+}
+
+/* Status dot */
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  display: inline-block;
+}
+
+/* Tags */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--radius-xs);
+  background: var(--fill);
+  font-size: var(--text-sm);
+  color: var(--fg2);
+  white-space: nowrap;
+}
+
+.tagDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.spinner {
+  display: inline-block;
+  animation: spin 0.9s linear infinite;
+}
+
+/* Keeps turning with reduced motion, as macOS's spinner does (base.css). */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 0.9s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.kbd {
+  font-size: var(--text-xs);
+  color: var(--fg3);
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  background: var(--fill);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--fg2);
+  white-space: nowrap;
+}
+
+/* Stepper */
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--fill);
+}
+
+.stepper button {
+  width: 28px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--fg2);
+  font-size: var(--icon-12);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stepper button:hover:not(:disabled) {
+  background: var(--segon);
+  box-shadow: var(--shadow-seg);
+  color: var(--fg);
+}
+
+.stepper button:disabled {
+  color: var(--fg3);
+}
+
+.stepValue {
+  min-width: 34px;
+  text-align: center;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}

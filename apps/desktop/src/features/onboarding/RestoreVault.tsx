@@ -1,12 +1,11 @@
 import { useState } from "react";
+import { Button, ErrorText, FooterSpacer, Icon, Segmented, StatusLine, TextField } from "@hatoba/ui";
 import { enterUnlocked } from "@/app/boot";
 import { errorMessage } from "@/app/errors";
-import { Button, Icon, Segmented, StatusDot, TextField } from "@/components/controls";
-import { FooterSpacer } from "@/components/overlay";
 import { useT } from "@/i18n";
-import { api } from "@/ipc/api";
+import { api, appError } from "@/ipc/api";
 import type { SyncConfigInput } from "@/ipc/types";
-import { ErrorLine, WizardCard } from "./WizardCard";
+import { WizardCard } from "./WizardCard";
 import s from "./RestoreVault.module.css";
 
 type Method = "worker" | "d1";
@@ -63,7 +62,10 @@ export function RestoreConnect({
     return { kind: "d1", account_id: accountId.trim(), database_id: databaseId.trim(), api_token: apiToken.trim() };
   };
 
-  const filled = method === "worker" ? url.trim() !== "" : accountId.trim() !== "" && databaseId.trim() !== "" && apiToken.trim() !== "";
+  const filled =
+    method === "worker"
+      ? url.trim() !== ""
+      : accountId.trim() !== "" && databaseId.trim() !== "" && apiToken.trim() !== "";
   const ready = status.state === "ok";
 
   const test = async () => {
@@ -73,7 +75,7 @@ export function RestoreConnect({
     try {
       const r = await api.sync_test(config);
       if (!r.ok) {
-        setStatus({ state: "error", text: errorMessage(t, r.error ?? { code: "sync", detail: "" }) });
+        setStatus({ state: "error", text: errorMessage(t, r.error ?? appError("sync", "")) });
       } else if (!r.initialized) {
         setStatus({ state: "warn", text: t("err.remote_not_initialized") });
       } else {
@@ -139,13 +141,15 @@ export function RestoreConnect({
             placeholder={t("vault.restore.workerUrlPlaceholder")}
             value={url}
             invalid={!!urlError}
-            trailing={status.state === "ok" ? <Icon name="check-circle" fill size={15} color="var(--green)" /> : undefined}
+            trailing={
+              status.state === "ok" ? <Icon name="check-circle" fill size={16} color="var(--green)" /> : undefined
+            }
             onChange={(e) => {
               setUrl(e.target.value);
               reset();
             }}
           />
-          {urlError && <div className={s.fieldError}>{urlError}</div>}
+          {urlError && <ErrorText>{urlError}</ErrorText>}
         </div>
       ) : (
         <>
@@ -153,19 +157,38 @@ export function RestoreConnect({
             <label className={s.label} htmlFor="restore-account">
               {t("vault.restore.accountId")}
             </label>
-            <TextField id="restore-account" large mono autoFocus value={accountId} onChange={(e) => (setAccountId(e.target.value), reset())} />
+            <TextField
+              id="restore-account"
+              large
+              mono
+              autoFocus
+              value={accountId}
+              onChange={(e) => (setAccountId(e.target.value), reset())}
+            />
           </div>
           <div className={s.field}>
             <label className={s.label} htmlFor="restore-database">
               {t("vault.restore.databaseId")}
             </label>
-            <TextField id="restore-database" large mono value={databaseId} onChange={(e) => (setDatabaseId(e.target.value), reset())} />
+            <TextField
+              id="restore-database"
+              large
+              mono
+              value={databaseId}
+              onChange={(e) => (setDatabaseId(e.target.value), reset())}
+            />
           </div>
           <div className={s.field}>
             <label className={s.label} htmlFor="restore-token">
               {t("vault.restore.apiToken")}
             </label>
-            <TextField id="restore-token" large secret value={apiToken} onChange={(e) => (setApiToken(e.target.value), reset())} />
+            <TextField
+              id="restore-token"
+              large
+              secret
+              value={apiToken}
+              onChange={(e) => (setApiToken(e.target.value), reset())}
+            />
           </div>
         </>
       )}
@@ -175,12 +198,11 @@ export function RestoreConnect({
           {t("vault.restore.test")}
         </Button>
         <div className={s.status} role="status">
-          {status.state === "running" && t("vault.restore.testing")}
+          {status.state === "running" && <StatusLine tone="progress">{t("vault.restore.testing")}</StatusLine>}
           {(status.state === "ok" || status.state === "warn" || status.state === "error") && (
-            <>
-              <StatusDot color={status.state === "ok" ? "var(--green)" : status.state === "warn" ? "var(--orange)" : "var(--red)"} />
-              <span className={status.state === "error" ? s.statusError : undefined}>{status.text}</span>
-            </>
+            <StatusLine tone={status.state === "ok" ? "success" : status.state === "warn" ? "warning" : "error"}>
+              {status.text}
+            </StatusLine>
           )}
         </div>
       </div>
@@ -189,7 +211,15 @@ export function RestoreConnect({
 }
 
 /** Flow B step 3: master password, then pull and decrypt everything. */
-export function RestorePassword({ steps, config, onBack }: { steps: string[]; config: SyncConfigInput; onBack: () => void }) {
+export function RestorePassword({
+  steps,
+  config,
+  onBack,
+}: {
+  steps: string[];
+  config: SyncConfigInput;
+  onBack: () => void;
+}) {
   const t = useT();
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -248,7 +278,7 @@ export function RestorePassword({ steps, config, onBack }: { steps: string[]; co
           }}
         />
       </div>
-      {error && <ErrorLine>{error}</ErrorLine>}
+      {error && <ErrorText icon="warning-circle">{error}</ErrorText>}
     </WizardCard>
   );
 }

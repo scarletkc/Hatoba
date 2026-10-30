@@ -1,9 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["crates/hatoba-ai", "crates/hatoba-cli", "crates/hatoba-core", "crates/hatoba-local", "crates/hatoba-ssh", "crates/hatoba-telnet", "apps/desktop/src-tauri"]
+members = ["crates/hatoba-ai", "crates/hatoba-assistant", "crates/hatoba-cli", "crates/hatoba-core", "crates/hatoba-ipc", "crates/hatoba-local", "crates/hatoba-ssh", "crates/hatoba-telnet", "apps/desktop/src-tauri"]
 
 [workspace.package]
-version = "0.5.0"
+version = "0.7.6"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/scarletkc/Hatoba"
@@ -11,8 +11,10 @@ rust-version = "1.90"
 
 [workspace.dependencies]
 hatoba-ai = { path = "crates/hatoba-ai" }
+hatoba-assistant = { path = "crates/hatoba-assistant" }
 hatoba-cli = { path = "crates/hatoba-cli" }
 hatoba-core = { path = "crates/hatoba-core" }
+hatoba-ipc = { path = "crates/hatoba-ipc" }
 hatoba-local = { path = "crates/hatoba-local" }
 hatoba-ssh = { path = "crates/hatoba-ssh" }
 hatoba-telnet = { path = "crates/hatoba-telnet" }
@@ -30,6 +32,7 @@ uuid = { version = "1", features = ["v4", "v7", "serde"] }
 bytes = "1"
 futures = "0.3"
 specta = { version = "=2.0.0-rc.25", features = ["derive"] }
+specta-typescript = "0.0.12"
 
 [profile.release]
 codegen-units = 1

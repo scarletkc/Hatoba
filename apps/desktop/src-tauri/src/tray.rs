@@ -29,7 +29,7 @@ mod imp {
 
     use crate::dto::{
         CloseAction, ClosePromptEvent, ForwardKind, HostConnectionView, LocalPrefs, LockReason,
-        RunningForwardView, TrayMenuInput, TrayUpdateEvent,
+        RemoteEditQuitEvent, RunningForwardView, TrayMenuInput, TrayUpdateEvent,
     };
     use crate::state::AppState;
     use crate::{lock, platform};
@@ -42,17 +42,19 @@ mod imp {
 
     /// The menu items whose labels and state the WebView sets. Managed once the tray exists.
     struct Tray {
-        menu: Menu<Wry>,
         open: MenuItem<Wry>,
         lock: MenuItem<Wry>,
         /// In the menu, after **Lock**, only while the WebView names a newer release.
         update: MenuItem<Wry>,
         quit: MenuItem<Wry>,
-        forwards: Mutex<Forwards>,
+        shown: Mutex<Shown>,
     }
 
-    /// FWD-05: what the menu shows of the running forwards.
-    struct Forwards {
+    /// What the menu shows besides **Open**, **Lock** and **Quit**. Each change builds the menu
+    /// anew: Windows keeps a menu as wide as its widest item ever was, a stopped forward's too.
+    struct Shown {
+        update: bool,
+        /// FWD-05: the running forwards.
         heading: String,
         copy: String,
         stop: String,
@@ -62,12 +64,13 @@ mod imp {
         /// Of the `hosts` list (`ConnectionsEvent::version`).
         version: u64,
         hosts: Vec<HostConnectionView>,
-        /// In the menu, between the separator and **Quit**, while a forward runs.
-        items: Vec<MenuItemKind<Wry>>,
+        /// What the menu was last built from: a change to tabs or failed forwards alone does not
+        /// build it again.
+        built: Option<Vec<String>>,
     }
 
+    const TRAY: &str = "main";
     const UPDATE: &str = "update";
-    const UPDATE_POSITION: usize = 2;
     /// Followed by the address to copy.
     const FORWARD_COPY: &str = "forward-copy:";
     /// Followed by `host_id:forward_id`.
@@ -116,7 +119,7 @@ mod imp {
             app,
             &[&open, &lock, &PredefinedMenuItem::separator(app)?, &quit],
         )?;
-        TrayIconBuilder::with_id("main")
+        TrayIconBuilder::with_id(TRAY)
             .icon(ICON)
             .tooltip("Hatoba")
             .menu(&menu)
@@ -148,12 +151,12 @@ mod imp {
             })
             .build(app)?;
         app.manage(Tray {
-            menu,
             open,
             lock,
             update,
             quit,
-            forwards: Mutex::new(Forwards {
+            shown: Mutex::new(Shown {
+                update: false,
                 heading: "Port Forwarding".to_owned(),
                 copy: "Copy Address".to_owned(),
                 stop: "Stop".to_owned(),
@@ -161,7 +164,7 @@ mod imp {
                 socks: "SOCKS proxy".to_owned(),
                 version: 0,
                 hosts: Vec::new(),
-                items: Vec::new(),
+                built: None,
             }),
         });
         #[cfg(target_os = "linux")]
@@ -180,20 +183,11 @@ mod imp {
         let _ = tray.lock.set_text(&menu.lock);
         let _ = tray.lock.set_enabled(menu.can_lock);
         let _ = tray.quit.set_text(&menu.quit);
-        let shown = tray.menu.get(UPDATE).is_some();
-        match &menu.update {
-            Some(label) => {
-                let _ = tray.update.set_text(label);
-                let _ = tray.update.set_enabled(menu.can_update);
-                if !shown {
-                    let _ = tray.menu.insert(&tray.update, UPDATE_POSITION);
-                }
-            }
-            None if shown => {
-                let _ = tray.menu.remove(&tray.update);
-            }
-            None => {}
+        if let Some(label) = &menu.update {
+            let _ = tray.update.set_text(label);
+            let _ = tray.update.set_enabled(menu.can_update);
         }
+        let update = menu.update.is_some();
         let (heading, copy, stop, on_server, socks) = (
             menu.forwards.clone(),
             menu.copy_address.clone(),
@@ -201,78 +195,102 @@ mod imp {
             menu.on_server.clone(),
             menu.socks_proxy.clone(),
         );
-        on_forwards(app, move |forwards| {
-            forwards.heading = heading;
-            forwards.copy = copy;
-            forwards.stop = stop;
-            forwards.on_server = on_server;
-            forwards.socks = socks;
+        on_shown(app, move |shown| {
+            shown.update = update;
+            shown.heading = heading;
+            shown.copy = copy;
+            shown.stop = stop;
+            shown.on_server = on_server;
+            shown.socks = socks;
         });
     }
 
     /// FWD-05: the hosts' connections changed; a list older than the one shown changes nothing.
     pub fn set_forwards(app: &AppHandle, version: u64, hosts: &[HostConnectionView]) {
         let hosts = hosts.to_vec();
-        on_forwards(app, move |forwards| {
-            if version >= forwards.version {
-                forwards.version = version;
-                forwards.hosts = hosts;
+        on_shown(app, move |shown| {
+            if version >= shown.version {
+                shown.version = version;
+                shown.hosts = hosts;
             }
         });
     }
 
-    /// Changes what the menu shows of the forwards, and shows it, on the main thread. Elsewhere
-    /// each menu change waits for the main thread, which could be waiting for the lock.
-    fn on_forwards(app: &AppHandle, change: impl FnOnce(&mut Forwards) + Send + 'static) {
+    /// Changes what the menu shows, and shows it, on the main thread. Elsewhere each menu change
+    /// waits for the main thread, which could be waiting for the lock.
+    fn on_shown(app: &AppHandle, change: impl FnOnce(&mut Shown) + Send + 'static) {
         let handle = app.clone();
         let _ = app.run_on_main_thread(move || {
             let Some(tray) = handle.try_state::<Tray>() else {
                 return;
             };
-            let mut forwards = tray.forwards.lock().unwrap_or_else(|p| p.into_inner());
-            change(&mut forwards);
-            refresh_forwards(&handle, &tray, &mut forwards);
+            let mut shown = tray.shown.lock().unwrap_or_else(|p| p.into_inner());
+            change(&mut shown);
+            if let Err(e) = refresh(&handle, &tray, &mut shown) {
+                tracing::warn!("tray menu not updated: {e}");
+            }
         });
     }
 
-    /// Puts the running forwards before **Quit**: the heading, a submenu for each, named by its
-    /// host and addresses, and a separator.
-    fn refresh_forwards(app: &AppHandle, tray: &Tray, forwards: &mut Forwards) {
-        for item in forwards.items.drain(..) {
-            let _ = tray.menu.remove(&item);
-        }
-        if forwards.hosts.iter().all(|h| h.forwards.is_empty()) {
-            return;
-        }
-        let items = match forward_items(app, forwards) {
-            Ok(items) => items,
-            Err(e) => {
-                tracing::warn!("forwards not shown in the tray menu: {e}");
-                return;
-            }
+    /// Builds the menu: **Open**, **Lock**, **Update to vX.Y.Z** while there is one, a separator,
+    /// the running forwards, and **Quit**.
+    fn refresh(app: &AppHandle, tray: &Tray, shown: &mut Shown) -> tauri::Result<()> {
+        let Some(icon) = app.tray_by_id(TRAY) else {
+            return Ok(());
         };
-        let quit = tray
-            .menu
-            .items()
-            .map_or(0, |list| list.len().saturating_sub(1));
-        let refs: Vec<&dyn IsMenuItem<Wry>> =
-            items.iter().map(|i| i as &dyn IsMenuItem<Wry>).collect();
-        if tray.menu.insert_items(&refs, quit).is_ok() {
-            forwards.items = items;
+        let entries = entries(shown);
+        if shown.built.as_ref() == Some(&entries) {
+            return Ok(());
         }
+        let separator = PredefinedMenuItem::separator(app)?;
+        let forwards = forward_items(app, shown)?;
+        let mut items: Vec<&dyn IsMenuItem<Wry>> = vec![&tray.open, &tray.lock];
+        if shown.update {
+            items.push(&tray.update);
+        }
+        items.push(&separator);
+        items.extend(forwards.iter().map(|i| i as &dyn IsMenuItem<Wry>));
+        items.push(&tray.quit);
+        icon.set_menu(Some(Menu::with_items(app, &items)?))?;
+        shown.built = Some(entries);
+        Ok(())
     }
 
-    fn forward_items(
-        app: &AppHandle,
-        forwards: &Forwards,
-    ) -> tauri::Result<Vec<MenuItemKind<Wry>>> {
+    /// Everything the built menu shows besides the labels the WebView sets on the fixed items.
+    fn entries(shown: &Shown) -> Vec<String> {
+        let mut entries = vec![
+            shown.update.to_string(),
+            shown.heading.clone(),
+            shown.copy.clone(),
+            shown.stop.clone(),
+        ];
+        for host in &shown.hosts {
+            for forward in &host.forwards {
+                entries.push(format!(
+                    "{}:{} {} {}",
+                    host.host_id,
+                    forward.forward_id,
+                    forward.address,
+                    submenu_label(shown, host, forward)
+                ));
+            }
+        }
+        entries
+    }
+
+    /// The heading, a submenu for each running forward (see [`submenu_label`]), and a separator;
+    /// nothing while none runs.
+    fn forward_items(app: &AppHandle, forwards: &Shown) -> tauri::Result<Vec<MenuItemKind<Wry>>> {
+        if forwards.hosts.iter().all(|h| h.forwards.is_empty()) {
+            return Ok(Vec::new());
+        }
         let heading = MenuItem::new(app, &forwards.heading, false, None::<&str>)?;
         let mut items = vec![MenuItemKind::MenuItem(heading)];
         for host in &forwards.hosts {
             for forward in &host.forwards {
                 let stop_id = format!("{FORWARD_STOP}{}:{}", host.host_id, forward.forward_id);
                 let stop = MenuItem::with_id(app, stop_id, &forwards.stop, true, None::<&str>)?;
-                let label = format!("{}  {}", host.host_name, addresses(forwards, forward));
+                let label = submenu_label(forwards, host, forward);
                 // A remote forward's address is on the server: nothing here connects to it.
                 let entry = if forward.kind == ForwardKind::Remote {
                     Submenu::with_items(app, label, true, &[&stop])?
@@ -290,8 +308,22 @@ mod imp {
         Ok(items)
     }
 
+    /// A running forward's submenu: its host's name, its own if it has one, and its addresses.
+    fn submenu_label(
+        forwards: &Shown,
+        host: &HostConnectionView,
+        forward: &RunningForwardView,
+    ) -> String {
+        let addresses = addresses(forwards, forward);
+        if forward.name.is_empty() {
+            format!("{}  {addresses}", host.host_name)
+        } else {
+            format!("{} · {}  {addresses}", host.host_name, forward.name)
+        }
+    }
+
     /// Where a running forward listens and where it leads.
-    fn addresses(forwards: &Forwards, forward: &RunningForwardView) -> String {
+    fn addresses(forwards: &Shown, forward: &RunningForwardView) -> String {
         match forward.kind {
             ForwardKind::Local => format!("{} → {}", forward.address, forward.dest),
             ForwardKind::Remote => format!(
@@ -373,6 +405,13 @@ mod imp {
         let app = window.app_handle();
         let action = close_action();
         if action == CloseAction::Quit || !tray_shown(app) {
+            // SFTP-05: the window stays to ask about saves of edited files that did not upload.
+            if app.state::<AppState>().edits.holds_quit() {
+                api.prevent_close();
+                // A minimized window, closed from the taskbar, shows the question.
+                platform::window::reopen_main(app);
+                let _ = RemoteEditQuitEvent.emit(app);
+            }
             return;
         }
         api.prevent_close();
@@ -415,6 +454,43 @@ mod imp {
                 refresh_close_action(&state);
                 assert_eq!(close_action(), action);
             }
+        }
+
+        #[test]
+        fn a_named_forward_shows_its_name_after_its_host() {
+            let shown = Shown {
+                update: false,
+                heading: String::new(),
+                copy: String::new(),
+                stop: String::new(),
+                on_server: "{addr} on the server".to_owned(),
+                socks: "SOCKS proxy".to_owned(),
+                version: 0,
+                hosts: Vec::new(),
+                built: None,
+            };
+            let host = HostConnectionView {
+                host_id: "h1".to_owned(),
+                host_name: "db".to_owned(),
+                forwards: Vec::new(),
+                failed: Vec::new(),
+            };
+            let forward = |name: &str| RunningForwardView {
+                forward_id: "f1".to_owned(),
+                name: name.to_owned(),
+                kind: ForwardKind::Local,
+                port: 15432,
+                address: "localhost:15432".to_owned(),
+                dest: "127.0.0.1:5432".to_owned(),
+            };
+            assert_eq!(
+                submenu_label(&shown, &host, &forward("Postgres")),
+                "db · Postgres  localhost:15432 → 127.0.0.1:5432"
+            );
+            assert_eq!(
+                submenu_label(&shown, &host, &forward("")),
+                "db  localhost:15432 → 127.0.0.1:5432"
+            );
         }
     }
 }

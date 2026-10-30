@@ -1,7 +1,16 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AiConversationDetail, AiConversationView, AiEntryView, AiProviderView, AiSendInput, AiSendStarted, AiTurnEndReason, AiTurnEvent } from "@/ipc/types";
+import type {
+  AiConversationDetail,
+  AiConversationView,
+  AiEntryView,
+  AiProviderView,
+  AiSendInput,
+  AiSendStarted,
+  AiTurnEndReason,
+  AiTurnEvent,
+} from "@/ipc/types";
 import type { PasteAttachment } from "./attachments";
 
 /** The calls the actions make, answered by each test. */
@@ -12,27 +21,21 @@ const ipc = vi.hoisted(() => ({
 }));
 vi.mock("@/ipc/api", async (importActual) => ({
   ...(await importActual<typeof import("@/ipc/api")>()),
-  api: { ai_send: ipc.send, ai_stop: ipc.stop, ai_conversation_get: ipc.get, notification_show: () => Promise.resolve() },
+  api: {
+    ai_send: ipc.send,
+    ai_stop: ipc.stop,
+    ai_conversation_get: ipc.get,
+    notification_show: () => Promise.resolve(),
+  },
 }));
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 
-const {
-  askAiAboutConnection,
-  discardQueued,
-  editQueued,
-  newConversation,
-  noteSelection,
-  queueMessage,
-  reloadSlot,
-  removeQueuedAttachment,
-  resetForLock,
-  selectionAttachment,
-  sendMessage,
-  stopTurn,
-  tabSelection,
-} = await import("./actions");
-const { Composer } = await import("./Composer");
+const { askAiAboutConnection, noteSelection, selectionAttachment, tabSelection } = await import("./actions/attach");
+const { discardQueued, editQueued, queueMessage, removeQueuedAttachment } = await import("./actions/queued");
+const { newConversation, reloadSlot, resetForLock } = await import("./actions/slots");
+const { sendMessage, stopTurn } = await import("./actions/turns");
+const { Composer } = await import("./composer/Composer");
 const { joinMessages, messageBack, sendsQueued, takenBeside } = await import("./queue");
 const { blankSlot, getSlot, HOME_SLOT, patchSlot, useAi } = await import("./store");
 const { newTurn } = await import("./turn");
@@ -47,7 +50,7 @@ const view: AiConversationView = {
   host_id: null,
   quick_target: null,
   origin: null,
-      local: null,
+  local: null,
   pinned: false,
   context_start: null,
   effort: null,
@@ -63,7 +66,17 @@ const provider: AiProviderView = {
   base_url: "http://127.0.0.1/v1",
   has_api_key: false,
   auth_header: "x-api-key",
-  models: [{ id: "m1", name: "Model 1", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null }],
+  models: [
+    {
+      id: "m1",
+      name: "Model 1",
+      context_window: null,
+      max_output_tokens: null,
+      efforts: null,
+      adaptive_thinking: null,
+    },
+  ],
+  chatgpt: null,
   updated_at: 0,
 };
 const paste = (text: string): PasteAttachment => ({ kind: "paste", text, lines: 1 });
@@ -78,7 +91,10 @@ function turns() {
   const sent: { text: string; emit: (event: AiTurnEvent) => void }[] = [];
   ipc.send.mockImplementation(async (input, onEvent) => {
     sent.push({ text: input.text, emit: onEvent });
-    return { conversation: view, user_entry: { role: "user", entry_id: `u${sent.length}`, created_at: 0, text: input.text } };
+    return {
+      conversation: view,
+      user_entry: { role: "user", entry_id: `u${sent.length}`, created_at: 0, text: input.text },
+    };
   });
   return sent;
 }
@@ -144,7 +160,8 @@ describe("joining queued messages (§13.1)", () => {
     expect(sendsQueued("completed", false)).toBe(true);
     expect(sendsQueued("stopped", true)).toBe(true);
     expect(sendsQueued("stopped", false)).toBe(false);
-    for (const reason of ["error", "length", "refused", "empty"] as const) expect(sendsQueued(reason, true)).toBe(false);
+    for (const reason of ["error", "length", "refused", "empty"] as const)
+      expect(sendsQueued(reason, true)).toBe(false);
   });
 });
 
@@ -155,13 +172,20 @@ describe("the queued message (§13.1)", () => {
     patchSlot(HOME_SLOT, { extras: [{ id: "x1", attachment: paste("error.log") }] });
     expect(queueMessage(HOME_SLOT, " check the logs ")).toBe(true);
     expect(queueMessage(HOME_SLOT, "then restart it")).toBe(true);
-    expect(getSlot(HOME_SLOT)).toMatchObject({ draft: "", extras: [], queued: { typed: "check the logs\n\nthen restart it" } });
+    expect(getSlot(HOME_SLOT)).toMatchObject({
+      draft: "",
+      extras: [],
+      queued: { typed: "check the logs\n\nthen restart it" },
+    });
     expect(ipc.send).toHaveBeenCalledTimes(1);
 
     patchSlot(HOME_SLOT, { draft: "still typing" });
     sent[0].emit({ kind: "turn_ended", reason: "completed" });
     await flush();
-    expect(sent.map((x) => x.text)).toEqual(["first", '<pasted_text lines="1">\nerror.log\n</pasted_text>\n\ncheck the logs\n\nthen restart it']);
+    expect(sent.map((x) => x.text)).toEqual([
+      "first",
+      '<pasted_text lines="1">\nerror.log\n</pasted_text>\n\ncheck the logs\n\nthen restart it',
+    ]);
     expect(getSlot(HOME_SLOT)).toMatchObject({ queued: null, draft: "still typing" });
 
     sent[1].emit({ kind: "request_started" });
@@ -200,12 +224,20 @@ describe("the queued message (§13.1)", () => {
       sent[0].emit({ kind: "turn_ended", reason });
       await flush();
       expect(ipc.send).toHaveBeenCalledTimes(1);
-      expect(getSlot(HOME_SLOT)).toMatchObject({ queued: null, draft: "then this\n\nand this", extras: [{ id: "x1" }, { id: "x2" }] });
+      expect(getSlot(HOME_SLOT)).toMatchObject({
+        queued: null,
+        draft: "then this\n\nand this",
+        extras: [{ id: "x1" }, { id: "x2" }],
+      });
     }
   });
 
   it("goes back into the input area when the vault locks, with its chips", async () => {
-    useAi.setState({ slots: { [TAB]: slot({ conversationId: "c2", conversation: { ...view, id: "c2" } }) }, selections: {}, diagnostics: {} });
+    useAi.setState({
+      slots: { [TAB]: slot({ conversationId: "c2", conversation: { ...view, id: "c2" } }) },
+      selections: {},
+      diagnostics: {},
+    });
     const sent = turns();
     await running(sent, TAB);
     noteSelection(TAB, "502 Bad Gateway");
@@ -221,7 +253,12 @@ describe("the queued message (§13.1)", () => {
   });
 
   it("stays with its conversation when another one is shown, and goes with its chips when the turn ends (AI-07)", async () => {
-    useAi.setState({ slots: { [TAB]: slot({ conversationId: "c2", conversation: { ...view, id: "c2" } }) }, background: {}, selections: {}, diagnostics: {} });
+    useAi.setState({
+      slots: { [TAB]: slot({ conversationId: "c2", conversation: { ...view, id: "c2" } }) },
+      background: {},
+      selections: {},
+      diagnostics: {},
+    });
     const sent = turns();
     await running(sent, TAB);
     noteSelection(TAB, "502 Bad Gateway");
@@ -251,7 +288,11 @@ describe("the queued message (§13.1)", () => {
 
   it("keeps its chips when it goes back after the tab's selection or diagnostics changed", async () => {
     for (const change of [() => noteSelection(TAB, "second error"), () => noteSelection(TAB, "")]) {
-      useAi.setState({ slots: { [TAB]: slot({ conversationId: "c2", conversation: { ...view, id: "c2" } }) }, selections: {}, diagnostics: {} });
+      useAi.setState({
+        slots: { [TAB]: slot({ conversationId: "c2", conversation: { ...view, id: "c2" } }) },
+        selections: {},
+        diagnostics: {},
+      });
       ipc.send.mockReset();
       const sent = turns();
       await running(sent, TAB);
@@ -271,7 +312,9 @@ describe("the queued message (§13.1)", () => {
       sent[0].emit({ kind: "turn_ended", reason: "completed" });
       await flush();
       await sendMessage(TAB, getSlot(TAB).draft);
-      expect(sent[1].text).toMatch(/^<connection_diagnostics [^]*timeout[^]*<terminal_selection [^]*first error[^]*why\?$/);
+      expect(sent[1].text).toMatch(
+        /^<connection_diagnostics [^]*timeout[^]*<terminal_selection [^]*first error[^]*why\?$/,
+      );
       // The tab's own chips stay for a later message.
       expect(useAi.getState().diagnostics[TAB]).toMatchObject({ text: expect.stringContaining("refused") });
       expect(getSlot(TAB).extras).toEqual([]);
@@ -378,7 +421,15 @@ describe("Ctrl+Enter during a turn (§13.1)", () => {
     sent[0].emit({ kind: "turn_ended", reason: "stopped" });
     await flush();
     expect(getSlot(HOME_SLOT).turn).not.toBeNull();
-    const cancelled: AiEntryView = { role: "tool", entry_id: "c9", created_at: 0, tool_call_id: "call_1", status: "cancelled", content: "cancelled", auto: null };
+    const cancelled: AiEntryView = {
+      role: "tool",
+      entry_id: "c9",
+      created_at: 0,
+      tool_call_id: "call_1",
+      status: "cancelled",
+      content: "cancelled",
+      auto: null,
+    };
     sent[1].emit({ kind: "entry", entry: cancelled });
     const ids = getSlot(HOME_SLOT).entries.map((e) => e.entry_id);
     expect(ids.indexOf("c9")).toBeLessThan(ids.indexOf("u2"));

@@ -1,18 +1,36 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  Button,
+  EmptyState,
+  FormRow,
+  Group,
+  HintText,
+  Icon,
+  IconButton,
+  LinkButton,
+  PopupSelect,
+  Section,
+  Segmented,
+  StatusDot,
+  TagInput,
+  TextArea,
+  TextField,
+  WarningText,
+  confirm,
+  isImeEvent,
+  toast,
+  type SelectOption,
+} from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
-import { useApp, type HostFilter } from "@/app/store";
-import { Button, Icon, IconButton, LinkButton, Segmented, StatusDot, TextArea, TextField } from "@/components/controls";
-import { EmptyState, FormRow, Group, Section, TagInput } from "@/components/layout";
-import { PopupSelect, confirm, toast, type SelectOption } from "@/components/overlay";
+import { useApp } from "@/app/store";
 import { InstructionsField } from "@/features/ai/InstructionsField";
 import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
 import { useT } from "@/i18n";
-import { api, toAppError } from "@/ipc/api";
+import { api, appError, toAppError } from "@/ipc/api";
 import type { AuthKind, HostInput, HostView, KeyView, ProxyMode, QuickTarget } from "@/ipc/types";
 import { proxySummary } from "@/features/settings/proxyLogic";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
 import { ENV_FOCUS_ID, EnvVarsSection } from "./EnvVarsSection";
 import { ProtocolRow, type HostDraft } from "./ProtocolRow";
 import { envInput, envRows, envTooLarge, validateEnvRows, type EnvRow } from "./envVars";
@@ -47,10 +65,7 @@ type FieldKey = "name" | "address" | "port" | "username" | "password" | "key" | 
 type Errors = Partial<Record<FieldKey, string>>;
 
 type TestState =
-  | { state: "idle" }
-  | { state: "running" }
-  | { state: "ok"; text: string }
-  | { state: "error"; text: string };
+  { state: "idle" } | { state: "running" } | { state: "ok"; text: string } | { state: "error"; text: string };
 
 const BACKEND_FIELDS: Record<string, FieldKey> = {
   name: "name",
@@ -65,7 +80,12 @@ const BACKEND_FIELDS: Record<string, FieldKey> = {
   env: "env",
 };
 
-function initialForm(host: HostView | undefined, groupId: string | null, prefill: QuickTarget | undefined, draft: HostDraft | undefined): Form {
+function initialForm(
+  host: HostView | undefined,
+  groupId: string | null,
+  prefill: QuickTarget | undefined,
+  draft: HostDraft | undefined,
+): Form {
   return {
     name: host?.name ?? draft?.name ?? prefill?.address ?? "",
     address: host?.address ?? draft?.address ?? prefill?.address ?? "",
@@ -95,15 +115,13 @@ export function HostEditPage({
   hostId,
   groupId,
   back,
-  fromDashboard,
   prefill,
   draft,
 }: {
   hostId: string | null;
   groupId: string | null;
-  back: HostFilter;
-  /** Back and Save return to the dashboard (HOST-14) rather than the host list. */
-  fromDashboard?: boolean;
+  /** The group whose hosts Back and Save return to, or null for every host. */
+  back: string | null;
   /** A quick-connect target the new host starts from (HOST-12). */
   prefill?: QuickTarget;
   /** What a new host carries over from the Telnet editor's form, when the protocol was switched. */
@@ -138,11 +156,26 @@ export function HostEditPage({
     setForm((f) => ({ ...f, ...p }));
     if (field) setErrors((e) => (e[field] ? { ...e, [field]: undefined } : e));
     // A test result describes the old connection settings.
-    if (Object.keys(p).some((k) => ["address", "port", "username", "authKind", "password", "keyId", "jumpHostId", "proxyMode", "proxyId", "replacing"].includes(k)))
+    if (
+      Object.keys(p).some((k) =>
+        [
+          "address",
+          "port",
+          "username",
+          "authKind",
+          "password",
+          "keyId",
+          "jumpHostId",
+          "proxyMode",
+          "proxyId",
+          "replacing",
+        ].includes(k),
+      )
+    )
       setTest({ state: "idle" });
   };
 
-  const goBack = () => navigate(fromDashboard ? { kind: "dashboard", filter: back } : { kind: "hosts", filter: back });
+  const goBack = () => navigate({ kind: "hosts", group: back });
 
   const validate = (): Errors => {
     const e: Errors = {};
@@ -155,9 +188,11 @@ export function HostEditPage({
       else if (hostId && jumpChainReaches(hosts, form.jumpHostId, hostId)) e.jump = t("hosts.err.jumpLoop");
     }
     // Ignored behind a jump host, so it only matters without one.
-    if (!form.jumpHostId && form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId)) e.proxy = t("hosts.err.proxyDeleted");
+    if (!form.jumpHostId && form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId))
+      e.proxy = t("hosts.err.proxyDeleted");
     // The field says so itself; this only keeps the form from saving.
-    if (byteCount(form.aiNotes) > HOST_NOTES_MAX_BYTES) e.aiNotes = t("ai.instructions.tooLong", { max: HOST_NOTES_MAX_BYTES.toLocaleString(t.locale) });
+    if (byteCount(form.aiNotes) > HOST_NOTES_MAX_BYTES)
+      e.aiNotes = t("ai.instructions.tooLong", { max: HOST_NOTES_MAX_BYTES.toLocaleString(t.locale) });
     return e;
   };
 
@@ -206,7 +241,7 @@ export function HostEditPage({
     try {
       const saved = await api.host_save(toInput());
       await useVaultData.getState().reload();
-      useHostsUi.getState().select(saved.id);
+      useHostsUi.getState().select([saved.id]);
       goBack();
     } catch (err) {
       const ae = toAppError(err);
@@ -230,7 +265,10 @@ export function HostEditPage({
       } else {
         setTest({
           state: "error",
-          text: errorMessage(t, r.error ?? { code: "ssh", detail: "" }, { host: form.address, port: Number(form.port) }),
+          text: errorMessage(t, r.error ?? appError("ssh", ""), {
+            host: form.address,
+            port: Number(form.port),
+          }),
         });
       }
     } catch (err) {
@@ -279,7 +317,13 @@ export function HostEditPage({
   // Enter in a single-line field saves (tag input handles its own Enter).
   const onKeyDown = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement;
-    if (e.key === "Enter" && !isImeEvent(e) && !e.defaultPrevented && target.tagName === "INPUT" && target.getAttribute("type") !== "checkbox") {
+    if (
+      e.key === "Enter" &&
+      !isImeEvent(e) &&
+      !e.defaultPrevented &&
+      target.tagName === "INPUT" &&
+      target.getAttribute("type") !== "checkbox"
+    ) {
       e.preventDefault();
       void save();
     }
@@ -295,7 +339,11 @@ export function HostEditPage({
       { value: null, label: t("hosts.f.none") },
       ...hosts
         .filter((h) => h.id !== hostId)
-        .map((h) => ({ value: h.id, label: h.name, hint: `${h.username ? `${h.username}@` : ""}${h.address}:${h.port}` })),
+        .map((h) => ({
+          value: h.id,
+          label: h.name,
+          hint: `${h.username ? `${h.username}@` : ""}${h.address}:${h.port}`,
+        })),
     ],
     [hosts, hostId, t],
   );
@@ -309,7 +357,9 @@ export function HostEditPage({
     { value: "device_default", label: t("hosts.f.proxyDefault"), hint: defaultHint },
     { value: "direct", label: t("hosts.f.proxyDirect") },
     ...proxies.map((p) => ({ value: `proxy:${p.id}`, label: p.name, hint: proxySummary(p) })),
-    ...(form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId) ? [{ value: proxyValue, label: t("hosts.f.proxyDeleted") }] : []),
+    ...(form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId)
+      ? [{ value: proxyValue, label: t("hosts.f.proxyDeleted") }]
+      : []),
   ];
   const setProxy = (value: string) =>
     value.startsWith("proxy:")
@@ -329,7 +379,7 @@ export function HostEditPage({
     );
   }
 
-  const groupName = groups.find((g) => g.id === form.groupId)?.name ?? t("sidebar.all");
+  const groupName = groups.find((g) => g.id === form.groupId)?.name ?? t("hosts.title");
   const methodOptions = [
     { value: "password" as const, label: t("hosts.auth.password"), icon: "password" },
     { value: "key" as const, label: t("hosts.auth.key"), icon: "key" },
@@ -345,16 +395,14 @@ export function HostEditPage({
         <span className={s.crumbSep}>/</span>
         <span className={s.crumbName}>{form.name.trim() || t("hosts.newHost")}</span>
         <div className={s.spacer} />
-        <button
-          type="button"
+        <IconButton
+          icon="star"
+          fill={form.favorite}
           className={cx(s.favButton, form.favorite && s.favOn)}
           aria-pressed={form.favorite}
-          title={form.favorite ? t("hosts.menu.unfavorite") : t("hosts.menu.favorite")}
-          aria-label={form.favorite ? t("hosts.menu.unfavorite") : t("hosts.menu.favorite")}
+          label={form.favorite ? t("hosts.menu.unfavorite") : t("hosts.menu.favorite")}
           onClick={() => patch({ favorite: !form.favorite })}
-        >
-          <Icon name="star" fill={form.favorite} />
-        </button>
+        />
         <Button onClick={goBack}>{t("btn.cancel")}</Button>
         <Button variant="primary" busy={saving} onClick={() => void save()}>
           {t("btn.save")}
@@ -365,7 +413,7 @@ export function HostEditPage({
         <div className={s.column}>
           <Section title={t("hosts.edit.sec.basic")}>
             <Group>
-              {!hostId && !fromDashboard && (
+              {!hostId && (
                 <ProtocolRow
                   value="ssh"
                   onChange={(p) =>
@@ -398,7 +446,11 @@ export function HostEditPage({
                   onChange={(e) => patch({ name: e.target.value }, "name")}
                 />
               </FormRow>
-              <FormRow label={t("hosts.f.address")} htmlFor="host-address" error={[errors.address, errors.port].filter(Boolean).join(" ") || null}>
+              <FormRow
+                label={t("hosts.f.address")}
+                htmlFor="host-address"
+                error={[errors.address, errors.port].filter(Boolean).join(" ") || null}
+              >
                 <div className={s.addrRow}>
                   <TextField
                     id="host-address"
@@ -432,10 +484,7 @@ export function HostEditPage({
                     onChange={(e) => patch({ username: e.target.value }, "username")}
                   />
                   {userTouched && !form.username.trim() && !errors.username && (
-                    <div className={s.warn}>
-                      <Icon name="warning" size={13} />
-                      {t("hosts.f.userWarn")}
-                    </div>
+                    <WarningText className={s.warn}>{t("hosts.f.userWarn")}</WarningText>
                   )}
                 </div>
               </FormRow>
@@ -480,11 +529,15 @@ export function HostEditPage({
                         autoComplete="new-password"
                         value={form.password}
                         invalid={!!errors.password}
-                        placeholder={form.replacing ? t("hosts.f.passwordNewPlaceholder") : t("hosts.f.passwordPlaceholder")}
+                        placeholder={
+                          form.replacing ? t("hosts.f.passwordNewPlaceholder") : t("hosts.f.passwordPlaceholder")
+                        }
                         onChange={(e) => patch({ password: e.target.value }, "password")}
                       />
                       {form.replacing && (
-                        <LinkButton onClick={() => patch({ replacing: false, password: "" })}>{t("hosts.f.keepSaved")}</LinkButton>
+                        <LinkButton onClick={() => patch({ replacing: false, password: "" })}>
+                          {t("hosts.f.keepSaved")}
+                        </LinkButton>
                       )}
                     </div>
                   )}
@@ -513,7 +566,7 @@ export function HostEditPage({
 
               {form.authKind === "ask" && (
                 <FormRow label="">
-                  <span className={s.hint}>{t("hosts.f.askHint")}</span>
+                  <HintText>{t("hosts.f.askHint")}</HintText>
                 </FormRow>
               )}
             </Group>
@@ -551,7 +604,7 @@ export function HostEditPage({
                     minWidth={340}
                     onChange={(jumpHostId) => patch({ jumpHostId }, "jump")}
                   />
-                  <span className={s.jumpHint}>{t("hosts.f.jumpHint")}</span>
+                  <HintText>{t("hosts.f.jumpHint")}</HintText>
                 </div>
               </FormRow>
               <FormRow label={t("hosts.f.proxy")} top error={errors.proxy}>
@@ -570,9 +623,11 @@ export function HostEditPage({
                         onChange={setProxy}
                       />
                     </div>
-                    <LinkButton onClick={() => useApp.getState().openSettings(true, "proxies")}>{t("hosts.f.manageProxies")}</LinkButton>
+                    <LinkButton onClick={() => useApp.getState().openSettings(true, "proxies")}>
+                      {t("hosts.f.manageProxies")}
+                    </LinkButton>
                   </div>
-                  {form.jumpHostId && <span className={s.jumpHint}>{t("hosts.f.proxyJumpHint")}</span>}
+                  {form.jumpHostId && <HintText>{t("hosts.f.proxyJumpHint")}</HintText>}
                 </div>
               </FormRow>
             </Group>
@@ -598,7 +653,7 @@ export function HostEditPage({
 
           <Section title={t("hosts.edit.sec.ai")}>
             <div className={s.aiNotes}>
-              <span className={s.hint}>{t("hosts.f.aiNotesHint")}</span>
+              <HintText>{t("hosts.f.aiNotesHint")}</HintText>
               <InstructionsField
                 id="host-aiNotes"
                 label={t("hosts.f.aiNotes")}

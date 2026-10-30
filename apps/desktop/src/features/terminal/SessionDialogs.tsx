@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Button, Icon, TextField } from "@/components/controls";
-import { Modal } from "@/components/overlay";
+import { Button, ErrorText, Icon, Modal, TextField } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
-import { startSessionListeners } from "./listeners";
+import { startSessionListeners } from "@/session/listeners";
 import {
   answerAuth,
   answerHostKey,
@@ -11,7 +10,7 @@ import {
   answerUsername,
   usePrompts,
   type PromptItem,
-} from "./prompts";
+} from "@/session/prompts";
 import s from "./SessionDialogs.module.css";
 
 /** Global host-key / keyboard-interactive / one-off secret dialogs (mounted once by App). */
@@ -42,7 +41,10 @@ type HostKeyItem = PromptItem & { kind: "hostkey" };
 function HostKeyNew({ item }: { item: HostKeyItem }) {
   const t = useT();
   const p = item.prompt;
-  const other = p.known_key_type !== null && p.known_fingerprint !== null ? { keyType: p.known_key_type, fingerprint: p.known_fingerprint } : null;
+  const other =
+    p.known_key_type !== null && p.known_fingerprint !== null
+      ? { keyType: p.known_key_type, fingerprint: p.known_fingerprint }
+      : null;
   const reject = useCallback(() => answerHostKey(item, false), [item]);
   return (
     <Modal center onClose={reject} closeOnBackdrop={false}>
@@ -50,12 +52,19 @@ function HostKeyNew({ item }: { item: HostKeyItem }) {
         <div className={s.head}>
           <Icon name="shield-check" size={20} color="var(--accent)" />
           <div id="hk-title" className={s.title}>
-            {t(other ? "terminal.hostkey.additionalTitle" : "terminal.hostkey.newTitle", { host: p.host, port: p.port })}
+            {t(other ? "terminal.hostkey.additionalTitle" : "terminal.hostkey.newTitle", {
+              host: p.host,
+              port: p.port,
+            })}
           </div>
         </div>
         <div className={s.body}>{t(other ? "terminal.hostkey.additionalBody" : "terminal.hostkey.newBody")}</div>
         {other && <Fingerprint label={t("terminal.hostkey.known")} keyType={other.keyType} value={other.fingerprint} />}
-        <Fingerprint label={t(other ? "terminal.hostkey.received" : "terminal.hostkey.fingerprint")} keyType={p.key_type} value={p.fingerprint} />
+        <Fingerprint
+          label={t(other ? "terminal.hostkey.received" : "terminal.hostkey.fingerprint")}
+          keyType={p.key_type}
+          value={p.fingerprint}
+        />
         <div className={s.actions}>
           <Button onClick={reject}>{t("btn.cancel")}</Button>
           <Button variant="primary" onClick={() => answerHostKey(item, true)}>
@@ -104,7 +113,17 @@ function HostKeyChanged({ item }: { item: HostKeyItem }) {
   );
 }
 
-function Fingerprint({ label, keyType, value, danger }: { label: string; keyType: string; value: string; danger?: boolean }) {
+function Fingerprint({
+  label,
+  keyType,
+  value,
+  danger,
+}: {
+  label: string;
+  keyType: string;
+  value: string;
+  danger?: boolean;
+}) {
   return (
     <div className={cx(s.fp, danger && s.fpDanger)}>
       <div className={s.fpLabel}>
@@ -179,17 +198,17 @@ function SecretDialog({ item }: { item: PromptItem & { kind: "secret" } }) {
         <div className={s.head}>
           <Icon name={isPassword ? "lock-key" : "key"} size={20} color="var(--accent)" />
           <div id="secret-title" className={s.title}>
-            {isPassword
-              ? t("terminal.password.title", { name: r.hostName })
-              : t("terminal.passphrase.title")}
+            {isPassword ? t("terminal.password.title", { name: r.hostName }) : t("terminal.passphrase.title")}
           </div>
         </div>
         {!(isPassword && r.oneOff) && (
           <div className={s.body}>
-            {isPassword ? t("terminal.password.body", { target: r.target }) : t("terminal.passphrase.body", { name: r.hostName })}
+            {isPassword
+              ? t("terminal.password.body", { target: r.target })
+              : t("terminal.passphrase.body", { name: r.hostName })}
           </div>
         )}
-        {r.wrong && <div className={s.wrong}>{t("terminal.passphrase.wrong")}</div>}
+        {r.wrong && <ErrorText className={s.wrong}>{t("terminal.passphrase.wrong")}</ErrorText>}
         <div className={s.fields}>
           <TextField
             secret

@@ -5,9 +5,9 @@
   z-index: 5;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-2);
   padding: 4px 4px 4px 8px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: var(--sheet);
   box-shadow: var(--shadow-popover);
   color: var(--fg);
@@ -48,7 +48,5 @@
 }
 
 .button {
-  width: 24px;
-  height: 24px;
   color: var(--fg2);
 }

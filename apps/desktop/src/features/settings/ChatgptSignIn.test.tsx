@@ -31,7 +31,8 @@ afterEach(() => {
 });
 
 const shown = (text: string) => document.body.textContent?.includes(text) ?? false;
-const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label);
+const button = (label: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label);
 const settle = async (until: () => boolean) => {
   for (let i = 0; i < 400 && !until(); i++) await act(() => new Promise((r) => setTimeout(r, 10)));
 };
@@ -59,7 +60,10 @@ describe("ChatgptSignInDialog (AI-52)", () => {
     const done: AiProviderView[] = [];
     let closed = 0;
     signIns.count = 0;
-    render((p) => done.push(p), () => closed++);
+    render(
+      (p) => done.push(p),
+      () => closed++,
+    );
     expect(shown(t("aiSettings.chatgpt.waiting.title"))).toBe(true);
     await settle(() => done.length > 0);
     expect(signIns.count).toBe(1);
@@ -78,7 +82,10 @@ describe("ChatgptSignInDialog (AI-52)", () => {
   it("closes without a provider when the sign-in is cancelled", async () => {
     const done: AiProviderView[] = [];
     let closed = 0;
-    render((p) => done.push(p), () => closed++);
+    render(
+      (p) => done.push(p),
+      () => closed++,
+    );
     act(() => button(t("btn.cancel"))?.click());
     await settle(() => closed > 0);
     await act(() => new Promise((r) => setTimeout(r, 50)));

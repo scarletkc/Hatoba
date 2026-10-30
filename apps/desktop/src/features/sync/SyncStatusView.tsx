@@ -1,21 +1,35 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Button, Icon, LinkButton, Switch, TextField } from "@/components/controls";
-import { Group, Row, RowValue, Section, StatusTile } from "@/components/layout";
-import { confirm, toast } from "@/components/overlay";
+import {
+  Button,
+  Chip,
+  ErrorText,
+  Group,
+  Icon,
+  LinkButton,
+  ListRow,
+  Row,
+  RowValue,
+  Section,
+  StatusTile,
+  Switch,
+  TextField,
+  confirm,
+  isImeEvent,
+  toast,
+} from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { formatRelative, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { DeviceView, SyncStatus, TooLargeItem, WorkerUpdate } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
-import { DEPLOY_GUIDE_URL, openExternal } from "./external";
 import { ChangePasswordDialog, NewRecoveryDialog, VerifyPasswordDialog } from "@/features/settings/dialogs";
+import { DEPLOY_GUIDE_URL, openExternal } from "@/lib/external";
 import { countsLine, deviceIcon, isStale, refreshSyncStatus, type T } from "./syncUtils";
 import { UpgradeDialog } from "./UpgradeDialog";
 import s from "./Sync.module.css";
 
-/** Icon, tint and copy for each sync state; titles reuse the sidebar footer strings. */
+/** Icon, tint and copy for each sync state; titles reuse the rail's Sync strings. */
 function present(t: T, st: SyncStatus) {
   if (st.state === "syncing")
     return {
@@ -50,10 +64,17 @@ function present(t: T, st: SyncStatus) {
       title: t(st.worker_update?.kind === "app_required" ? "sync.footer.appUpdate" : "sync.footer.workerUpdate"),
       sub: st.pending > 0 ? t("sync.footer.paused_sub", { n: st.pending }) : t("sync.footer.paused_sub_none"),
     };
-  const last = st.last_synced_at ? t("sync.sub.last", { time: formatRelative(t.locale, st.last_synced_at) }) : t("sync.sub.never");
+  const last = st.last_synced_at
+    ? t("sync.sub.last", { time: formatRelative(t.locale, st.last_synced_at) })
+    : t("sync.sub.never");
   const sub = st.counts ? `${last} · ${countsLine(t, st.counts)}` : last;
   if (st.conflicts > 0)
-    return { icon: "warning-circle", color: "var(--orange)", title: t("sync.footer.conflict", { n: st.conflicts }), sub };
+    return {
+      icon: "warning-circle",
+      color: "var(--orange)",
+      title: t("sync.footer.conflict", { n: st.conflicts }),
+      sub,
+    };
   return { icon: "cloud-check", color: "var(--green)", title: t("sync.footer.synced"), sub };
 }
 
@@ -103,7 +124,12 @@ export function SyncStatusView({ status, onReview }: { status: SyncStatus; onRev
               <div className={s.title}>{view.title}</div>
               <div className={s.sub}>{view.sub}</div>
             </div>
-            <Button icon="arrows-clockwise" busy={syncing} disabled={status.state === "auth_failed"} onClick={() => void syncNow()}>
+            <Button
+              icon="arrows-clockwise"
+              busy={syncing}
+              disabled={status.state === "auth_failed"}
+              onClick={() => void syncNow()}
+            >
               {t("sync.syncNow")}
             </Button>
           </div>
@@ -208,7 +234,7 @@ function TooLargeNotice({ item }: { item: TooLargeItem }) {
     const kind = item.item_type === "host" ? "host-edit" : "telnet-edit";
     text = t("sync.tooLarge.host", { name: item.item_name });
     action = (
-      <LinkButton onClick={() => navigate({ kind, hostId: item.item_id, groupId: null, back: { kind: "all" } })}>
+      <LinkButton onClick={() => navigate({ kind, hostId: item.item_id, groupId: null, back: null })}>
         {t("hosts.editHost")}
       </LinkButton>
     );
@@ -270,11 +296,7 @@ function ReloginForm() {
           {t("sync.auth.login")}
         </Button>
       </div>
-      {error && (
-        <div className={s.reloginError} role="alert">
-          {error}
-        </div>
-      )}
+      {error && <ErrorText>{error}</ErrorText>}
     </div>
   );
 }
@@ -318,29 +340,36 @@ function Devices({ status }: { status: SyncStatus }) {
         {devices.map((d) => {
           const stale = isStale(d);
           return (
-            <div key={d.device_id} className={s.device}>
-              <Icon name={deviceIcon(d)} className={s.deviceIcon} />
-              <div className={s.deviceText}>
-                <div className={s.deviceName}>
-                  <span className={s.deviceNameText}>{d.name}</span>
-                  {d.current && <span className={s.badge}>{t("sync.device.thisPc")}</span>}
-                </div>
+            <ListRow
+              key={d.device_id}
+              className={s.device}
+              leading={<Icon name={deviceIcon(d)} className={s.deviceIcon} />}
+              status={
                 <div className={s.deviceMeta}>
                   {d.platform} · {formatRelative(t.locale, d.last_seen)}
                 </div>
+              }
+              trailing={
+                <>
+                  {stale && <span className={s.deviceMeta}>{t("sync.device.stale")}</span>}
+                  {!d.current && (
+                    <LinkButton
+                      tone={stale ? undefined : "muted"}
+                      className={cx(s.removeLink, !stale && s.removeQuiet)}
+                      aria-label={t("sync.device.removeAria", { name: d.name })}
+                      onClick={() => void revoke(d)}
+                    >
+                      {t("btn.remove")}
+                    </LinkButton>
+                  )}
+                </>
+              }
+            >
+              <div className={s.deviceName}>
+                <span className={s.deviceNameText}>{d.name}</span>
+                {d.current && <Chip>{t("sync.device.thisPc")}</Chip>}
               </div>
-              {stale && <span className={s.deviceMeta}>{t("sync.device.stale")}</span>}
-              {!d.current && (
-                <LinkButton
-                  tone={stale ? undefined : "muted"}
-                  className={cx(s.removeLink, !stale && s.removeQuiet)}
-                  aria-label={t("sync.device.removeAria", { name: d.name })}
-                  onClick={() => void revoke(d)}
-                >
-                  {t("btn.remove")}
-                </LinkButton>
-              )}
-            </div>
+            </ListRow>
           );
         })}
       </Group>

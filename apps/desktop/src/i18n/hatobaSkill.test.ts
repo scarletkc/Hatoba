@@ -12,8 +12,11 @@ import { messages } from "./locales";
  * written again (docs/development.md).
  */
 
-const SKILL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../crates/hatoba-ai/src/skills/builtin/hatoba");
-/** `read_skill` shortens a longer file, so each one stays under this. */
+const SKILL_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../../crates/hatoba-ai/src/skills/builtin/hatoba",
+);
+/** Each file stays under this, half of `MAX_RESULT_CHARS` (crates/hatoba-ai/src/tools.rs), above which `read_skill` shortens a file. */
 const MAX_CHARS = 15_000;
 /** SKILL.md descriptions are limited to this many characters (spec AI-27). */
 const MAX_DESCRIPTION_CHARS = 1_024;
@@ -29,7 +32,10 @@ function readDir(dir: string): SkillFile[] {
   if (!existsSync(resolve(SKILL_DIR, dir))) return [];
   return readdirSync(resolve(SKILL_DIR, dir), { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-    .map((entry) => ({ name: `${dir}/${entry.name}`, text: readFileSync(resolve(SKILL_DIR, dir, entry.name), "utf8") }));
+    .map((entry) => ({
+      name: `${dir}/${entry.name}`,
+      text: readFileSync(resolve(SKILL_DIR, dir, entry.name), "utf8"),
+    }));
 }
 
 const files: SkillFile[] = [
@@ -40,6 +46,25 @@ const files: SkillFile[] = [
 const referenceFiles = files.filter((f) => f.name !== "SKILL.md");
 const generated = labelFiles();
 const mentions = (text: string) => new Set(text.match(/references\/[A-Za-z0-9_./-]+\.md/g) ?? []);
+/** SKILL.md names the label files by this pattern, with the languages and areas that fill it in. */
+const LABEL_PATTERN = "`references/labels/<language>-<area>.md`";
+
+/** The label files SKILL.md names by the pattern: those whose language it gives as `code` and whose area it has a row for. */
+function patternMentions(text: string): Set<string> {
+  if (!text.includes(LABEL_PATTERN)) return new Set();
+  return new Set(
+    AREAS.flatMap((area) => {
+      if (!text.includes(`| \`${area.name}\` |`)) return [];
+      return generated
+        .map((f) => f.path)
+        .filter((path) => {
+          const name = path.slice(LABELS.length + 1);
+          if (!name.endsWith(`-${area.name}.md`)) return false;
+          return text.includes(`\`${name.slice(0, -`-${area.name}.md`.length)}\``);
+        });
+    }),
+  );
+}
 
 describe("built-in hatoba skill", () => {
   it("has SKILL.md and reference files", () => {
@@ -60,7 +85,8 @@ describe("built-in hatoba skill", () => {
       const quoted = value.length >= 2 && (value.startsWith('"') || value.startsWith("'")) && value.endsWith(value[0]);
       if (quoted) value = value.slice(1, -1);
       // A YAML plain scalar cannot hold ": " or " #", so such a value must be quoted.
-      if (!quoted) expect(value, `SKILL.md: the unquoted ${m[1]} must not contain ": " or " #" (quote it)`).not.toMatch(/: | #/);
+      if (!quoted)
+        expect(value, `SKILL.md: the unquoted ${m[1]} must not contain ": " or " #" (quote it)`).not.toMatch(/: | #/);
       fields.set(m[1], value);
     }
     expect(fields.get("name")).toBe("hatoba");
@@ -76,14 +102,18 @@ describe("built-in hatoba skill", () => {
 
   it.each(files.map((f) => [f.name, f] as const))("%s stays under the character limit", (_name, file) => {
     const chars = [...file.text].length;
-    expect(chars, `${file.name} has ${chars} characters; read_skill shortens a file over ${MAX_CHARS}`).toBeLessThan(MAX_CHARS);
+    expect(chars, `${file.name} has ${chars} characters; read_skill shortens a file over ${MAX_CHARS}`).toBeLessThan(
+      MAX_CHARS,
+    );
   });
 
   it("links every reference file from SKILL.md, and links only existing files", () => {
-    const linked = mentions(files[0].text);
+    const linked = new Set([...mentions(files[0].text), ...patternMentions(files[0].text)]);
     const present = new Set(referenceFiles.map((f) => f.name));
     expect([...present].filter((n) => !linked.has(n)).map((n) => `SKILL.md does not mention ${n}`)).toEqual([]);
-    expect([...linked].filter((n) => !present.has(n)).map((n) => `SKILL.md mentions ${n}, which does not exist`)).toEqual([]);
+    expect(
+      [...linked].filter((n) => !present.has(n)).map((n) => `SKILL.md mentions ${n}, which does not exist`),
+    ).toEqual([]);
 
     const dangling: string[] = [];
     for (const f of referenceFiles) {
@@ -95,13 +125,19 @@ describe("built-in hatoba skill", () => {
   });
 
   it("puts label tables only in the label files", () => {
-    const tables = files.filter((f) => !f.name.startsWith(`${LABELS}/`) && /^\|\s*en\s*\|/m.test(f.text)).map((f) => f.name);
+    const tables = files
+      .filter((f) => !f.name.startsWith(`${LABELS}/`) && /^\|\s*en\s*\|/m.test(f.text))
+      .map((f) => f.name);
     expect(tables, "name labels in English; the other languages are in the label files").toEqual([]);
   });
 });
 
 describe("the skill's label files", () => {
-  const sections = AREAS.flatMap((area) => Object.entries(area.files).flatMap(([file, s]) => Object.entries(s).map(([heading, keys]) => ({ file, heading, keys }))));
+  const sections = AREAS.flatMap((area) =>
+    Object.entries(area.files).flatMap(([file, s]) =>
+      Object.entries(s).map(([heading, keys]) => ({ file, heading, keys })),
+    ),
+  );
 
   it("cover each skill file once, by sections it has", () => {
     const covered = AREAS.flatMap((area) => Object.keys(area.files));
@@ -110,7 +146,8 @@ describe("the skill's label files", () => {
     for (const { file, heading } of sections) {
       const text = files.find((f) => f.name === file)?.text;
       if (text === undefined) problems.push(`${file} does not exist`);
-      else if (heading && !text.split(/\r?\n/).includes(`## ${heading}`)) problems.push(`${file} has no "## ${heading}" section`);
+      else if (heading && !text.split(/\r?\n/).includes(`## ${heading}`))
+        problems.push(`${file} has no "## ${heading}" section`);
     }
     expect(problems).toEqual([]);
   });
@@ -128,6 +165,10 @@ describe("the skill's label files", () => {
 
   it("are all written from the message tables", () => {
     const paths = new Set(generated.map((f) => f.path));
-    expect(readDir(LABELS).map((f) => f.name).filter((name) => !paths.has(name))).toEqual([]);
+    expect(
+      readDir(LABELS)
+        .map((f) => f.name)
+        .filter((name) => !paths.has(name)),
+    ).toEqual([]);
   });
 });

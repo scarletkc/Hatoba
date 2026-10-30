@@ -1,12 +1,9 @@
 import type { HostView } from "@/ipc/types";
-import { parseQuickConnect, savedHostFor, type TypedTarget } from "./quickConnect";
+import { parseQuickConnect, savedHostFor, type TypedTarget } from "@/session/quickConnect";
 
 /** What a `hatoba …` command line asks for (HOST-13); null when it only brings the window up. */
 export type LaunchAction =
-  | { kind: "host"; hostId: string }
-  | { kind: "target"; target: TypedTarget }
-  | { kind: "search"; text: string }
-  | null;
+  { kind: "host"; hostId: string } | { kind: "target"; target: TypedTarget } | { kind: "search"; text: string } | null;
 
 /** Text that reads as ssh syntax: a user, a URL, or an option. */
 const SSH_SYNTAX = /@|:\/\/|(^|\s)-/;

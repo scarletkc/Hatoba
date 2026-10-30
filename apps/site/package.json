@@ -9,7 +9,8 @@
     "demo:check": "node scripts/demo-check.mjs",
     "preview": "astro preview",
     "typecheck": "astro sync && tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "layout:check": "node scripts/layout-check.mjs"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.4",

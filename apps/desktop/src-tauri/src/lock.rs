@@ -99,6 +99,10 @@ pub async fn lock_vault(app: &AppHandle, reason: LockReason) {
     // HOST-15: what other programs run through the `hatoba` command stops, and its connections
     // close.
     state.cli.lock(app);
+    // SFTP-05: editing pauses, so nothing uploads behind the lock screen.
+    state.edits.lock();
+    // AI-35: files dropped before the lock cannot be read after the unlock.
+    state.dropped.clear();
     let disconnect = async {
         if disconnects_on_lock(&state) {
             // The sessions open now: one opened after an unlock in the meantime stays.

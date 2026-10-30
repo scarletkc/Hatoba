@@ -1,7 +1,5 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
-import { Button, Icon } from "@/components/controls";
-import { PageHeader, SearchField, EmptyState } from "@/components/layout";
-import { confirm, toast } from "@/components/overlay";
+import { Button, Chip, EmptyState, Icon, PageHeader, SearchField, confirm, toast } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { formatDate, useT } from "@/i18n";
@@ -14,12 +12,9 @@ import { keyTypeLabel, shortFingerprint } from "./keyUtils";
 import s from "./KeysPage.module.css";
 
 type Dialog =
-  | { kind: "import" }
-  | { kind: "generate" }
-  | { kind: "rename"; key: KeyView }
-  | { kind: "deploy"; key: KeyView };
+  { kind: "import" } | { kind: "generate" } | { kind: "rename"; key: KeyView } | { kind: "deploy"; key: KeyView };
 
-/** Key vault (KEY-01..07, design §04): list + detail panel. Private keys never reach the WebView. */
+/** Key vault (KEY-01..07): list + detail panel. Private keys never reach the WebView. */
 export function KeysPage() {
   const t = useT();
   const keys = useVaultData((st) => st.keys);
@@ -111,7 +106,9 @@ export function KeysPage() {
           }}
         />
       )}
-      {dialog?.kind === "deploy" && <DeployKeyDialog keyView={dialog.key} hosts={hosts} onClose={() => setDialog(null)} />}
+      {dialog?.kind === "deploy" && (
+        <DeployKeyDialog keyView={dialog.key} hosts={hosts} onClose={() => setDialog(null)} />
+      )}
     </>
   );
 
@@ -186,7 +183,9 @@ export function KeysPage() {
                     <Icon name="key" className={s.keyIcon} />
                     <span className={s.nameText}>{k.name}</span>
                   </span>
-                  <span className={s.typeBadge}>{keyTypeLabel(k)}</span>
+                  <Chip mono className={s.typeBadge}>
+                    {keyTypeLabel(k)}
+                  </Chip>
                   <span className={s.cellFingerprint} title={k.fingerprint}>
                     {shortFingerprint(k.fingerprint)}
                   </span>

@@ -1,10 +1,27 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  Button,
+  EmptyState,
+  FormRow,
+  Group,
+  HintText,
+  Icon,
+  IconButton,
+  LinkButton,
+  PopupSelect,
+  Section,
+  TagInput,
+  TextArea,
+  TextField,
+  WarningText,
+  confirm,
+  isImeEvent,
+  toast,
+  type SelectOption,
+} from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
-import { useApp, type HostFilter } from "@/app/store";
-import { Button, Icon, IconButton, LinkButton, TextArea, TextField } from "@/components/controls";
-import { EmptyState, FormRow, Group, Section, TagInput } from "@/components/layout";
-import { PopupSelect, confirm, toast, type SelectOption } from "@/components/overlay";
+import { useApp } from "@/app/store";
 import { InstructionsField } from "@/features/ai/InstructionsField";
 import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
 import { proxySummary } from "@/features/settings/proxyLogic";
@@ -12,7 +29,6 @@ import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { ProxyMode, TelnetHostInput, TelnetHostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
 import { ProtocolRow, type HostDraft } from "./ProtocolRow";
 import { useHostsUi } from "./ui";
 import s from "./HostEditPage.module.css";
@@ -78,7 +94,8 @@ export function TelnetEditPage({
 }: {
   hostId: string | null;
   groupId: string | null;
-  back: HostFilter;
+  /** The group whose hosts Back and Save return to, or null for every host. */
+  back: string | null;
   /** What a new host carries over from the SSH editor's form, when the protocol was switched. */
   draft?: HostDraft;
 }) {
@@ -102,15 +119,17 @@ export function TelnetEditPage({
     if (field) setErrors((e) => (e[field] ? { ...e, [field]: undefined } : e));
   };
 
-  const goBack = () => navigate({ kind: "hosts", filter: back });
+  const goBack = () => navigate({ kind: "hosts", group: back });
 
   const validate = (): Errors => {
     const e: Errors = {};
     if (!form.address.trim()) e.address = t("hosts.err.addressRequired");
     const port = Number(form.port);
     if (!/^\d+$/.test(form.port.trim()) || port < 1 || port > 65535) e.port = t("hosts.err.portInvalid");
-    if (form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId)) e.proxy = t("hosts.err.proxyDeleted");
-    if (byteCount(form.aiNotes) > HOST_NOTES_MAX_BYTES) e.aiNotes = t("ai.instructions.tooLong", { max: HOST_NOTES_MAX_BYTES.toLocaleString(t.locale) });
+    if (form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId))
+      e.proxy = t("hosts.err.proxyDeleted");
+    if (byteCount(form.aiNotes) > HOST_NOTES_MAX_BYTES)
+      e.aiNotes = t("ai.instructions.tooLong", { max: HOST_NOTES_MAX_BYTES.toLocaleString(t.locale) });
     return e;
   };
 
@@ -145,7 +164,7 @@ export function TelnetEditPage({
     try {
       const saved = await api.telnet_host_save(toInput());
       await useVaultData.getState().reload();
-      useHostsUi.getState().select(saved.id);
+      useHostsUi.getState().select([saved.id]);
       goBack();
     } catch (err) {
       const ae = toAppError(err);
@@ -197,7 +216,13 @@ export function TelnetEditPage({
 
   const onKeyDown = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement;
-    if (e.key === "Enter" && !isImeEvent(e) && !e.defaultPrevented && target.tagName === "INPUT" && target.getAttribute("type") !== "checkbox") {
+    if (
+      e.key === "Enter" &&
+      !isImeEvent(e) &&
+      !e.defaultPrevented &&
+      target.tagName === "INPUT" &&
+      target.getAttribute("type") !== "checkbox"
+    ) {
       e.preventDefault();
       void save();
     }
@@ -214,7 +239,9 @@ export function TelnetEditPage({
     { value: "device_default", label: t("hosts.f.proxyDefault"), hint: defaultHint },
     { value: "direct", label: t("hosts.f.proxyDirect") },
     ...proxies.map((p) => ({ value: `proxy:${p.id}`, label: p.name, hint: proxySummary(p) })),
-    ...(form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId) ? [{ value: proxyValue, label: t("hosts.f.proxyDeleted") }] : []),
+    ...(form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId)
+      ? [{ value: proxyValue, label: t("hosts.f.proxyDeleted") }]
+      : []),
   ];
   const setProxy = (value: string) =>
     value.startsWith("proxy:")
@@ -234,7 +261,7 @@ export function TelnetEditPage({
     );
   }
 
-  const groupName = groups.find((g) => g.id === form.groupId)?.name ?? t("sidebar.all");
+  const groupName = groups.find((g) => g.id === form.groupId)?.name ?? t("hosts.title");
   // A new host switches to the SSH editor with what it has typed so far.
   const toSsh = () =>
     navigate({
@@ -261,16 +288,14 @@ export function TelnetEditPage({
         <span className={s.crumbSep}>/</span>
         <span className={s.crumbName}>{form.name.trim() || t("hosts.newHost")}</span>
         <div className={s.spacer} />
-        <button
-          type="button"
+        <IconButton
+          icon="star"
+          fill={form.favorite}
           className={cx(s.favButton, form.favorite && s.favOn)}
           aria-pressed={form.favorite}
-          title={form.favorite ? t("hosts.menu.unfavorite") : t("hosts.menu.favorite")}
-          aria-label={form.favorite ? t("hosts.menu.unfavorite") : t("hosts.menu.favorite")}
+          label={form.favorite ? t("hosts.menu.unfavorite") : t("hosts.menu.favorite")}
           onClick={() => patch({ favorite: !form.favorite })}
-        >
-          <Icon name="star" fill={form.favorite} />
-        </button>
+        />
         <Button onClick={goBack}>{t("btn.cancel")}</Button>
         <Button variant="primary" busy={saving} onClick={() => void save()}>
           {t("btn.save")}
@@ -292,7 +317,11 @@ export function TelnetEditPage({
                   onChange={(e) => patch({ name: e.target.value }, "name")}
                 />
               </FormRow>
-              <FormRow label={t("hosts.f.address")} htmlFor="telnet-address" error={[errors.address, errors.port].filter(Boolean).join(" ") || null}>
+              <FormRow
+                label={t("hosts.f.address")}
+                htmlFor="telnet-address"
+                error={[errors.address, errors.port].filter(Boolean).join(" ") || null}
+              >
                 <div className={s.addrRow}>
                   <TextField
                     id="telnet-address"
@@ -356,22 +385,23 @@ export function TelnetEditPage({
                       autoComplete="new-password"
                       value={form.password}
                       invalid={!!errors.password}
-                      placeholder={form.replacing ? t("hosts.f.passwordNewPlaceholder") : t("hosts.f.telnetPasswordPlaceholder")}
+                      placeholder={
+                        form.replacing ? t("hosts.f.passwordNewPlaceholder") : t("hosts.f.telnetPasswordPlaceholder")
+                      }
                       onChange={(e) => patch({ password: e.target.value }, "password")}
                     />
                     {(form.replacing || form.forget) && (
-                      <LinkButton onClick={() => patch({ replacing: false, forget: false, password: "" })}>{t("hosts.f.keepSaved")}</LinkButton>
+                      <LinkButton onClick={() => patch({ replacing: false, forget: false, password: "" })}>
+                        {t("hosts.f.keepSaved")}
+                      </LinkButton>
                     )}
                   </div>
                 )}
               </FormRow>
               <FormRow label="">
                 <div className={s.jump}>
-                  <span className={s.hint}>{t("hosts.f.telnetLoginHint")}</span>
-                  <div className={s.warn}>
-                    <Icon name="warning" size={13} />
-                    {t("hosts.f.telnetPlaintext")}
-                  </div>
+                  <HintText>{t("hosts.f.telnetLoginHint")}</HintText>
+                  <WarningText>{t("hosts.f.telnetPlaintext")}</WarningText>
                 </div>
               </FormRow>
             </Group>
@@ -412,19 +442,26 @@ export function TelnetEditPage({
                       onChange={setProxy}
                     />
                   </div>
-                  <LinkButton onClick={() => useApp.getState().openSettings(true, "proxies")}>{t("hosts.f.manageProxies")}</LinkButton>
+                  <LinkButton onClick={() => useApp.getState().openSettings(true, "proxies")}>
+                    {t("hosts.f.manageProxies")}
+                  </LinkButton>
                 </div>
               </FormRow>
             </Group>
           </Section>
 
           <Section title={t("hosts.edit.sec.note")}>
-            <TextArea aria-label={t("hosts.f.note")} value={form.note} rows={3} onChange={(e) => patch({ note: e.target.value })} />
+            <TextArea
+              aria-label={t("hosts.f.note")}
+              value={form.note}
+              rows={3}
+              onChange={(e) => patch({ note: e.target.value })}
+            />
           </Section>
 
           <Section title={t("hosts.edit.sec.ai")}>
             <div className={s.aiNotes}>
-              <span className={s.hint}>{t("hosts.f.aiNotesHint")}</span>
+              <HintText>{t("hosts.f.aiNotesHint")}</HintText>
               <InstructionsField
                 id="telnet-aiNotes"
                 label={t("hosts.f.aiNotes")}

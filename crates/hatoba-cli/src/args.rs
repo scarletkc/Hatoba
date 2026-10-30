@@ -12,12 +12,16 @@ Usage:
   hatoba hosts [--json]                         List the saved hosts
   hatoba exec [options] <host> [--] <command>   Run a command on a host
   hatoba cp [--no-prompt] <source> <target>     Copy a file to or from a host
-  hatoba <host> | hatoba [user@]<address>       Open a terminal in Hatoba
+  hatoba <name> | hatoba [user@]<address>       Open a terminal in Hatoba
 
-<host> is the name or id of a saved host, as hatoba hosts lists them.
+<host> is the name or id of a saved host, as hatoba hosts --json lists them;
+<name> is its name. Any other first word also opens Hatoba, so a misspelled
+command prints nothing and exits with 0.
 In cp, one side is <host>:<path> and the other a local path. A remote path is
 from the home directory. A target that is a folder or ends with / gets the file
-under its own name.
+under its own name. A file already at the target is replaced; on the host, the
+new file belongs to the login user with default permissions. A copy that fails
+leaves the old file as it was.
 
 Options:
   --cwd <dir>    Start the command in <dir>, absolute or from the home directory
@@ -26,8 +30,16 @@ Options:
 
 exec runs the command with the host's login shell, without a terminal, and with
 an empty stdin. It prints the command's stdout and stderr as they come and exits
-with the command's exit status, or with 255 when Hatoba could not run it. hosts
-and cp exit with 1 when they fail. Passwords and keys stay in Hatoba.
+with the command's exit status, or with 255 when Hatoba failed, which may be
+after the command started. Ending exec stops the command and what it started;
+on hosts without sh, such as Windows, it may keep running. A command that ends
+by itself leaves what it started in the background running. hosts and cp exit
+with 1 when they fail, and a command line hatoba can't read exits with 2.
+
+A host key not trusted yet, or a password or code that isn't saved, is asked in
+the Hatoba window, and the command waits up to 10 minutes for the answer. A
+jump host can't ask for a password: it needs a saved one, a key or the SSH
+agent. Passwords and keys stay in Hatoba.
 
 Hatoba has to be running and unlocked, with Settings > General >
 \"Let other programs use saved hosts\" on.

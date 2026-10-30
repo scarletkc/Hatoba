@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { IconButton } from "@/components/controls";
+import { IconButton, isImeEvent } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
-import type { LiveSession } from "./session";
+import type { LiveSession } from "@/session/session";
 import s from "./FindBar.module.css";
 
 /** Small inline find bar (TERM-07): Enter / Shift+Enter step through matches, Esc closes. */
@@ -28,7 +27,12 @@ export function FindBar({ session, onClose }: { session: LiveSession; onClose():
   };
 
   const none = query !== "" && results?.count === 0;
-  const label = !query || !results ? "" : none ? t("terminal.find.none") : t("terminal.find.count", { i: results.index + 1, n: results.count });
+  const label =
+    !query || !results
+      ? ""
+      : none
+        ? t("terminal.find.none")
+        : t("terminal.find.count", { i: results.index + 1, n: results.count });
 
   return (
     <div className={s.bar} role="search">
@@ -60,8 +64,20 @@ export function FindBar({ session, onClose }: { session: LiveSession; onClose():
       <span className={cx(s.count, none && s.countNone)} aria-live="polite">
         {label}
       </span>
-      <IconButton icon="caret-up" size={13} label={t("terminal.find.prev")} className={s.button} onClick={() => step("prev")} />
-      <IconButton icon="caret-down" size={13} label={t("terminal.find.next")} className={s.button} onClick={() => step("next")} />
+      <IconButton
+        icon="caret-up"
+        size={14}
+        label={t("terminal.find.prev")}
+        className={s.button}
+        onClick={() => step("prev")}
+      />
+      <IconButton
+        icon="caret-down"
+        size={14}
+        label={t("terminal.find.next")}
+        className={s.button}
+        onClick={() => step("next")}
+      />
       <IconButton icon="x" size={12} label={t("terminal.find.close")} className={s.button} onClick={onClose} />
     </div>
   );

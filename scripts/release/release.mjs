@@ -2,6 +2,8 @@
 // The Release workflow (.github/workflows/release.yml) runs each command, and docs/releasing.md
 // describes the steps.
 // Usage: node scripts/release/release.mjs <command> [options]
+//   commit                           Print the release commit, where the release pull request set
+//                                    the version
 //   check                            Check the version files, the release tag, the release note, and
 //                                    the updater's public key
 //   gate                             Require a CI pass, an approval-gated release environment, and a
@@ -20,7 +22,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFi
 import { basename, dirname, extname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { NOTES_DIR, ROOT, VERSION, compareVersions, isPrerelease, readVersion } from "./version.mjs";
+import { NOTES_DIR, ROOT, VERSION, VERSION_FILES, compareVersions, isPrerelease, readVersion } from "./version.mjs";
 
 /** Keep in sync with the environment of the publish job in release.yml. */
 export const ENVIRONMENT = "release";
@@ -106,9 +108,15 @@ function parsePublicKey(pubkey) {
   const [comment, line] = minisignLines(pubkey);
   const bytes = Buffer.from(line ?? "", "base64");
   if (!comment?.startsWith("untrusted comment:") || bytes.length !== 42 || bytes.subarray(0, 2).toString() !== "Ed") {
-    throw new Error(`plugins.updater.pubkey in ${TAURI_CONFIG} is not a minisign public key. Set it to the contents of the .pub file that \`pnpm tauri signer generate\` wrote.`);
+    throw new Error(
+      `plugins.updater.pubkey in ${TAURI_CONFIG} is not a minisign public key. Set it to the contents of the .pub file that \`pnpm tauri signer generate\` wrote.`,
+    );
   }
-  const key = createPublicKey({ key: Buffer.concat([ED25519_SPKI_PREFIX, bytes.subarray(10)]), format: "der", type: "spki" });
+  const key = createPublicKey({
+    key: Buffer.concat([ED25519_SPKI_PREFIX, bytes.subarray(10)]),
+    format: "der",
+    type: "spki",
+  });
   return { id: bytes.subarray(2, 10), key };
 }
 
@@ -117,7 +125,9 @@ export function updaterPubkey(root = ROOT) {
   const config = JSON.parse(readFileSync(join(root, TAURI_CONFIG), "utf8"));
   const pubkey = config.plugins?.updater?.pubkey ?? "";
   if (!pubkey) {
-    throw new Error(`plugins.updater.pubkey in ${TAURI_CONFIG} is empty. Set it to the public key of the update signing key, as docs/releasing.md describes.`);
+    throw new Error(
+      `plugins.updater.pubkey in ${TAURI_CONFIG} is empty. Set it to the public key of the update signing key, as docs/releasing.md describes.`,
+    );
   }
   parsePublicKey(pubkey);
   return pubkey;
@@ -131,7 +141,8 @@ export function verifyUpdaterSignature(data, signature, pubkey) {
   const { id, key } = parsePublicKey(pubkey);
   const [, line, trustedLine, globalLine] = minisignLines(signature);
   const bytes = Buffer.from(line ?? "", "base64");
-  if (bytes.length !== 74 || !trustedLine?.startsWith(TRUSTED_COMMENT)) throw new Error("The updater signature is not a minisign signature.");
+  if (bytes.length !== 74 || !trustedLine?.startsWith(TRUSTED_COMMENT))
+    throw new Error("The updater signature is not a minisign signature.");
   if (!bytes.subarray(2, 10).equals(id)) {
     throw new Error(
       `The installer was signed with another key than the one in ${TAURI_CONFIG}, so installed apps would refuse the update. Check that TAURI_SIGNING_PRIVATE_KEY in the ${SIGNING_ENVIRONMENT} environment belongs to that public key.`,
@@ -142,10 +153,18 @@ export function verifyUpdaterSignature(data, signature, pubkey) {
   const signed = bytes.subarray(10);
   const trusted = trustedLine.slice(TRUSTED_COMMENT.length);
   const global = Buffer.from(globalLine ?? "", "base64");
-  if (!verify(null, message, key, signed) || !verify(null, Buffer.concat([signed, Buffer.from(trusted)]), key, global)) {
+  if (
+    !verify(null, message, key, signed) ||
+    !verify(null, Buffer.concat([signed, Buffer.from(trusted)]), key, global)
+  ) {
     throw new Error("The updater signature does not match the installer.");
   }
-  return trusted.split("\t").find((field) => field.startsWith("version:"))?.slice("version:".length) ?? null;
+  return (
+    trusted
+      .split("\t")
+      .find((field) => field.startsWith("version:"))
+      ?.slice("version:".length) ?? null
+  );
 }
 
 export function git(args, root = ROOT) {
@@ -159,10 +178,31 @@ export function releaseTarget(version, root = ROOT) {
   if (git(["tag", "--list", tag], root)) {
     const tagged = git(["rev-parse", `refs/tags/${tag}^{commit}`], root);
     if (tagged !== sha) {
-      throw new Error(`${tag} already points to ${tagged.slice(0, 7)}, not to ${sha.slice(0, 7)}. Bump to a new version instead of moving the tag.`);
+      throw new Error(
+        `${tag} already points to ${tagged.slice(0, 7)}, not to ${sha.slice(0, 7)}. Bump to a new version instead of moving the tag.`,
+      );
     }
   }
   return { tag, sha };
+}
+
+/**
+ * The commit to release: where the release pull request set the version that HEAD records, the oldest
+ * commit since then on HEAD's first-parent history to change Cargo.toml, or a later one that changed
+ * the version's release note, such as a fix to it. Commits merged after it go into the next release.
+ */
+export function releaseCommit(version, root = ROOT) {
+  const manifest = VERSION_FILES.find((file) => file.path === "Cargo.toml");
+  let found = null;
+  for (const sha of git(["log", "--first-parent", "--format=%H", "HEAD", "--", manifest.path], root)
+    .split("\n")
+    .filter(Boolean)) {
+    if (manifest.read(git(["show", `${sha}:${manifest.path}`], root))[0] !== version) break;
+    found = sha;
+  }
+  if (found === null) throw new Error(`No commit on HEAD's history sets version ${version} in ${manifest.path}.`);
+  const noted = git(["log", "--first-parent", "-1", "--format=%H", "HEAD", "--", `${NOTES_DIR}/${version}.md`], root);
+  return noted && git(["rev-list", "--count", `${found}..${noted}`], root) !== "0" ? noted : found;
 }
 
 /**
@@ -180,7 +220,8 @@ export function handwrittenNote(version, root = ROOT) {
   const text = readFileSync(join(root, path), "utf8").trim();
   const [heading, ...body] = text.split("\n");
   if (!/^## \S/.test(heading)) throw new Error(`${path} must start with a '## <title>' heading.`);
-  if (!body.join("\n").trim()) throw new Error(`${path} has a heading but no body. Write the release note below the heading.`);
+  if (!body.join("\n").trim())
+    throw new Error(`${path} has a heading but no body. Write the release note below the heading.`);
   return text;
 }
 
@@ -320,10 +361,7 @@ export function ciCovers(tested, sha, root = ROOT) {
   } catch {
     return false;
   }
-  return git(["diff", "--name-only", "--no-renames", tested, sha], root)
-    .split("\n")
-    .filter(Boolean)
-    .every(skippedByCi);
+  return git(["diff", "--name-only", "--no-renames", tested, sha], root).split("\n").filter(Boolean).every(skippedByCi);
 }
 
 async function github(path, { allowMissing = false } = {}) {
@@ -338,17 +376,22 @@ async function github(path, { allowMissing = false } = {}) {
     },
   });
   if (response.status === 404 && allowMissing) return null;
-  if (!response.ok) throw new Error(`GitHub API request for ${path} failed with HTTP ${response.status}: ${await response.text()}`);
+  if (!response.ok)
+    throw new Error(`GitHub API request for ${path} failed with HTTP ${response.status}: ${await response.text()}`);
   return response.json();
 }
 
 async function gate(repository, root = ROOT) {
   const sha = git(["rev-parse", "HEAD"], root);
-  const { workflow_runs: runs } = await github(`${repository}/actions/workflows/ci.yml/runs?status=success&per_page=100`);
+  // The release commit's own run first, which the latest runs may no longer include.
+  const runs = [
+    ...(await github(`${repository}/actions/workflows/ci.yml/runs?status=success&head_sha=${sha}`)).workflow_runs,
+    ...(await github(`${repository}/actions/workflows/ci.yml/runs?status=success&per_page=100`)).workflow_runs,
+  ];
   const passed = runs.find((run) => ciCovers(run.head_sha, sha, root));
   if (!passed) {
     throw new Error(
-      `CI has not passed on ${sha.slice(0, 7)}, or on an earlier commit that differs from it only in files CI skips. Wait for CI on this commit to pass, or run CI on this branch from the Actions tab, then rerun this workflow.`,
+      `CI has not passed on the release commit ${sha.slice(0, 7)}, or on an earlier commit that differs from it only in files CI skips. Wait for CI on it to pass, or rerun the failed jobs of its CI run, then rerun this workflow.`,
     );
   }
   console.log(`CI passed on ${passed.head_sha.slice(0, 7)}: ${passed.html_url}`);
@@ -361,14 +404,17 @@ async function gate(repository, root = ROOT) {
   console.log(`Publishing waits for approval in the ${ENVIRONMENT} environment.`);
   const signing = await github(`${repository}/environments/${SIGNING_ENVIRONMENT}`, { allowMissing: true });
   const policies = signing?.deployment_branch_policy?.custom_branch_policies
-    ? (await github(`${repository}/environments/${SIGNING_ENVIRONMENT}/deployment-branch-policies?per_page=100`)).branch_policies
+    ? (await github(`${repository}/environments/${SIGNING_ENVIRONMENT}/deployment-branch-policies?per_page=100`))
+        .branch_policies
     : [];
   if (!allowsOnlyMain(signing, policies)) {
     throw new Error(
       `The ${SIGNING_ENVIRONMENT} environment must exist and allow deployments only from the main branch, because its secrets sign updates. Set it up as docs/releasing.md describes, then rerun this workflow.`,
     );
   }
-  console.log(`The build signs updates with the secrets of the ${SIGNING_ENVIRONMENT} environment, which only main can use.`);
+  console.log(
+    `The build signs updates with the secrets of the ${SIGNING_ENVIRONMENT} environment, which only main can use.`,
+  );
 }
 
 /**
@@ -393,7 +439,8 @@ export function allowsOnlyMain(environment, policies) {
 export function updateNotes(notes, version, repository) {
   const install = installSection(version);
   const at = notes.indexOf(install);
-  if (at === -1) throw new Error(`The release notes have no install section for ${version}. Write them with the notes command.`);
+  if (at === -1)
+    throw new Error(`The release notes have no install section for ${version}. Write them with the notes command.`);
   return [notes.slice(0, at).trimEnd(), notes.slice(at + install.length).trim()]
     .filter(Boolean)
     .join("\n\n")
@@ -405,7 +452,9 @@ function bundlesOf(platform) {
   const bundles = Object.keys(INSTALLERS).filter((bundle) => INSTALLERS[bundle].platform === platform);
   if (bundles.length === 0) {
     const platforms = [...new Set(Object.values(INSTALLERS).map((installer) => installer.platform))];
-    throw new Error(`Unknown platform '${platform}'. Use ${new Intl.ListFormat("en", { type: "disjunction" }).format(platforms)}.`);
+    throw new Error(
+      `Unknown platform '${platform}'. Use ${new Intl.ListFormat("en", { type: "disjunction" }).format(platforms)}.`,
+    );
   }
   return bundles;
 }
@@ -429,7 +478,9 @@ export function collectDist(version, platform, bundles, output, { pubkey }) {
         );
       }
       const found = existsSync(dir) ? readdirSync(dir).filter((entry) => entry.endsWith(extname(file))) : [];
-      throw new Error(`Expected the installer ${file} in ${dir}; found ${found.length > 0 ? found.join(", ") : "no installer"}.`);
+      throw new Error(
+        `Expected the installer ${file} in ${dir}; found ${found.length > 0 ? found.join(", ") : "no installer"}.`,
+      );
     }
     if (!updater) return [{ from: join(dir, file), name }];
     const sig = `${file}.sig`;
@@ -438,8 +489,13 @@ export function collectDist(version, platform, bundles, output, { pubkey }) {
         `Expected the updater signature ${sig} in ${dir}. \`pnpm tauri build\` writes it when TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD are set, as docs/releasing.md describes.`,
       );
     }
-    const signed = verifyUpdaterSignature(readFileSync(join(dir, file)), readFileSync(join(dir, sig), "utf8").trim(), pubkey);
-    if (signed !== version) throw new Error(`${sig} was made for version ${signed ?? "(none)"}, not ${version}. Rebuild the installer.`);
+    const signed = verifyUpdaterSignature(
+      readFileSync(join(dir, file)),
+      readFileSync(join(dir, sig), "utf8").trim(),
+      pubkey,
+    );
+    if (signed !== version)
+      throw new Error(`${sig} was made for version ${signed ?? "(none)"}, not ${version}. Rebuild the installer.`);
     return [
       { from: join(dir, file), name },
       { from: join(dir, sig), name: signatureName(bundle, version) },
@@ -460,20 +516,26 @@ export function assembleRelease(version, dist, { notes, repository, now = new Da
   const files = bundles.flatMap((bundle) => distFiles(bundle, version));
   const absent = files.filter((name) => !existsSync(join(dist, name)));
   if (absent.length > 0) {
-    throw new Error(`Missing release files in ${dist}: ${absent.join(", ")}. Collect them with the dist command of each platform.`);
+    throw new Error(
+      `Missing release files in ${dist}: ${absent.join(", ")}. Collect them with the dist command of each platform.`,
+    );
   }
   const checksums = bundles.map((bundle) => {
     const name = installerName(bundle, version);
-    return `${createHash("sha256").update(readFileSync(join(dist, name))).digest("hex")}  ${name}\n`;
+    return `${createHash("sha256")
+      .update(readFileSync(join(dist, name)))
+      .digest("hex")}  ${name}\n`;
   });
   writeFileSync(join(dist, CHECKSUMS), checksums.join(""));
-  const platforms = bundles.filter((bundle) => INSTALLERS[bundle].updater).map((bundle) => [
-    INSTALLERS[bundle].updater,
-    {
-      signature: readFileSync(join(dist, signatureName(bundle, version)), "utf8").trim(),
-      url: `https://github.com/${repository}/releases/download/v${version}/${installerName(bundle, version)}`,
-    },
-  ]);
+  const platforms = bundles
+    .filter((bundle) => INSTALLERS[bundle].updater)
+    .map((bundle) => [
+      INSTALLERS[bundle].updater,
+      {
+        signature: readFileSync(join(dist, signatureName(bundle, version)), "utf8").trim(),
+        url: `https://github.com/${repository}/releases/download/v${version}/${installerName(bundle, version)}`,
+      },
+    ]);
   const latest = {
     version,
     notes: updateNotes(notes, version, repository),
@@ -492,18 +554,40 @@ function run(command, args, root) {
 async function publish(version, repository, notes, dist, root = ROOT) {
   const { tag, sha } = releaseTarget(version, root);
   if (!existsSync(notes)) throw new Error(`${notes} does not exist; write it with the notes command.`);
-  const assets = assembleRelease(version, dist, { notes: readFileSync(notes, "utf8"), repository }).map((name) => join(dist, name));
+  const assets = assembleRelease(version, dist, { notes: readFileSync(notes, "utf8"), repository }).map((name) =>
+    join(dist, name),
+  );
   const prerelease = isPrerelease(version);
   // The list includes drafts, which have no tag yet and so are not found by tag.
   const existing = (await github(`${repository}/releases?per_page=100`)).find((release) => release.tag_name === tag);
   if (!existing) {
     // A prerelease never becomes the latest release, whose latest.json installed stable versions read.
     const flags = prerelease ? ["--prerelease", "--latest=false"] : [];
-    run("gh", ["release", "create", tag, ...assets, "--repo", repository, "--target", sha, "--title", `Hatoba ${tag}`, "--notes-file", notes, ...flags], root);
+    run(
+      "gh",
+      [
+        "release",
+        "create",
+        tag,
+        ...assets,
+        "--repo",
+        repository,
+        "--target",
+        sha,
+        "--title",
+        `Hatoba ${tag}`,
+        "--notes-file",
+        notes,
+        ...flags,
+      ],
+      root,
+    );
     return;
   }
   if (existing.draft) {
-    throw new Error(`A draft release already uses ${tag}. Review it on GitHub and delete or publish it, then rerun this workflow.`);
+    throw new Error(
+      `A draft release already uses ${tag}. Review it on GitHub and delete or publish it, then rerun this workflow.`,
+    );
   }
   if (existing.prerelease !== prerelease) {
     throw new Error(
@@ -537,9 +621,13 @@ async function main() {
     return values[name];
   };
   const repository = process.env.GITHUB_REPOSITORY ?? "scarletkc/Hatoba";
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) throw new Error(`GITHUB_REPOSITORY must be OWNER/REPO; got '${repository}'.`);
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repository))
+    throw new Error(`GITHUB_REPOSITORY must be OWNER/REPO; got '${repository}'.`);
   const version = readVersion(ROOT);
   switch (command) {
+    case "commit":
+      console.log(releaseCommit(version));
+      break;
     case "check": {
       const { tag, sha } = releaseTarget(version);
       composeNotes(version, repository);

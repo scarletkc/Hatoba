@@ -7,7 +7,7 @@ A message to the assistant can carry attachments that go with it when the user s
 | Connection diagnostics | **Ask AI** on a failed connection's card | Connection diagnostics · host |
 | Terminal selection | Text selected in the tab's terminal | Selection · N lines |
 | Pasted text | A long paste into the input | Pasted text · N lines |
-| Text file | **Add Text Files…** in the + menu, the clipboard, or dropping on the panel | file name · N lines |
+| Text file | **Add Text Files** in the + menu, the clipboard, or dropping on the panel | file name · N lines |
 | File on the host | A file picked after `@` | file name · N lines |
 | Folder on the host | The first row of a folder after `@`: its list of entries | name/ · N entries |
 | MCP resource | A resource picked after `@` | name · N lines |
@@ -51,7 +51,7 @@ Other labels: **Preview the pasted text**.
 
 ## Text files
 
-**Add Text Files…** in the input area's + menu (the + button, **Add Files and More**) opens a file picker for one or more files. Files can also be attached by copying them in a file manager and pasting into the input box, or by dropping them on the panel (a "Drop text files to attach them" overlay shows while dragging; it works in the desktop app too, which reads the dropped paths itself). Dropping needs a provider with a model to be set up. Each file becomes a chip "name · N lines" with a preview and ×.
+**Add Text Files** in the input area's + menu (the + button, **Add Files and More**) opens a file picker for one or more files. Files can also be attached by copying them in a file manager and pasting into the input box, or by dropping them on the panel (a "Drop text files to attach them" overlay shows while dragging; it works in the desktop app too, which reads the dropped paths itself). Dropping needs a provider with a model to be set up. Each file becomes a chip "name · N lines" with a preview and ×.
 
 - Only UTF-8 text files are accepted: source code, configs, logs, Markdown, JSON. A file with NUL bytes or invalid UTF-8 is refused as not a text file. Images (PNG, JPEG, GIF, WebP, SVG and so on) are not supported yet. Documents such as PDF or Word files are binary and are refused too.
 - A file over 256 KB is refused. All attachments of one message together (diagnostics, selection, pastes and files) may not pass 512 KB; the one that would pass it is refused. Each refusal shows a message naming the file, for example "<name> is larger than 256 KB, so it can’t be attached." or "A message’s attachments can’t exceed 512 KB in total."
@@ -71,4 +71,4 @@ Other labels: **The message is larger than the model’s context window**.
 
 ## After sending
 
-A sent message shows each attachment as a collapsed card above what you typed; click a card to open its text. **Export as Markdown…** writes each attachment as a labelled fenced block. **Edit and Resend** keeps the attachments with the message unless their chip is removed, and a long paste in its edit box becomes another attachment. If a message is stopped before it was stored (for example during the compaction before it), its text and its pastes and files return to the input.
+A sent message shows each attachment as a collapsed card above what you typed; click a card to open its text. **Export as Markdown** writes each attachment as a labelled fenced block. **Edit and Resend** keeps the attachments with the message unless their chip is removed, and a long paste in its edit box becomes another attachment. If a message is stopped before it was stored (for example during the compaction before it), its text and its pastes and files return to the input.

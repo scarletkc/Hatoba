@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
-import { Icon, TextField } from "@/components/controls";
+import { ErrorText, HintText, Icon, TextField, WarningText, isImeEvent } from "@hatoba/ui";
 import { useT } from "@/i18n";
-import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
 import { COMMON_PASSWORDS } from "./commonPasswords";
 import s from "./PasswordStrength.module.css";
 
@@ -46,13 +44,20 @@ export function useStrength(password: string): number | null {
   return password && result?.password === password ? result.score : null;
 }
 
-const LABELS = ["vault.strength.weak", "vault.strength.weak", "vault.strength.fair", "vault.strength.strong", "vault.strength.veryStrong"] as const;
+const LABELS = [
+  "vault.strength.weak",
+  "vault.strength.weak",
+  "vault.strength.fair",
+  "vault.strength.strong",
+  "vault.strength.veryStrong",
+] as const;
 const FILLED = [1, 1, 2, 3, 4];
 
-/** The design's 4-segment meter with a label (design §05 step 3). */
+/** A 4-segment meter with a label. */
 export function StrengthMeter({ score }: { score: number | null }) {
   const t = useT();
-  const color = score === null ? "var(--fill2)" : score <= 1 ? "var(--red)" : score === 2 ? "var(--orange)" : "var(--green)";
+  const color =
+    score === null ? "var(--fill2)" : score <= 1 ? "var(--red)" : score === 2 ? "var(--orange)" : "var(--green)";
   const filled = score === null ? 0 : FILLED[score];
   return (
     <div className={s.meter} aria-live="polite">
@@ -85,7 +90,7 @@ export function useNewPassword() {
 
 export type NewPasswordState = ReturnType<typeof useNewPassword>;
 
-/** Master password + strength meter + confirmation, as in the design's wizard step 3. */
+/** Master password + strength meter + confirmation. */
 export function NewPasswordFields({
   state,
   passwordLabel,
@@ -126,11 +131,8 @@ export function NewPasswordFields({
           onKeyDown={enter}
         />
         <StrengthMeter score={password ? score : null} />
-        {password.length > 0 && issue && (
-          <div className={cx(s.note, issue === "weak" && s.noteWarn)}>
-            {issue === "short" ? t("vault.err.tooShort") : t("vault.err.tooWeak")}
-          </div>
-        )}
+        {password.length > 0 && issue === "short" && <HintText>{t("vault.err.tooShort")}</HintText>}
+        {password.length > 0 && issue === "weak" && <WarningText>{t("vault.err.tooWeak")}</WarningText>}
       </div>
       <div className={s.field}>
         <label className={s.label2} htmlFor="confirm-password">
@@ -144,16 +146,12 @@ export function NewPasswordFields({
           readOnly={disabled}
           invalid={mismatch}
           value={confirm}
-          trailing={matches ? <Icon name="check-circle" fill size={15} color="var(--green)" /> : undefined}
+          trailing={matches ? <Icon name="check-circle" fill size={16} color="var(--green)" /> : undefined}
           onChange={(e) => state.setConfirm(e.target.value)}
           onBlur={() => setConfirmTouched(true)}
           onKeyDown={enter}
         />
-        {mismatch && (
-          <div className={s.error} role="alert">
-            {t("vault.err.mismatch")}
-          </div>
-        )}
+        {mismatch && <ErrorText>{t("vault.err.mismatch")}</ErrorText>}
       </div>
     </>
   );

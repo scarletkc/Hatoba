@@ -3,10 +3,11 @@ import type { TabSource } from "@/app/tabs";
 import { translate, type MessageKey, type Params } from "@/i18n";
 import type { HostView, QuickTarget, TelnetHostView } from "@/ipc/types";
 import { connectionFor, conversationPlace, movedFrom, moves, placeLabel, placeName } from "./place";
-import { serverLabel } from "./revertText";
+import { serverLabel } from "./calls/revertText";
 
 const t = (key: MessageKey, params?: Params) => translate("en", key, params);
-const host = (id: string, name: string, address: string, port = 22, username = "root") => ({ id, name, address, port, username, auth_kind: "agent" }) as HostView;
+const host = (id: string, name: string, address: string, port = 22, username = "root") =>
+  ({ id, name, address, port, username, auth_kind: "agent" }) as HostView;
 const telnetHost = { id: "t-sw", name: "core-sw", address: "10.0.0.2", port: 23, username: "admin" } as TelnetHostView;
 const hosts = [
   host("h-prod", "prod-db", "10.0.0.5"),
@@ -22,13 +23,18 @@ const onHost = (host_id: string) => ({ host_id, quick_target: null });
 const onTarget = (quick_target: QuickTarget) => ({ host_id: null, quick_target });
 const homeChat = { host_id: null, quick_target: null };
 const hostTab = (hostId: string): TabSource => ({ hostId, target: null });
-const quickTab = (address: string, port = 22, username = "root"): TabSource => ({ hostId: null, target: target(address, port, username) });
+const quickTab = (address: string, port = 22, username = "root"): TabSource => ({
+  hostId: null,
+  target: target(address, port, username),
+});
 
 describe("conversationPlace (AI-23, AI-25)", () => {
   it("names a host, a deleted host, a quick-connect target, or none", () => {
     expect(placeName(t, conversationPlace(onHost("h-prod"), hosts))).toBe("prod-db");
     expect(placeName(t, conversationPlace(onHost("h-gone"), hosts))).toBe("Deleted host");
-    expect(placeName(t, conversationPlace(onTarget(target("2001:db8::1", 2222)), hosts))).toBe("root@[2001:db8::1]:2222");
+    expect(placeName(t, conversationPlace(onTarget(target("2001:db8::1", 2222)), hosts))).toBe(
+      "root@[2001:db8::1]:2222",
+    );
     expect(placeName(t, conversationPlace(homeChat, hosts))).toBe("No host");
   });
 });
@@ -37,7 +43,10 @@ describe("movedFrom (AI-09)", () => {
   it("names the host a conversation moves off, empty when it was deleted", () => {
     expect(movedFrom(onHost("h-prod"), hostTab("h-web"), hosts)).toEqual({ from: "prod-db", to: "web-1" });
     expect(movedFrom(onHost("h-gone"), hostTab("h-web"), hosts)).toEqual({ from: "", to: "web-1" });
-    expect(movedFrom(onHost("h-prod"), quickTab("10.0.0.7"), hosts)).toEqual({ from: "prod-db", to: "root@10.0.0.7:22" });
+    expect(movedFrom(onHost("h-prod"), quickTab("10.0.0.7"), hosts)).toEqual({
+      from: "prod-db",
+      to: "root@10.0.0.7:22",
+    });
     expect(movedFrom(onHost("h-prod"), hostTab("h-prod"), hosts)).toBeNull();
   });
 
@@ -53,16 +62,25 @@ describe("movedFrom (AI-09)", () => {
     const on7 = onTarget(target("10.0.0.7"));
     expect(movedFrom(on7, hostTab("h-prod"), hosts)).toEqual({ from: "root@10.0.0.7:22", to: "prod-db" });
     expect(movedFrom(on7, quickTab("10.0.0.8"), hosts)).toEqual({ from: "root@10.0.0.7:22", to: "root@10.0.0.8:22" });
-    expect(movedFrom(on7, quickTab("10.0.0.7", 2222), hosts)).toEqual({ from: "root@10.0.0.7:22", to: "root@10.0.0.7:2222" });
+    expect(movedFrom(on7, quickTab("10.0.0.7", 2222), hosts)).toEqual({
+      from: "root@10.0.0.7:22",
+      to: "root@10.0.0.7:2222",
+    });
     expect(movedFrom(on7, quickTab("10.0.0.7"), hosts)).toBeNull();
     // The tab's target is named as Rust records it, the address in lowercase.
-    expect(movedFrom(on7, quickTab("DB.Example"), hosts)).toEqual({ from: "root@10.0.0.7:22", to: "root@db.example:22" });
+    expect(movedFrom(on7, quickTab("DB.Example"), hosts)).toEqual({
+      from: "root@10.0.0.7:22",
+      to: "root@db.example:22",
+    });
   });
 
   it("stays on a target whose user name has a space", () => {
     const user = "domain user";
     expect(movedFrom(onTarget(target("10.0.0.7", 22, user)), quickTab("10.0.0.7", 22, user), hosts)).toBeNull();
-    expect(movedFrom(onTarget(target("10.0.0.7", 22, user)), hostTab("h-prod"), hosts)).toEqual({ from: "domain user@10.0.0.7:22", to: "prod-db" });
+    expect(movedFrom(onTarget(target("10.0.0.7", 22, user)), hostTab("h-prod"), hosts)).toEqual({
+      from: "domain user@10.0.0.7:22",
+      to: "prod-db",
+    });
   });
 
   it("does not note a move between a target and the host saved from it", () => {
@@ -91,7 +109,11 @@ describe("movedFrom (AI-09)", () => {
 describe("Telnet tabs (TELNET-04)", () => {
   const all = [...hosts, telnetHost];
   const telnetTab = (hostId: string): TabSource => ({ hostId: null, target: null, telnet: { hostId } });
-  const quickTelnet: TabSource = { hostId: null, target: null, telnet: { hostId: null, address: "10.0.0.3", port: 23 } };
+  const quickTelnet: TabSource = {
+    hostId: null,
+    target: null,
+    telnet: { hostId: null, address: "10.0.0.3", port: 23 },
+  };
 
   it("move a conversation to their saved host, and leave it where it was without one", () => {
     expect(movedFrom(onHost("h-prod"), telnetTab("t-sw"), all)).toEqual({ from: "prod-db", to: "core-sw" });
@@ -112,19 +134,29 @@ describe("connectionFor (AI-09)", () => {
   });
 
   it("opens its quick-connect target, as the host saved from it when there is one", () => {
-    expect(connectionFor(onTarget(target("10.0.0.7", 2222)), hosts)).toEqual({ name: "root@10.0.0.7:2222", source: quickTab("10.0.0.7", 2222) });
+    expect(connectionFor(onTarget(target("10.0.0.7", 2222)), hosts)).toEqual({
+      name: "root@10.0.0.7:2222",
+      source: quickTab("10.0.0.7", 2222),
+    });
     expect(connectionFor(onTarget(target("10.0.0.7", 22, "domain user")), hosts)).toEqual({
       name: "domain user@10.0.0.7:22",
       source: quickTab("10.0.0.7", 22, "domain user"),
     });
     expect(connectionFor(onTarget(target("10.0.0.9")), hosts)).toEqual({ name: "web-1", source: hostTab("h-web") });
-    expect(connectionFor(onTarget(target("2001:db8::1", 2222)), hosts)).toEqual({ name: "v6", source: hostTab("h-v6") });
+    expect(connectionFor(onTarget(target("2001:db8::1", 2222)), hosts)).toEqual({
+      name: "v6",
+      source: hostTab("h-v6"),
+    });
   });
 });
 
 describe("local terminal tabs (§7.5)", () => {
   const onLocal = (local: string) => ({ host_id: null, quick_target: null, local });
-  const localTab: TabSource = { hostId: null, target: null, local: { id: "pwsh", name: "PowerShell", kind: "powershell" } };
+  const localTab: TabSource = {
+    hostId: null,
+    target: null,
+    local: { id: "pwsh", name: "PowerShell", kind: "powershell" },
+  };
 
   it("records the computer, and names this one This Computer", () => {
     expect(placeName(t, conversationPlace(onLocal("DEMO-PC"), hosts), "DEMO-PC")).toBe("This Computer");
@@ -136,14 +168,23 @@ describe("local terminal tabs (§7.5)", () => {
   it("moves a conversation to this computer, named as Rust's notes name it", () => {
     expect(moves(onLocal("DEMO-PC"), localTab, "DEMO-PC")).toBe(false);
     expect(moves(onLocal("LAPTOP"), localTab, "DEMO-PC")).toBe(true);
-    expect(movedFrom(onHost("h-prod"), localTab, hosts, "DEMO-PC")).toEqual({ from: "prod-db", to: "DEMO-PC (local terminal)" });
-    expect(movedFrom(onLocal("DEMO-PC"), hostTab("h-web"), hosts, "DEMO-PC")).toEqual({ from: "DEMO-PC (local terminal)", to: "web-1" });
+    expect(movedFrom(onHost("h-prod"), localTab, hosts, "DEMO-PC")).toEqual({
+      from: "prod-db",
+      to: "DEMO-PC (local terminal)",
+    });
+    expect(movedFrom(onLocal("DEMO-PC"), hostTab("h-web"), hosts, "DEMO-PC")).toEqual({
+      from: "DEMO-PC (local terminal)",
+      to: "web-1",
+    });
     // A home tab chat moves without a note.
     expect(movedFrom(homeChat, localTab, hosts, "DEMO-PC")).toBeNull();
   });
 
   it("opens a local terminal for a conversation that was on this computer's", () => {
-    expect(connectionFor(onLocal("DEMO-PC"), hosts, "DEMO-PC")).toEqual({ name: "DEMO-PC (local terminal)", source: "local" });
+    expect(connectionFor(onLocal("DEMO-PC"), hosts, "DEMO-PC")).toEqual({
+      name: "DEMO-PC (local terminal)",
+      source: "local",
+    });
     expect(connectionFor(onLocal("LAPTOP"), hosts, "DEMO-PC")).toBeNull();
   });
 

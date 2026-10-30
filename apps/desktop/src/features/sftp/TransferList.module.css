@@ -6,11 +6,11 @@
   padding: 10px 14px 14px;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: var(--space-6);
 }
 
 .header {
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--fg2);
 }
@@ -18,7 +18,7 @@
 .transfer {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: var(--space-6);
   transition: opacity 0.6s ease;
 }
 
@@ -29,8 +29,8 @@
 .top {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 12px;
+  gap: var(--space-6);
+  font-size: var(--text-sm);
 }
 
 .name {
@@ -42,39 +42,29 @@
 }
 
 .pct {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--fg2);
   font-variant-numeric: tabular-nums;
+  min-width: 4ch;
+  text-align: right;
 }
 
+/* Overhangs the name's line rather than making it taller. */
 .close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
+  margin: -2px 0;
   color: var(--fg2);
-}
-
-.close:hover {
-  background: var(--fill2);
-  color: var(--fg);
 }
 
 .track {
   height: 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-mark);
   background: var(--fill2);
   overflow: hidden;
 }
 
 .fill {
   height: 100%;
-  border-radius: 2px;
+  border-radius: var(--radius-mark);
   background: var(--accent);
   transition: width var(--motion-base) var(--ease-out);
 }
@@ -84,7 +74,7 @@
 }
 
 .line {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--fg2);
   font-variant-numeric: tabular-nums;
   overflow: hidden;

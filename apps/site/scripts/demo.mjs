@@ -20,7 +20,11 @@ const OUT = fileURLToPath(new URL("../public/demo/", import.meta.url));
 /** Runs `command`. pnpm is a .cmd script on Windows, which only a shell runs, so paths with spaces are quoted for it. */
 function run(command, args, cwd) {
   const shell = process.platform === "win32" && command === "pnpm";
-  execFileSync(command, shell ? args.map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg)) : args, { cwd, stdio: "inherit", shell });
+  execFileSync(command, shell ? args.map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg)) : args, {
+    cwd,
+    stdio: "inherit",
+    shell,
+  });
 }
 
 rmSync(OUT, { recursive: true, force: true });
@@ -36,9 +40,11 @@ try {
   if (!scripts["build:demo"]) {
     console.log(`${ref} has no build:demo script in apps/desktop, so the site has no demo.`);
   } else {
-    if (checkout !== ROOT) run("pnpm", ["install", "--frozen-lockfile", "--filter", "@hatoba/desktop"], checkout);
+    // `...` also installs the workspace packages the app depends on, such as @hatoba/ui.
+    if (checkout !== ROOT) run("pnpm", ["install", "--frozen-lockfile", "--filter", "@hatoba/desktop..."], checkout);
     run("pnpm", ["run", "build:demo", "--base", "/demo/", "--outDir", OUT, "--emptyOutDir"], desktop);
-    if (!existsSync(join(OUT, "index.html"))) throw new Error(`Building the demo of ${ref} left no index.html in ${OUT}.`);
+    if (!existsSync(join(OUT, "index.html")))
+      throw new Error(`Building the demo of ${ref} left no index.html in ${OUT}.`);
     console.log(`Built the demo of ${ref} into ${OUT}.`);
   }
 } finally {

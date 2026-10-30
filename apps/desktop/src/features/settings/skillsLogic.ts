@@ -49,7 +49,12 @@ export function nameProblemKey(problem: NameProblem): "nameRequired" | "nameInva
 
 /** The first unused name built from `name`: `nginx-ops` becomes `nginx-ops-2`, then `-3`. Valid names only. */
 export function suggestSkillName(name: string, taken: readonly string[]): string {
-  const base = isValidSkillName(name) ? name : name.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || "skill";
+  const base = isValidSkillName(name)
+    ? name
+    : name
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "skill";
   for (let n = 2; ; n++) {
     const suffix = `-${n}`;
     const candidate = `${base.slice(0, SKILL_NAME_MAX - suffix.length)}${suffix}`;
@@ -175,14 +180,20 @@ export function toSkillInput(id: string | null, enabled: boolean, draft: SkillDr
     description: draft.description.trim(),
     enabled,
     body: draft.body,
-    files: draft.files.map((f): SkillFileView => ({ path: normalizeSkillPath(f.path.trim()) ?? f.path.trim(), content: f.content })),
+    files: draft.files.map((f): SkillFileView => ({
+      path: normalizeSkillPath(f.path.trim()) ?? f.path.trim(),
+      content: f.content,
+    })),
   };
 }
 
 // ───────────────────────── Import issues (AI-27) ─────────────────────────
 
 /** The message key suffix and the placeholders of an issue; the key is `aiSettings.skills.issue.<kind>`. */
-export function describeIssue(issue: SkillIssue): { kind: SkillIssue["kind"]; params: Record<string, string | number> } {
+export function describeIssue(issue: SkillIssue): {
+  kind: SkillIssue["kind"];
+  params: Record<string, string | number>;
+} {
   switch (issue.kind) {
     case "invalid_frontmatter":
       return { kind: issue.kind, params: { detail: issue.detail } };
@@ -212,7 +223,9 @@ export function sortSkills(list: readonly SkillView[]): SkillView[] {
 
 /** Replaces the skill with the same ID, or adds it. */
 export function upsertSkill(list: readonly SkillView[], skill: SkillView): SkillView[] {
-  return sortSkills(list.some((s) => s.id === skill.id) ? list.map((s) => (s.id === skill.id ? skill : s)) : [...list, skill]);
+  return sortSkills(
+    list.some((s) => s.id === skill.id) ? list.map((s) => (s.id === skill.id ? skill : s)) : [...list, skill],
+  );
 }
 
 /** The last part of a picked folder or `.zip` path, without the extension, for the title of the import. */

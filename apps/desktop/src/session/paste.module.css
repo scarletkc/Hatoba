@@ -1,0 +1,17 @@
+.preview {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  max-height: 150px;
+  overflow: auto;
+  border-radius: var(--radius-sm);
+  background: var(--fill);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.more {
+  color: var(--fg2);
+}

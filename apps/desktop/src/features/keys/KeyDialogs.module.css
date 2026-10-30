@@ -1,31 +1,20 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-12);
 }
 
 .dialogForm {
   margin-top: 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.formHint {
-  font-size: var(--text-sm);
-  color: var(--fg2);
-}
-
-.formError {
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--red);
+  gap: var(--space-12);
 }
 
 .filePick {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-8);
   min-width: 0;
 }
 
@@ -33,7 +22,7 @@
   flex: 1;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--text-sm);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -46,7 +35,7 @@
 
 .paste {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   min-height: 110px;
   white-space: pre;

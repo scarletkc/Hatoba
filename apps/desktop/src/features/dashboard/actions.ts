@@ -1,26 +1,12 @@
-import { create } from "zustand";
+import { toast } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useTabs } from "@/app/tabs";
-import { toast } from "@/components/overlay";
-import { connectHost } from "@/features/terminal/connect";
 import { t } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { GroupView, HostView } from "@/ipc/types";
-import { leftOutBy, type DashboardSort } from "./logic";
-
-/** Dashboard view state that survives leaving the page and coming back (HOST-14). */
-export const useDashboardUi = create<{
-  sort: DashboardSort;
-  showLeftOut: boolean;
-  setSort(sort: DashboardSort): void;
-  setShowLeftOut(show: boolean): void;
-}>((set) => ({
-  sort: "list",
-  showLeftOut: false,
-  setSort: (sort) => set({ sort }),
-  setShowLeftOut: (showLeftOut) => set({ showLeftOut }),
-}));
+import { connectHost } from "@/session/connect";
+import { leftOutBy } from "./logic";
 
 /** **Open Terminal**: brings the host's tab to the front, or opens one (which takes over the dashboard's connection). */
 export function openTerminal(hostId: string) {
@@ -50,9 +36,17 @@ export function dashboardSwitch(host: HostView, groups: ReadonlyMap<string, Grou
     case "host":
       return { key: "dashboard.include", icon: "eye", run: () => void setShownOnDashboard(host.id, true) } as const;
     case "group":
-      return { key: "dashboard.includeGroup", icon: "eye", run: () => void setShownOnDashboard(host.group_id!, true) } as const;
+      return {
+        key: "dashboard.includeGroup",
+        icon: "eye",
+        run: () => void setShownOnDashboard(host.group_id!, true),
+      } as const;
     case null:
-      return { key: "dashboard.leaveOut", icon: "eye-slash", run: () => void setShownOnDashboard(host.id, false) } as const;
+      return {
+        key: "dashboard.leaveOut",
+        icon: "eye-slash",
+        run: () => void setShownOnDashboard(host.id, false),
+      } as const;
   }
 }
 

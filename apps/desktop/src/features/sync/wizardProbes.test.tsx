@@ -57,7 +57,9 @@ describe("Worker step", () => {
     const [state, setState] = useState(EMPTY_WORKER);
     form = state;
     if (!shown) return null;
-    return <WorkerStep form={state} update={(p) => setState((f) => ({ ...f, ...p }))} onBack={() => {}} onNext={() => {}} />;
+    return (
+      <WorkerStep form={state} update={(p) => setState((f) => ({ ...f, ...p }))} onBack={() => {}} onNext={() => {}} />
+    );
   }
 
   it("drops a test answer that arrives after the step was left and tested again", async () => {
@@ -111,7 +113,9 @@ describe("D1 step", () => {
     const [state, setState] = useState(EMPTY_D1);
     form = state;
     if (!shown) return null;
-    return <D1Step form={state} update={(p) => setState((f) => ({ ...f, ...p }))} onBack={() => {}} onNext={() => {}} />;
+    return (
+      <D1Step form={state} update={(p) => setState((f) => ({ ...f, ...p }))} onBack={() => {}} onNext={() => {}} />
+    );
   }
   const db = (id: string) => ({ id, name: id, region: null });
 

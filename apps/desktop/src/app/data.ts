@@ -4,7 +4,7 @@ import { api } from "@/ipc/api";
 import type { AnyHostView, GroupView, HostView, KeyView, ProxyView, TagCount, TelnetHostView } from "@/ipc/types";
 
 /**
- * Decrypted-vault metadata shown across the app (sidebar counts, host list, key pickers).
+ * Decrypted-vault metadata shown across the app (group counts, host list, key pickers).
  * Contains no secrets — only the DTOs the backend chooses to expose.
  */
 interface VaultData {
@@ -44,7 +44,15 @@ export const useVaultData = create<VaultData>((set) => ({
       api.keys_list(),
       api.proxies_list(),
     ]);
-    set({ loaded: true, hosts, telnetHosts, groups: [...groups].sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name)), tags, keys, proxies });
+    set({
+      loaded: true,
+      hosts,
+      telnetHosts,
+      groups: [...groups].sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name)),
+      tags,
+      keys,
+      proxies,
+    });
   },
   reloadHosts: async () => {
     const started = generation;

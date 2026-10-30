@@ -1,5 +1,13 @@
-import type { AiAutoVerdict, AiEntryView, AiFileChange, AiToolCall, AiTurnEvent, AiUsage, McpToolInfo } from "@/ipc/types";
-import type { HardRule } from "./autoRules";
+import type {
+  AiAutoVerdict,
+  AiEntryView,
+  AiFileChange,
+  AiToolCall,
+  AiTurnEvent,
+  AiUsage,
+  McpToolInfo,
+} from "@/ipc/types";
+import type { HardRule } from "./rules/autoRules";
 
 /** A response while it streams, before Rust stores it as an entry (§13.1 step 2). */
 export interface LiveResponse {
@@ -42,8 +50,7 @@ export interface TurnState {
 
 /** How the last turn ended, when the panel has something to say about it. `empty`: the reply had no answer (§13.1). */
 export type TurnOutcome =
-  | { reason: "stopped" | "length" | "refused" | "empty" }
-  | { reason: "error"; status: number | null; message: string };
+  { reason: "stopped" | "length" | "refused" | "empty" } | { reason: "error"; status: number | null; message: string };
 
 export interface TurnSnapshot {
   entries: AiEntryView[];
@@ -111,7 +118,11 @@ export function reduceTurnEvent(s: TurnSnapshot, ev: AiTurnEvent): TurnSnapshot 
     case "opened":
       return s;
     case "request_started":
-      return { ...s, outcome: null, turn: { ...(turn ?? newTurn()), phase: "waiting", live: emptyLive(), error: null } };
+      return {
+        ...s,
+        outcome: null,
+        turn: { ...(turn ?? newTurn()), phase: "waiting", live: emptyLive(), error: null },
+      };
     case "thinking":
       if (!turn) return s;
       return { ...s, turn: { ...turn, phase: "streaming", live: { ...(turn.live ?? emptyLive()), thinking: true } } };
@@ -128,7 +139,10 @@ export function reduceTurnEvent(s: TurnSnapshot, ev: AiTurnEvent): TurnSnapshot 
             ? { ...live, reasoning: live.reasoning + ev.delta }
             : ev.kind === "tool_call"
               ? { ...live, toolCalls: [...live.toolCalls, { id: ev.id, name: ev.name, arguments: ev.arguments }] }
-              : { ...live, usage: { input_tokens: ev.input_tokens, output_tokens: ev.output_tokens, estimated: ev.estimated } };
+              : {
+                  ...live,
+                  usage: { input_tokens: ev.input_tokens, output_tokens: ev.output_tokens, estimated: ev.estimated },
+                };
       return { ...s, turn: { ...turn, phase: "streaming", live: next } };
     }
     case "entry": {
@@ -239,7 +253,9 @@ export function callRevealKey(responseId: string, callId: string): string {
 export function revealKey(entries: AiEntryView[], entry: AiEntryView): string | null {
   if (entry.role !== "tool") return `entry:${entry.entry_id}`;
   const at = entries.indexOf(entry);
-  const response = entries.slice(0, at < 0 ? entries.length : at).findLast((e) => e.role === "assistant" && e.tool_calls.some((c) => c.id === entry.tool_call_id));
+  const response = entries
+    .slice(0, at < 0 ? entries.length : at)
+    .findLast((e) => e.role === "assistant" && e.tool_calls.some((c) => c.id === entry.tool_call_id));
   return response ? callRevealKey(response.entry_id, entry.tool_call_id) : null;
 }
 
@@ -253,7 +269,8 @@ export function unansweredCalls(entries: AiEntryView[]): AiToolCall[] {
     const e = entries[i];
     if (e.role !== "assistant") continue;
     const results = new Map<string, number>();
-    for (const x of entries.slice(i + 1)) if (x.role === "tool") results.set(x.tool_call_id, (results.get(x.tool_call_id) ?? 0) + 1);
+    for (const x of entries.slice(i + 1))
+      if (x.role === "tool") results.set(x.tool_call_id, (results.get(x.tool_call_id) ?? 0) + 1);
     return e.tool_calls.filter((c) => {
       const left = results.get(c.id) ?? 0;
       if (left > 0) results.set(c.id, left - 1);

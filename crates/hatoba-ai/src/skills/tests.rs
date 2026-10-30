@@ -1088,34 +1088,20 @@ fn a_zip_bomb_that_declares_its_size_is_rejected_without_reading_it() {
 }
 
 #[test]
-fn a_zip_bomb_that_lies_about_its_size_is_cut_at_the_file_limit() {
-    let text_bomb = vec![b'a'; 8 * 1024 * 1024];
-    let mut bytes = zip_bytes(&[
-        ("SKILL.md", GOOD.as_bytes()),
-        ("references/bomb.md", &text_bomb),
-    ]);
-    // Central directory, uncompressed size: claim 10 bytes for every entry.
-    patch_zip(&mut bytes, 24, None, &10u32.to_le_bytes());
-    let import = read_zip_bytes(&bytes).unwrap();
-    // The bytes that were read decide; SKILL.md only claims to be smaller than it is.
-    assert_eq!(
-        import.issues,
-        vec![SkillIssue::FileTooLarge {
-            path: "references/bomb.md".into(),
-            size: MAX_FILE_BYTES as u64 + 1
-        }]
-    );
-    assert!(package(&import).files.is_empty());
-}
-
-#[test]
-fn a_zip_bomb_of_zeros_that_lies_about_its_size_is_skipped_as_not_text() {
-    let zeros = vec![0u8; 8 * 1024 * 1024];
-    let mut bytes = zip_bytes(&[("SKILL.md", GOOD.as_bytes()), ("assets/zeros.bin", &zeros)]);
-    patch_zip(&mut bytes, 24, None, &10u32.to_le_bytes());
-    let import = read_zip_bytes(&bytes).unwrap();
-    assert_eq!(import.issues, vec![]);
-    assert_eq!(import.skipped.len(), 1);
+fn a_zip_bomb_that_lies_about_its_size_is_refused_as_corrupt() {
+    for (path, bomb) in [
+        ("references/bomb.md", vec![b'a'; 8 * 1024 * 1024]),
+        ("assets/zeros.bin", vec![0u8; 8 * 1024 * 1024]),
+    ] {
+        let mut bytes = zip_bytes(&[("SKILL.md", GOOD.as_bytes()), (path, &bomb)]);
+        // Central directory, uncompressed size: claim 10 bytes for every entry.
+        patch_zip(&mut bytes, 24, None, &10u32.to_le_bytes());
+        // Reading stops at the first byte past the claimed size.
+        assert!(
+            matches!(read_zip_bytes(&bytes), Err(SkillError::Zip(_))),
+            "{path}"
+        );
+    }
 }
 
 #[test]
@@ -1261,7 +1247,10 @@ fn an_archive_file_over_the_cap_is_refused() {
 
 fn zip_entry_names(path: &Path) -> Vec<String> {
     let archive = zip::ZipArchive::new(fs::File::open(path).unwrap()).unwrap();
-    archive.file_names().map(str::to_owned).collect()
+    archive
+        .file_names()
+        .map(|name| name.unwrap().into_owned())
+        .collect()
 }
 
 #[test]

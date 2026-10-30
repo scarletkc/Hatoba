@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Button, Icon, LinkButton, Spinner } from "@hatoba/ui";
+import { AppLogo } from "@/app/AppLogo";
 import { enterUnlocked } from "@/app/boot";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
 import { WindowChrome } from "@/app/TitleBar";
-import { AppLogo, Icon, Spinner } from "@/components/controls";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import { cx } from "@/lib/cx";
 import { RecoverSheet } from "./RecoverSheet";
 import s from "./UnlockScreen.module.css";
 
-/** Full-window lock screen (design §06, VAULT-03, SEC-06, SEC-07, SEC-10, SEC-11). */
+/** Full-window lock screen (VAULT-03, SEC-06, SEC-07, SEC-10, SEC-11). */
 export function UnlockScreen() {
   const t = useT();
   const vault = useApp((st) => st.vault);
@@ -89,17 +90,27 @@ export function UnlockScreen() {
       // shows after a click on the button.
       if (auto && err.code === "biometric_unavailable") return;
       // The backend turned off an enrolment that no longer opens; the refresh removes the button.
-      if (err.code === "biometric_stale") void useApp.getState().refreshVault().catch(() => null);
+      if (err.code === "biometric_stale")
+        void useApp
+          .getState()
+          .refreshVault()
+          .catch(() => null);
       // The PIN no longer unlocks (too many wrong ones, or the app restarted): the field asks for
       // the master password, under the reason.
       if (err.code === "pin_unavailable" || (err.code === "wrong_pin" && !err.attempts_left)) {
         setUsePassword(true);
         setPassword("");
-        void useApp.getState().refreshVault().catch(() => null);
+        void useApp
+          .getState()
+          .refreshVault()
+          .catch(() => null);
       }
       if (err.code === "throttled" && err.retry_at) setRetryAt(err.retry_at);
       else if (err.code === "wrong_password") {
-        const v = await useApp.getState().refreshVault().catch(() => null);
+        const v = await useApp
+          .getState()
+          .refreshVault()
+          .catch(() => null);
         if (v?.retry_at) setRetryAt(v.retry_at);
       }
       setError(errorMessage(t, e, { biometric: platform === "macos" ? "Touch ID" : "Windows Hello" }));
@@ -146,7 +157,8 @@ export function UnlockScreen() {
   const prompted = useRef(false);
   const autoPrompt = useRef(() => {});
   autoPrompt.current = () => {
-    if (prompted.current || busy || recovering || !document.hasFocus() || document.visibilityState !== "visible") return;
+    if (prompted.current || busy || recovering || !document.hasFocus() || document.visibilityState !== "visible")
+      return;
     prompted.current = true;
     void unlockBiometric(true);
   };
@@ -216,8 +228,13 @@ export function UnlockScreen() {
             >
               <Icon name={revealed ? "eye-slash" : "eye"} />
             </button>
-            <button type="submit" className={s.go} aria-label={t("vault.unlock.submit")} disabled={!password || busy || throttled}>
-              {busy ? <Spinner size={13} /> : <Icon name="arrow-right" />}
+            <button
+              type="submit"
+              className={s.go}
+              aria-label={t("vault.unlock.submit")}
+              disabled={!password || busy || throttled}
+            >
+              {busy ? <Spinner size={14} /> : <Icon name="arrow-right" />}
             </button>
           </div>
           <div className={s.message} role="alert" aria-live="assertive">
@@ -227,29 +244,22 @@ export function UnlockScreen() {
           {vault?.biometric_enabled && (
             <>
               <div className={s.divider}>{t("vault.unlock.or")}</div>
-              <button type="button" className={s.biometric} disabled={busy} onClick={() => void unlockBiometric()}>
-                <Icon name="fingerprint" />
+              <Button icon="fingerprint" disabled={busy} onClick={() => void unlockBiometric()}>
                 {biometricLabel}
-              </button>
+              </Button>
             </>
           )}
         </form>
 
         <div className={s.links}>
           {pinMode ? (
-            <button type="button" className={s.forgot} onClick={() => switchMode(true)}>
-              {t("vault.unlock.usePassword")}
-            </button>
+            <LinkButton onClick={() => switchMode(true)}>{t("vault.unlock.usePassword")}</LinkButton>
           ) : (
             <>
               {vault?.pin_unlock && (
-                <button type="button" className={s.forgot} onClick={() => switchMode(false)}>
-                  {t("vault.unlock.usePin")}
-                </button>
+                <LinkButton onClick={() => switchMode(false)}>{t("vault.unlock.usePin")}</LinkButton>
               )}
-              <button type="button" className={s.forgot} onClick={() => setRecovering(true)}>
-                {t("vault.unlock.forgot")}
-              </button>
+              <LinkButton onClick={() => setRecovering(true)}>{t("vault.unlock.forgot")}</LinkButton>
             </>
           )}
         </div>

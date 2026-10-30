@@ -133,6 +133,8 @@ pub fn proxy_save(
     Ok(view)
 }
 
+/// Hosts that named the proxy go back to the device default; this device stops using it as its
+/// default.
 #[tauri::command]
 #[specta::specta]
 pub fn proxy_delete(app: AppHandle, state: State<'_, AppState>, id: String) -> AppResult<()> {

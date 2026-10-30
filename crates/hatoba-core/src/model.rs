@@ -575,6 +575,8 @@ pub enum ForwardKind {
 pub struct PortForward {
     /// The [`Host`] this forward belongs to.
     pub host_id: String,
+    /// What the forward is for; empty when it has none, and it is named by its rule.
+    pub name: String,
     /// Direction.
     #[zeroize(skip)]
     pub kind: ForwardKind,
@@ -1360,7 +1362,18 @@ pub struct AiSettings {
     /// Conversations start with the memories, and the assistant can save and delete them (AI-53).
     /// On by default, also for settings written before it existed.
     pub memory: bool,
+    /// The size of the AI panel's conversation and input text, in px (TERM-13), from
+    /// [`AI_TEXT_SIZE_MIN`] to [`AI_TEXT_SIZE_MAX`]. [`AI_TEXT_SIZE_DEFAULT`] for settings written
+    /// before it existed.
+    pub text_size: u32,
 }
+
+/// The smallest [`AiSettings::text_size`], in px (TERM-13).
+pub const AI_TEXT_SIZE_MIN: u32 = 11;
+/// The largest [`AiSettings::text_size`], in px.
+pub const AI_TEXT_SIZE_MAX: u32 = 24;
+/// The [`AiSettings::text_size`] of settings that have none: the panel's design size, in px.
+pub const AI_TEXT_SIZE_DEFAULT: u32 = 13;
 
 /// The longest [`AiSettings::custom_instructions`], in bytes of UTF-8 (AI-36). Plain text this long
 /// fits the settings item; text whose JSON is much longer (many quotes or backslashes) may not,
@@ -1379,6 +1392,7 @@ impl Default for AiSettings {
             send_terminal_screen: true,
             judge_model: None,
             memory: true,
+            text_size: AI_TEXT_SIZE_DEFAULT,
         }
     }
 }
@@ -1519,7 +1533,8 @@ impl Item {
             Self::Group(i) => i.name.clone(),
             Self::Key(i) => i.name.clone(),
             Self::KnownHost(i) => format!("{}:{}", i.host, i.port),
-            Self::Forward(i) => format!("{}:{}", i.bind_address, i.bind_port),
+            Self::Forward(i) if i.name.is_empty() => format!("{}:{}", i.bind_address, i.bind_port),
+            Self::Forward(i) => i.name.clone(),
             Self::Snippet(i) => i.name.clone(),
             Self::Proxy(i) => i.name.clone(),
             Self::AiProvider(i) => i.name.clone(),
@@ -2421,7 +2436,8 @@ mod tests {
                 "custom_instructions": "Answer in English.",
                 "send_terminal_screen": true,
                 "judge_model": {"provider_id": "p2", "model_id": "jev-latest"},
-                "memory": true
+                "memory": true,
+                "text_size": 13
             })
         );
         assert_eq!(
@@ -2432,7 +2448,8 @@ mod tests {
                 "native_search": true,
                 "builtin_skill_enabled": true,
                 "send_terminal_screen": true,
-                "memory": true
+                "memory": true,
+                "text_size": 13
             })
         );
 
@@ -2481,6 +2498,8 @@ mod tests {
         assert!(ai.memory);
         let forgetful = read(json!({"type": "settings", "ai": {"memory": false}}));
         assert!(!forgetful.as_settings().unwrap().ai.memory);
+        // And those written before the AI text size (TERM-13) have the default.
+        assert_eq!(ai.text_size, AI_TEXT_SIZE_DEFAULT);
         let memory = read(json!({"type": "ai_memory", "name": "web-1", "extra": 1}));
         assert_eq!(
             memory,
@@ -2861,6 +2880,16 @@ mod tests {
             ..KnownHost::default()
         });
         assert_eq!(kh.display_name(), "h:2222");
+        let forward = |name: &str| {
+            Item::Forward(PortForward {
+                name: name.into(),
+                bind_address: "127.0.0.1".into(),
+                bind_port: 15432,
+                ..PortForward::default()
+            })
+        };
+        assert_eq!(forward("Postgres").display_name(), "Postgres");
+        assert_eq!(forward("").display_name(), "127.0.0.1:15432");
     }
 
     #[test]

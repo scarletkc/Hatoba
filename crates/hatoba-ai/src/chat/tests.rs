@@ -220,6 +220,8 @@ async fn chat_completions_streams_text_and_sends_the_expected_request() {
             usage: Some(cached_usage(812, 9, 768, 0)),
             raw: json!({"role": "assistant", "content": "Disk usage is 42%.", "refusal": null}),
             terminal: None,
+            shell: None,
+            mcp_servers: None,
             interrupted: false,
         }
     );
@@ -606,6 +608,8 @@ fn thinking_entry() -> AssistantEntry {
         usage: a.usage,
         raw: a.raw,
         terminal: None,
+        shell: None,
+        mcp_servers: None,
         interrupted: false,
     }
 }
@@ -1154,6 +1158,20 @@ fn retry_conditions() {
     )));
     assert!(!rejects_replayed_raw(&http(401, "signature")));
     assert!(!rejects_replayed_raw(&http(400, "max_tokens too large")));
+
+    // About the replayed blocks alone, or also about the display, its header or the level.
+    assert!(rejects_only_replayed_raw(&http(
+        400,
+        "messages.1.content.0: Invalid `signature` in `thinking` block"
+    )));
+    for message in [
+        "thinking.display: Input should be 'summarized' or 'omitted'",
+        "Unexpected value(s) `thinking-display-updates-2026-08-18` for the `anthropic-beta` header",
+        "thinking.type: Input tag 'adaptive' found using 'type' does not match any of the expected tags",
+    ] {
+        assert!(rejects_replayed_raw(&http(400, message)), "{message}");
+        assert!(!rejects_only_replayed_raw(&http(400, message)), "{message}");
+    }
 }
 
 fn assistant_with(calls: &[(&str, &str)], text: &str) -> AiEntry {
@@ -3029,7 +3047,10 @@ async fn anthropic_falls_back_to_summarized_when_updates_are_refused() {
         .mount(&server)
         .await;
     let p = provider(&server, Protocol::Anthropic);
-    let model = ModelSpec::new("claude-opus-5-5");
+    // Refusals are remembered per base URL and model for the life of the process, and Windows
+    // hands a dropped mock server's port to the next one: a Vertex-style `@` suffix keeps these
+    // refusal tests' models apart from every other test's.
+    let model = ModelSpec::new("claude-opus-5-5@falls-back");
     let tools = builtin_tools(&ToolSet {
         terminal: true,
         ..ToolSet::default()
@@ -3066,7 +3087,7 @@ async fn anthropic_falls_back_to_summarized_when_updates_are_refused() {
     assert_eq!(requests.len(), 5);
     assert!(!sent_beta(&server, 4).await);
     // Another model behind the same gateway may reach another upstream, so it still tries.
-    let sonnet = ModelSpec::new("claude-sonnet-5-5");
+    let sonnet = ModelSpec::new("claude-sonnet-5-5@falls-back");
     let (result, _) = run(
         &p,
         &with_effort(request(&sonnet, &entries, &tools), Some(High)),
@@ -3094,7 +3115,7 @@ async fn an_accepted_request_clears_earlier_refusals_of_progress_updates() {
         .mount(&server)
         .await;
     let p = provider(&server, Protocol::Anthropic);
-    let model = ModelSpec::new("claude-opus-5-5");
+    let model = ModelSpec::new("claude-opus-5-5@clears");
     let entries = vec![AiEntry::user(1, "hi")];
     let req = request(&model, &entries, &[]);
     // A passing refusal, confirmed by the summarized retry: one strike.
@@ -3162,7 +3183,7 @@ async fn an_unrelated_refusal_keeps_progress_updates() {
         .mount(&server)
         .await;
     let p = provider(&server, Protocol::Anthropic);
-    let model = ModelSpec::new("claude-opus-5-5");
+    let model = ModelSpec::new("claude-opus-5-5@unrelated");
     let tools = builtin_tools(&ToolSet {
         terminal: true,
         ..ToolSet::default()
@@ -3182,6 +3203,54 @@ async fn an_unrelated_refusal_keeps_progress_updates() {
     let requests = server.received_requests().await.unwrap();
     assert_eq!(requests.len(), 4);
     assert!(requests[2].headers.get("anthropic-beta").is_some());
+}
+
+#[tokio::test]
+async fn replayed_thinking_that_no_longer_binds_keeps_progress_updates() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(body_string_contains(r#""type":"thinking""#))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "type": "error",
+            "error": {"type": "invalid_request_error",
+                      "message": "messages.1.content.0: Invalid `signature` in `thinking` block"}
+        })))
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .respond_with(sse(ANTHROPIC_PROGRESS))
+        .mount(&server)
+        .await;
+    let p = provider(&server, Protocol::Anthropic);
+    let model = ModelSpec::new("claude-opus-5-5@rebinds");
+    let earlier = AssistantEntry {
+        model_id: model.id.clone(),
+        ..thinking_entry()
+    };
+    let entries = vec![
+        AiEntry::user(1, "Is the disk full?"),
+        AiEntry::assistant(2, earlier),
+        AiEntry::tool(3, "toolu_01AbCdEf", ToolStatus::Ok, "42%"),
+    ];
+    let tools = terminal_tools();
+    let req = with_effort(request(&model, &entries, &tools), Some(High));
+    let (result, events) = run(&p, &req).await;
+    let entry = result.unwrap();
+    // The retry rebuilds the entries and still asks for progress updates at the same level, so
+    // no reasoning shows.
+    assert_eq!(entry.reasoning, None);
+    assert!(!events.contains(&StreamEvent::EffortIgnored));
+    let requests = server.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 2);
+    assert!(sent_beta(&server, 1).await);
+    let sent = bodies(&server).await;
+    assert_eq!(
+        sent[1]["thinking"],
+        json!({"type": "adaptive", "display": "updates"})
+    );
+    assert_eq!(sent[1]["output_config"], json!({"effort": "high"}));
+    assert!(!sent[1].to_string().contains(r#""type":"thinking""#));
 }
 
 /// Whether request `i` of `server` carried the progress-updates beta header.
@@ -3212,7 +3281,7 @@ async fn an_effort_refusal_is_not_a_refusal_of_progress_updates() {
         .mount(&server)
         .await;
     let p = provider(&server, Protocol::Anthropic);
-    let model = ModelSpec::new("claude-opus-5-5");
+    let model = ModelSpec::new("claude-opus-5-5@effort");
     let entries = vec![AiEntry::user(1, "hi")];
     let req = with_effort(request(&model, &entries, &[]), Some(High));
     // Progress updates, then the summarized display, then neither with the effort dropped.
@@ -3244,7 +3313,7 @@ async fn a_failed_stream_is_not_a_refusal_of_progress_updates() {
         .mount(&server)
         .await;
     let p = provider(&server, Protocol::Anthropic);
-    let model = ModelSpec::new("claude-opus-5-5");
+    let model = ModelSpec::new("claude-opus-5-5@failed-stream");
     let entries = vec![AiEntry::user(1, "hi")];
     let req = request(&model, &entries, &[]);
     let (result, _) = run(&p, &req).await;
@@ -3283,7 +3352,7 @@ async fn a_refused_beta_and_a_replay_refusal_still_get_an_answer() {
         .mount(&server)
         .await;
     let p = provider(&server, Protocol::Anthropic);
-    let model = ModelSpec::new("claude-opus-5-5");
+    let model = ModelSpec::new("claude-opus-5-5@replay");
     let earlier = AssistantEntry {
         provider_id: PROVIDER_ID.into(),
         model_id: model.id.clone(),
@@ -3297,6 +3366,8 @@ async fn a_refused_beta_and_a_replay_refusal_still_get_an_answer() {
             {"type": "text", "text": "Hello."}
         ]),
         terminal: None,
+        shell: None,
+        mcp_servers: None,
         interrupted: false,
     };
     let entries = vec![

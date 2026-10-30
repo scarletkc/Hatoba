@@ -105,7 +105,9 @@ function rustFiles(root) {
 
 function main() {
   const files = rustFiles(ROOT);
-  const found = files.flatMap((path) => longComments(readFileSync(join(ROOT, path), "utf8")).map((long) => ({ path, ...long })));
+  const found = files.flatMap((path) =>
+    longComments(readFileSync(join(ROOT, path), "utf8")).map((long) => ({ path, ...long })),
+  );
   if (found.length === 0) {
     console.log(`The comment lines in ${files.length} Rust files are within ${MAX_WIDTH} characters.`);
     return 0;

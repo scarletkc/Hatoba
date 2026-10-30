@@ -1094,7 +1094,10 @@ mod tests {
 
         /// A `find` that never ends, with a child that never ends either, as `find -exec rg` has
         /// one, and records both process IDs; it answers the `-xtype` check. Without `group`,
-        /// `setsid` and `perl` fail, so the search cannot have a process group of its own.
+        /// `setsid` and `perl` fail, so the search cannot have a process group of its own. The
+        /// watchdog's `sleep` waits for `find` to start its child: without a process group, the
+        /// watchdog lists the processes to end, and on a busy machine a child started after that
+        /// outlived the search at its time limit.
         fn endless_find(home: &Path, group: bool) -> String {
             let bin = home.join("bin-endless");
             std::fs::create_dir_all(&bin).unwrap();
@@ -1103,17 +1106,32 @@ mod tests {
                 std::fs::write(&file, format!("#!/bin/sh\n{body}\n")).unwrap();
                 std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o755)).unwrap();
             };
+            let path = std::env::var("PATH").unwrap();
+            let sleep = std::env::split_paths(&path)
+                .map(|dir| dir.join("sleep"))
+                .find(|file| file.is_file())
+                .unwrap();
+            let sleep = sleep.display();
             script(
                 "find",
-                "case \" $* \" in *\" -maxdepth 0 \"*) exit 0;; esac\n\
-                 sleep 60 < /dev/null > /dev/null 2>&1 &\n\
-                 echo \"$$ $!\" > \"$HOME/find.pid\"\nexec sleep 60",
+                &format!(
+                    "case \" $* \" in *\" -maxdepth 0 \"*) exit 0;; esac\n\
+                     {sleep} 60 < /dev/null > /dev/null 2>&1 &\n\
+                     echo \"$$ $!\" > \"$HOME/find.pid\"\nexec {sleep} 60"
+                ),
+            );
+            script(
+                "sleep",
+                &format!(
+                    "i=0; while [ ! -s \"$HOME/find.pid\" ] && [ $i -lt 200 ]; do \
+                     {sleep} 0.05; i=$((i + 1)); done\nexec {sleep} \"$@\""
+                ),
             );
             if !group {
                 script("setsid", "exit 127");
                 script("perl", "exit 127");
             }
-            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap())
+            format!("{}:{path}", bin.display())
         }
 
         /// Starts the glob script with the endless `find`, and waits for that to start. The

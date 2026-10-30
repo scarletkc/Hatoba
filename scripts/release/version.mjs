@@ -13,10 +13,16 @@ const STAGES = { alpha: 0, beta: 1, rc: 2 };
 export function parseVersion(version) {
   const match = VERSION.exec(version);
   if (match === null) {
-    throw new Error(`'${version}' is not a release version. Use MAJOR.MINOR.PATCH, optionally followed by -alpha.N, -beta.N, or -rc.N.`);
+    throw new Error(
+      `'${version}' is not a release version. Use MAJOR.MINOR.PATCH, optionally followed by -alpha.N, -beta.N, or -rc.N.`,
+    );
   }
   const [, major, minor, patch, stage, number] = match;
-  return { core: [Number(major), Number(minor), Number(patch)], stage: stage ?? null, number: stage ? Number(number) : 0 };
+  return {
+    core: [Number(major), Number(minor), Number(patch)],
+    stage: stage ?? null,
+    number: stage ? Number(number) : 0,
+  };
 }
 
 export function isPrerelease(version) {
@@ -69,7 +75,13 @@ const WORKSPACE_VERSION = /^(\[workspace\.package\]\n(?:(?!\[)[^\n]*\n)*?version
 
 const cargoManifest = {
   read: (text) => [...text.matchAll(WORKSPACE_VERSION)].map((m) => m[2]),
-  write: (text, to) => replaceOnce(text, WORKSPACE_VERSION, (_, head, _old, tail) => `${head}${to}${tail}`, "version in [workspace.package]"),
+  write: (text, to) =>
+    replaceOnce(
+      text,
+      WORKSPACE_VERSION,
+      (_, head, _old, tail) => `${head}${to}${tail}`,
+      "version in [workspace.package]",
+    ),
 };
 
 // Packages without a `source` are the workspace's own crates; registry and git packages keep theirs.
@@ -78,7 +90,10 @@ const isLocal = (block) => block.startsWith("[[package]]") && !/^source\s*=/m.te
 const LOCK_VERSION = /^(version\s*=\s*")([^"]*)(")/m;
 
 const cargoLock = {
-  read: (text) => lockPackages(text).filter(isLocal).map((block) => LOCK_VERSION.exec(block)?.[2]),
+  read: (text) =>
+    lockPackages(text)
+      .filter(isLocal)
+      .map((block) => LOCK_VERSION.exec(block)?.[2]),
   write: (text, to) =>
     lockPackages(text)
       .map((block) => (isLocal(block) ? block.replace(LOCK_VERSION, `$1${to}$3`) : block))
@@ -90,7 +105,9 @@ const cargoLock = {
 function parseNpmJson(text) {
   const json = JSON.parse(text);
   if (`${JSON.stringify(json, null, 2)}\n` !== text) {
-    throw new Error("The file is not formatted as npm writes it (two-space JSON with a final newline); reformat it, then retry.");
+    throw new Error(
+      "The file is not formatted as npm writes it (two-space JSON with a final newline); reformat it, then retry.",
+    );
   }
   return json;
 }
@@ -118,7 +135,8 @@ const WORKER_VERSION = /^(export const VERSION = ")([^"]*)(";)$/gm;
 
 const workerConfig = {
   read: (text) => [...text.matchAll(WORKER_VERSION)].map((m) => m[2]),
-  write: (text, to) => replaceOnce(text, WORKER_VERSION, (_, head, _old, tail) => `${head}${to}${tail}`, "export const VERSION"),
+  write: (text, to) =>
+    replaceOnce(text, WORKER_VERSION, (_, head, _old, tail) => `${head}${to}${tail}`, "export const VERSION"),
 };
 
 /**
@@ -159,7 +177,9 @@ export function readVersion(root, files = VERSION_FILES) {
   const found = files.map((file) => ({ path: file.path, versions: versionsIn(file, readFile(root, file.path)) }));
   const all = new Set(found.flatMap((f) => f.versions));
   if (all.size !== 1 || found.some((f) => f.versions.length === 0)) {
-    const lines = found.map((f) => `  ${f.path}: ${f.versions.map((v) => v ?? "(no version)").join(", ") || "(no version)"}`);
+    const lines = found.map(
+      (f) => `  ${f.path}: ${f.versions.map((v) => v ?? "(no version)").join(", ") || "(no version)"}`,
+    );
     throw new Error(`The version files disagree. Give them all the same version:\n${lines.join("\n")}`);
   }
   const [version] = all;

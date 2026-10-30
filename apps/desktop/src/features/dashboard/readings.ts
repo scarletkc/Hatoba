@@ -17,7 +17,7 @@ export interface HostReadout {
   tab: boolean;
   hold: DashboardHold | null;
   error: AppError | null;
-  /** The system of a server that does not run Linux; empty when unknown. */
+  /** The system of a server that runs neither Linux nor macOS; empty when unknown. */
   system: string | null;
   /** The readings of the last few minutes, oldest first. They stay when the host stops answering. */
   history: StatsReading[];
@@ -46,7 +46,16 @@ export function applyEvent(prev: HostReadout | undefined, event: DashboardEvent,
     case "reset":
       return { ...r, os: null, history: [] };
     case "reading":
-      return { ...r, online: true, phase: "reading", os: event.os ?? r.os, tab: event.tab, hold: null, error: null, system: null };
+      return {
+        ...r,
+        online: true,
+        phase: "reading",
+        os: event.os ?? r.os,
+        tab: event.tab,
+        hold: null,
+        error: null,
+        system: null,
+      };
     case "stats":
       return { ...r, online: true, phase: "reading", history: appendReading(r.history, { ...event.stats, at: now }) };
     case "unsupported":
@@ -99,8 +108,8 @@ export function useReadoutMap(): Record<string, HostReadout> {
 let generation = 0;
 
 /**
- * Reads `hostIds` every `intervalSecs` while `active`: the page is shown, the window is visible and the vault
- * unlocked (HOST-14). A change of hosts or interval replaces the watch, so the hosts both watches read keep
+ * Reads `hostIds` every `intervalSecs` while `active`: the page is shown and the vault unlocked (HOST-14), also
+ * with the window minimized. A change of hosts or interval replaces the watch, so the hosts both watches read keep
  * their connections; going inactive stops it, and the backend closes its connections a minute later.
  */
 export function useDashboardWatch(hostIds: string[], intervalSecs: number, active: boolean) {

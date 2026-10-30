@@ -95,6 +95,15 @@ pub struct JumpHop {
     pub agent_sockets: Vec<String>,
 }
 
+/// `user@host:port`, with an IPv6 address in brackets.
+pub fn target_label(username: &str, host: &str, port: u16) -> String {
+    if host.contains(':') {
+        format!("{username}@[{host}]:{port}")
+    } else {
+        format!("{username}@{host}:{port}")
+    }
+}
+
 /// Everything needed to open a session.
 #[derive(Clone)]
 pub struct ConnectConfig {

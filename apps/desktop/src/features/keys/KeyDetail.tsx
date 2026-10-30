@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Icon, LinkButton, StatusDot } from "@/components/controls";
-import { toast } from "@/components/overlay";
+import { Button, HintText, Icon, LinkButton, StatusDot, toast } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { formatDate, formatRelative, useT } from "@/i18n";
@@ -58,7 +57,8 @@ export function KeyDetail({
     }
   };
 
-  const editHost = (hostId: string) => useApp.getState().navigate({ kind: "host-edit", hostId, groupId: null, back: { kind: "all" } });
+  const editHost = (hostId: string) =>
+    useApp.getState().navigate({ kind: "host-edit", hostId, groupId: null, back: null });
 
   return (
     <aside className={s.panel} aria-label={keyView.name}>
@@ -119,7 +119,7 @@ export function KeyDetail({
             {t("keys.detail.usedHosts")} <span className={s.blockCount}>{hosts.length}</span>
           </div>
           {hosts.length === 0 ? (
-            <div className={s.hint}>{t("keys.detail.noHosts")}</div>
+            <HintText>{t("keys.detail.noHosts")}</HintText>
           ) : (
             hosts.map((h) => (
               <button
@@ -129,7 +129,10 @@ export function KeyDetail({
                 aria-label={t("keys.detail.editHost", { name: h.name })}
                 onClick={() => editHost(h.id)}
               >
-                <StatusDot size={6} color={h.id in probe ? (probe[h.id] ? "var(--green)" : "var(--red)") : "var(--fg3)"} />
+                <StatusDot
+                  size={6}
+                  color={h.id in probe ? (probe[h.id] ? "var(--green)" : "var(--red)") : "var(--fg3)"}
+                />
                 <span className={s.hostName}>{h.name}</span>
               </button>
             ))

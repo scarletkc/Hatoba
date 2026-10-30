@@ -1,15 +1,16 @@
 ---
 import { localePath, messages, type Locale } from "../i18n";
 import type { Platform, SiteRelease } from "../lib/release";
-import Icon from "./Icon.astro";
+import Button from "./Button.astro";
 
 interface Props {
   locale: Locale;
   release: SiteRelease;
-  class?: string;
+  /** pier on the night band, accent on paper. */
+  variant?: "pier" | "accent";
 }
 
-const { locale, release, class: className = "btn-pier" } = Astro.props;
+const { locale, release, variant = "pier" } = Astro.props;
 const t = messages(locale);
 const downloadPage = localePath(locale, "/download/");
 /**
@@ -21,35 +22,47 @@ const targets: Record<Platform, string> = {
   linux: `${downloadPage}#linux`,
   macos: `${downloadPage}#macos`,
 };
+const platforms = Object.keys(targets) as Platform[];
 ---
 
-<a
-  class:list={["btn", className]}
-  href={targets.windows}
+<!--
+  Every label is in the page and the stylesheet shows the one for the platform the layout detected
+  before the first paint, so the button never changes its width after the page shows. Phones and
+  unknown systems get the download page.
+-->
+<Button
+  variant={variant}
+  icon="download"
+  class="download"
+  href={downloadPage}
   data-download
-  data-all-href={downloadPage}
-  data-all-label={t.hero.allDownloads}
-  {...Object.fromEntries(
-    (Object.keys(targets) as Platform[]).flatMap((platform) => [
-      [`data-${platform}-href`, targets[platform]],
-      [`data-${platform}-label`, t.hero.downloadFor(t.platforms[platform])],
-    ]),
-  )}
+  {...Object.fromEntries(platforms.map((platform) => [`data-${platform}-href`, targets[platform]]))}
 >
-  <Icon name="download" />
-  <span>{t.hero.downloadFor(t.platforms.windows)}</span>
-</a>
+  <span class="for-all">{t.hero.allDownloads}</span>
+  {platforms.map((platform) => (
+    <span class={`for-${platform}`}>{t.hero.downloadFor(t.platforms[platform])}</span>
+  ))}
+</Button>
 
 <script>
-  // Offer the visitor's platform, which the layout detected; phones and unknown systems get the
-  // download page.
   const os = document.documentElement.dataset.os;
-  for (const button of document.querySelectorAll<HTMLAnchorElement>("a[data-download]")) {
-    const href = os ? button.dataset[`${os}Href`] : button.dataset.allHref;
-    const label = os ? button.dataset[`${os}Label`] : button.dataset.allLabel;
-    if (href && label) {
-      button.href = href;
-      button.querySelector("span")!.textContent = label;
+  if (os) {
+    for (const button of document.querySelectorAll<HTMLAnchorElement>("a[data-download]")) {
+      const href = button.dataset[`${os}Href`];
+      if (href) button.href = href;
     }
   }
 </script>
+
+<style>
+  :global(.download) > span {
+    display: none;
+  }
+
+  :global(html:not([data-os]) .download) > .for-all,
+  :global(html[data-os="windows"] .download) > .for-windows,
+  :global(html[data-os="linux"] .download) > .for-linux,
+  :global(html[data-os="macos"] .download) > .for-macos {
+    display: inline;
+  }
+</style>

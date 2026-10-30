@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Hatoba social preview</title>
+    <style>
+      /* The repository's social preview: 1280×640, as GitHub asks, in the website's night sea. */
+
+      @font-face {
+        font-family: "Archivo Variable";
+        font-style: normal;
+        font-display: block;
+        font-weight: 100 900;
+        font-stretch: 62% 125%;
+        src: url("../../../apps/site/node_modules/@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2")
+          format("woff2-variations");
+      }
+
+      :root {
+        /* The website's tokens (apps/site/src/styles/tokens.css) */
+        --night: #0d1735;
+        --harbor: #24408a;
+        --deep: #0d4590;
+        --white: #ffffff;
+        --on-night-2: rgb(227 238 255 / 0.74);
+        --sea-surface: rgb(34 166 232 / 0.9);
+        --sea-shallow: rgb(26 132 210 / 0.95);
+        --window-bg: #1c1d21;
+        --window-edge: rgb(255 255 255 / 0.08);
+        --shadow-window: 0 0 0 1px var(--window-edge), 0 30px 80px rgb(5 12 40 / 0.45), 0 8px 24px rgb(5 12 40 / 0.25);
+        --wave-height: 36px;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+
+      body {
+        position: relative;
+        width: 1280px;
+        height: 640px;
+        overflow: hidden;
+        background: linear-gradient(180deg, var(--night) 0%, var(--harbor) 100%);
+        color: var(--white);
+        font-family: "Archivo Variable", sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* The name and the tagline, centred above the sea. */
+      .copy {
+        position: absolute;
+        top: 0;
+        left: 88px;
+        width: 400px;
+        height: 492px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+
+      .icon {
+        width: 80px;
+        height: 80px;
+        margin-left: -5px;
+      }
+
+      /* The home page's wordmark. */
+      .wordmark {
+        margin-top: 20px;
+        font-size: 84px;
+        font-weight: 800;
+        font-stretch: 125%;
+        line-height: 0.88;
+        letter-spacing: -0.035em;
+      }
+
+      /* The website's tagline, meta.tagline in apps/site/src/i18n/en.ts. */
+      .lead {
+        margin-top: 24px;
+        font-size: 25px;
+        line-height: 1.32;
+        color: var(--on-night-2);
+      }
+
+      /* The home page's first screenshot, standing in the sea. */
+      .window {
+        position: absolute;
+        top: 104px;
+        right: 48px;
+        width: 720px;
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--window-bg);
+        box-shadow: var(--shadow-window);
+      }
+
+      .window img {
+        display: block;
+        width: 100%;
+      }
+
+      /* The sea of apps/site/src/components/Sea.astro, with a crest in the middle. */
+      .sea {
+        position: absolute;
+        inset: auto 0 0 0;
+        height: calc(112px + var(--wave-height));
+        background: linear-gradient(
+          180deg,
+          var(--sea-surface) 0,
+          var(--sea-shallow) var(--wave-height),
+          var(--deep) 100%
+        );
+        mask:
+          url("../../../apps/site/src/assets/wave.svg") 192px 0 / 448px 36px repeat-x,
+          linear-gradient(black 0 0) 0 35px / 100% calc(100% - 35px) no-repeat;
+      }
+
+      .sea::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: url("../../../apps/site/src/assets/seigaiha.svg") 0 4px / 56px 28px repeat;
+        opacity: 0.2;
+        mask: linear-gradient(180deg, black 0, black 30%, transparent 100%);
+      }
+
+      .sea::after {
+        content: "";
+        position: absolute;
+        inset: -1px 0 auto 0;
+        height: 38px;
+        background: url("../../../apps/site/src/assets/wave-line.svg") 192px 0 / 448px 38px repeat-x;
+        opacity: 0.55;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="copy">
+      <img class="icon" src="../../../apps/desktop/src-tauri/app-icon.svg" alt="" />
+      <h1 class="wordmark">Hatoba</h1>
+      <p class="lead">Open-source SSH client<br />with AI and encrypted sync</p>
+    </div>
+    <div class="window"><img src="../../../docs/media/ai-assistant.png" alt="" /></div>
+    <div class="sea"></div>
+  </body>
+</html>

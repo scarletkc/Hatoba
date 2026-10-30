@@ -65,10 +65,6 @@ const FILES: &[(&str, &str)] = &[
         include_str!("builtin/hatoba/references/command-line.md"),
     ),
     (
-        "references/dashboard.md",
-        include_str!("builtin/hatoba/references/dashboard.md"),
-    ),
-    (
         "references/hosts-and-connecting.md",
         include_str!("builtin/hatoba/references/hosts-and-connecting.md"),
     ),
@@ -125,8 +121,36 @@ const FILES: &[(&str, &str)] = &[
         include_str!("builtin/hatoba/references/labels/zh-CN-vault.md"),
     ),
     (
+        "references/labels/zh-TW-ai-settings.md",
+        include_str!("builtin/hatoba/references/labels/zh-TW-ai-settings.md"),
+    ),
+    (
+        "references/labels/zh-TW-ai.md",
+        include_str!("builtin/hatoba/references/labels/zh-TW-ai.md"),
+    ),
+    (
+        "references/labels/zh-TW-app.md",
+        include_str!("builtin/hatoba/references/labels/zh-TW-app.md"),
+    ),
+    (
+        "references/labels/zh-TW-sync.md",
+        include_str!("builtin/hatoba/references/labels/zh-TW-sync.md"),
+    ),
+    (
+        "references/labels/zh-TW-terminal.md",
+        include_str!("builtin/hatoba/references/labels/zh-TW-terminal.md"),
+    ),
+    (
+        "references/labels/zh-TW-vault.md",
+        include_str!("builtin/hatoba/references/labels/zh-TW-vault.md"),
+    ),
+    (
         "references/port-forwarding.md",
         include_str!("builtin/hatoba/references/port-forwarding.md"),
+    ),
+    (
+        "references/resource-usage.md",
+        include_str!("builtin/hatoba/references/resource-usage.md"),
     ),
     (
         "references/settings.md",

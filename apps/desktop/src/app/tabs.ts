@@ -86,7 +86,9 @@ export const useTabs = create<TabsState>((set, get) => ({
       return { tabs };
     }),
   adoptHost: (id, hostId, title) =>
-    set((s) => ({ tabs: s.tabs.map((t) => (t.id === id && !t.local && !t.telnet ? { ...t, hostId, target: null, title } : t)) })),
+    set((s) => ({
+      tabs: s.tabs.map((t) => (t.id === id && !t.local && !t.telnet ? { ...t, hostId, target: null, title } : t)),
+    })),
   update: (id, patch) =>
     set((s) => ({
       tabs: s.tabs.map((t) => (t.id === id ? { ...t, ...patch } : t)),

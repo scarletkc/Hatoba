@@ -1,10 +1,16 @@
 import type { MessageKey, Params } from "@/i18n";
 import type { AiAllowance, AiFilePreview, AiPermissionMode, AiSettingsView, McpToolInfo } from "@/ipc/types";
 import type { CallLimit } from "./batches";
-import { allowancePrefixes, commandAllowed, readsOnlyCommand, savablePrefixes, type ShellDialect } from "./commandRules";
-import { parseSendKey, SEND_KEY_NOTATION, showTerminalInput, type SendKey } from "./sendKeys";
-export { SEND_KEYS, keySequence, parseSendKey } from "./sendKeys";
-export type { SendKey } from "./sendKeys";
+import {
+  allowancePrefixes,
+  commandAllowed,
+  readsOnlyCommand,
+  savablePrefixes,
+  type ShellDialect,
+} from "./rules/commandRules";
+import { parseSendKey, SEND_KEY_NOTATION, showTerminalInput, type SendKey } from "./terminal/sendKeys";
+export { SEND_KEYS, keySequence, parseSendKey } from "./terminal/sendKeys";
+export type { SendKey } from "./terminal/sendKeys";
 
 /**
  * Built-in tool names (§13.4, §13.8); MCP tools are `mcp__<server>__<tool>` (§13.9), called directly or,
@@ -42,7 +48,21 @@ export type ToolKind =
   | "mcp"
   | "unknown";
 
-const BUILTIN: readonly string[] = [READ_TERMINAL, RUN_COMMAND, SEND_INPUT, READ_FILE, EDIT_FILE, WRITE_FILE, GREP, GLOB, WEB_SEARCH, FETCH_URL, READ_SKILL, SEARCH_TOOLS, MEMORY];
+const BUILTIN: readonly string[] = [
+  READ_TERMINAL,
+  RUN_COMMAND,
+  SEND_INPUT,
+  READ_FILE,
+  EDIT_FILE,
+  WRITE_FILE,
+  GREP,
+  GLOB,
+  WEB_SEARCH,
+  FETCH_URL,
+  READ_SKILL,
+  SEARCH_TOOLS,
+  MEMORY,
+];
 
 /** A call's kind; a `call_mcp_tool` call (AI-45) is an MCP call, approved as the tool it names. */
 export function toolKind(name: string): ToolKind {
@@ -63,7 +83,8 @@ export function proxyCall(name: string, json: string): { tool: string; arguments
   const tool = typeof args?.tool === "string" ? args.tool.trim() : "";
   if (!args || !splitMcpName(tool)) return null;
   const inner = args.arguments;
-  if (inner === undefined || inner === null || (typeof inner === "string" && !inner.trim())) return { tool, arguments: "{}" };
+  if (inner === undefined || inner === null || (typeof inner === "string" && !inner.trim()))
+    return { tool, arguments: "{}" };
   if (typeof inner === "string") {
     const parsed = parseArgs(inner);
     return { tool, arguments: parsed ? JSON.stringify(parsed) : inner };
@@ -100,7 +121,13 @@ export function isSearchTool(kind: ToolKind): kind is "grep" | "glob" {
 
 /** Tools that act on the tab's SSH session and return an error while it is disconnected (AI-08). */
 export function needsSession(kind: ToolKind): boolean {
-  return kind === "read_terminal" || kind === "send_input" || kind === "run_command" || isFileTool(kind) || isSearchTool(kind);
+  return (
+    kind === "read_terminal" ||
+    kind === "send_input" ||
+    kind === "run_command" ||
+    isFileTool(kind) ||
+    isSearchTool(kind)
+  );
 }
 
 /**
@@ -123,7 +150,11 @@ export function searchesNatively(settings: AiSettingsView | null): boolean {
  * call whose command line only reads (§13.5), in the `dialect` of the tab's shell. Edits, writes, typing into the
  * shell, other commands and MCP tools run alone.
  */
-export function concurrencySafe(kind: ToolKind, args: Record<string, unknown>, dialect: ShellDialect = "posix"): boolean {
+export function concurrencySafe(
+  kind: ToolKind,
+  args: Record<string, unknown>,
+  dialect: ShellDialect = "posix",
+): boolean {
   switch (kind) {
     case "read_terminal":
     case "read_file":
@@ -150,11 +181,22 @@ export function concurrencySafe(kind: ToolKind, args: Record<string, unknown>, d
  */
 export function needsApproval(kind: ToolKind, mode: AiPermissionMode): boolean {
   if (mode === "bypass") return false;
-  return kind === "run_command" || kind === "send_input" || kind === "edit_file" || kind === "write_file" || kind === "fetch_url" || kind === "mcp";
+  return (
+    kind === "run_command" ||
+    kind === "send_input" ||
+    kind === "edit_file" ||
+    kind === "write_file" ||
+    kind === "fetch_url" ||
+    kind === "mcp"
+  );
 }
 
 /** The permission modes' icons (AI-16, AI-47): on the mode switch, in its menu, and on their notes' dividers. */
-export const MODE_ICON: Record<AiPermissionMode, string> = { manual: "shield-check", auto: "robot", bypass: "lightning" };
+export const MODE_ICON: Record<AiPermissionMode, string> = {
+  manual: "shield-check",
+  auto: "robot",
+  bypass: "lightning",
+};
 
 /** §13.5, AI-47: the modes from the strictest: manual approval, Auto, bypass. */
 const STRICTNESS: readonly AiPermissionMode[] = ["manual", "auto", "bypass"];
@@ -235,7 +277,12 @@ export function urlDomain(url: string): string | null {
  * cannot be allowed ahead, a command line with no prefix to name, a URL with no host name, or a tool
  * that never asks. A command line is read in the `dialect` of the tab's shell.
  */
-export function allowanceScope(kind: ToolKind, args: Record<string, unknown>, mcp: McpToolInfo | null | undefined, dialect: ShellDialect = "posix"): Scope | null {
+export function allowanceScope(
+  kind: ToolKind,
+  args: Record<string, unknown>,
+  mcp: McpToolInfo | null | undefined,
+  dialect: ShellDialect = "posix",
+): Scope | null {
   switch (kind) {
     case "run_command": {
       const prefixes = allowancePrefixes(str(args.command), dialect, str(args.workdir));
@@ -311,7 +358,10 @@ export function callAllowed(
     }
     case "fetch_url": {
       const domain = urlDomain(str(args.url));
-      return !!domain && (grants.includes(`fetch_url:${domain}`) || saved.some((a) => a.kind === "domain" && a.value === domain));
+      return (
+        !!domain &&
+        (grants.includes(`fetch_url:${domain}`) || saved.some((a) => a.kind === "domain" && a.value === domain))
+      );
     }
     case "edit_file":
     case "write_file":
@@ -328,7 +378,10 @@ export function callAllowed(
  * The allowance a Run decision stores (AI-19, AI-31): none when it carries a refusal, so no path grants a
  * tool from a card that showed no change.
  */
-export function allowanceOf(decision: { allow?: "conversation" | "always"; refusal?: string }): "conversation" | "always" | undefined {
+export function allowanceOf(decision: {
+  allow?: "conversation" | "always";
+  refusal?: string;
+}): "conversation" | "always" | undefined {
   return decision.refusal === undefined ? decision.allow : undefined;
 }
 
@@ -395,7 +448,8 @@ export function callFileChange(name: string, json: string): AiFilePreview | null
   if (!args) return null;
   const text = (v: unknown) => (typeof v === "string" ? v : "");
   // Whether write_file created the file is not in its arguments, so the content shows as added, without "new file".
-  const [before, after] = kind === "edit_file" ? [text(args.old_string), text(args.new_string)] : ["", text(args.content)];
+  const [before, after] =
+    kind === "edit_file" ? [text(args.old_string), text(args.new_string)] : ["", text(args.content)];
   return { path: text(args.path), before, after, error: null, crlf: false };
 }
 
@@ -423,16 +477,21 @@ export const READ_TERMINAL_MAX_LINES = 1000;
 export interface ReadTerminalArgs {
   /** Lines to read, counted back from the last line with text; null when the call leaves it to the default. */
   lines: number | null;
+  /** How long to wait for new output to come and go quiet before reading, in seconds; 0 reads at once. */
+  waitSeconds: number;
 }
 
-/** AI-11: `{ lines?: integer }`, at most 1,000. */
+/** AI-11: `{ lines?: integer, wait_seconds?: integer }`, at most 1,000 lines and 120 s. */
 export function parseReadTerminal(json: string): Parsed<ReadTerminalArgs> {
   const args = parseArgs(json);
   if (!args) return { ok: false, error: "The arguments are not a JSON object." };
-  if (args.lines === undefined || args.lines === null || args.lines === "") return { ok: true, value: { lines: null } };
+  const waitSeconds = intArg(args.wait_seconds, 0, 0, SEND_INPUT_MAX_WAIT);
+  if (waitSeconds === null) return { ok: false, error: '"wait_seconds" must be an integer.' };
+  if (args.lines === undefined || args.lines === null || args.lines === "")
+    return { ok: true, value: { lines: null, waitSeconds } };
   const lines = intArg(args.lines, 1, 1, READ_TERMINAL_MAX_LINES);
   if (lines === null) return { ok: false, error: '"lines" must be an integer.' };
-  return { ok: true, value: { lines } };
+  return { ok: true, value: { lines, waitSeconds } };
 }
 
 export const SEND_INPUT_DEFAULT_WAIT = 10;
@@ -449,23 +508,31 @@ export interface SendInputArgs {
 export function parseSendInput(json: string): Parsed<SendInputArgs> {
   const args = parseArgs(json);
   if (!args) return { ok: false, error: "The arguments are not a JSON object." };
-  if (args.text !== undefined && args.text !== null && typeof args.text !== "string") return { ok: false, error: '"text" must be a string.' };
+  if (args.text !== undefined && args.text !== null && typeof args.text !== "string")
+    return { ok: false, error: '"text" must be a string.' };
   const text = typeof args.text === "string" ? args.text : "";
   const keys: SendKey[] = [];
   if (args.key !== undefined && args.key !== null && args.key !== "") {
     const key = parseSendKey(args.key);
-    if (key === null) return { ok: false, error: `Unsupported key ${JSON.stringify(args.key)}. A key is ${SEND_KEY_NOTATION}.` };
+    if (key === null)
+      return { ok: false, error: `Unsupported key ${JSON.stringify(args.key)}. A key is ${SEND_KEY_NOTATION}.` };
     keys.push(key);
   }
   if (args.keys !== undefined && args.keys !== null) {
     if (!Array.isArray(args.keys)) return { ok: false, error: '"keys" must be an array.' };
     for (const value of args.keys) {
       const key = parseSendKey(value);
-      if (key === null) return { ok: false, error: `Unsupported key ${JSON.stringify(value)}. A key is ${SEND_KEY_NOTATION}.` };
+      if (key === null)
+        return { ok: false, error: `Unsupported key ${JSON.stringify(value)}. A key is ${SEND_KEY_NOTATION}.` };
       keys.push(key);
     }
   }
-  if (!text && !keys.length) return { ok: false, error: 'Nothing to send: give "text", "keys", or both.' };
+  if (!text && !keys.length)
+    return {
+      ok: false,
+      error:
+        'Nothing to send: give "text", "keys", or both. To wait for more output, call read_terminal with wait_seconds.',
+    };
   const waitSeconds = intArg(args.wait_seconds, SEND_INPUT_DEFAULT_WAIT, 1, SEND_INPUT_MAX_WAIT);
   if (waitSeconds === null) return { ok: false, error: '"wait_seconds" must be an integer.' };
   return { ok: true, value: { text, keys, waitSeconds } };
@@ -481,7 +548,12 @@ export function callSummary(name: string, json: string): string {
     case "run_command":
       return firstLine(str(args.command));
     case "send_input":
-      return [showTerminalInput(str(args.text)).replace(/\n/g, "⏎"), ...[args.key, ...(Array.isArray(args.keys) ? args.keys : [])].filter(Boolean).map((k) => `[${str(k)}]`)].filter(Boolean).join(" ");
+      return [
+        showTerminalInput(str(args.text)).replace(/\n/g, "⏎"),
+        ...[args.key, ...(Array.isArray(args.keys) ? args.keys : [])].filter(Boolean).map((k) => `[${str(k)}]`),
+      ]
+        .filter(Boolean)
+        .join(" ");
     case "web_search":
       return str(args.query);
     case "fetch_url":
@@ -493,7 +565,9 @@ export function callSummary(name: string, json: string): string {
     case "memory":
       return str(args.name);
     case "read_file":
-      return args.offset !== undefined && args.offset !== null ? `${str(args.path)}:${str(args.offset)}` : str(args.path);
+      return args.offset !== undefined && args.offset !== null
+        ? `${str(args.path)}:${str(args.offset)}`
+        : str(args.path);
     case "edit_file":
     case "write_file":
       return firstLine(str(args.path));

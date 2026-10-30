@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { Icon, IconButton, Modal, toast } from "@hatoba/ui";
 import { errorMessage } from "@/app/errors";
 import { useApp, type SettingsTab } from "@/app/store";
-import { Icon, IconButton } from "@/components/controls";
-import { Modal, toast } from "@/components/overlay";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { SettingsView, TerminalSettings } from "@/ipc/types";
@@ -30,7 +29,7 @@ const TABS: { id: SettingsTab; icon: string; label: MessageKey }[] = [
 let lastTab: SettingsTab = "general";
 
 /**
- * Settings (design §07): a 700×620 preferences window with General / Appearance / Terminal / Security, plus
+ * Settings: a 700×620 preferences window with General / Appearance / Terminal / Security, plus
  * Proxies for SSH connections (SSH-13), AI for the assistant (spec §13) and About for the version and the
  * update check.
  */
@@ -77,7 +76,8 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape")
-        escapeBlocked.current = document.querySelectorAll('[role="dialog"],[role="alertdialog"],[role="menu"]').length > 1;
+        escapeBlocked.current =
+          document.querySelectorAll('[role="dialog"],[role="alertdialog"],[role="menu"]').length > 1;
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
@@ -139,8 +139,8 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
           <IconButton icon="x" label={t("btn.close")} className={s.close} onClick={() => closeRef.current()} />
         </div>
         <div id="settings-panel" role="tabpanel" aria-labelledby={`settings-tab-${tab}`} className={s.content}>
-          {tab === "general" && <GeneralPane {...pane} />}
-          {tab === "appearance" && <AppearancePane {...pane} />}
+          {tab === "general" && <GeneralPane />}
+          {tab === "appearance" && <AppearancePane />}
           {tab === "terminal" && <TerminalPane {...pane} />}
           {tab === "proxies" && <ProxiesPane />}
           {tab === "security" && <SecurityPane />}

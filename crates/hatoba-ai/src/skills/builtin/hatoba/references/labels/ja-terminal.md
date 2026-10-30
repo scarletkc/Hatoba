@@ -48,7 +48,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Network | ネットワーク |
 | Disk | ディスク |
 | Reading… | 読み取り中… |
-| Resource usage is available only for Linux servers. | リソース使用状況は Linux サーバーでのみ表示できます。 |
+| Resource usage is available only for Linux and macOS servers. | リソース使用状況は Linux と macOS のサーバーでのみ表示できます。 |
 
 ### Menus
 
@@ -59,11 +59,11 @@ The labels that these files name in English, as the interface shows them in Japa
 | Copy | コピー |
 | Paste | 貼り付け |
 | Select All | すべて選択 |
-| Find… | 検索… |
+| Find | 検索 |
 | Ask AI | AI に質問 |
 | Clear Scrollback | スクロールバックを消去 |
 | Edit Host | ホストを編集 |
-| Save as Host… | ホストとして保存… |
+| Save as Host | ホストとして保存 |
 
 ### Copy, paste, search and links
 
@@ -76,7 +76,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Next (Enter) | 次へ（Enter） |
 | Close find (Esc) | 検索を閉じる（Esc） |
 | Confirm before pasting multiple lines | 複数行を貼り付ける前に確認 |
-| General | 一般 |
+| Terminal | ターミナル |
 | Right-Click in Terminal | ターミナルでの右クリック |
 | Copy if selected, otherwise paste | 選択があればコピー、なければ貼り付け |
 | Show context menu | コンテキストメニューを表示 |
@@ -94,14 +94,27 @@ The labels that these files name in English, as the interface shows them in Japa
 | Block | ブロック |
 | Bar | バー |
 | Underline | アンダーライン |
-| Scrollback | スクロールバック |
-| Appearance | 外観 |
-| Terminal Colors | ターミナルの配色 |
+| Text and Cursor | 文字とカーソル |
+| Colors | 配色 |
+| Behavior | 動作 |
+| Mode | モード |
 | Always Dark | 常にダーク |
 | Always Light | 常にライト |
 | Match Appearance | 外観に合わせる |
 | In Dark Appearance | ダーク外観のとき |
 | In Light Appearance | ライト外観のとき |
+| Right-Click in Terminal | ターミナルでの右クリック |
+| Copy if selected, otherwise paste | 選択があればコピー、なければ貼り付け |
+| Show context menu | コンテキストメニューを表示 |
+| Confirm before pasting multiple lines | 複数行を貼り付ける前に確認 |
+| Scrollback | スクロールバック |
+| Local Terminal Shell | ローカル ターミナルのシェル |
+| SFTP | SFTP |
+| Editor | エディター |
+| System Default | システムの既定 |
+| Choose a Program… | プログラムを選択… |
+| General | 一般 |
+| Appearance | 外観 |
 
 ## `references/sftp.md`
 
@@ -133,17 +146,49 @@ The labels that these files name in English, as the interface shows them in Japa
 | en | ja |
 |---|---|
 | Open | 開く |
-| Download… | ダウンロード… |
+| Download | ダウンロード |
+| Edit | 編集 |
 | Rename | 名前を変更 |
-| Delete… | 削除… |
+| Delete | 削除 |
 | Copy Path | パスをコピー |
 | New Folder | 新規フォルダ |
-| Upload Files… | ファイルをアップロード… |
+| Upload Files | ファイルをアップロード |
 | The name can’t be empty or contain /. | 名前を空にしたり、/ を含めたりすることはできません。 |
 | This file will be permanently deleted from the server. This can’t be undone. | このファイルはサーバーから完全に削除されます。元に戻せません。 |
 | This folder and everything in it will be permanently deleted from the server. This can’t be undone. | このフォルダとその中身はすべてサーバーから完全に削除されます。元に戻せません。 |
 | Path copied | パスをコピーしました |
 | Drop to upload to {path} | ここにドロップして {path} にアップロード |
+
+### Edit files
+
+| en | ja |
+|---|---|
+| Edit | 編集 |
+| Terminal | ターミナル |
+| SFTP | SFTP |
+| Editor | エディター |
+| System Default | システムの既定 |
+| Choose a Program… | プログラムを選択… |
+| Editing | 編集中 |
+| Saved | 保存済み |
+| Waiting to upload | アップロード待ち |
+| Uploading… | アップロード中… |
+| Changed on the server | サーバー上で変更あり |
+| Open in Editor | エディターで開く |
+| Upload Again | もう一度アップロード |
+| Stop Editing | 編集を終了 |
+| “{name}” changed on the server | 「{name}」はサーバー上で変更されています |
+| Overwrite | 上書き |
+| Discard My Changes | 自分の変更を破棄 |
+| Resolve Conflict | 競合を解決 |
+| Upload the changes to “{name}”? | 「{name}」の変更をアップロードしますか？ |
+| Upload | アップロード |
+| Discard Changes | 変更を破棄 |
+| Their last saves haven’t uploaded to {host} yet. | 最後の保存が {host} にまだアップロードされていません。 |
+| Their last saves haven’t uploaded to {host}, and the tab isn’t connected. Reconnect to upload them. | 最後の保存が {host} にまだアップロードされておらず、このタブは接続されていません。アップロードするには再接続してください。 |
+| Their last saves haven’t uploaded yet. Nothing uploads while Hatoba is locked. | 最後の保存はまだアップロードされていません。Hatoba のロック中は何もアップロードされません。 |
+| Couldn’t open “{name}” in an editor. You can choose one in Settings → Terminal. | 「{name}」をエディターで開けませんでした。設定 → ターミナルでエディターを選べます。 |
+| {n} files didn’t upload. | {n} 個のファイルがアップロードされませんでした。 |
 
 ### Transfers
 
@@ -163,11 +208,12 @@ The labels that these files name in English, as the interface shows them in Japa
 |---|---|
 | Port Forwarding | ポートフォワーディング |
 | No port forwards yet | ポートフォワーディングがまだありません |
-| Add Forward… | 転送を追加… |
+| Add Forward | 転送を追加 |
 | Add Port Forward | ポートフォワーディングを追加 |
 | Host | ホスト |
 | Choose a host. | ホストを選択してください。 |
 | Edit Port Forward | ポートフォワーディングを編集 |
+| Name | 名前 |
 | Add | 追加 |
 | Type | 種類 |
 | Local | ローカル |
@@ -178,7 +224,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Port | ポート |
 | Destination | 転送先 |
 | Start when this host connects | このホストに接続したときに開始 |
-| Auto-start | 自動起動 |
+| Start on connect | 接続時に開始 |
 | auto | 自動 |
 | {addr} on the server | サーバーの {addr} |
 | SOCKS proxy | SOCKS プロキシ |
@@ -192,9 +238,10 @@ The labels that these files name in English, as the interface shows them in Japa
 |---|---|
 | Start | 開始 |
 | Port Forwarding | ポートフォワーディング |
+| Starting… | 開始中… |
 | Stop | 停止 |
 | Retry | 再試行 |
-| Manage Port Forwarding… | ポートフォワーディングを管理… |
+| Manage Port Forwarding | ポートフォワーディングを管理 |
 | Can’t read the port forwards. | ポートフォワーディングを読み込めません。 |
 
 ### Keep running in the background
@@ -250,7 +297,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Key | 鍵 |
 | Ask Each Time | 毎回入力 |
 | SSH Agent | SSH Agent |
-| Deploy to Host… | ホストに配置… |
+| Deploy to Host | ホストに配置 |
 
 ### Jump hosts (ProxyJump)
 

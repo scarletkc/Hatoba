@@ -3,36 +3,41 @@ import Base from "../layouts/Base.astro";
 import { LANG, LOCALES, localePath, messages } from "../i18n";
 ---
 
-<Base locale="en" title="Page not found – Hatoba" description={messages("en").meta.description} path="/404/" translated={false} noindex>
+<Base
+  locale="en"
+  title="Page not found – Hatoba"
+  description={messages("en").meta.description}
+  path="/404/"
+  translated={false}
+  noindex
+>
   <div class="container lost">
-    {
-      LOCALES.map((locale) => {
-        const t = messages(locale);
-        return (
-          <section lang={LANG[locale]}>
-            <h1>{t.notFound.title}</h1>
-            <p>{t.notFound.body}</p>
-            <a href={localePath(locale)}>{t.notFound.home}</a>
-          </section>
-        );
-      })
-    }
+    {LOCALES.map((locale) => {
+      const t = messages(locale);
+      return (
+        <section lang={LANG[locale]}>
+          <h1>{t.notFound.title}</h1>
+          <p>{t.notFound.body}</p>
+          <a href={localePath(locale)}>{t.notFound.home}</a>
+        </section>
+      );
+    })}
   </div>
 </Base>
 
 <style>
   .lost {
     display: grid;
-    gap: 40px;
-    padding: 72px 0 120px;
+    gap: var(--space-40);
+    padding: var(--space-72) 0 var(--space-120);
   }
 
   h1 {
-    font-size: 30px;
-    margin-bottom: 8px;
+    font-size: var(--text-2xl);
+    margin-bottom: var(--space-8);
   }
 
   section:first-child h1 {
-    font-size: clamp(40px, 6vw, 64px);
+    font-size: var(--text-h1);
   }
 </style>

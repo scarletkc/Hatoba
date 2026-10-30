@@ -38,7 +38,12 @@ const BUNDLING_OPTIONS = [
 ];
 
 function git(args, root) {
-  return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+  return execFileSync("git", args, {
+    cwd: root,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    maxBuffer: 64 * 1024 * 1024,
+  });
 }
 
 const nulSeparated = (output) => output.split("\0").filter(Boolean);
@@ -47,7 +52,9 @@ const nulSeparated = (output) => output.split("\0").filter(Boolean);
 function workingTree(root) {
   const read = (path) => (existsSync(join(root, path)) ? readFileSync(join(root, path), "utf8") : null);
   const list = (dir) =>
-    nulSeparated(git(["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", dir], root)).filter((path) => existsSync(join(root, path)));
+    nulSeparated(git(["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", dir], root)).filter(
+      (path) => existsSync(join(root, path)),
+    );
   return { read, list };
 }
 
@@ -72,7 +79,10 @@ function bundlingOptions(text) {
     return text.replaceAll("\r\n", "\n");
   }
   const options = config.compilerOptions ?? {};
-  return JSON.stringify({ extends: config.extends, ...Object.fromEntries(BUNDLING_OPTIONS.filter((key) => key in options).map((key) => [key, options[key]])) });
+  return JSON.stringify({
+    extends: config.extends,
+    ...Object.fromEntries(BUNDLING_OPTIONS.filter((key) => key in options).map((key) => [key, options[key]])),
+  });
 }
 
 /**
@@ -98,7 +108,9 @@ function workerInputs(tree) {
   const json = (path) => JSON.parse(tree.read(path) ?? "{}");
   inputs.set(`${PACKAGE} (dependencies)`, JSON.stringify(json(PACKAGE).dependencies ?? {}));
   // npm marks the packages that only devDependencies need, such as wrangler and vitest, as dev.
-  const packages = Object.entries(json(LOCK).packages ?? {}).filter(([path, entry]) => path !== "" && !entry.dev && !entry.devOptional);
+  const packages = Object.entries(json(LOCK).packages ?? {}).filter(
+    ([path, entry]) => path !== "" && !entry.dev && !entry.devOptional,
+  );
   inputs.set(`${LOCK} (dependencies)`, JSON.stringify(packages));
   inputs.set(`${TSCONFIG} (bundling options)`, bundlingOptions(tree.read(TSCONFIG)));
   return inputs;
@@ -118,7 +130,9 @@ export function checkWorkerVersion(root, base) {
   try {
     commit = git(["merge-base", "HEAD", base], root).trim();
   } catch {
-    throw new Error(`Cannot find where HEAD branched from ${base}. Fetch ${base}, or pass the branch or commit to compare with, such as upstream/main.`);
+    throw new Error(
+      `Cannot find where HEAD branched from ${base}. Fetch ${base}, or pass the branch or commit to compare with, such as upstream/main.`,
+    );
   }
   const since = `${base} (${commit.slice(0, 7)})`;
   const version = readVersion(root, WORKER_VERSION_FILES);
@@ -136,7 +150,8 @@ export function checkWorkerVersion(root, base) {
     };
   }
   const changed = changedInputs(workerInputs(before), workerInputs(workingTree(root)));
-  if (changed.length === 0) return { ok: true, message: `The sync Worker has not changed since ${since}, and its version stays ${version}.` };
+  if (changed.length === 0)
+    return { ok: true, message: `The sync Worker has not changed since ${since}, and its version stays ${version}.` };
   return {
     ok: false,
     message: [

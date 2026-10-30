@@ -8,7 +8,10 @@ type Names = Record<string, string>;
  * English, translated. `source` is the English they translate: install.test.ts fails when the
  * English in release.mjs no longer matches it, so that a change there is translated here too.
  */
-export const TRANSLATED_STEPS: { source: Record<Platform, (names: Names) => string> } & Record<"zh" | "ja", Record<Platform, (names: Names) => string>> = {
+export const TRANSLATED_STEPS: { source: Record<Platform, (names: Names) => string> } & Record<
+  "zh-cn" | "zh-tw" | "ja",
+  Record<Platform, (names: Names) => string>
+> = {
   source: {
     windows: ({ nsis }) =>
       `download \`${nsis}\` and run it. It installs Hatoba for the current user and needs no administrator rights. The installer is not code-signed, so Windows SmartScreen may stop it: choose **More info**, then **Run anyway**.`,
@@ -17,13 +20,21 @@ export const TRANSLATED_STEPS: { source: Record<Platform, (names: Names) => stri
     macos: ({ dmg }) =>
       `on macOS 13 or later, download \`${dmg}\`, open it, and drag Hatoba to Applications. The app is not signed with an Apple Developer ID or notarized, so macOS blocks it the first time you open it: close the warning, go to **System Settings → Privacy & Security**, choose **Open Anyway** under **Security**, and enter your login password. After an update, macOS may ask whether Hatoba can use its keychain items: enter your login password and choose **Always Allow**, because sync fails if you deny it.`,
   },
-  zh: {
+  "zh-cn": {
     windows: ({ nsis }) =>
       `下载 \`${nsis}\` 并运行。它为当前用户安装 Hatoba，不需要管理员权限。安装程序没有代码签名，Windows SmartScreen 可能会拦截它：选择**更多信息**，再选择**仍要运行**。`,
     linux: ({ deb, appimage }) =>
       `在 Debian、Ubuntu 及其衍生发行版上，下载 \`${deb}\`，然后用 \`sudo apt install ./${deb}\` 安装。在其他发行版上，下载 \`${appimage}\`，用 \`chmod +x ${appimage}\` 赋予执行权限后运行。`,
     macos: ({ dmg }) =>
       `在 macOS 13 或更高版本上，下载 \`${dmg}\`，打开后把 Hatoba 拖到“应用程序”文件夹。这个应用没有 Apple Developer ID 签名，也没有经过公证，所以第一次打开时 macOS 会阻止它：关闭警告，前往**系统设置 → 隐私与安全性**，在**安全性**下选择**仍要打开**，然后输入登录密码。更新之后，macOS 可能会询问 Hatoba 能否使用它的钥匙串项目：输入登录密码并选择**始终允许**，拒绝的话同步会失败。`,
+  },
+  "zh-tw": {
+    windows: ({ nsis }) =>
+      `下載 \`${nsis}\` 並執行。它會為目前的使用者安裝 Hatoba，不需要系統管理員權限。安裝程式沒有程式碼簽署，Windows SmartScreen 可能會攔下它：選擇**其他資訊**，再選擇**仍要執行**。`,
+    linux: ({ deb, appimage }) =>
+      `在 Debian、Ubuntu 及其衍生發行版上，下載 \`${deb}\`，然後用 \`sudo apt install ./${deb}\` 安裝。在其他發行版上，下載 \`${appimage}\`，用 \`chmod +x ${appimage}\` 加上執行權限後執行。`,
+    macos: ({ dmg }) =>
+      `在 macOS 13 或更新版本上，下載 \`${dmg}\`，打開後把 Hatoba 拖到「應用程式」資料夾。這個 App 沒有 Apple Developer ID 簽署，也沒有經過公證，所以第一次打開時 macOS 會阻擋它：關閉警告，前往**系統設定 → 隱私權與安全性**，在**安全性**下選擇**強制打開**，然後輸入登入密碼。更新之後，macOS 可能會詢問 Hatoba 能否使用它的鑰匙圈項目：輸入登入密碼並選擇**永遠允許**，拒絕的話同步會失敗。`,
   },
   ja: {
     windows: ({ nsis }) =>

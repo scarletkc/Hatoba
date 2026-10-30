@@ -81,6 +81,8 @@ impl Users {
 /// A running forward, and the addresses that name it (see [`RunningForwardView`]).
 struct RunningForward {
     handle: ForwardHandle,
+    /// The rule's name, kept current as it changes (see [`rules_changed`]).
+    name: String,
     kind: crate::dto::ForwardKind,
     address: String,
     dest: String,
@@ -189,12 +191,20 @@ impl Connection {
 
     /// Keeps the forward unless its rule went while it started: a delete removes the rule, then
     /// stops the forward under the same lock, so it either finds the forward or the forward finds
-    /// no rule.
-    fn add_forward(&self, state: &AppState, id: &str, running: RunningForward) -> AppResult<()> {
+    /// no rule. It takes the rule's name as it is now, which a rename while it started changed.
+    fn add_forward(
+        &self,
+        state: &AppState,
+        id: &str,
+        mut running: RunningForward,
+    ) -> AppResult<()> {
         let mut users = self.users();
-        if let Err(e) = saved_forward(state, &self.host_id, id) {
-            running.handle.stop();
-            return Err(e);
+        match saved_forward(state, &self.host_id, id) {
+            Ok(rule) => running.name = rule.name,
+            Err(e) => {
+                running.handle.stop();
+                return Err(e);
+            }
         }
         users.failed.remove(id);
         if let Some(old) = users.forwards.insert(id.to_owned(), running) {
@@ -218,6 +228,18 @@ impl Connection {
             found |= users.failed.remove(id).is_some();
         });
         found
+    }
+
+    /// Gives the forward running here its rule's name; `false` when it is not running here or
+    /// already has that name.
+    fn rename_forward(&self, id: &str, name: String) -> bool {
+        match self.users().forwards.get_mut(id) {
+            Some(running) if running.name != name => {
+                running.name = name;
+                true
+            }
+            _ => false,
+        }
     }
 
     /// Stops every forward, and returns how many there were.
@@ -516,6 +538,7 @@ async fn open_kind(session: &SshSession, f: &PortForward) -> AppResult<RunningFo
     };
     Ok(RunningForward {
         handle,
+        name: f.name.clone(),
         kind: f.kind.into(),
         address,
         dest,
@@ -557,8 +580,9 @@ pub fn stop(app: &AppHandle, host_id: &str, forward_id: &str) {
     }
 }
 
-/// After a sync pull: stops the forwards whose rule, or whose host, another device deleted.
-pub fn forget_deleted(app: &AppHandle) {
+/// After a rule changed, here or by a sync pull: stops the forwards whose rule, or whose host, was
+/// deleted, and a running forward takes its rule's name.
+pub fn rules_changed(app: &AppHandle) {
     let state = state(app);
     let running: Vec<(Arc<Connection>, String)> = state
         .connections
@@ -576,23 +600,30 @@ pub fn forget_deleted(app: &AppHandle) {
             ids.into_iter().map(move |id| (Arc::clone(&conn), id))
         })
         .collect();
-    // Read with no connection's lock held, which a start takes before the vault's.
-    let Ok(deleted) = state.with_unlocked(|v| {
+    // Read with no connection's lock held, which a start takes before the vault's. Each rule's
+    // name, or `None` when it or its host is gone.
+    let Ok(rules) = state.with_unlocked(|v| {
         Ok(running
             .into_iter()
-            .filter(|(conn, id)| {
-                v.get(&conn.host_id).and_then(Item::as_host).is_none()
-                    || v.get(id)
-                        .and_then(Item::as_forward)
-                        .is_none_or(|f| f.host_id != conn.host_id)
+            .map(|(conn, id)| {
+                let name = v
+                    .get(&id)
+                    .and_then(Item::as_forward)
+                    .filter(|f| f.host_id == conn.host_id)
+                    .filter(|_| v.get(&conn.host_id).and_then(Item::as_host).is_some())
+                    .map(|f| f.name.clone());
+                (conn, id, name)
             })
             .collect::<Vec<_>>())
     }) else {
         return;
     };
     let mut found = false;
-    for (conn, id) in deleted {
-        found |= conn.stop_forward(&id);
+    for (conn, id, name) in rules {
+        found |= match name {
+            Some(name) => conn.rename_forward(&id, name),
+            None => conn.stop_forward(&id),
+        };
     }
     if found {
         changed(app);
@@ -667,6 +698,7 @@ fn snapshot(state: &AppState, version: u64) -> ConnectionsEvent {
                 .filter(|(_, f)| f.handle.is_running())
                 .map(|(forward_id, f)| RunningForwardView {
                     forward_id: forward_id.clone(),
+                    name: f.name.clone(),
                     kind: f.kind,
                     port: f.handle.port(),
                     address: f.address.clone(),

@@ -1,5 +1,4 @@
-import { Segmented } from "@/components/controls";
-import { FormRow } from "@/components/layout";
+import { FormRow, Segmented } from "@hatoba/ui";
 import { useT } from "@/i18n";
 
 export type HostProtocol = "ssh" | "telnet";

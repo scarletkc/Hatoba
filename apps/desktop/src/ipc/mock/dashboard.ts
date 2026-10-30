@@ -1,4 +1,4 @@
-import type { HatobaApi } from "../api";
+import { appError, type HatobaApi } from "../api";
 import type { DashboardEvent, HostView } from "../types";
 import { mockStats, PROBE, type StatsProfile } from "./data";
 
@@ -12,7 +12,10 @@ type Scenario =
 
 const SCENARIOS: Record<string, Scenario> = {
   "h-api-tokyo": { kind: "read", profile: { cpus: 8, memGib: 16, cpu: 34, mem: 0.58, uptimeDays: 41 } },
-  "h-bastion": { kind: "read", profile: { cpus: 2, memGib: 2, cpu: 4, mem: 0.31, disks: [["/", 6, 20]], uptimeDays: 97 } },
+  "h-bastion": {
+    kind: "read",
+    profile: { cpus: 2, memGib: 2, cpu: 4, mem: 0.31, disks: [["/", 6, 20]], uptimeDays: 97 },
+  },
   "h-db-osaka-01": {
     kind: "read",
     profile: {
@@ -43,7 +46,10 @@ const NO_PROC: Record<string, string> = { windows: "Windows", freebsd: "FreeBSD"
  * short, staggered delay and reads every interval, as `SCENARIOS` says. **Retry** signs in to a host whose
  * sign-in failed, which then reads.
  */
-export function createDashboardMock(ctx: { host(id: string): HostView | undefined; unlocked(): boolean }): DashboardApi & { stopAll(): void } {
+export function createDashboardMock(ctx: {
+  host(id: string): HostView | undefined;
+  unlocked(): boolean;
+}): DashboardApi & { stopAll(): void } {
   let watchId = 0;
   let current: { id: number; interval: number; emit: (e: DashboardEvent) => void } | null = null;
   const timers = new Map<string, ReturnType<typeof setTimeout>[]>();
@@ -95,7 +101,9 @@ export function createDashboardMock(ctx: { host(id: string): HostView | undefine
           kind: "held",
           host_id: hostId,
           hold: "sign_in_failed",
-          error: { code: "ssh", detail: "authentication failed: no method succeeded (tried publickey)", ssh_kind: "auth_failed" },
+          error: appError("ssh", "authentication failed: no method succeeded (tried publickey)", {
+            ssh_kind: "auth_failed",
+          }),
         }),
       );
       return;
@@ -111,7 +119,11 @@ export function createDashboardMock(ctx: { host(id: string): HostView | undefine
       const read = () => {
         if (scenario.lostAfter !== undefined && n >= scenario.lostAfter) {
           stop(hostId);
-          emit({ kind: "failed", host_id: hostId, error: { code: "ssh", detail: "connection reset by peer", ssh_kind: "disconnected" } });
+          emit({
+            kind: "failed",
+            host_id: hostId,
+            error: appError("ssh", "connection reset by peer", { ssh_kind: "disconnected" }),
+          });
           return;
         }
         emit({ kind: "stats", host_id: hostId, stats: sample(n === 0) });
@@ -126,7 +138,7 @@ export function createDashboardMock(ctx: { host(id: string): HostView | undefine
 
   return {
     dashboard_watch: async (hostIds, intervalSecs, onEvent) => {
-      if (!ctx.unlocked()) throw { code: "locked", detail: "vault is locked" };
+      if (!ctx.unlocked()) throw appError("locked", "vault is locked");
       const interval = Math.min(60, Math.max(1, intervalSecs));
       const restart = current !== null && current.interval !== interval;
       const wanted = new Set(hostIds);

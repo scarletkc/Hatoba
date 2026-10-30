@@ -1,28 +1,30 @@
-import type { HostFilter } from "@/app/store";
 import type { HostView } from "@/ipc/types";
-import type { HostSort } from "./ui";
+import type { ListSort } from "./ui";
 
 /** What the host list filters and sorts by, which SSH and Telnet hosts both have. */
-export type HostLike = Pick<HostView, "name" | "address" | "port" | "username" | "tags" | "favorite" | "group_id" | "last_connected_at">;
+export type HostLike = Pick<
+  HostView,
+  "name" | "address" | "port" | "username" | "tags" | "favorite" | "group_id" | "last_connected_at"
+>;
 
-/** The hosts a sidebar filter shows: all, favorites, recent, a group or a tag. */
+/** What the hosts page lists: a group or every host, narrowed to favorites and to hosts with every one of `tags`. */
+export interface HostFilter {
+  group: string | null;
+  favorites: boolean;
+  tags: string[];
+}
+
 export function applyFilter<T extends HostLike>(hosts: T[], filter: HostFilter): T[] {
-  switch (filter.kind) {
-    case "all":
-      return hosts;
-    case "favorites":
-      return hosts.filter((h) => h.favorite);
-    case "recent":
-      return hosts.filter((h) => h.last_connected_at !== null);
-    case "group":
-      return hosts.filter((h) => h.group_id === filter.id);
-    case "tag":
-      return hosts.filter((h) => h.tags.includes(filter.name));
-  }
+  return hosts.filter(
+    (h) =>
+      (filter.group === null || h.group_id === filter.group) &&
+      (!filter.favorites || h.favorite) &&
+      filter.tags.every((tag) => h.tags.includes(tag)),
+  );
 }
 
 /** The host list's order (HOST-05): the latest connection first, the name, or the address. */
-export function sortHosts<T extends HostLike>(hosts: T[], sort: HostSort, locale: string): T[] {
+export function sortHosts<T extends HostLike>(hosts: T[], sort: ListSort, locale: string): T[] {
   const collator = new Intl.Collator(locale, { numeric: true, sensitivity: "base" });
   const byName = (a: T, b: T) => collator.compare(a.name, b.name);
   const out = [...hosts];

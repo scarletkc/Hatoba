@@ -2,12 +2,20 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
 import { boot } from "./app/boot";
+import { AppUiStrings } from "./app/UiStrings";
 import "./styles/base.css";
 
-void boot().finally(() => {
+void boot().finally(async () => {
+  // The component gallery (`/?gallery`) exists only in development builds.
+  const Root =
+    import.meta.env.DEV && new URLSearchParams(location.search).has("gallery")
+      ? (await import("./app/Gallery")).Gallery
+      : App;
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
-      <App />
+      <AppUiStrings>
+        <Root />
+      </AppUiStrings>
     </StrictMode>,
   );
 });

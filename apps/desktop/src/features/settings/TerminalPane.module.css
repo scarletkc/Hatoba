@@ -2,57 +2,27 @@
   width: 220px;
 }
 
-.stepper {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px;
-  border-radius: var(--radius-control);
-  background: var(--fill);
-}
-
-.stepper button {
-  width: 28px;
-  height: 22px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--fg2);
-  font-size: 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.stepper button:hover:not(:disabled) {
-  background: var(--segon);
-  box-shadow: var(--shadow-seg);
-  color: var(--fg);
-}
-
-.stepper button:disabled {
-  color: var(--fg3);
-}
-
-.stepValue {
-  min-width: 34px;
-  text-align: center;
-  font-size: 12.5px;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Live preview of font, size and cursor */
+/* Live preview of font, size, cursor and colours; the colours come from the scheme. */
 .preview {
   padding: 12px 14px;
-  border-radius: var(--radius-panel);
-  background: var(--term);
-  color: var(--term-fg);
+  border-radius: var(--radius-lg);
   line-height: 1.5;
   white-space: pre;
   overflow: hidden;
 }
 
+.dark {
+  box-shadow:
+    0 0 0 0.5px rgba(255, 255, 255, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.16);
+}
+
+.light {
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.16);
+}
+
 .dim {
-  color: var(--term-dim);
+  color: var(--preview-dim);
 }
 
 /* Every style fills the same box, one line tall, so switching styles keeps the preview's height. */
@@ -64,13 +34,13 @@
 }
 
 .block {
-  background: var(--term-fg);
+  background: var(--preview-cursor);
 }
 
 .bar {
-  border-left: 2px solid var(--term-fg);
+  border-left: 2px solid var(--preview-cursor);
 }
 
 .underline {
-  border-bottom: 2px solid var(--term-fg);
+  border-bottom: 2px solid var(--preview-cursor);
 }

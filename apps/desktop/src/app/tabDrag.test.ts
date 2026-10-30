@@ -67,7 +67,16 @@ describe("TabDrag", () => {
   const el = (title: string) => strip.querySelector<HTMLElement>(`[data-title="${title}"]`)!;
   const tabOf = (title: string) => useTabs.getState().tabs.find((t) => t.title === title)!;
   const press = (title: string, target: Element = el(title)) =>
-    drag.down({ button: 0, target, currentTarget: el(title), pointerId: 1, clientX: 10 } as unknown as ReactPointerEvent<HTMLElement>, tabOf(title).id);
+    drag.down(
+      {
+        button: 0,
+        target,
+        currentTarget: el(title),
+        pointerId: 1,
+        clientX: 10,
+      } as unknown as ReactPointerEvent<HTMLElement>,
+      tabOf(title).id,
+    );
   const pointer = (type: string, clientX: number) => {
     const e = new MouseEvent(type, { clientX });
     Object.defineProperty(e, "pointerId", { value: 1 });
@@ -83,7 +92,10 @@ describe("TabDrag", () => {
     const places = { a: [0, 100], b: [100, 60], c: [160, 80] };
     for (const [title, [left, width]] of Object.entries(places)) {
       const id = useTabs.getState().openSession({ hostId: title, target: null }, title);
-      strip.insertAdjacentHTML("beforeend", `<button data-tab-id="${id}" data-title="${title}"><span role="button">x</span></button>`);
+      strip.insertAdjacentHTML(
+        "beforeend",
+        `<button data-tab-id="${id}" data-title="${title}"><span role="button">x</span></button>`,
+      );
       el(title).getBoundingClientRect = () => ({ left, width }) as DOMRect;
     }
     document.body.append(strip);

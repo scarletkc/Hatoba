@@ -1,106 +1,25 @@
 /*
- * Design tokens extracted from the Claude Design file `Hatoba.dc.html`
- * (light values from the canvas root, dark values from its `DARK` table).
- * Components only reference these variables, never raw colors.
+ * Hatoba's own tokens, on top of the shared ones in @hatoba/ui (base.css imports both): the app's
+ * frame, the terminal, server logos and charts, and the window chrome each platform needs.
  */
 
 :root {
-  /* Typography (WIN-02: Segoe UI Variable / Cascadia Mono on Windows, SF on macOS) */
-  --font-sans: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont,
-    "SF Pro Text", "Microsoft YaHei UI", "PingFang SC", "Hiragino Sans GB", "Yu Gothic UI", "Helvetica Neue",
-    Helvetica, Arial, sans-serif;
-  --font-mono: "Cascadia Mono", Consolas, ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono",
-    "Microsoft YaHei UI", "Yu Gothic UI", monospace;
-
-  --text-xs: 11px;
-  --text-sm: 12px;
-  --text-md: 13px;
-  --text-lg: 15px;
-  --text-xl: 17px;
-  --text-title: 20px;
-  --text-wizard: 19px;
-
-  /* Radii */
-  --radius-xs: 4px;
-  --radius-sm: 5px;
-  --radius-md: 6px;
-  --radius-control: 7px;
-  --radius-panel: 10px;
-  --radius-window: 12px;
-  --radius-icon: 14px;
-
-  /* Motion. Fades change only color or opacity, and stay with reduced motion. Moves and resizes take
-     the other durations, which reduced motion sets to zero (base.css). */
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-in: cubic-bezier(0.4, 0, 1, 1);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --motion-hover: 50ms;
-  --motion-fade: 140ms;
-  --motion-fast: 180ms;
-  --motion-base: 260ms;
-  --motion-slow: 520ms;
-  /* How far a popover or dialog travels and grows as it opens: none with reduced motion. */
-  --motion-rise: 6px;
-  --motion-pop: 0.97;
+  /* The interface zoom (TERM-13), set by lib/zoom.ts. The WebView scales every CSS pixel by it; a
+     length in --window-px stays the same in window pixels, for chrome that lines up with the native
+     window (Linux's painted margin, the macOS traffic lights). */
+  --ui-zoom: 1;
+  --window-px: calc(1px / var(--ui-zoom));
 
   /* Sizes */
-  --sidebar-width: 228px;
+  --rail-width: 76px;
   --titlebar-height: 44px;
   --toolbar-height: 36px;
-  --control-height: 28px;
-  --field-height: 26px;
-  --row: 40px;
 
-  /* Light palette */
-  --win: #ffffff;
-  --side: #ececf1;
-  --side-translucent: rgba(236, 236, 241, 0.6);
-  --fg: #1d1d1f;
-  --fg2: rgba(60, 60, 67, 0.75);
-  --fg3: rgba(60, 60, 67, 0.4);
-  --line: rgba(0, 0, 0, 0.075);
-  --line2: rgba(0, 0, 0, 0.12);
-  --fill: rgba(0, 0, 0, 0.045);
-  --fill2: rgba(0, 0, 0, 0.08);
-  --group: rgba(0, 0, 0, 0.025);
-  --sel: rgba(0, 0, 0, 0.075);
-  --accent: #007aff;
-  --rowsel: color-mix(in srgb, var(--accent) 10%, transparent);
-  --accenttint: color-mix(in srgb, var(--accent) 12%, transparent);
-  --field: #ffffff;
-  --fieldline: rgba(0, 0, 0, 0.15);
-  --btn: #ffffff;
-  --btnline: rgba(0, 0, 0, 0.13);
-  --segon: #ffffff;
-  --green: #28a745;
-  --orange: #e08600;
-  --red: #e5342b;
-  --sheet: #ffffff;
-  --winline: rgba(0, 0, 0, 0.22);
-  --shadow: 0 30px 80px rgba(20, 24, 40, 0.22), 0 6px 18px rgba(20, 24, 40, 0.1);
-  --shadow-popover: 0 0 0 0.5px var(--winline), 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 10px rgba(0, 0, 0, 0.07),
-    0 14px 36px rgba(0, 0, 0, 0.14);
-  --shadow-btn: 0 0 0 0.5px var(--btnline), 0 1px 1.5px rgba(0, 0, 0, 0.05);
-  --shadow-seg: 0 1px 2px rgba(0, 0, 0, 0.12), 0 0 0 0.5px var(--line);
-  --focus-ring: 0 0 0 1px var(--accent), 0 0 0 3.5px var(--accenttint);
-  --error-ring: 0 0 0 1px var(--red), 0 0 0 3.5px color-mix(in srgb, var(--red) 16%, transparent);
-  --scrim: rgba(0, 0, 0, 0.18);
-
-  /* Terminal (always dark in the design; "match appearance" switches to the light set) */
+  /* Terminal (dark by default; "match appearance" switches to the light set) */
   --term: #121316;
   --term-fg: #d5d8de;
   --term-dim: #6b717c;
   --term-dialog: #1c1d21;
-
-  /* Tag palette (oklch, from the design's TAGC table) */
-  --tag-1: oklch(0.66 0.15 30);
-  --tag-2: oklch(0.76 0.13 80);
-  --tag-3: oklch(0.6 0.13 300);
-  --tag-4: oklch(0.68 0.1 190);
-  --tag-5: oklch(0.62 0.14 255);
-  --tag-6: oklch(0.66 0.11 150);
-  --tag-7: oklch(0.66 0.01 260);
-  --tag-8: oklch(0.7 0.12 340);
 
   /* Server OS logos (HOST-11): the Simple Icons brand colors, and Windows blue */
   --os-ubuntu: #e95420;
@@ -117,38 +36,9 @@
   /* Windows caption buttons */
   --caption-hover: rgba(0, 0, 0, 0.06);
   --caption-close: #c42b1c;
-
-  color-scheme: light;
 }
 
 :root[data-theme="dark"] {
-  --win: #1e1e20;
-  --side: #2a2a2e;
-  --side-translucent: rgba(42, 42, 46, 0.58);
-  --fg: #f5f5f7;
-  --fg2: rgba(235, 235, 245, 0.64);
-  --fg3: rgba(235, 235, 245, 0.32);
-  --line: rgba(255, 255, 255, 0.075);
-  --line2: rgba(255, 255, 255, 0.12);
-  --fill: rgba(255, 255, 255, 0.07);
-  --fill2: rgba(255, 255, 255, 0.11);
-  --group: rgba(255, 255, 255, 0.035);
-  --sel: rgba(255, 255, 255, 0.1);
-  --accent: #0a84ff;
-  --rowsel: color-mix(in srgb, var(--accent) 24%, transparent);
-  --accenttint: color-mix(in srgb, var(--accent) 20%, transparent);
-  --field: rgba(255, 255, 255, 0.055);
-  --fieldline: rgba(255, 255, 255, 0.13);
-  --btn: rgba(255, 255, 255, 0.1);
-  --btnline: rgba(255, 255, 255, 0.07);
-  --segon: rgba(255, 255, 255, 0.18);
-  --green: #30d158;
-  --orange: #ff9f0a;
-  --red: #ff453a;
-  --sheet: #28282b;
-  --winline: rgba(255, 255, 255, 0.14);
-  --shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 6px 18px rgba(0, 0, 0, 0.35);
-  --scrim: rgba(0, 0, 0, 0.4);
   --term: #0d0e10;
   --caption-hover: rgba(255, 255, 255, 0.08);
   /* The darker brand colors, lightened to stay visible on dark and selected rows */
@@ -157,55 +47,39 @@
   --os-freebsd: #e66259;
   --os-windows: #3395f4;
   --chart-tx: oklch(0.63 0.15 315);
-
-  color-scheme: dark;
 }
 
-/* Compact list density (design "density: 紧凑") */
-:root[data-density="compact"] {
-  --row: 32px;
-}
-
-/* Mica on Windows 11 (WIN-07): let the native material show through the sidebar */
+/* Mica on Windows 11 (WIN-07): let the native material show through the tab bar and the rail */
 :root[data-material="mica"] {
   --side: var(--side-translucent);
 }
 
 /* Linux gets no shadow or rounding from the compositor on an undecorated window, so the app
    paints its own chrome: --win-pad leaves room for the shadow in the transparent margin and
-   --win-resize is the resize band just outside the painted edge. Keep --win-pad and
-   --win-resize in step with WIN_PAD and RESIZE_BAND in src-tauri/src/platform/linux_chrome.rs.
-   The shadow's offset + blur must stay within --win-pad or the window edge clips it. */
+   --win-resize is the resize band just outside the painted edge. Both are in window pixels: keep
+   --win-pad-px and --win-resize in step with WIN_PAD and RESIZE_BAND in
+   src-tauri/src/platform/linux_chrome.rs. The shadow's offset + blur must stay within --win-pad or
+   the window edge clips it, so it is in window pixels too. */
 :root[data-platform="linux"] {
-  --win-pad: 22px;
-  --win-resize: 8px;
-  --shadow-window: 0 6px 16px rgba(0, 0, 0, 0.24), 0 1px 4px rgba(0, 0, 0, 0.16);
+  --win-pad-px: 22;
+  --win-pad: calc(var(--win-pad-px) * var(--window-px));
+  --win-resize: calc(8 * var(--window-px));
+  --shadow-window:
+    0 calc(6 * var(--window-px)) calc(16 * var(--window-px)) rgba(0, 0, 0, 0.24),
+    0 var(--window-px) calc(4 * var(--window-px)) rgba(0, 0, 0, 0.16);
 }
 
 :root[data-platform="linux"][data-theme="dark"] {
-  --shadow-window: 0 6px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.36);
+  --shadow-window:
+    0 calc(6 * var(--window-px)) calc(16 * var(--window-px)) rgba(0, 0, 0, 0.5),
+    0 var(--window-px) calc(4 * var(--window-px)) rgba(0, 0, 0, 0.36);
 }
 
-/* CJK font order: Japanese UI should prefer Yu Gothic over YaHei for unified Han glyphs */
-:root:lang(ja) {
-  --font-sans: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont,
-    "SF Pro Text", "Yu Gothic UI", "Hiragino Sans", "Microsoft YaHei UI", "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "Cascadia Mono", Consolas, ui-monospace, "SF Mono", Menlo, "Yu Gothic UI", "Microsoft YaHei UI",
-    monospace;
-}
-
-/* macOS keeps the design's native look (P1). The mono stack keeps CJK fallbacks for wide characters (TERM-02). */
+/* The native traffic lights stay where the window was made (tao puts them back on every redraw), so
+   the title bar keeps its 44 window pixels as the interface zooms, while it can hold the 28 px tabs. */
 :root[data-platform="macos"] {
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue",
-    Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "PingFang SC", "Hiragino Sans GB",
-    "Hiragino Sans", monospace;
-}
-
-/* The macOS block above has the same specificity as :root:lang(ja) and comes later, so Japanese needs its own rule. */
-:root[data-platform="macos"]:lang(ja) {
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", "PingFang SC", "Helvetica Neue",
-    Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "Hiragino Sans", "PingFang SC",
-    monospace;
+  --titlebar-height: max(calc(44 * var(--window-px)), 34px);
+  /* The traffic lights (x = 18 to 78 pt) stand on the rail, 18 pt from both its edges at 100% interface zoom and
+     below. Above 100% the rail grows with what it holds while they stay put, as by a wider Finder sidebar. */
+  --rail-width: max(96px, calc(96 * var(--window-px)));
 }

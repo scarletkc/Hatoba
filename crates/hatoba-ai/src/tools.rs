@@ -132,8 +132,10 @@ fn read_terminal_tool() -> ToolDef {
          text across the visible screen and the scrollback, as plain text with soft-wrapped \
          lines joined, with how many lines the terminal has in all and whether the alternate \
          screen (vim, htop, less and so on) is active. \
-         Use it to see the prompt, earlier output or a full-screen program. It runs without \
-         asking."
+         Use it to see the prompt, earlier output or a full-screen program. With \
+         wait_seconds, it first waits until new output has come and been quiet for 1 second, \
+         or wait_seconds has passed, so it can wait for a command that is still running. It \
+         runs without asking."
             .to_owned(),
         json!({
             "type": "object",
@@ -143,6 +145,11 @@ fn read_terminal_tool() -> ToolDef {
                     "description": "How many lines to return, counted back from the last \
                                     line with text (at most 1000). Without it: 20, or the \
                                     whole screen while the alternate screen is active."
+                },
+                "wait_seconds": {
+                    "type": "integer",
+                    "description": "Longest wait for new output before reading (at most \
+                                    120). Without it, the screen is read at once."
                 }
             }
         }),
@@ -159,6 +166,8 @@ fn send_input_tool() -> ToolDef {
          \"n\"] leaves nano without saving. Then wait until the output has been quiet for 1 second \
          or wait_seconds has passed (default 10, at most 120), and return the output that \
          appeared after the input, or the whole screen when a full-screen program is active. \
+         A quiet second does not mean a command has finished, since many commands pause \
+         while they work: to wait for more output, call read_terminal with wait_seconds. \
          The text goes to the shell itself, so commands use its working directory, \
          environment and sudo session, and can be interactive or ask for input. A command \
          started this way keeps running in the shell when the turn stops."
@@ -184,6 +193,7 @@ fn send_input_tool() -> ToolDef {
         }),
     )
 }
+
 fn tool(name: &str, description: String, input_schema: Value) -> ToolDef {
     ToolDef {
         name: name.to_owned(),
@@ -978,6 +988,28 @@ pub fn terminal_change_block(attached: bool) -> String {
     format!("<{TAG} to=\"{to}\">\n{body}\n</{TAG}>\n\n")
 }
 
+/// The attachment block that notes a move to a local terminal tab (§7.5) of the same computer
+/// that runs another shell, such as from a WSL distribution to PowerShell (spec §13.3), with the
+/// blank line after it. `from` and `to` are the shells as the system prompt names them.
+#[must_use]
+pub fn shell_change_block(from: &str, to: &str) -> String {
+    const TAG: &str = "shell_change";
+    let body = escape_closing_tag(
+        &format!(
+            "The conversation moved to another local terminal on the same computer, which runs \
+             \"{}\". Screens and command output before this message came from \"{}\".",
+            note_text(to),
+            note_text(from)
+        ),
+        TAG,
+    );
+    format!(
+        "<{TAG} from=\"{}\" to=\"{}\">\n{body}\n</{TAG}>\n\n",
+        note_attribute(from),
+        note_attribute(to)
+    )
+}
+
 /// The attachment block that notes a switch to another model (AI-05, spec §13.3), with the blank
 /// line after it. `from` and `to` are [`model_label`]s.
 #[must_use]
@@ -1211,6 +1243,9 @@ const ATTACHMENTS: &str = "<attachments>\n\
      - <terminal_change to=\"…\">: with this message a terminal became attached \
      (to=\"attached\") or stopped being attached (to=\"detached\"). Replies before it had the \
      tools offered then, so what they said they could or could not do was true at the time.\n\
+     - <shell_change from=\"…\" to=\"…\">: with this message the conversation moved to a local \
+     terminal of the same computer that runs another shell. Screens and command output before \
+     it came from the shell in from, and replies before it were told of that shell.\n\
      - <model_change from=\"…\" to=\"…\">: with this message the user switched models. Earlier \
      replies came from the model in from.\n\
      - <permission_mode mode=\"…\">: the permission mode from this message on, manual, auto or \
@@ -1232,9 +1267,10 @@ const ATTACHMENTS: &str = "<attachments>\n\
      - <terminal_state host=\"…\" alternate_screen=\"…\" lines=\"…\">: the attached terminal's \
      screen when the user sent this message: its last lines, or the whole screen while a \
      full-screen program such as vim or less runs (alternate_screen=\"true\").\n\
-     - <mcp_tools servers=\"…\" tools=\"…\">: the MCP tools you can call with call_mcp_tool \
-     from this message on, by server, which replace any earlier list. search_tools returns a \
-     tool's description and input schema.\n\
+     - <mcp_change available=\"…\" unavailable=\"…\">: with this message the MCP servers whose \
+     tools you can call changed, as its Now available and No longer available lists say. Replies \
+     before it had the tools offered then, so what they said they could or could not do was true \
+     at the time.\n\
      Then come the blocks the user attached:\n\
      - <terminal_selection host=\"…\" lines=\"…\">: text selected in the terminal. \
      truncated=\"true\" means its middle was left out.\n\
@@ -2189,9 +2225,11 @@ mod tests {
             "<interrupted>: ",
             "<host_change from=",
             "<terminal_change to=",
+            "<shell_change from=",
             "<model_change from=",
             "<file_revert path=",
             "<terminal_state host=",
+            "<mcp_change available=",
             "<memory entries=",
             "<file name=",
             // A revert does not undo a reload (AI-41), so changes are tested before one.
@@ -2723,6 +2761,12 @@ mod tests {
              run commands were right at the time.\n</terminal_change>\n\n"
         );
         assert_eq!(
+            shell_change_block("Ubuntu", "PowerShell"),
+            "<shell_change from=\"Ubuntu\" to=\"PowerShell\">\nThe conversation moved to another \
+             local terminal on the same computer, which runs \"PowerShell\". Screens and command \
+             output before this message came from \"Ubuntu\".\n</shell_change>\n\n"
+        );
+        assert_eq!(
             file_revert_block("/etc/nginx/nginx.conf", "toolu_01", "edit_file", false),
             "<file_revert path=\"/etc/nginx/nginx.conf\" tool_call_id=\"toolu_01\">\nThe user \
              reverted the change your edit_file call toolu_01 made to \
@@ -2843,12 +2887,13 @@ A user message can start with blocks before the text the user typed. First come 
 - <interrupted>: the user stopped the reply before this message while it was being written, so that reply ends where it was cut off. Answer this message rather than finishing that reply, unless the user asks you to go on.
 - <host_change from="…" to="…">: with this message the conversation moved to another host. Screens and command output before it came from the host in from.
 - <terminal_change to="…">: with this message a terminal became attached (to="attached") or stopped being attached (to="detached"). Replies before it had the tools offered then, so what they said they could or could not do was true at the time.
+- <shell_change from="…" to="…">: with this message the conversation moved to a local terminal of the same computer that runs another shell. Screens and command output before it came from the shell in from, and replies before it were told of that shell.
 - <model_change from="…" to="…">: with this message the user switched models. Earlier replies came from the model in from.
 - <permission_mode mode="…">: the permission mode from this message on, manual, auto or bypass; the newest one applies. A conversation's first message has one, and so does the message that continues a compacted conversation.
 - <memory entries="…" conversation_host="…">: your memories as they were when the note was added, each in an <entry name="…" scope="…" updated="…"> block. The entry's scope says whose memory it is: scope="global" shows in every conversation, scope="host" host="…" only on that host or computer. conversation_host is the host the conversation was on. updated is the day the memory was last saved. While memory is on and you have memories, a conversation's first message has one, so does the message that continues a compacted conversation, and so does a message on a host whose memories no note showed yet, with just those.
 - <file_revert path="…" tool_call_id="…">: the user reverted the change that your call tool_call_id made to the file at path, one block for each reverted call. The file holds what it held before the call again, or was deleted if the call created it. Nothing else was undone: commands run since stay, and a service that loaded the change keeps it until it reloads. Read the file again before you change it.
 - <terminal_state host="…" alternate_screen="…" lines="…">: the attached terminal's screen when the user sent this message: its last lines, or the whole screen while a full-screen program such as vim or less runs (alternate_screen="true").
-- <mcp_tools servers="…" tools="…">: the MCP tools you can call with call_mcp_tool from this message on, by server, which replace any earlier list. search_tools returns a tool's description and input schema.
+- <mcp_change available="…" unavailable="…">: with this message the MCP servers whose tools you can call changed, as its Now available and No longer available lists say. Replies before it had the tools offered then, so what they said they could or could not do was true at the time.
 Then come the blocks the user attached:
 - <terminal_selection host="…" lines="…">: text selected in the terminal. truncated="true" means its middle was left out.
 - <connection_diagnostics host="…">: the report of a connection that failed.

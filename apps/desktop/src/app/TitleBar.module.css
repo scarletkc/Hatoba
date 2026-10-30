@@ -3,10 +3,10 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding-left: 10px;
-  border-bottom: 0.5px solid var(--line);
-  background: var(--win);
+  gap: var(--space-2);
+  /* The home tab (36 px) stands over the rail's items, centred on them. */
+  padding-left: calc((var(--rail-width) - 36px) / 2);
+  background: var(--side);
   color: var(--fg);
   min-width: 0;
 }
@@ -14,7 +14,7 @@
 .tabs {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-2);
   min-width: 0;
   overflow: hidden;
 }
@@ -22,17 +22,29 @@
 .tab {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-6);
   height: 28px;
   padding: 0 10px;
   border: 0;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg2);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   min-width: 0;
   max-width: 200px;
   flex-shrink: 1;
+}
+
+/* The home tab is a button back to the pages, an icon only, as Termius's Vaults: the rail and the page header name
+   the page it shows. */
+.homeTab {
+  flex: none;
+  justify-content: center;
+}
+
+/* Past the rail and the traffic lights on it on macOS, on every tab. */
+:root[data-platform="macos"] .tabbar {
+  padding-left: calc(var(--rail-width) + 8px);
 }
 
 /* A new session's tab opens out from nothing (TabBar), so its content stays inside it meanwhile. */
@@ -42,6 +54,11 @@
 
 .tab:hover {
   background: var(--fill);
+}
+
+/* Inside the tab: the tab strip clips what stands out of it, which would cut the ring's top and bottom. */
+.tab:focus-visible {
+  outline-offset: -2px;
 }
 
 .tabActive,
@@ -55,18 +72,33 @@
 .tab[data-dragging] {
   position: relative;
   z-index: 1;
-  background: linear-gradient(var(--fill2), var(--fill2)), var(--win);
+  background: linear-gradient(var(--fill2), var(--fill2)), var(--side-solid);
 }
 
 .tabIcon {
-  font-size: 15px;
+  font-size: var(--icon-16);
   flex: none;
 }
 
+/* Each label is as wide as its selected weight, so selecting a tab never resizes it or moves the ones after it. */
 .tabLabel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   white-space: nowrap;
+}
+
+.tabLabel > span {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.tabLabel::after {
+  content: attr(data-label);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 500;
 }
 
 .tabClose {
@@ -77,8 +109,8 @@
   height: 16px;
   margin-left: 2px;
   margin-right: -4px;
-  border-radius: 4px;
-  font-size: 11px;
+  border-radius: var(--radius-xs);
+  font-size: var(--icon-12);
   color: var(--fg2);
   visibility: hidden;
   opacity: 0;
@@ -115,10 +147,10 @@
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg2);
-  font-size: 14px;
+  font-size: var(--icon-14);
 }
 
 .newTab:hover {
@@ -131,6 +163,11 @@
   margin-left: -2px;
 }
 
+.newTabMenu[aria-expanded="true"] {
+  background: var(--fill);
+  color: var(--fg);
+}
+
 .drag {
   flex: 1;
   align-self: stretch;
@@ -138,6 +175,36 @@
 }
 
 /* AI panel toggle (§9) and the per-tab assistant state (AI-07) */
+.barButton {
+  position: relative;
+  width: 30px;
+  height: 28px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg2);
+}
+
+.barButton:hover {
+  background: var(--fill);
+}
+
+/* A newer release was found; the button opens Settings → About. */
+.updateDot {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--side);
+}
+
 .aiButton {
   position: relative;
   width: 30px;
@@ -148,7 +215,7 @@
   justify-content: center;
   margin-right: 6px;
   border: 0;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg2);
 }
@@ -171,14 +238,14 @@
   height: 6px;
   border-radius: 50%;
   background: var(--orange);
-  box-shadow: 0 0 0 1.5px var(--win);
+  box-shadow: 0 0 0 1.5px var(--side);
 }
 
 .tabAi {
   display: inline-flex;
   align-items: center;
   flex: none;
-  font-size: 12px;
+  font-size: var(--icon-12);
 }
 
 .tabAiRunning {
@@ -238,7 +305,7 @@
   width: 10px;
   height: 10px;
   border: 1px solid currentColor;
-  border-radius: 1px;
+  border-radius: var(--radius-hair);
 }
 
 .glyphRestore {
@@ -254,7 +321,7 @@
   width: 8px;
   height: 8px;
   border: 1px solid currentColor;
-  border-radius: 1px;
+  border-radius: var(--radius-hair);
 }
 
 .glyphRestore::before {
@@ -262,7 +329,7 @@
   top: 0;
   border-left-color: transparent;
   border-bottom-color: transparent;
-  border-radius: 0 1px 0 0;
+  border-radius: 0 var(--radius-hair) 0 0;
 }
 
 .glyphRestore::after {

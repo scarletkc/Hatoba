@@ -32,6 +32,8 @@ The labels that these files name in English, as the interface shows them in Simp
 | MCP Servers | MCP 服务器 |
 | Auto Mode | 自动批准模式 |
 | This Device | 此设备 |
+| Text Size | 文字大小 |
+| Appearance | 外观 |
 
 ### Providers
 
@@ -90,8 +92,8 @@ The labels that these files name in English, as the interface shows them in Simp
 | Read skill | 读取技能 |
 | New Skill | 新建技能 |
 | Import | 导入 |
-| Import Folder… | 导入文件夹… |
-| Import .zip… | 导入 .zip… |
+| Import Folder | 导入文件夹 |
+| Import .zip | 导入 .zip |
 | Description | 描述 |
 | Instructions | 说明 |
 | Files | 文件 |

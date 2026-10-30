@@ -29,7 +29,7 @@
   max-width: 680px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--space-16);
   padding-bottom: 8px;
   align-self: flex-start;
 }
@@ -42,7 +42,7 @@
 .hostTitle {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-8);
   min-width: 0;
 }
 
@@ -65,49 +65,31 @@
   color: var(--fg3);
 }
 
-/* Rows: mono rule over its state · auto-start switch · start / stop · edit / delete. */
+/* Rows (ListRow): the name, if any, over the mono rule and its state · auto-start switch · start / stop · edit /
+   delete. */
 
-/* A narrow row puts the switch and the buttons under a rule that would be narrower than 160px. */
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 12px;
-  min-height: 40px;
-  padding: 6px 8px 6px 14px;
+.name {
   min-width: 0;
-}
-
-.body {
-  flex: 1 1 160px;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.rule {
-  min-width: 0;
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Running: the address to copy. Failed: why. */
-.status {
-  display: flex;
-  align-items: center;
-  gap: 5px;
+.rule {
   min-width: 0;
-  font-size: var(--text-xs);
-  color: var(--fg2);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.running {
-  flex: none;
-  color: var(--green);
+/* Under a name, the rule reads as its detail. */
+.ruleDetail {
+  font-size: var(--text-xs);
+  color: var(--fg2);
 }
 
 .address {
@@ -138,21 +120,6 @@
   text-overflow: ellipsis;
 }
 
-.failed {
-  align-items: flex-start;
-  color: var(--red);
-}
-
-.failed > i {
-  flex: none;
-  margin-top: 1px;
-}
-
-.failure {
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
 .toggle {
   flex: none;
   min-width: 52px;
@@ -166,7 +133,7 @@
 .auto {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   flex: none;
   margin-left: auto;
   font-size: var(--text-sm);
@@ -175,19 +142,7 @@
 
 .actions {
   display: flex;
-  gap: 2px;
+  gap: var(--space-2);
   flex: none;
   color: var(--fg2);
-}
-
-.remove:hover:not(:disabled) {
-  color: var(--red);
-}
-
-.error {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: var(--text-sm);
-  color: var(--red);
 }

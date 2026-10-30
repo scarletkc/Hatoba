@@ -1,27 +1,28 @@
+import { Button, Card, Group, LinkButton, StatusLine, Switch, confirm, toast, type StatusTone } from "@hatoba/ui";
+import { AppLogo } from "@/app/AppLogo";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
 import { useUpdate } from "@/app/update";
-import { AppLogo, Button, Icon, LinkButton, Switch, controlStyles } from "@/components/controls";
-import { Group } from "@/components/layout";
-import { confirm, toast } from "@/components/overlay";
-import { Markdown } from "@/features/ai/Markdown";
+import { Markdown } from "@/features/ai/messages/Markdown";
 import { copyText } from "@/features/keys/clipboard";
-import { useTransfers } from "@/features/sftp/transfers";
-import { openExternal } from "@/features/sync/external";
 import { formatBytes, formatDate, useT, type MessageKey, type Params } from "@/i18n";
 import type { AppError, AvailableUpdate, PackageManager, UpdateProgress } from "@/ipc/types";
+import { cx } from "@/lib/cx";
+import { openExternal } from "@/lib/external";
 import { REPO_URL, WEBSITE_URL, bugReportUrl } from "@/lib/github";
+import { useTransfers } from "@/session/transfers";
 import { Pane, SettingRow, usePrefs } from "./shared";
 import s from "./AboutPane.module.css";
 
 const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
+const SPONSOR_URL = "https://github.com/sponsors/scarletkc";
 const SCOOP_UPDATE = "scoop update hatoba";
 
 type T = (key: MessageKey, params?: Params) => string;
 type Install = UpdateProgress | { kind: "starting" };
 interface Status {
-  icon: string;
-  color: string;
+  tone: StatusTone;
+  icon?: string;
   text: string;
 }
 
@@ -43,7 +44,14 @@ function installErrorKey(error: AppError): MessageKey {
 /** The update row's status line, or null before the first check. */
 function updateStatus(
   t: T,
-  { checking, error, install, installError, found, checked }: {
+  {
+    checking,
+    error,
+    install,
+    installError,
+    found,
+    checked,
+  }: {
     checking: boolean;
     error: AppError | null;
     install: Install | null;
@@ -52,14 +60,19 @@ function updateStatus(
     checked: boolean;
   },
 ): Status | null {
-  const busy = (text: string) => ({ icon: "circle-notch", color: "var(--fg2)", text });
-  const failed = (text: string) => ({ icon: "warning-circle", color: "var(--red)", text });
+  const busy = (text: string): Status => ({ tone: "progress", text });
+  const failed = (text: string): Status => ({ tone: "error", text });
   if (install) return busy(installText(t, install));
   if (checking) return busy(t("settings.about.checking"));
   if (error) return failed(t(error.code === "sync_offline" ? "settings.about.offline" : "settings.about.failed"));
   if (installError) return failed(t(installErrorKey(installError)));
-  if (found) return { icon: "arrow-circle-up", color: "var(--accent)", text: t("settings.about.available", { version: found.version }) };
-  if (checked) return { icon: "check-circle", color: "var(--green)", text: t("settings.about.latest") };
+  if (found)
+    return {
+      tone: "neutral",
+      icon: "arrow-circle-up",
+      text: t("settings.about.available", { version: found.version }),
+    };
+  if (checked) return { tone: "success", text: t("settings.about.latest") };
   return null;
 }
 
@@ -92,8 +105,12 @@ export async function confirmInstall(t: T, target: AvailableUpdate) {
       title: t("settings.about.install.title", { version: target.version }),
       body: (
         <>
-          {sessions > 0 && <span className={s.consequence}>{t("settings.about.install.sessions", { n: sessions })}</span>}
-          {transfers > 0 && <span className={s.consequence}>{t("settings.about.install.transfers", { n: transfers })}</span>}
+          {sessions > 0 && (
+            <span className={s.consequence}>{t("settings.about.install.sessions", { n: sessions })}</span>
+          )}
+          {transfers > 0 && (
+            <span className={s.consequence}>{t("settings.about.install.transfers", { n: transfers })}</span>
+          )}
         </>
       ),
       confirmLabel: t("settings.about.install.confirm"),
@@ -133,7 +150,12 @@ export function AboutPane() {
       <div className={s.header}>
         <AppLogo className={s.logo} />
         <div className={s.name}>Hatoba</div>
-        <button type="button" className={s.version} title={t("settings.about.copyVersion")} onClick={() => void copy(version)}>
+        <button
+          type="button"
+          className={s.version}
+          title={t("settings.about.copyVersion")}
+          onClick={() => void copy(version)}
+        >
           {t("settings.about.version", { version })}
         </button>
       </div>
@@ -145,14 +167,28 @@ export function AboutPane() {
             (status || manager) && (
               <span className={s.progress}>
                 {status && (
-                  <span className={s.status} role="status">
-                    <Icon name={status.icon} color={status.color} className={spinning ? controlStyles.spinner : undefined} />
-                    {status.text}
+                  <span role="status">
+                    <StatusLine
+                      tone={status.tone}
+                      icon={status.icon}
+                      className={cx(s.status, status.icon && s.available)}
+                    >
+                      {status.text}
+                    </StatusLine>
                   </span>
                 )}
                 {install && (
-                  <span className={s.track} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined}>
-                    <span className={percent === null ? `${s.fill} ${s.fillUnknown}` : s.fill} style={percent === null ? undefined : { width: `${percent}%` }} />
+                  <span
+                    className={s.track}
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={percent ?? undefined}
+                  >
+                    <span
+                      className={percent === null ? `${s.fill} ${s.fillUnknown}` : s.fill}
+                      style={percent === null ? undefined : { width: `${percent}%` }}
+                    />
                   </span>
                 )}
                 {manager && <span>{managerText(t, manager)}</span>}
@@ -160,8 +196,8 @@ export function AboutPane() {
             )
           }
         >
-          {update && !install && !manager && (
-            <Button variant="primary" onClick={() => void confirmInstall(t, update)}>
+          {update && !manager && (
+            <Button variant="primary" disabled={install !== null} onClick={() => void confirmInstall(t, update)}>
               {t("settings.about.install")}
             </Button>
           )}
@@ -186,11 +222,13 @@ export function AboutPane() {
       </Group>
 
       {update && (
-        <section className={s.notes} aria-label={t("settings.about.notes", { version: update.version })}>
+        <Card role="region" className={s.notes} aria-label={t("settings.about.notes", { version: update.version })}>
           <div className={s.notesHead}>
             <span className={s.notesTitle}>{t("settings.about.notes", { version: update.version })}</span>
             {update.published_at !== null && (
-              <span className={s.notesDate}>{t("settings.about.published", { date: formatDate(update.published_at) })}</span>
+              <span className={s.notesDate}>
+                {t("settings.about.published", { date: formatDate(update.published_at) })}
+              </span>
             )}
           </div>
           {update.notes && (
@@ -201,7 +239,7 @@ export function AboutPane() {
           <LinkButton icon="arrow-up-right" onClick={() => void openExternal(update.release_url)}>
             {t("settings.about.releasePage")}
           </LinkButton>
-        </section>
+        </Card>
       )}
 
       <div className={s.links}>
@@ -216,6 +254,9 @@ export function AboutPane() {
         </LinkButton>
         <LinkButton icon="bug" onClick={() => void openExternal(bugReportUrl({ version, platform }))}>
           {t("settings.about.report")}
+        </LinkButton>
+        <LinkButton icon="heart" onClick={() => void openExternal(SPONSOR_URL)}>
+          {t("settings.about.sponsor")}
         </LinkButton>
       </div>
     </Pane>

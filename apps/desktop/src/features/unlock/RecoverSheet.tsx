@@ -1,8 +1,7 @@
 import { useState, type FormEvent } from "react";
+import { Button, ErrorText, FooterSpacer, HintText, Sheet, SheetHeader, TextField } from "@hatoba/ui";
 import { enterUnlocked } from "@/app/boot";
 import { errorMessage } from "@/app/errors";
-import { Button, TextField } from "@/components/controls";
-import { FooterSpacer, Sheet, SheetHeader } from "@/components/overlay";
 import { NewPasswordFields, useNewPassword } from "@/features/onboarding/PasswordStrength";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
@@ -10,7 +9,10 @@ import s from "./RecoverSheet.module.css";
 
 /** "ab12 cd34" → "AB12-CD34": accepts dashes and spaces, uppercases, regroups by four. */
 function formatCode(raw: string): string {
-  const clean = raw.toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 40);
+  const clean = raw
+    .toUpperCase()
+    .replace(/[^0-9A-Z]/g, "")
+    .slice(0, 40);
   return clean.match(/.{1,4}/g)?.join("-") ?? "";
 }
 
@@ -82,13 +84,7 @@ export function RecoverSheet({ onClose }: { onClose: () => void }) {
               setCodeError(null);
             }}
           />
-          {codeError ? (
-            <div className={s.error} role="alert">
-              {codeError}
-            </div>
-          ) : (
-            <div className={s.hint}>{t("vault.recover.codeHint")}</div>
-          )}
+          {codeError ? <ErrorText>{codeError}</ErrorText> : <HintText>{t("vault.recover.codeHint")}</HintText>}
         </div>
         <NewPasswordFields
           state={pw}
@@ -96,11 +92,7 @@ export function RecoverSheet({ onClose }: { onClose: () => void }) {
           passwordLabel={t("vault.recover.newPassword")}
           confirmLabel={t("vault.field.confirm")}
         />
-        {error && (
-          <div className={s.error} role="alert">
-            {error}
-          </div>
-        )}
+        {error && <ErrorText>{error}</ErrorText>}
         {/* Lets Enter submit from any field. */}
         <button type="submit" hidden />
       </form>

@@ -15,15 +15,15 @@
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Mentioned in Awesome Rust](https://img.shields.io/badge/mentioned%20in-Awesome%20Rust-FC60A8?logo=awesomelists&logoColor=white)](https://github.com/rust-unofficial/awesome-rust#applications)
 
-https://github.com/user-attachments/assets/2bd36c2f-6b4a-4fef-a1ac-c964ac5a83f8
+https://github.com/user-attachments/assets/cd33e989-36e3-4e17-bc7f-74d472c96078
 
 </div>
 
 Hatoba keeps your hosts, keys, and terminal sessions in one place, syncs them
-between your devices, and puts an AI assistant beside each terminal. The sync
-backend is a Worker and a D1 database that you deploy to your own Cloudflare
-account.
+between your devices, and puts an AI assistant beside each terminal.
 
+- **AI in every terminal.** The assistant reads the screen, runs commands, and
+  edits files on the host, and you choose what it may do without asking.
 - **No Hatoba server.** Sync runs entirely in your Cloudflare account, so
   nobody else holds your data.
 - **End-to-end encrypted.** Everything is encrypted on your device before it
@@ -36,48 +36,36 @@ account.
 
 ## Features
 
-- **Hosts**: groups, tags, favorites, fuzzy search, recent connections, online
-  status, `~/.ssh/config` import, ProxyJump, and SOCKS5 and HTTP proxies. Type
-  `ssh user@host` in the search box to connect without saving a host, or run
-  `hatoba user@host` in a terminal once the `hatoba` command is on in Settings.
-- **Dashboard**: the online status, CPU, memory, disks, network, load, and
-  uptime of every saved host on one page, as cards or a table, read over SSH
-  without installing anything on the servers.
-- **Terminal**: tabs, 256 colors and truecolor, CJK wide characters and input
-  methods, confirmation before multi-line paste, search, clickable links, and
-  the CPU, memory, and network usage of Linux servers in the status bar.
-- **Local terminal**: tabs for the shells of your own computer, such as
-  PowerShell, Command Prompt, Git Bash, and WSL distributions on Windows, or
-  your login shell on macOS and Linux, beside the SSH tabs.
-- **Telnet**: switches, routers, and other devices that offer Telnet, in the
-  same host list and tabs, with the saved user name and password typed at the
-  device's login prompts.
-- **Authentication**: passwords, Ed25519, ECDSA, and RSA keys with or without
-  a passphrase, ask on every connection, ssh-agent, and keyboard-interactive
-  (2FA).
-- **Security**: host key confirmation on first connect, a blocked connection
-  when the key changes, a master password with a recovery code, and auto-lock
-  on idle, on sleep, or on demand.
-- **SFTP**: a file panel beside the terminal with drag-and-drop upload,
-  download with progress and cancel, rename, delete, and new folder.
-- **Key vault**: import OpenSSH, PEM, and PuTTY `.ppk` keys, generate Ed25519
-  or RSA 4096 keys, and copy or deploy public keys.
+- **AI assistant**: reads the screen, runs commands, edits files on the host or
+  your own computer, and searches the web. You approve its actions, or let Auto
+  mode approve the safe ones. It works with an OpenAI-compatible or Anthropic
+  API key or a ChatGPT plan, and supports skills and MCP servers.
+- **Hosts**: SSH and Telnet hosts with groups, tags, fuzzy search,
+  `~/.ssh/config` import, ProxyJump, and proxies. Type `ssh user@host` or
+  `telnet host` in the search box to connect without saving a host.
+- **Coding agents**: Claude Code, Codex, and scripts run commands and copy
+  files on your saved hosts with the `hatoba` command, while passwords and keys
+  stay in Hatoba. The [hatoba-cli skill](skills/hatoba-cli/SKILL.md) shows
+  agents how.
+- **Resource usage**: the CPU, memory, disks, and network of every saved host,
+  read over SSH with nothing to install on the servers.
+- **Terminal**: tabs, truecolor, CJK input methods, search, and clickable
+  links, with local shells such as PowerShell, WSL, or your login shell beside
+  the SSH tabs.
+- **SFTP**: a file panel beside the terminal with drag-and-drop upload and
+  download, and remote files edited in your own editor, uploaded on every save.
 - **Port forwarding**: local, remote, and SOCKS forwards that can start with
   the connection or run without a terminal.
-- **Cloud sync**: through your Worker or directly to D1, with incremental
-  sync, automatic conflict resolution you can review item by item, and a
-  device list with revocation.
-- **AI assistant**: a panel beside each terminal that reads the screen, runs
-  commands, types into the shell, reads, edits, and searches files on the host,
-  or on your own computer in a local terminal, and can search the web and read
-  pages. You approve its actions, a model you
-  choose approves the safe ones in Auto mode, or bypass mode skips approval. It
-  uses your own OpenAI-compatible or Anthropic API key, supports skills and MCP
-  servers, and takes terminal selections, connection errors, long pastes, and
-  text files as attachments. Type `/` for commands, skills, and MCP prompts, and
-  `@` to attach files and folders on the host or MCP resources. Conversations,
-  and the memories the assistant keeps across them, sync with the rest of the
-  vault.
+- **Authentication**: passwords, Ed25519, ECDSA, and RSA keys, ssh-agent, and
+  2FA, with OpenSSH, PEM, and PuTTY key import and key generation.
+- **Security**: host key verification, a master password with a recovery code,
+  and auto-lock.
+- **Sync**: incremental sync between your devices, with conflicts you can
+  review item by item and a device list with revocation.
+- **Languages**: English, Simplified Chinese, Traditional Chinese, and
+  Japanese, following the system language unless you pick one in Settings.
+
+The [documentation](https://hatoba.fog.moe/docs/) covers each one in detail.
 
 ## Download
 
@@ -107,7 +95,8 @@ yay -S hatoba-bin
 
 The maintainer uses Windows, so the Linux and macOS builds get little testing on
 real machines. If something doesn't work on them, please
-[open an issue](https://github.com/scarletkc/Hatoba/issues).
+[open an issue](https://github.com/scarletkc/Hatoba/issues). To build Hatoba
+yourself, follow the [development guide](docs/development.md#build).
 
 ## Security
 
@@ -123,32 +112,8 @@ The AI assistant sends the model provider your messages, their attachments,
 the terminal's screen as each message is sent (unless you turn that off), and
 what its tools read. Host addresses, passwords, and keys reach the provider
 only when they appear on the screen, in a tool result, or in an attachment you
-send.
-
-## Build from source
-
-You need Rust stable, Node.js 22 or later, and pnpm. Windows also needs
-WebView2, which Windows 11 includes, macOS needs the Xcode Command Line Tools,
-and Linux needs the Tauri system dependencies such as `libwebkit2gtk-4.1-dev`.
-
-```sh
-pnpm install
-pnpm tauri dev
-```
-
-`pnpm tauri build --no-sign` produces the NSIS installer on Windows, and the deb
-package and the AppImage on Linux, without the update signatures that only
-release builds carry. On macOS, don't pass `--no-sign`: it also drops the
-ad-hoc code signature, and Apple Silicon Macs report an app without one as
-damaged once it is downloaded or copied from another Mac. Turn off the update
-artifacts instead, and the build produces the app bundle and the DMG:
-
-```sh
-pnpm tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
-```
-
-The [development guide](docs/development.md) covers the browser-only frontend,
-tests, and the generated TypeScript bindings.
+send, except that a host you connect to without saving it is named by its
+address.
 
 ## Set up sync
 
@@ -165,15 +130,29 @@ connecting Hatoba, and covers upgrades, resets, and backups.
 ## Documentation
 
 - [User documentation](https://hatoba.fog.moe/docs/): hosts, the terminal, SFTP, keys and the vault, sync, the AI assistant, and troubleshooting
-- [Architecture and requirements](docs/hatoba-spec.md): architecture, security model, data formats, the sync protocol and Worker API, and requirements
-- [Implementation status](docs/status.md): progress on each requirement, milestones, and open questions
-- [Development guide](docs/development.md): building, running, and testing
-- [Release Hatoba](docs/releasing.md): versions, release notes, and publishing
 - [Deploy the sync Worker](workers/sync/README.md): deployment, upgrades, resets, and backups
-- [End-to-end smoke test](apps/desktop/e2e/README.md): driving the real app against a real OpenSSH server
-- [Design](docs/design/README.md): design files, porting conventions, and deviations from the design
+- [Architecture and requirements](docs/hatoba-spec.md): architecture, security model, data formats, the sync protocol and Worker API, and requirements
+- [AI assistant architecture and requirements](docs/ai-assistant.md): providers, tools, permission modes, history, skills, MCP servers, and memory
+- [Development guide](docs/development.md): building, running, and testing
 - [Contributing](CONTRIBUTING.md): issues, branches, commits, and pull requests
 - [Security policy](SECURITY.md): reporting a vulnerability privately
+
+## Sponsors
+
+Thanks to everyone who has sponsored Hatoba's author.
+
+<a href="https://github.com/sponsors/scarletkc"><img src="https://cdn.jsdelivr.net/gh/scarletkc/sponsors@main/sponsors.svg" alt="Sponsors" /></a>
+
+[Sponsor Hatoba on GitHub](https://github.com/sponsors/scarletkc)
+
+## Star History
+
+<a href="https://www.star-history.com/#scarletkc/hatoba&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=scarletkc/hatoba&type=Date&theme=dark" />
+    <img src="https://api.star-history.com/svg?repos=scarletkc/hatoba&type=Date" alt="Star history chart" />
+  </picture>
+</a>
 
 ## License
 

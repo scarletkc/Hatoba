@@ -3,7 +3,7 @@
 .row {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-4);
   padding: 6px 8px 6px 14px;
   min-width: 0;
 }
@@ -12,7 +12,7 @@
   display: grid;
   grid-template-columns: minmax(0, 0.8fr) auto minmax(0, 1.4fr) 28px;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .eq {
@@ -25,16 +25,13 @@
 }
 
 .problem {
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--red);
   overflow-wrap: anywhere;
 }
 
 .footRow {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
   min-height: 38px;
   padding: 0 14px;
 }
@@ -54,16 +51,6 @@
   color: var(--fg2);
 }
 
-.error {
+.message {
   padding-left: 2px;
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--red);
-}
-
-.hint {
-  padding-left: 2px;
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--fg2);
 }

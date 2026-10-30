@@ -25,8 +25,8 @@ LOCALES = {
         "show_ai": "Show AI Panel",
         "run": "Run",
         "fixed": "Fixed.",
-        "dashboard": "Dashboard",
-        "all": "All Hosts",
+        "cards": "Cards",
+        "stats": "Resource Usage",
     },
     "zh": {
         "browser": "zh-CN",
@@ -34,8 +34,8 @@ LOCALES = {
         "show_ai": "显示 AI 面板",
         "run": "运行",
         "fixed": "修好了。",
-        "dashboard": "仪表盘",
-        "all": "全部主机",
+        "cards": "卡片",
+        "stats": "资源占用",
     },
 }
 
@@ -76,7 +76,7 @@ def fix_urls(html):
         if "Phosphor" in url and k >= 0:
             tail = url[k:].split("?")[0]
             tail = re.sub(r"node_modules/\.pnpm/[^/]+/node_modules/", "node_modules/", tail)
-            return f"url({m.group(1)}/apps/desktop/{tail}{m.group(1)})"
+            return f"url({m.group(1)}/packages/ui/{tail}{m.group(1)})"
         return m.group(0)
 
     return re.sub(r"""url\((['"]?)([^'")]+)\1\)""", repl, html)
@@ -108,8 +108,6 @@ def main():
                 print(lang, name)
 
             pg = page()
-            pg.get_by_text(label["all"], exact=True).first.click()
-            pg.wait_for_timeout(800)
             save(pg, "hosts")
             pg.get_by_text("prod-api-tokyo", exact=True).first.dblclick()
             pg.wait_for_timeout(2500)
@@ -147,8 +145,10 @@ def main():
             pg.wait_for_timeout(5000)
             save(pg, "ai-done")
 
+            # Resource usage: the hosts page as cards, once the first readings are in
             pg = page()
-            pg.get_by_text(label["dashboard"], exact=True).first.click()
+            pg.get_by_role("radio", name=label["cards"]).click()
+            pg.get_by_role("switch", name=label["stats"]).click()
             pg.wait_for_timeout(4000)
             save(pg, "dash")
         browser.close()

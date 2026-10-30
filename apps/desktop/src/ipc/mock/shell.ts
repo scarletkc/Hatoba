@@ -16,9 +16,29 @@ const D = "\x1b[38;2;107;113;124m"; // design dim    #6b717c
 const X = "\x1b[0m";
 
 /** What `help` lists: the commands the fake shell answers. */
-const COMMANDS = ["cat /etc/os-release", "cd", "clear", "curl", "date", "df", "echo", "exit", "free", "git log", "git status", "hostname", "ls", "ps", "pwd", "systemctl status api", "uname", "uptime", "whoami"];
+const COMMANDS = [
+  "cat /etc/os-release",
+  "cd",
+  "clear",
+  "curl",
+  "date",
+  "df",
+  "echo",
+  "exit",
+  "free",
+  "git log",
+  "git status",
+  "hostname",
+  "ls",
+  "ps",
+  "pwd",
+  "systemctl status api",
+  "uname",
+  "uptime",
+  "whoami",
+];
 
-/** A tiny line-editing fake shell that replays the design's terminal screen (mock only). */
+/** A tiny line-editing fake shell that replays a sample terminal screen (mock only). */
 export class FakeShell {
   onExit: (() => void) | null = null;
   private line = "";
@@ -67,7 +87,9 @@ export class FakeShell {
 
   start() {
     if (this.local?.shell === "cmd") {
-      this.write("Microsoft Windows [Version 10.0.26100.4652]\r\n(c) Microsoft Corporation. All rights reserved.\r\n\r\n");
+      this.write(
+        "Microsoft Windows [Version 10.0.26100.4652]\r\n(c) Microsoft Corporation. All rights reserved.\r\n\r\n",
+      );
     }
     if (!this.local) this.write(`${D}Last login: Thu Oct  8 09:41:12 2026 from 10.0.0.4${X}\r\n`);
     // The website's demo says what its shell answers.
@@ -161,10 +183,16 @@ export class FakeShell {
         return;
       case "ls":
       case "dir":
-        this.write(`${B}migrations${X}  ${B}src${X}  ${B}target${X}  Cargo.lock  Cargo.toml  Dockerfile  README.md  wrangler.toml\r\n`);
+        this.write(
+          `${B}migrations${X}  ${B}src${X}  ${B}target${X}  Cargo.lock  Cargo.toml  Dockerfile  README.md  wrangler.toml\r\n`,
+        );
         return;
       case "uname":
-        this.write(args.includes("-a") ? `Linux ${this.machine} 6.8.0-45-generic #45-Ubuntu SMP x86_64 GNU/Linux\r\n` : "Linux\r\n");
+        this.write(
+          args.includes("-a")
+            ? `Linux ${this.machine} 6.8.0-45-generic #45-Ubuntu SMP x86_64 GNU/Linux\r\n`
+            : "Linux\r\n",
+        );
         return;
       case "hostname":
         this.write(`${this.machine}\r\n`);
@@ -198,7 +226,13 @@ export class FakeShell {
         return;
       case "cat":
         if (args[0] === "/etc/os-release")
-          lines(['PRETTY_NAME="Ubuntu 24.04.1 LTS"', 'NAME="Ubuntu"', 'VERSION_ID="24.04"', 'VERSION="24.04.1 LTS (Noble Numbat)"', "ID=ubuntu"]);
+          lines([
+            'PRETTY_NAME="Ubuntu 24.04.1 LTS"',
+            'NAME="Ubuntu"',
+            'VERSION_ID="24.04"',
+            'VERSION="24.04.1 LTS (Noble Numbat)"',
+            "ID=ubuntu",
+          ]);
         else this.write(`cat: ${args[0] ?? ""}: No such file or directory\r\n`);
         return;
       case "git":
@@ -208,7 +242,13 @@ export class FakeShell {
             `${Y}7be0d14${X} chore: bump tokio to 1.41`,
             `${Y}e02c5aa${X} feat: add /healthz latency histogram`,
           ]);
-        else if (args[0] === "status") lines(["On branch main", "Your branch is up to date with 'origin/main'.", "", "nothing to commit, working tree clean"]);
+        else if (args[0] === "status")
+          lines([
+            "On branch main",
+            "Your branch is up to date with 'origin/main'.",
+            "",
+            "nothing to commit, working tree clean",
+          ]);
         else this.write(`git: '${args[0] ?? ""}' is not a git command in this demo. Try git log or git status.\r\n`);
         return;
       case "systemctl":
@@ -241,7 +281,9 @@ export class FakeShell {
         this.write("中文宽字符测试：波止場 · 日本語テスト · 한국어\r\n");
         return;
       default:
-        this.write(`${name}: command not found\r\n${D}This demo shell knows only a few commands; type help to list them.${X}\r\n`);
+        this.write(
+          `${name}: command not found\r\n${D}This demo shell knows only a few commands; type help to list them.${X}\r\n`,
+        );
     }
   }
 

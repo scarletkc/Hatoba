@@ -11,6 +11,8 @@ history.replaceState(null, "", "/?ai=chatgptelsewhere");
 
 const { t } = await import("@/i18n");
 const { ProviderDialog } = await import("./ProviderDialog");
+// The dialog's first call loads the mock backend, which a busy test run can take seconds to transform.
+await import("@/ipc/mock");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -43,11 +45,20 @@ const byLabel = (label: string) => document.querySelector(`[aria-label="${label}
 const protocol = () => byLabel(t("aiSettings.f.protocol"))?.textContent;
 function pickProtocol(label: string) {
   act(() => (byLabel(t("aiSettings.f.protocol")) as HTMLButtonElement).click());
-  const item = [...document.querySelectorAll<HTMLButtonElement>("[role=menuitemradio]")].find((b) => b.textContent === label);
+  const item = [...document.querySelectorAll<HTMLButtonElement>("[role=menuitemradio]")].find(
+    (b) => b.textContent === label,
+  );
   act(() => item?.click());
 }
-const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label);
+const button = (label: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label);
 const shown = (text: string) => document.body.textContent?.includes(text) ?? false;
+
+/** Lets the dialog's async work and React run until `done`, for up to ten seconds, as a busy test run needs. */
+async function until(done: () => boolean) {
+  const end = Date.now() + 10_000;
+  while (!done() && Date.now() < end) await act(() => new Promise((r) => setTimeout(r, 10)));
+}
 
 describe("ProviderDialog", () => {
   it("preselects System One from the base URL until a protocol is chosen (AI-47)", () => {
@@ -83,12 +94,26 @@ describe("ProviderDialog", () => {
         base_url: "https://api.anthropic.com",
         has_api_key: true,
         auth_header: "x-api-key",
-        models: [{ id: "claude-haiku-5-5", name: "Claude Haiku 5.5", context_window: 1_000_000, max_output_tokens: 128_000, efforts: ["low"], adaptive_thinking: true }],
+        models: [
+          {
+            id: "claude-haiku-5-5",
+            name: "Claude Haiku 5.5",
+            context_window: 1_000_000,
+            max_output_tokens: 128_000,
+            efforts: ["low"],
+            adaptive_thinking: true,
+          },
+        ],
+        chatgpt: null,
         updated_at: 1,
       },
       (view) => (saved = view),
     );
-    const columns = [t("aiSettings.models.col.context"), t("aiSettings.models.col.output"), t("aiSettings.models.effort.label", { id: "claude-haiku-5-5" })];
+    const columns = [
+      t("aiSettings.models.col.context"),
+      t("aiSettings.models.col.output"),
+      t("aiSettings.models.effort.label", { id: "claude-haiku-5-5" }),
+    ];
     for (const label of columns) expect(byLabel(label)).not.toBeNull();
     expect(byLabel(t("aiSettings.f.authHeader"))).not.toBeNull();
 
@@ -99,13 +124,20 @@ describe("ProviderDialog", () => {
     expect(byLabel(t("aiSettings.models.col.id"))).not.toBeNull();
 
     act(() => button(t("btn.save"))?.click());
-    for (let i = 0; i < 100 && !saved; i++) await act(() => new Promise((r) => setTimeout(r, 10)));
+    await until(() => saved !== null);
     const view = saved as AiProviderView | null;
     expect(view?.protocol).toBe("system_one");
     expect(view?.models).toEqual([
-      { id: "claude-haiku-5-5", name: "Claude Haiku 5.5", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null },
+      {
+        id: "claude-haiku-5-5",
+        name: "Claude Haiku 5.5",
+        context_window: null,
+        max_output_tokens: null,
+        efforts: null,
+        adaptive_thinking: null,
+      },
     ]);
-  });
+  }, 30_000);
 
   it("shows a ChatGPT provider's account and signs it in and out on this device (AI-52)", async () => {
     const views: AiProviderView[] = [];
@@ -133,11 +165,11 @@ describe("ProviderDialog", () => {
     act(() => button(t("aiSettings.chatgpt.continue"))?.click());
     expect(shown(t("aiSettings.chatgpt.waiting.inline"))).toBe(true);
     act(() => button(t("btn.cancel"))?.click());
-    for (let i = 0; i < 100 && shown(t("aiSettings.chatgpt.waiting.inline")); i++) await act(() => new Promise((r) => setTimeout(r, 10)));
+    await until(() => !shown(t("aiSettings.chatgpt.waiting.inline")));
     expect(button(t("aiSettings.chatgpt.continue"))).toBeDefined();
 
     act(() => button(t("aiSettings.chatgpt.continue"))?.click());
-    for (let i = 0; i < 400 && !shown(t("aiSettings.chatgpt.status.signed_in")); i++) await act(() => new Promise((r) => setTimeout(r, 10)));
+    await until(() => shown(t("aiSettings.chatgpt.status.signed_in")));
     expect(shown(t("aiSettings.chatgpt.status.signed_in"))).toBe(true);
     expect(views.at(-1)?.id).toBe("p-chatgpt");
     expect(views.at(-1)?.chatgpt?.status).toBe("signed_in");
@@ -146,8 +178,8 @@ describe("ProviderDialog", () => {
     expect([...document.querySelectorAll("input")].some((i) => i.value === "gpt-6-astra")).toBe(true);
 
     act(() => button(t("aiSettings.chatgpt.signOut"))?.click());
-    for (let i = 0; i < 100 && !shown(t("aiSettings.chatgpt.status.signed_out")); i++) await act(() => new Promise((r) => setTimeout(r, 10)));
+    await until(() => shown(t("aiSettings.chatgpt.status.signed_out")));
     expect(shown(t("aiSettings.chatgpt.status.signed_out"))).toBe(true);
     expect(views.at(-1)?.chatgpt?.status).toBe("signed_out");
-  });
+  }, 30_000);
 });

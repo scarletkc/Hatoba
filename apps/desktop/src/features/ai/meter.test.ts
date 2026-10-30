@@ -3,7 +3,15 @@ import type { AiEntryView, AiUsage } from "@/ipc/types";
 import { contextUsage, estimateTokens, formatTokens, messageFit } from "./meter";
 
 const user = (id: string, text: string): AiEntryView => ({ role: "user", entry_id: id, created_at: 0, text });
-const tool = (id: string, content: string): AiEntryView => ({ role: "tool", entry_id: id, created_at: 0, tool_call_id: "c", status: "ok", content, auto: null });
+const tool = (id: string, content: string): AiEntryView => ({
+  role: "tool",
+  entry_id: id,
+  created_at: 0,
+  tool_call_id: "c",
+  status: "ok",
+  content,
+  auto: null,
+});
 const summary = (id: string, text: string): AiEntryView => ({ role: "summary", entry_id: id, created_at: 0, text });
 const assistant = (id: string, usage: AiUsage | null, model = "m1"): AiEntryView => ({
   role: "assistant",
@@ -21,7 +29,11 @@ const M1 = { provider_id: "p", model_id: "m1" };
 
 describe("context meter (AI-20)", () => {
   it("adds an estimate for text after the last reported usage", () => {
-    const entries = [user("1", "hi"), assistant("2", { input_tokens: 900, output_tokens: 100, estimated: false }), tool("3", "x".repeat(400))];
+    const entries = [
+      user("1", "hi"),
+      assistant("2", { input_tokens: 900, output_tokens: 100, estimated: false }),
+      tool("3", "x".repeat(400)),
+    ];
     const m = contextUsage({ entries, contextStart: null, model: M1, contextWindow: 2000 });
     expect(m.tokens).toBe(1100);
     expect(m.ratio).toBeCloseTo(0.55);
@@ -45,7 +57,14 @@ describe("context meter (AI-20)", () => {
     expect(m).toMatchObject({ tokens: 2, estimated: true, ratio: null, window: null, warn: false });
 
     const switched = [user("1", "hi"), assistant("2", { input_tokens: 10, output_tokens: 5, estimated: false })];
-    expect(contextUsage({ entries: switched, contextStart: null, model: { provider_id: "p", model_id: "m2" }, contextWindow: 100 }).estimated).toBe(true);
+    expect(
+      contextUsage({
+        entries: switched,
+        contextStart: null,
+        model: { provider_id: "p", model_id: "m2" },
+        contextWindow: 100,
+      }).estimated,
+    ).toBe(true);
   });
 
   it("counts only entries from context_start (AI-21)", () => {
@@ -61,7 +80,11 @@ describe("context meter (AI-20)", () => {
   });
 
   it("is empty for an empty conversation", () => {
-    expect(contextUsage({ entries: [], contextStart: null, model: null, contextWindow: 1000 })).toMatchObject({ tokens: 0, estimated: false, ratio: 0 });
+    expect(contextUsage({ entries: [], contextStart: null, model: null, contextWindow: 1000 })).toMatchObject({
+      tokens: 0,
+      estimated: false,
+      ratio: 0,
+    });
   });
 });
 
@@ -82,7 +105,13 @@ describe("token helpers", () => {
 });
 
 describe("how the next message fits (AI-35)", () => {
-  const state = (tokens: number, window: number | null) => ({ tokens, window, ratio: window ? tokens / window : null, estimated: false, warn: false });
+  const state = (tokens: number, window: number | null) => ({
+    tokens,
+    window,
+    ratio: window ? tokens / window : null,
+    estimated: false,
+    warn: false,
+  });
 
   it("says nothing without a context window or below 80%", () => {
     expect(messageFit(state(500_000, null), 900_000)).toEqual({ level: "ok" });
@@ -90,13 +119,23 @@ describe("how the next message fits (AI-35)", () => {
   });
 
   it("warns from 80% of the window with the current context", () => {
-    expect(messageFit(state(30_000, 100_000), 50_000)).toEqual({ level: "warn", tokens: 80_000, window: 100_000, ratio: 0.8 });
+    expect(messageFit(state(30_000, 100_000), 50_000)).toEqual({
+      level: "warn",
+      tokens: 80_000,
+      window: 100_000,
+      ratio: 0.8,
+    });
     // Past the window together, but compaction can make room: still a warning.
     expect(messageFit(state(90_000, 100_000), 50_000)).toMatchObject({ level: "warn", tokens: 140_000 });
   });
 
   it("blocks a message larger than the whole window", () => {
-    expect(messageFit(state(0, 100_000), 100_001)).toEqual({ level: "over", tokens: 100_001, window: 100_000, ratio: 1.00001 });
+    expect(messageFit(state(0, 100_000), 100_001)).toEqual({
+      level: "over",
+      tokens: 100_001,
+      window: 100_000,
+      ratio: 1.00001,
+    });
     expect(messageFit(state(0, 100_000), 100_000).level).toBe("warn");
   });
 });
