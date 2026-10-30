@@ -3,7 +3,8 @@
 //! output is batched (§10.3), every 8 ms or once 32 KB have built up, into a bounded channel. When
 //! the WebView falls behind, the channel fills and the server is no longer read, so about 4 MB is
 //! held at most. Writes go out on a task of their own, so a server that stops reading never stalls
-//! the output; once 1 MB waits for such a server, the connection closes.
+//! the output; once 1 MB of the client's own protocol replies waits for such a server, the
+//! connection closes.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -21,8 +22,9 @@ use crate::login::{AutoLogin, LOGIN_WINDOW};
 const FLUSH_INTERVAL: Duration = Duration::from_millis(8);
 const FLUSH_BYTES: usize = 32 * 1024;
 const EVENT_CAPACITY: usize = 128;
-/// How much may wait to go out before the server is taken to have stopped reading. A server that
-/// keeps sending option offers while it reads nothing would otherwise grow the replies without end.
+/// How much of the client's protocol replies may wait to go out before the server is taken to have
+/// stopped reading. A server that keeps sending option offers while it reads nothing would otherwise
+/// grow them without end. The user's input does not count: a large paste waits as long as it needs.
 const OUT_LIMIT: usize = 1024 * 1024;
 /// Why the connection closed when [`OUT_LIMIT`] was reached.
 const STALLED: &str = "The server stopped reading what Hatoba sends.";
@@ -132,7 +134,7 @@ async fn run<S>(
     S: AsyncRead + AsyncWrite + Send + 'static,
 {
     let (mut reader, writer) = tokio::io::split(stream);
-    let (tx, out_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    let (tx, out_rx) = mpsc::unbounded_channel();
     let queued = Arc::new(AtomicUsize::new(0));
     let out = Outbox {
         tx,
@@ -153,16 +155,14 @@ async fn run<S>(
                 Ok(0) => break None,
                 Ok(n) => {
                     let received = telnet.receive(&buf[..n]);
-                    if !out.send(received.reply) {
+                    if !out.reply(received.reply) {
                         break Some(STALLED.to_owned());
                     }
                     if Instant::now() >= login_until || login_stopped.load(Ordering::SeqCst) {
                         login.stop();
                     }
-                    if let Some(answer) = login.output(&received.data)
-                        && !out.send(telnet.encode(answer.as_bytes()))
-                    {
-                        break Some(STALLED.to_owned());
+                    if let Some(answer) = login.output(&received.data) {
+                        out.send(telnet.encode(answer.as_bytes()));
                     }
                     pending.extend_from_slice(&received.data);
                     if flush_at.is_none() || pending.len() >= FLUSH_BYTES {
@@ -177,15 +177,9 @@ async fn run<S>(
             command = commands.recv() => match command {
                 Some(Command::Input(data)) => {
                     login.typed(&data);
-                    if !out.send(telnet.encode(&data)) {
-                        break Some(STALLED.to_owned());
-                    }
+                    out.send(telnet.encode(&data));
                 }
-                Some(Command::Resize { cols, rows }) => {
-                    if !out.send(telnet.resize(cols, rows)) {
-                        break Some(STALLED.to_owned());
-                    }
-                }
+                Some(Command::Resize { cols, rows }) => out.send(telnet.resize(cols, rows)),
                 Some(Command::StopLogin) => login.stop(),
                 Some(Command::Close) | None => break None,
             },
@@ -212,36 +206,50 @@ async fn run<S>(
     let _ = events.send(TelnetEvent::Closed { error }).await;
 }
 
-/// What waits to go out to the server, counted against [`OUT_LIMIT`].
+/// What waits to go out to the server: bytes, and whether they are a protocol reply, which counts
+/// against [`OUT_LIMIT`].
+type Outgoing = (Vec<u8>, bool);
+
 struct Outbox {
-    tx: mpsc::UnboundedSender<Vec<u8>>,
+    tx: mpsc::UnboundedSender<Outgoing>,
+    /// The protocol replies' bytes that wait.
     queued: Arc<AtomicUsize>,
 }
 
 impl Outbox {
-    /// Queues `data`; `false` when more than [`OUT_LIMIT`] would then wait.
-    fn send(&self, data: Vec<u8>) -> bool {
+    /// Queues what the user typed, or a window size or login they caused.
+    fn send(&self, data: Vec<u8>) {
+        if !data.is_empty() {
+            let _ = self.tx.send((data, false));
+        }
+    }
+
+    /// Queues a reply to the server's commands; `false` when more than [`OUT_LIMIT`] of replies
+    /// would then wait.
+    fn reply(&self, data: Vec<u8>) -> bool {
         if data.is_empty() {
             return true;
         }
         if self.queued.fetch_add(data.len(), Ordering::SeqCst) + data.len() > OUT_LIMIT {
             return false;
         }
-        let _ = self.tx.send(data);
+        let _ = self.tx.send((data, true));
         true
     }
 }
 
 async fn write_loop<W: AsyncWrite>(
     writer: W,
-    mut out: mpsc::UnboundedReceiver<Vec<u8>>,
+    mut out: mpsc::UnboundedReceiver<Outgoing>,
     queued: Arc<AtomicUsize>,
 ) -> std::io::Result<()> {
     let mut writer = std::pin::pin!(writer);
-    while let Some(data) = out.recv().await {
+    while let Some((data, reply)) = out.recv().await {
         writer.write_all(&data).await?;
         writer.flush().await?;
-        queued.fetch_sub(data.len(), Ordering::SeqCst);
+        if reply {
+            queued.fetch_sub(data.len(), Ordering::SeqCst);
+        }
     }
     let _ = writer.shutdown().await;
     Ok(())
@@ -378,6 +386,23 @@ mod tests {
         .await
         .expect("the session stayed open");
         assert_eq!(error.as_deref(), Some(STALLED));
+    }
+
+    #[tokio::test]
+    async fn a_large_paste_reaches_a_server_that_reads() {
+        let (client, mut server) = duplex(4096);
+        let (session, mut events) =
+            TelnetSession::start(client, 80, 24, AutoLogin::new(None, None));
+        read_some(&mut server).await;
+        let paste = vec![b'a'; 3 * OUT_LIMIT];
+        session.write(paste.clone()).unwrap();
+        let mut received = vec![0u8; paste.len()];
+        tokio::time::timeout(Duration::from_secs(30), server.read_exact(&mut received))
+            .await
+            .expect("the paste did not arrive")
+            .unwrap();
+        assert_eq!(received, paste);
+        assert!(events.try_recv().is_err(), "the session ended");
     }
 
     #[tokio::test]
