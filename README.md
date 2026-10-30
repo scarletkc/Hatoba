@@ -38,8 +38,8 @@ between your devices, and puts an AI assistant beside each terminal.
 
 - **AI assistant**: reads the screen, runs commands, edits files on the host or
   your own computer, and searches the web. You approve its actions, or let Auto
-  mode approve the safe ones. It uses your own OpenAI-compatible or Anthropic
-  API key and supports skills and MCP servers.
+  mode approve the safe ones. It works with an OpenAI-compatible or Anthropic
+  API key or a ChatGPT plan, and supports skills and MCP servers.
 - **Hosts**: groups, tags, fuzzy search, `~/.ssh/config` import, ProxyJump, and
   proxies. Type `ssh user@host` in the search box to connect without saving a
   host.
@@ -112,7 +112,8 @@ The AI assistant sends the model provider your messages, their attachments,
 the terminal's screen as each message is sent (unless you turn that off), and
 what its tools read. Host addresses, passwords, and keys reach the provider
 only when they appear on the screen, in a tool result, or in an attachment you
-send.
+send, except that a host you connect to without saving it is named by its
+address.
 
 ## Set up sync
 
@@ -131,6 +132,7 @@ connecting Hatoba, and covers upgrades, resets, and backups.
 - [User documentation](https://hatoba.fog.moe/docs/): hosts, the terminal, SFTP, keys and the vault, sync, the AI assistant, and troubleshooting
 - [Deploy the sync Worker](workers/sync/README.md): deployment, upgrades, resets, and backups
 - [Architecture and requirements](docs/hatoba-spec.md): architecture, security model, data formats, the sync protocol and Worker API, and requirements
+- [AI assistant architecture and requirements](docs/ai-assistant.md): providers, tools, permission modes, history, skills, MCP servers, and memory
 - [Development guide](docs/development.md): building, running, and testing
 - [Contributing](CONTRIBUTING.md): issues, branches, commits, and pull requests
 - [Security policy](SECURITY.md): reporting a vulnerability privately

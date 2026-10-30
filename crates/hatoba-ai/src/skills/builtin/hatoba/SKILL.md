@@ -18,7 +18,7 @@ Hatoba is a desktop SSH client (Tauri 2: a Rust backend with a React interface).
 - Terminal tab. A status bar sits above the terminal: connection state, `user@host:port`, the jump host ("via"), latency in ms, and the buttons **Show Resource Usage** (or the resource usage readout once it is on), **Find in terminal**, **Port Forwarding** (for a host with rules), **SFTP** and **More actions**. The SFTP file panel opens to the right of the terminal.
 - AI panel. At the window's right edge, below the tab bar. It shows the active tab's conversation. Open it with the AI button or Ctrl+Shift+A (⌘⇧A on macOS).
 - Settings. A window with the tabs General, Appearance, Terminal, Proxies, Security, AI and About. Open it with the gear in the title bar or with Ctrl+, (⌘, on macOS).
-- System tray (Windows and Linux). An icon in the notification area while Hatoba runs, with **Open Hatoba**, **Lock**, running port forwards and **Quit Hatoba**; a left click opens the window. Closing the window asks whether to minimize to the tray or quit (Settings → General → **Close Button**). macOS has no tray: its red button hides the window and the Dock icon brings it back.
+- System tray (Windows and Linux). An icon in the notification area while Hatoba runs, with **Open Hatoba**, **Lock**, **Update to vX.Y.Z** once a newer release is found, running port forwards and **Quit Hatoba**; a left click opens the window. Closing the window asks whether to minimize to the tray or quit (Settings → General → **Close Button**). macOS has no tray: its red button hides the window and the Dock icon brings it back.
 - Lock screen and first launch. Both replace the whole window: the lock screen asks for the master password, and first launch offers to create a vault or restore one from the cloud.
 
 Other labels: **This Computer**, **Close Tab**, **Show AI Panel**, **Hide AI Panel**, **Minimize**, **Maximize**, **Restore Down**, **Minimize to Tray**, **Connected**, **Connecting…**, **Connection failed**, **Disconnected**.
@@ -94,10 +94,9 @@ Hatoba is open source: https://github.com/scarletkc/Hatoba (README, docs, releas
 - https://hatoba.fog.moe/docs/ (these docs as of the newest release; each page names the version it describes)
 - https://api.github.com/repos/scarletkc/Hatoba/releases/latest (JSON)
 - https://raw.githubusercontent.com/scarletkc/Hatoba/main/README.md
-- https://raw.githubusercontent.com/scarletkc/Hatoba/main/docs/status.md
 
 The `main` branch can be ahead of the latest release and of the user's version, so say where a statement comes from. Compare the latest release with {{HATOBA_VERSION}}. If a newer release exists, point to **Check for Updates** in Settings → About, or to the dot on the gear in the title bar (**Settings (update available)**), which opens About. Once a check finds the newer version, **Download and Install** there downloads it, checks its signature, then closes Hatoba to install it and opens it again; see `references/settings.md`.
 
 ## Not in Hatoba (current version)
 
-Split panes in a terminal, session logs, snippets, editing remote files, uploading or downloading whole folders over SFTP, `ProxyCommand`, SOCKS4 and HTTPS proxies, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH (Telnet, serial, RDP, VNC).
+Split panes in a terminal, session logs, snippets, uploading or downloading whole folders over SFTP, `ProxyCommand`, SOCKS4 and HTTPS proxies, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH (Telnet, serial, RDP, VNC).

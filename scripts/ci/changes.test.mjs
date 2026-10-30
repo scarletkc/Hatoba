@@ -26,7 +26,7 @@ test("the frontend, the Worker's code, docs and other workflows do not", () => {
     "apps/desktop/package.json",
     "pnpm-lock.yaml",
     "workers/sync/src/index.ts",
-    "docs/status.md",
+    "docs/releasing.md",
     "README.md",
     "scripts/release/release.mjs",
     ".github/workflows/codeql.yml",
