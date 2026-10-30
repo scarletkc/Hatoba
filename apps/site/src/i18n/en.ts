@@ -103,6 +103,7 @@ export const en = {
     security: "Security policy",
     privacy: "Privacy policy",
     contributing: "Contributing",
+    sponsor: "Sponsor",
     license: "Hatoba is released under the MIT license.",
   },
   download: {

@@ -15,6 +15,7 @@ import { Pane, SettingRow, usePrefs } from "./shared";
 import s from "./AboutPane.module.css";
 
 const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
+const SPONSOR_URL = "https://github.com/sponsors/scarletkc";
 const SCOOP_UPDATE = "scoop update hatoba";
 
 type T = (key: MessageKey, params?: Params) => string;
@@ -253,6 +254,9 @@ export function AboutPane() {
         </LinkButton>
         <LinkButton icon="bug" onClick={() => void openExternal(bugReportUrl({ version, platform }))}>
           {t("settings.about.report")}
+        </LinkButton>
+        <LinkButton icon="heart" onClick={() => void openExternal(SPONSOR_URL)}>
+          {t("settings.about.sponsor")}
         </LinkButton>
       </div>
     </Pane>
