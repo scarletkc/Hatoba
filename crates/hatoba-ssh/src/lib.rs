@@ -36,6 +36,7 @@ pub mod sftp;
 pub mod shell;
 mod socks;
 pub mod stats;
+pub mod sudo;
 #[cfg(all(test, unix))]
 mod test_sh;
 

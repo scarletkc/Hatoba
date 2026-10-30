@@ -32,7 +32,28 @@ const login = (request_id: string, session_id: string, password: boolean): AuthP
   instructions: "",
   prompts: [{ prompt: "Password: ", echo: false }],
   password,
+  sudo: false,
+  wrong: false,
   target: "root@db:22",
+});
+
+describe("pushAuthPrompt", () => {
+  it("asks for a sudo password as a secret of the saved host, and answers with it", () => {
+    usePrompts.setState({ items: [] });
+    answered.auths.length = 0;
+    pushAuthPrompt({ ...login("sudo1", "", false), session_id: null, name: "web", sudo: true, wrong: true });
+    const [item] = usePrompts.getState().items;
+    expect(item.kind === "secret" && item.request).toEqual({
+      kind: "sudo",
+      hostName: "web",
+      target: "root@db:22",
+      wrong: true,
+    });
+    if (item.kind === "secret") item.resolve("pw");
+    expect(answered.auths).toEqual([["sudo1", ["pw"]]]);
+    usePrompts.setState({ items: [] });
+    answered.auths.length = 0;
+  });
 });
 
 describe("cancelSessionPrompts", () => {

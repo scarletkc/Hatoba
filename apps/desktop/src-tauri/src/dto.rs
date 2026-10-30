@@ -413,6 +413,11 @@ pub struct AuthPrompt {
     /// The login password of a quick connection (HOST-12), asked like an "ask every time"
     /// password (SSH-03) rather than as a server prompt; answered with one value.
     pub password: bool,
+    /// The sudo password of the saved host `name`, for `hatoba exec --sudo` or `hatoba cp
+    /// --sudo` (HOST-15), asked like a password; answered with one value.
+    pub sudo: bool,
+    /// The sudo password given before was wrong.
+    pub wrong: bool,
     /// `user@host:port` of the hop that asks.
     pub target: String,
 }

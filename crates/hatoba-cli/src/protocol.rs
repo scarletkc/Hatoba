@@ -9,7 +9,7 @@ use std::io::{self, Read};
 use serde::{Deserialize, Serialize};
 
 /// Changes when a request or a frame changes in a way the other side cannot read.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 /// The largest payload either side sends or takes.
 pub const MAX_FRAME: usize = 1 << 20;
@@ -25,6 +25,7 @@ pub struct Request {
 }
 
 /// What a request asks for. A host is a saved host's id or name; local paths are absolute.
+/// `sudo` runs the command, or reads or writes the remote file, as root with sudo.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Op {
@@ -34,18 +35,21 @@ pub enum Op {
         command: String,
         cwd: Option<String>,
         prompt: bool,
+        sudo: bool,
     },
     Upload {
         host: String,
         local: String,
         remote: String,
         prompt: bool,
+        sudo: bool,
     },
     Download {
         host: String,
         remote: String,
         local: String,
         prompt: bool,
+        sudo: bool,
     },
 }
 
@@ -218,6 +222,7 @@ mod tests {
                     command: "ls -la".into(),
                     cwd: Some("/srv".into()),
                     prompt: true,
+                    sudo: true,
                 },
             }),
             Frame::Stdout(b"out\n".to_vec()),

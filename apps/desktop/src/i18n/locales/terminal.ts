@@ -128,6 +128,9 @@ export default defineMessages({
     "terminal.passphrase.body": "{name} 使用的私钥受口令保护。",
     "terminal.passphrase.wrong": "口令不正确，请重试。",
     "terminal.passphrase.label": "私钥口令",
+    "terminal.sudo.title": "输入 {name} 的 sudo 密码",
+    "terminal.sudo.body": "有程序通过 hatoba --sudo 以 root 身份在 {target} 上运行。",
+    "terminal.sudo.wrong": "密码不正确，请重试。",
     "terminal.connect": "连接",
 
     // host key dialogs (SSH-04)
@@ -347,6 +350,9 @@ export default defineMessages({
     "terminal.passphrase.body": "The key for {name} is protected by a passphrase.",
     "terminal.passphrase.wrong": "Incorrect passphrase. Try again.",
     "terminal.passphrase.label": "Key passphrase",
+    "terminal.sudo.title": "Enter the sudo password for {name}",
+    "terminal.sudo.body": "A program is using hatoba --sudo to run as root on {target}.",
+    "terminal.sudo.wrong": "Incorrect password. Try again.",
     "terminal.connect": "Connect",
 
     "terminal.hostkey.newTitle": "First connection to {host}:{port}",
@@ -571,6 +577,9 @@ export default defineMessages({
     "terminal.passphrase.body": "{name} の鍵はパスフレーズで保護されています。",
     "terminal.passphrase.wrong": "パスフレーズが正しくありません。もう一度お試しください。",
     "terminal.passphrase.label": "鍵のパスフレーズ",
+    "terminal.sudo.title": "{name} の sudo パスワードを入力",
+    "terminal.sudo.body": "プログラムが hatoba --sudo で {target} に root として実行しようとしています。",
+    "terminal.sudo.wrong": "パスワードが正しくありません。もう一度お試しください。",
     "terminal.connect": "接続",
 
     "terminal.hostkey.newTitle": "{host}:{port} への初回接続",
@@ -792,6 +801,9 @@ export default defineMessages({
     "terminal.passphrase.body": "{name} 使用的私鑰受密碼短語保護。",
     "terminal.passphrase.wrong": "密碼短語不正確，請重試。",
     "terminal.passphrase.label": "私鑰密碼短語",
+    "terminal.sudo.title": "輸入 {name} 的 sudo 密碼",
+    "terminal.sudo.body": "有程式透過 hatoba --sudo 以 root 身分在 {target} 上執行。",
+    "terminal.sudo.wrong": "密碼不正確，請重試。",
     "terminal.connect": "連線",
 
     // host key dialogs (SSH-04)

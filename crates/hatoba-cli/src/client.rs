@@ -32,6 +32,7 @@ pub fn run(app: &App, command: Command) -> i32 {
             command,
             cwd,
             prompt,
+            sudo,
         } => exec(
             app,
             Op::Exec {
@@ -39,13 +40,15 @@ pub fn run(app: &App, command: Command) -> i32 {
                 command,
                 cwd,
                 prompt,
+                sudo,
             },
         ),
         Command::Copy {
             source,
             target,
             prompt,
-        } => copy(app, source, target, prompt),
+            sudo,
+        } => copy(app, source, target, prompt, sudo),
         Command::Open(args) => open(app, args),
     }
 }
@@ -124,7 +127,7 @@ fn write_out(to: &mut impl Write, bytes: &[u8]) -> io::Result<()> {
     to.flush()
 }
 
-fn copy(app: &App, source: Place, target: Place, prompt: bool) -> i32 {
+fn copy(app: &App, source: Place, target: Place, prompt: bool, sudo: bool) -> i32 {
     let op = match (source, target) {
         (Place::Local(local), Place::Remote { host, path }) => match absolute(&local) {
             Ok(local) => Op::Upload {
@@ -132,6 +135,7 @@ fn copy(app: &App, source: Place, target: Place, prompt: bool) -> i32 {
                 local,
                 remote: path,
                 prompt,
+                sudo,
             },
             Err(message) => return fail(&message, FAILED),
         },
@@ -141,6 +145,7 @@ fn copy(app: &App, source: Place, target: Place, prompt: bool) -> i32 {
                 remote: path,
                 local,
                 prompt,
+                sudo,
             },
             Err(message) => return fail(&message, FAILED),
         },

@@ -1374,6 +1374,13 @@ export type AuthPrompt = {
 	 *  password (SSH-03) rather than as a server prompt; answered with one value.
 	 */
 	password: boolean,
+	/**
+	 *  The sudo password of the saved host `name`, for `hatoba exec --sudo` or `hatoba cp
+	 *  --sudo` (HOST-15), asked like a password; answered with one value.
+	 */
+	sudo: boolean,
+	/**  The sudo password given before was wrong. */
+	wrong: boolean,
 	/**  `user@host:port` of the hop that asks. */
 	target: string,
 };

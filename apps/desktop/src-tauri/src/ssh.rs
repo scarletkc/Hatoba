@@ -488,6 +488,8 @@ impl KeyboardInteractive for Interactive {
                 })
                 .collect(),
             password: request.password,
+            sudo: false,
+            wrong: false,
             target: target_label(&request.username, &request.host, request.port),
         };
         if let Some(on_ask) = &self.on_ask {
@@ -509,6 +511,50 @@ impl KeyboardInteractive for Interactive {
         (answers.len() == request.prompts.len())
             .then(|| answers.into_iter().map(Zeroizing::new).collect())
     }
+}
+
+/// Asks in the window for the sudo password of `target` (`user@host:port`) on the saved host
+/// `name`, for `hatoba exec --sudo` or `hatoba cp --sudo` (HOST-15); `wrong` says the last one
+/// given was wrong. `None` when the user cancels, or gives no answer within [`PROMPT_TIMEOUT`].
+pub async fn ask_sudo_password(
+    app: &AppHandle,
+    name: &str,
+    target: &str,
+    wrong: bool,
+) -> Option<Zeroizing<String>> {
+    let state = state(app);
+    let request_id = uuid::Uuid::now_v7().to_string();
+    let (tx, rx) = oneshot::channel();
+    lock(&state.ssh.auth_waiters).insert(request_id.clone(), tx);
+    let event = AuthPrompt {
+        request_id: request_id.clone(),
+        session_id: None,
+        name: name.to_owned(),
+        instructions: String::new(),
+        prompts: vec![AuthPromptField {
+            prompt: "Password:".into(),
+            echo: false,
+        }],
+        password: false,
+        sudo: true,
+        wrong,
+        target: target.to_owned(),
+    };
+    if event.emit(app).is_err() {
+        lock(&state.ssh.auth_waiters).remove(&request_id);
+        return None;
+    }
+    let answers = tokio::time::timeout(PROMPT_TIMEOUT, rx)
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .flatten();
+    lock(&state.ssh.auth_waiters).remove(&request_id);
+    answers?
+        .into_iter()
+        .next()
+        .filter(|a| !a.is_empty())
+        .map(Zeroizing::new)
 }
 
 /// What stopped a connection made without the user (HOST-14): the host key it could not check,
