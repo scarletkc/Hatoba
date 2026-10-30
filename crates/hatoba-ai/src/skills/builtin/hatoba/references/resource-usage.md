@@ -18,7 +18,7 @@ Other labels: **Filesystems**.
 
 ## How hosts are read
 
-- Hosts are read only while Resource Usage is on, the hosts page is shown, the window is visible and the vault is unlocked. Leaving the page or turning the switch off stops reading, and the connections close a minute later, so a look at a tab and back does not sign in again. Locking closes them at once.
+- Hosts are read only while Resource Usage is on, the hosts page is shown and the vault is unlocked, also while the window is minimized. Leaving the page or turning the switch off stops reading, and the connections close a minute later, so a look at a tab and back does not sign in again. Locking closes them at once.
 - Each host is read every 3 seconds by default (**Refresh interval** in Settings → General), over the host's open connection (its terminal tabs' and port forwards') or else over a background SSH connection of its own. At most 8 connections are being set up at once, which keeps many hosts behind one jump host under OpenSSH's default `MaxStartups`. Until a jump host has let one connection through, the hosts behind it try it one at a time.
 - A host whose first hop (the host, or its outermost jump host) does not answer the online probe is shown **Offline** and is not signed in to until it answers; it is checked again every minute, or at once with **Retry** in its menu.
 - When a host's connection settings change (on another device, say), Hatoba connects again with the new ones and drops the readings made with the old ones.

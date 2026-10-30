@@ -1,4 +1,3 @@
-import { useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { formatBytes, translate, type Locale } from "@/i18n";
 import { api } from "@/ipc/api";
@@ -116,16 +115,6 @@ export function getSessionStats(sessionId: string): SessionStats | undefined {
 
 export function useSessionStats(sessionId: string | null): SessionStats | undefined {
   return useStatsStore((st) => (sessionId ? st.bySession[sessionId] : undefined));
-}
-
-function subscribeVisibility(cb: () => void) {
-  document.addEventListener("visibilitychange", cb);
-  return () => document.removeEventListener("visibilitychange", cb);
-}
-
-/** `false` while the window is minimized or hidden, when there is no point in sampling. */
-export function useDocumentVisible(): boolean {
-  return useSyncExternalStore(subscribeVisibility, () => document.visibilityState !== "hidden");
 }
 
 // ───────────────────────── Formatting ─────────────────────────

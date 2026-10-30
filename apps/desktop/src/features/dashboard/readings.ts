@@ -108,8 +108,8 @@ export function useReadoutMap(): Record<string, HostReadout> {
 let generation = 0;
 
 /**
- * Reads `hostIds` every `intervalSecs` while `active`: the page is shown, the window is visible and the vault
- * unlocked (HOST-14). A change of hosts or interval replaces the watch, so the hosts both watches read keep
+ * Reads `hostIds` every `intervalSecs` while `active`: the page is shown and the vault unlocked (HOST-14), also
+ * with the window minimized. A change of hosts or interval replaces the watch, so the hosts both watches read keep
  * their connections; going inactive stops it, and the backend closes its connections a minute later.
  */
 export function useDashboardWatch(hostIds: string[], intervalSecs: number, active: boolean) {

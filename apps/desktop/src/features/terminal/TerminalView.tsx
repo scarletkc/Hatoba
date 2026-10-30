@@ -22,7 +22,7 @@ import { useTermSettings, useTerminalChrome } from "@/session/theme";
 import { ForwardsPopover } from "./ForwardsPopover";
 import { FindBar } from "./FindBar";
 import { ConnectingOverlay, DisconnectedBanner, ErrorCard, LocalErrorCard } from "./Overlays";
-import { clearStats, startStats, stopStats, useDocumentVisible, useSessionStats } from "./stats";
+import { clearStats, startStats, stopStats, useSessionStats } from "./stats";
 import { StatsPopover } from "./StatsPopover";
 import { StatusBar } from "./StatusBar";
 import s from "./TerminalView.module.css";
@@ -38,7 +38,6 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
   const t = useT();
   const platform = useApp((st) => st.info.platform);
   const unlocked = useApp((st) => st.phase === "unlocked");
-  const visible = useDocumentVisible();
   const info = useSessionInfo(tab.id);
   const host = useVaultData((st) => (tab.hostId ? st.hosts.find((h) => h.id === tab.hostId) : undefined));
   // A quick connection (HOST-12) whose target has been saved as a host since.
@@ -106,8 +105,9 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
       .then(() => useVaultData.getState().reloadHosts())
       .catch((e: unknown) => toast(errorMessage(t, e), "error"));
   };
-  // Sampled only while someone can see it: the tab in front, the window shown, the vault unlocked.
-  const sampling = statsOn && connected && active && visible && unlocked;
+  // Sampled while the tab is in front and the vault is unlocked, also with the window minimized or hidden, so the
+  // readout is current when it comes back.
+  const sampling = statsOn && connected && active && unlocked;
   const sessionId = tab.sessionId;
   useEffect(() => {
     if (!sampling || !sessionId) return;
