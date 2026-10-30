@@ -401,19 +401,40 @@ async fn sudo_runs_the_command_and_the_copy_as_root() {
         sudo::install(&session, &run_as, &staged, &format!("{locked}/no/x"), "x").await,
         Err(RemoteFileError::NoDirectory)
     ));
-    let emptied = session
-        .exec_output(
-            "sh -c 'IFS= read -r f; : > \"$f\"'",
-            Some(format!("{staged}\n").into_bytes()),
-        )
-        .await
-        .unwrap();
-    assert_eq!(emptied.exit_status, Some(0));
-    sudo::fetch(&session, &run_as, &format!("{locked}/conf"), &staged)
-        .await
-        .unwrap();
-    assert_eq!(std::fs::read(&staged).unwrap(), b"hello");
     sudo::remove_temp_dir(&session, &dir).await.unwrap();
     assert!(!std::path::Path::new(&dir).exists());
+
+    let local = server.area("sudo-download").join("conf");
+    std::fs::create_dir_all(local.parent().unwrap()).unwrap();
+    std::fs::write(&local, b"old").unwrap();
+    let download = |remote: String| {
+        let local = local.clone();
+        let session = &session;
+        let run_as = &run_as;
+        async move {
+            sudo::download(
+                session,
+                run_as,
+                &remote,
+                &local,
+                |_| {},
+                CancellationToken::new(),
+            )
+            .await
+        }
+    };
+    download(format!("{locked}/conf")).await.unwrap();
+    assert_eq!(std::fs::read(&local).unwrap(), b"hello");
+    // A file that is not there leaves the local one as it was, and no part file.
+    std::fs::write(&local, b"old").unwrap();
+    assert!(matches!(
+        download(format!("{locked}/missing")).await,
+        Err(RemoteFileError::NotFound)
+    ));
+    assert_eq!(std::fs::read(&local).unwrap(), b"old");
+    assert_eq!(
+        std::fs::read_dir(local.parent().unwrap()).unwrap().count(),
+        1
+    );
     as_root(&session, &run_as, &format!("rm -rf {locked}")).await;
 }

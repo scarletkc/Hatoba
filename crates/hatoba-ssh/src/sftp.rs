@@ -802,7 +802,7 @@ impl SftpClient {
 }
 
 /// Throttled progress reporting with a smoothed transfer rate.
-struct Tracker {
+pub(crate) struct Tracker {
     started: Instant,
     total: u64,
     bytes: u64,
@@ -812,7 +812,7 @@ struct Tracker {
 }
 
 impl Tracker {
-    fn new(total: u64) -> Self {
+    pub(crate) fn new(total: u64) -> Self {
         let now = Instant::now();
         Self {
             started: now,
@@ -824,7 +824,7 @@ impl Tracker {
         }
     }
 
-    fn advance(&mut self, n: u64, progress: &impl Fn(TransferProgress)) {
+    pub(crate) fn advance(&mut self, n: u64, progress: &impl Fn(TransferProgress)) {
         self.bytes += n;
         let dt = self.last_report.elapsed();
         if dt < PROGRESS_INTERVAL {
@@ -845,8 +845,12 @@ impl Tracker {
         });
     }
 
+    pub(crate) fn bytes(&self) -> u64 {
+        self.bytes
+    }
+
     /// Final event with the average rate over the whole transfer.
-    fn finish(&mut self, progress: &impl Fn(TransferProgress)) {
+    pub(crate) fn finish(&mut self, progress: &impl Fn(TransferProgress)) {
         let secs = self.started.elapsed().as_secs_f64().max(0.001);
         progress(TransferProgress {
             bytes: self.bytes,
@@ -858,7 +862,9 @@ impl Tracker {
 
 /// Creates a new, empty temporary file next to `local` that no other file or
 /// transfer is using.
-async fn create_local_part(local: &Path) -> Result<(PathBuf, tokio::fs::File), SshError> {
+pub(crate) async fn create_local_part(
+    local: &Path,
+) -> Result<(PathBuf, tokio::fs::File), SshError> {
     let mut last = None;
     for _ in 0..PART_ATTEMPTS {
         let part = part_path(local, &part_token());

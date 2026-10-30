@@ -1029,7 +1029,7 @@ async fn run_download(
             local.push(name);
         }
         if let Some(run_as) = &run_as {
-            return download_as_root(ctx, &lease.session, &sftp, run_as, &remote, &local).await;
+            return download_as_root(ctx, &lease.session, run_as, &remote, &local).await;
         }
         let cancel = CancellationToken::new();
         let copying = sftp.download(&remote, &local, ctx.progress(), cancel.clone());
@@ -1040,29 +1040,40 @@ async fn run_download(
     result
 }
 
-/// `hatoba cp --sudo` from the host: as root, the file `remote` goes into a folder that only the
-/// login user can open (`hatoba_ssh::sudo::fetch`), and from there over SFTP to `local`.
+/// `hatoba cp --sudo` from the host: root reads the file `remote` onto the exec channel
+/// (`hatoba_ssh::sudo::download`), so no copy of it is left on the host. A stopped download still
+/// runs to its end, which removes what it wrote here.
 async fn download_as_root(
     ctx: &Ctx<'_>,
     session: &SshSession,
-    sftp: &SftpClient,
     run_as: &RunAs,
     remote: &str,
     local: &Path,
 ) -> Result<(), String> {
-    let dir = sudo::temp_dir(session).await.map_err(|e| e.message)?;
-    let result = async {
-        let staged = sudo::temp_file(&dir);
-        sudo::fetch(session, run_as, remote, &staged)
-            .await
-            .map_err(|e| copy_error(remote, e))?;
-        let cancel = CancellationToken::new();
-        let copying = sftp.download(&staged, local, ctx.progress(), cancel.clone());
-        ctx.copy_until_stopped(copying, &cancel).await
-    }
-    .await;
-    remove_temp_dir(session, &dir).await;
-    result
+    let cancel = CancellationToken::new();
+    let copying = sudo::download(
+        session,
+        run_as,
+        remote,
+        local,
+        ctx.progress(),
+        cancel.clone(),
+    );
+    tokio::pin!(copying);
+    let result = tokio::select! {
+        result = &mut copying => result,
+        () = ctx.stopped() => {
+            cancel.cancel();
+            copying.await
+        }
+    };
+    result.map_err(|e| {
+        if cancel.is_cancelled() {
+            ctx.stop_message("the copy")
+        } else {
+            copy_error(remote, e)
+        }
+    })
 }
 
 /// Removes the folder a `--sudo` copy went through; one left behind only takes space.

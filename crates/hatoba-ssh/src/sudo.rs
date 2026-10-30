@@ -9,36 +9,43 @@
 //!
 //! What runs as root is a fixed `sh -c` script, one line without single quotes, backslashes or
 //! `!`, like those of [`crate::remote_file`]: [`crate::remote_command`]'s, so a stop still ends the
-//! command and every process it started, or [`INSTALL_SCRIPT`] and [`FETCH_SCRIPT`] for a copy,
-//! which goes through a folder of the login user's that SFTP reads or writes ([`temp_dir`]).
+//! command and every process it started, or [`INSTALL_SCRIPT`] for an upload, which goes through a
+//! folder of the login user's that SFTP writes ([`temp_dir`]), or [`READ_SCRIPT`] for a download,
+//! which comes back over the exec channel, so no copy of it is left on the host.
 
+use std::path::Path;
+
+use bytes::Bytes;
+use russh::ChannelMsg;
+use tokio::io::AsyncWriteExt;
+use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
 use crate::error::SshError;
 use crate::exec::Exec;
 use crate::remote_file::{RemoteFileError, command, last_line};
-use crate::session::ExecOutput;
+use crate::session::{ExecOutput, SshSession};
+use crate::sftp::{Tracker, TransferProgress, create_local_part};
 
 /// The line the scripts print before what they report, so that anything the login shell's startup
 /// files print is told apart from it. The copy scripts also take it as their first line of stdin,
 /// which tells them that sudo took the password before it.
 const MARKER: &str = "hatoba-sudo";
 
-/// Prints the marker and `root` when the login user is root, `free` when sudo runs a command
-/// without asking for a password, `password` when it asks for one, and `none` without sudo.
+/// Prints the marker and `root` when the login user is root, `free` when sudo runs `sh`, as it runs
+/// the scripts, without asking for a password, `password` when it asks for one, and `none` without
+/// sudo.
 const ACCESS_SCRIPT: &str = "if [ \"$(id -u)\" = 0 ]; then echo hatoba-sudo root; \
      elif command -v sudo >/dev/null 2>&1; then \
-     if sudo -n true >/dev/null 2>&1; then echo hatoba-sudo free; \
+     if sudo -n -- sh -c true >/dev/null 2>&1; then echo hatoba-sudo free; \
      else echo hatoba-sudo password; fi; else echo hatoba-sudo none; fi";
 
-/// Prints the marker, then has sudo run `true` with the password on stdin, in the C locale, so its
-/// messages can be read.
-const CHECK_SCRIPT: &str = "echo hatoba-sudo; LC_ALL=C sudo -S -k -p \"\" -- true";
+/// Prints the marker, then has sudo run `sh`, as it runs the scripts, with the password on stdin,
+/// in the C locale, so its messages can be read.
+const CHECK_SCRIPT: &str = "echo hatoba-sudo; LC_ALL=C sudo -S -k -p \"\" -- sh -c true";
 
-/// Makes a folder that only the login user can open, with an empty file `f` in it, and prints the
-/// marker and the folder's path.
-const TEMP_SCRIPT: &str =
-    "d=$(mktemp -d) || exit 1; : > \"$d/f\" || exit 1; echo hatoba-sudo; printf %s \"$d\"; echo";
+/// Makes a folder that only the login user can open, and prints the marker and the folder's path.
+const TEMP_SCRIPT: &str = "d=$(mktemp -d) || exit 1; echo hatoba-sudo; printf %s \"$d\"; echo";
 
 /// Removes the folder named on stdin.
 const REMOVE_SCRIPT: &str = "IFS= read -r d || exit 9; rm -rf -- \"$d\"";
@@ -56,14 +63,20 @@ const INSTALL_SCRIPT: &str = "IFS= read -r x; [ \"$x\" = hatoba-sudo ] || exit 9
      if [ -e \"$f\" ]; then [ -d \"$f\" ] && exit 3; [ -f \"$f\" ] || exit 6; \
      else [ -d \"$(dirname -- \"$f\")\" ] || exit 2; fi; cat -- \"$t\" > \"$f\" || exit 1";
 
-/// As root: copies the file on stdin's second line into the login user's file on its third, in
-/// place, so the copy stays the user's. Stdin's first line is the marker. Exit statuses: 2 no such
-/// file, 3 a directory, 6 not a regular file, 9 no marker or path; 1 when the copy fails, with the
-/// message on stderr.
-const FETCH_SCRIPT: &str = "IFS= read -r x; [ \"$x\" = hatoba-sudo ] || exit 9; \
-     echo hatoba-sudo; IFS= read -r f || exit 9; IFS= read -r t || exit 9; \
+/// As root: prints the marker, then, for the regular file on stdin's second line, its size on a
+/// line of its own, then the file. Stdin's first line is the marker. Exit statuses: 2 no such file,
+/// 3 a directory, 6 not a regular file, 9 no marker or path; 1 when the file cannot be read, with
+/// the message on stderr.
+const READ_SCRIPT: &str = "IFS= read -r x; [ \"$x\" = hatoba-sudo ] || exit 9; \
+     echo hatoba-sudo; IFS= read -r f || exit 9; \
      [ -d \"$f\" ] && exit 3; [ -e \"$f\" ] || exit 2; [ -f \"$f\" ] || exit 6; \
-     cat -- \"$f\" > \"$t\" || exit 1";
+     n=$(wc -c < \"$f\") || exit 1; echo $n; exec cat -- \"$f\"";
+
+/// How much of a download's stdout may come before the size line: what the login shell's startup
+/// files print, and the marker.
+const MAX_HEAD: usize = 64 * 1024;
+/// How much of a download's stderr is kept for its error.
+const MAX_STDERR: usize = 64 * 1024;
 
 /// How a host runs a command as root.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -165,7 +178,7 @@ fn parse_access(out: &ExecOutput) -> Result<Access, AccessError> {
     }
 }
 
-/// Has sudo run `true` with `password`, without the password it may remember.
+/// Has sudo run `sh -c true` with `password`, without the password it may remember.
 pub async fn check(session: &impl Exec, password: &str) -> Result<Checked, SshError> {
     let Some(stdin) = password_line(password) else {
         return Ok(Checked::Wrong);
@@ -198,8 +211,8 @@ pub(crate) fn refused(stderr: &[u8]) -> SshError {
     }
 }
 
-/// Makes a folder on the host that only the login user can open, for a copy that goes through it,
-/// with an empty file in it ([`temp_file`]). [`remove_temp_dir`] removes it.
+/// Makes a folder on the host that only the login user can open, for an upload that goes through
+/// it, as the file [`temp_file`]. [`remove_temp_dir`] removes it.
 pub async fn temp_dir(session: &impl Exec) -> Result<String, SshError> {
     let out = session
         .exec_output(&command(TEMP_SCRIPT, None), None)
@@ -260,19 +273,154 @@ pub async fn install(
     parse_copy(&out, RemoteFileError::NoDirectory)
 }
 
-/// As `run_as`, copies the file `from`, absolute, into the login user's file `to`.
-pub async fn fetch(
-    session: &impl Exec,
+/// As `run_as`, downloads the file `remote`, absolute, to `local` on this computer over an exec
+/// channel, as [`crate::SftpClient::download`] writes it: into a new part file beside `local`,
+/// renamed over it once the whole file has arrived, and deleted when it does not. `progress` is
+/// called as for SFTP; `cancel` stops it, as [`SshError::cancelled`].
+pub async fn download(
+    session: &SshSession,
     run_as: &RunAs,
-    from: &str,
-    to: &str,
+    remote: &str,
+    local: &Path,
+    progress: impl Fn(TransferProgress) + Send + Sync,
+    cancel: CancellationToken,
 ) -> Result<(), RemoteFileError> {
-    let stdin = request(run_as, &[from, to])?;
-    let out = session
-        .exec_output(&root_command(run_as, FETCH_SCRIPT), Some(stdin))
+    let stdin = request(run_as, &[remote])?;
+    let (part, file) = create_local_part(local)
         .await
         .map_err(RemoteFileError::Ssh)?;
-    parse_copy(&out, RemoteFileError::NotFound)
+    let command = root_command(run_as, READ_SCRIPT);
+    let received = receive(session, &command, stdin, &part, file, &progress, &cancel).await;
+    match received {
+        Ok(()) => tokio::fs::rename(&part, local).await.map_err(|e| {
+            let _ = std::fs::remove_file(&part);
+            RemoteFileError::Ssh(SshError::io_context(
+                &format!("finalize {}", local.display()),
+                &e,
+            ))
+        }),
+        Err(e) => {
+            let _ = tokio::fs::remove_file(&part).await;
+            Err(e)
+        }
+    }
+}
+
+/// Runs [`READ_SCRIPT`] and writes the file it prints after the size line into `file`.
+async fn receive(
+    session: &SshSession,
+    command: &str,
+    stdin: Vec<u8>,
+    part: &Path,
+    mut file: tokio::fs::File,
+    progress: &(impl Fn(TransferProgress) + Send + Sync),
+    cancel: &CancellationToken,
+) -> Result<(), RemoteFileError> {
+    let ssh = RemoteFileError::Ssh;
+    let write_error = |e: std::io::Error| {
+        ssh(SshError::io_context(
+            &format!("write {}", part.display()),
+            &e,
+        ))
+    };
+    let (mut reader, writer, _slot) = session.open_exec_channel().await.map_err(ssh)?;
+    writer
+        .half()
+        .exec(true, command.as_bytes().to_vec())
+        .await
+        .map_err(|e| ssh(SshError::from(e)))?;
+    writer
+        .half()
+        .data_bytes(Bytes::from(stdin))
+        .await
+        .map_err(|e| ssh(SshError::from(e)))?;
+    let _ = writer.half().eof().await;
+
+    // Until the size line, stdout is held here; after it, it is the file.
+    let mut out = ExecOutput::default();
+    let mut body: Option<(Tracker, u64)> = None;
+    let mut accepted = false;
+    loop {
+        let msg = tokio::select! {
+            biased;
+            () = cancel.cancelled() => return Err(ssh(SshError::cancelled())),
+            msg = reader.wait() => msg,
+        };
+        match msg {
+            Some(ChannelMsg::Success) => accepted = true,
+            Some(ChannelMsg::Failure) => {
+                return Err(ssh(SshError::channel(
+                    "the server refused to run the command",
+                )));
+            }
+            Some(ChannelMsg::Data { data }) => {
+                if let Some((tracker, _)) = body.as_mut() {
+                    file.write_all(&data).await.map_err(write_error)?;
+                    tracker.advance(data.len() as u64, progress);
+                    continue;
+                }
+                out.stdout.extend_from_slice(&data);
+                if let Some((size, at)) = size_line(&out.stdout) {
+                    let rest = out.stdout.split_off(at);
+                    let mut tracker = Tracker::new(size);
+                    file.write_all(&rest).await.map_err(write_error)?;
+                    tracker.advance(rest.len() as u64, progress);
+                    body = Some((tracker, size));
+                } else if out.stdout.len() > MAX_HEAD {
+                    return Err(ssh(SshError::other(
+                        "the host printed too much before the file",
+                    )));
+                }
+            }
+            Some(ChannelMsg::ExtendedData { data, .. }) => {
+                if out.stderr.len() < MAX_STDERR {
+                    out.stderr.extend_from_slice(&data);
+                }
+            }
+            Some(ChannelMsg::ExitStatus { exit_status }) => out.exit_status = Some(exit_status),
+            Some(ChannelMsg::Close) => break,
+            Some(_) => {}
+            None => {
+                if out.exit_status.is_some() || accepted {
+                    break;
+                }
+                return Err(ssh(session.close_error()));
+            }
+        }
+    }
+    writer.ended();
+    let Some((mut tracker, size)) = body else {
+        parse_copy(&out, RemoteFileError::NotFound)?;
+        return Err(RemoteFileError::Incomplete(last_line(&out.stderr)));
+    };
+    if out.exit_status != Some(0) {
+        return Err(RemoteFileError::Failed {
+            status: out.exit_status,
+            stderr: last_line(&out.stderr),
+        });
+    }
+    if tracker.bytes() != size {
+        return Err(RemoteFileError::Incomplete(last_line(&out.stderr)));
+    }
+    file.flush().await.map_err(write_error)?;
+    tracker.finish(progress);
+    Ok(())
+}
+
+/// The size [`READ_SCRIPT`] printed on the line after the marker, and where the file starts after
+/// it; `None` until both lines are whole.
+fn size_line(stdout: &[u8]) -> Option<(u64, usize)> {
+    let marker = format!("{MARKER}\n");
+    let marker = marker.as_bytes();
+    let start = (0..stdout.len().checked_sub(marker.len())? + 1)
+        .find(|&i| (i == 0 || stdout[i - 1] == b'\n') && stdout[i..].starts_with(marker))?
+        + marker.len();
+    let end = stdout[start..].iter().position(|&b| b == b'\n')? + start;
+    let size = std::str::from_utf8(&stdout[start..end])
+        .ok()?
+        .parse()
+        .ok()?;
+    Some((size, end + 1))
 }
 
 fn root_command(run_as: &RunAs, script: &str) -> String {
@@ -337,7 +485,7 @@ pub(crate) mod tests {
             TEMP_SCRIPT,
             REMOVE_SCRIPT,
             INSTALL_SCRIPT,
-            FETCH_SCRIPT,
+            READ_SCRIPT,
         ] {
             // `!` too: csh expands it even inside single quotes when its history is on.
             assert!(!script.contains(['\'', '\\', '\n', '!']), "{script}");
@@ -438,6 +586,17 @@ pub(crate) mod tests {
             "/tmp/tmp.Ab12"
         );
         assert!(parse_temp_dir(&output(Some(1), "", "mktemp: failed\n")).is_err());
+    }
+
+    #[test]
+    fn a_download_starts_after_the_size_line() {
+        assert_eq!(size_line(b"motd\nhatoba-sudo\n5\nhello"), Some((5, 19)));
+        assert_eq!(size_line(b"hatoba-sudo\n0\n"), Some((0, 14)));
+        // Not whole yet.
+        assert_eq!(size_line(b"hatoba-sudo\n"), None);
+        assert_eq!(size_line(b"hatoba-sudo\n12"), None);
+        // The marker only counts at the start of a line.
+        assert_eq!(size_line(b"xhatoba-sudo\n3\nabc"), None);
     }
 
     /// A `sudo` of the tests' own, which takes the password `secret` with `-S`, asks for none with
@@ -553,7 +712,7 @@ exec env HOME=/nonexistent-root SHELL=/bin/false \"$@\"
         }
 
         #[test]
-        fn a_copy_goes_through_the_users_folder() {
+        fn an_upload_goes_through_the_users_folder_and_a_download_comes_back_whole() {
             let home = tempfile::tempdir().unwrap();
             let home_path = home.path().canonicalize().unwrap();
             let (_sudo, path) = sudo_dir();
@@ -562,7 +721,6 @@ exec env HOME=/nonexistent-root SHELL=/bin/false \"$@\"
 
             let dir = parse_temp_dir(&sh(&command(TEMP_SCRIPT, None), b"")).unwrap();
             let file = temp_file(&dir);
-            assert_eq!(std::fs::read(&file).unwrap(), b"");
             std::fs::write(&file, b"new").unwrap();
 
             let target = home_path.join("conf");
@@ -602,20 +760,22 @@ exec env HOME=/nonexistent-root SHELL=/bin/false \"$@\"
             assert_eq!(std::fs::read(&target).unwrap(), b"old");
 
             std::fs::write(&target, b"secret config").unwrap();
-            let fetch = |from: &str| {
-                parse_copy(
-                    &sh(
-                        &root_command(&run_as, FETCH_SCRIPT),
-                        &request(&run_as, &[from, &file]).unwrap(),
-                    ),
-                    RemoteFileError::NotFound,
+            let read = |from: &str| {
+                sh(
+                    &root_command(&run_as, READ_SCRIPT),
+                    &request(&run_as, &[from]).unwrap(),
                 )
             };
-            fetch(to).unwrap();
-            assert_eq!(std::fs::read(&file).unwrap(), b"secret config");
-            assert!(matches!(fetch(&missing), Err(RemoteFileError::NotFound)));
+            let out = read(to);
+            assert_eq!(out.exit_status, Some(0));
+            let (size, at) = size_line(&out.stdout).unwrap();
+            assert_eq!((size, &out.stdout[at..]), (13, &b"secret config"[..]));
             assert!(matches!(
-                fetch(text(&home_path)),
+                parse_copy(&read(&missing), RemoteFileError::NotFound),
+                Err(RemoteFileError::NotFound)
+            ));
+            assert!(matches!(
+                parse_copy(&read(text(&home_path)), RemoteFileError::NotFound),
                 Err(RemoteFileError::IsDirectory)
             ));
 
