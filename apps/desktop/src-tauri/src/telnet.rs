@@ -66,11 +66,16 @@ impl TelnetManager {
         let mut sessions = lock(&self.sessions);
         if sessions.get(id).is_some_and(|s| Arc::ptr_eq(s, live)) {
             sessions.remove(id);
+            live.session.stop_login();
         }
     }
 
+    /// Takes a session out. Its saved login stops before the registry is let go, so a lock that
+    /// no longer finds it here has nothing to stop.
     pub fn take(&self, id: &str) -> Option<Arc<TelnetLive>> {
-        lock(&self.sessions).remove(id)
+        let live = lock(&self.sessions).remove(id)?;
+        live.session.stop_login();
+        Some(live)
     }
 
     /// SEC-03: the vault locked, so no tab types its saved login any more, also one kept open.
@@ -82,6 +87,12 @@ impl TelnetManager {
 
     /// SEC-03 "lock disconnects sessions", and quitting: takes every session out.
     pub fn take_all(&self) -> Vec<Arc<TelnetLive>> {
-        lock(&self.sessions).drain().map(|(_, live)| live).collect()
+        lock(&self.sessions)
+            .drain()
+            .map(|(_, live)| {
+                live.session.stop_login();
+                live
+            })
+            .collect()
     }
 }

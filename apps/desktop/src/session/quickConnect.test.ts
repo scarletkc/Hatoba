@@ -30,6 +30,7 @@ describe("parseTelnet (TELNET-05)", () => {
       "telnet host 70000",
       "telnet://u@host",
       "telnet://router:",
+      "telnet://[::1]:",
       "telnet :",
       "telnet ::",
       "telnetd host",
