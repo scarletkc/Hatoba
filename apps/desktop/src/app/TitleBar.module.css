@@ -56,6 +56,11 @@
   background: var(--fill);
 }
 
+/* Inside the tab: the tab strip clips what stands out of it, which would cut the ring's top and bottom. */
+.tab:focus-visible {
+  outline-offset: -2px;
+}
+
 .tabActive,
 .tabActive:hover {
   background: var(--fill2);
