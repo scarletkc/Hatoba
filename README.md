@@ -139,8 +139,7 @@ connecting Hatoba, and covers upgrades, resets, and backups.
 
 Thanks to everyone who has sponsored Hatoba's author.
 
-<a href="https://github.com/kleedaisuki"><img src="https://github.com/kleedaisuki.png?size=96" width="48" height="48" alt="kleedaisuki" /></a>
-<a href="https://github.com/kamiiroawase"><img src="https://github.com/kamiiroawase.png?size=96" width="48" height="48" alt="kamiiroawase" /></a>
+<a href="https://github.com/sponsors/scarletkc"><img src="https://cdn.jsdelivr.net/gh/scarletkc/Hatoba@sponsors/sponsors.svg" alt="Sponsors" /></a>
 
 [Sponsor Hatoba on GitHub](https://github.com/sponsors/scarletkc)
 

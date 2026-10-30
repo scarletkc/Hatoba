@@ -1,0 +1,52 @@
+name: Sponsors
+
+# Draws the public GitHub sponsors of scarletkc into sponsors.svg on the sponsors branch, which the
+# README shows through jsDelivr. Sponsorships are not visible to GITHUB_TOKEN, so SPONSORS_TOKEN is a
+# classic token of scarletkc with the read:user and read:org scopes.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sponsors
+  cancel-in-progress: false
+
+jobs:
+  sponsors:
+    name: Sponsors
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/sponsors
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Draw
+        working-directory: .github/sponsors
+        env:
+          SPONSORKIT_GITHUB_TOKEN: ${{ secrets.SPONSORS_TOKEN }}
+        run: npx --yes sponsorkit@18.0.0
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          svg="$PWD/.github/sponsors/sponsorkit/sponsors.svg"
+          cd "$(mktemp -d)"
+          git init -q -b sponsors
+          git remote add origin "https://x-access-token:$GH_TOKEN@github.com/$REPO.git"
+          if git fetch -q --depth 1 origin sponsors; then git checkout -q -B sponsors FETCH_HEAD; fi
+          cp "$svg" sponsors.svg
+          git add sponsors.svg
+          if git diff --cached --quiet; then exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -qm "Update sponsors"
+          git push -q origin sponsors
+          curl -fsS "https://purge.jsdelivr.net/gh/$REPO@sponsors/sponsors.svg" > /dev/null
