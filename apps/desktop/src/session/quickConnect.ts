@@ -149,8 +149,8 @@ export function parseTelnet(input: string): { target: TelnetTarget; search: stri
   let address: string;
   let portText: string | undefined;
   const url = /^telnet:\/\/([^/@\s]+)\/?$/i.exec(text);
-  // `telnet://host:` names no port.
-  if (url?.[1].endsWith(":")) return null;
+  // `telnet://host:` names no port; a bare IPv6 address may end in `::`.
+  if (url?.[1].endsWith(":") && url[1].split(":").length === 2) return null;
   if (url) {
     const dest = parseDestination(url[1]);
     if (!dest || dest.username !== null) return null;

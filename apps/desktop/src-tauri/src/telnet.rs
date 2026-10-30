@@ -26,9 +26,11 @@ impl TelnetLive {
         }
     }
 
-    /// Closes the connection.
+    /// Closes the connection. The saved login stops at once, before the session's task gets to
+    /// the close, so output it reads meanwhile gets nothing typed.
     pub fn close(&self) {
         self.closed.store(true, Ordering::Relaxed);
+        self.session.stop_login();
         self.session.close();
     }
 

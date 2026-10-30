@@ -11,6 +11,8 @@ export interface HostDraft {
   /** The port typed, unless it was the old protocol's default, which the new one replaces with its own. */
   port?: string;
   username: string;
+  /** A password typed for the new host, which it keeps as the form did; never a saved one. */
+  password: string;
   tags: string[];
   proxyMode: ProxyMode;
   proxyId: string | null;

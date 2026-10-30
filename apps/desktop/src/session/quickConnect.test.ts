@@ -18,6 +18,7 @@ describe("parseTelnet (TELNET-05)", () => {
     expect(parseTelnet("telnet [2001:db8::1] 23")?.target).toEqual({ address: "2001:db8::1", port: 23 });
     expect(parseTelnet("telnet://router.lan:2323")?.target).toEqual({ address: "router.lan", port: 2323 });
     expect(parseTelnet("telnet://router.lan/")?.target).toEqual({ address: "router.lan", port: 23 });
+    expect(parseTelnet("telnet://2001:db8::")?.target).toEqual({ address: "2001:db8::", port: 23 });
   });
 
   it("leaves anything else to ssh and search", () => {
