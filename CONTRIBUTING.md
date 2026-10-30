@@ -177,8 +177,8 @@ Before requesting review:
 - When behavior changes, update the
   [architecture and requirements](docs/hatoba-spec.md) and any other affected
   docs in the same pull request; the
-  [implementation status](docs/status.md) is the easiest to forget. Write
-  documentation in English.
+  [built-in skill](docs/development.md#keep-the-built-in-skill-current) is
+  the easiest to forget. Write documentation in English.
 - Change a schema by adding a migration, never by editing an existing one:
   `MIGRATIONS` in `crates/hatoba-core/src/store.rs` for the local database,
   and `workers/sync/migrations/` for D1. Vaults and Workers that already ran a

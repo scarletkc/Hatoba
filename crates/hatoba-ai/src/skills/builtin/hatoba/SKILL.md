@@ -94,10 +94,9 @@ Hatoba is open source: https://github.com/scarletkc/Hatoba (README, docs, releas
 - https://hatoba.fog.moe/docs/ (these docs as of the newest release; each page names the version it describes)
 - https://api.github.com/repos/scarletkc/Hatoba/releases/latest (JSON)
 - https://raw.githubusercontent.com/scarletkc/Hatoba/main/README.md
-- https://raw.githubusercontent.com/scarletkc/Hatoba/main/docs/status.md
 
 The `main` branch can be ahead of the latest release and of the user's version, so say where a statement comes from. Compare the latest release with {{HATOBA_VERSION}}. If a newer release exists, point to **Check for Updates** in Settings → About, or to the dot on the gear in the title bar (**Settings (update available)**), which opens About. Once a check finds the newer version, **Download and Install** there downloads it, checks its signature, then closes Hatoba to install it and opens it again; see `references/settings.md`.
 
 ## Not in Hatoba (current version)
 
-Split panes in a terminal, session logs, snippets, editing remote files, uploading or downloading whole folders over SFTP, `ProxyCommand`, SOCKS4 and HTTPS proxies, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH (Telnet, serial, RDP, VNC).
+Split panes in a terminal, session logs, snippets, uploading or downloading whole folders over SFTP, `ProxyCommand`, SOCKS4 and HTTPS proxies, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH (Telnet, serial, RDP, VNC).

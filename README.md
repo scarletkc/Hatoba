@@ -131,6 +131,7 @@ connecting Hatoba, and covers upgrades, resets, and backups.
 - [User documentation](https://hatoba.fog.moe/docs/): hosts, the terminal, SFTP, keys and the vault, sync, the AI assistant, and troubleshooting
 - [Deploy the sync Worker](workers/sync/README.md): deployment, upgrades, resets, and backups
 - [Architecture and requirements](docs/hatoba-spec.md): architecture, security model, data formats, the sync protocol and Worker API, and requirements
+- [AI assistant architecture and requirements](docs/ai-assistant.md): providers, tools, permission modes, history, skills, MCP servers, and memory
 - [Development guide](docs/development.md): building, running, and testing
 - [Contributing](CONTRIBUTING.md): issues, branches, commits, and pull requests
 - [Security policy](SECURITY.md): reporting a vulnerability privately
