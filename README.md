@@ -38,8 +38,8 @@ between your devices, and puts an AI assistant beside each terminal.
 
 - **AI assistant**: reads the screen, runs commands, edits files on the host or
   your own computer, and searches the web. You approve its actions, or let Auto
-  mode approve the safe ones. It uses your own OpenAI-compatible or Anthropic
-  API key and supports skills and MCP servers.
+  mode approve the safe ones. It works with an OpenAI-compatible or Anthropic
+  API key or a ChatGPT plan, and supports skills and MCP servers.
 - **Hosts**: groups, tags, fuzzy search, `~/.ssh/config` import, ProxyJump, and
   proxies. Type `ssh user@host` in the search box to connect without saving a
   host.
@@ -112,7 +112,8 @@ The AI assistant sends the model provider your messages, their attachments,
 the terminal's screen as each message is sent (unless you turn that off), and
 what its tools read. Host addresses, passwords, and keys reach the provider
 only when they appear on the screen, in a tool result, or in an attachment you
-send.
+send, except that a host you connect to without saving it is named by its
+address.
 
 ## Set up sync
 

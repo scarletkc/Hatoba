@@ -20,7 +20,7 @@ pnpm dev                  # Start only the frontend, with a mock backend in the 
 
 A release build runs one Hatoba at a time and hands the arguments of a second launch to it ([HOST-13](hatoba-spec.md#82-hosts)). A development build skips this, so it can run beside the installed app, unless `HATOBA_SINGLE_INSTANCE` is set.
 
-In the browser, `pnpm dev` uses the mock backend in `apps/desktop/src/ipc/mock` with sample data. URL parameters switch demo states, such as `?state=locked` and `?sync=conflict`. The comment on `createMockApi` in `apps/desktop/src/ipc/mock/index.ts` lists every parameter.
+In the browser, `pnpm dev` uses the mock backend in `apps/desktop/src/ipc/mock` with sample data. URL parameters switch demo states, such as `?state=locked` and `?sync=conflict`. The comment on `createMockApi` in `apps/desktop/src/ipc/mock/index.ts` lists most of them, and the AI mocks beside it (`ai.ts`, `aiExtensions.ts`, `aiMemory.ts`) list theirs.
 
 `/?gallery` opens the component gallery instead of the app: every control and pattern in `packages/ui` (`@hatoba/ui`) in each state, in light, dark or side by side, at either density. Check it after changing a shared component. Only development builds include it.
 
@@ -173,7 +173,7 @@ The Sync Worker job in CI runs the same check against the base branch, and fails
 
 The AI assistant ships with a built-in `hatoba` skill in [`crates/hatoba-ai/src/skills/builtin/hatoba`](../crates/hatoba-ai/src/skills/builtin/hatoba). Its `SKILL.md` and `references/` files describe the current interface, settings, and features, so the assistant can answer questions about Hatoba, and the [website](#website) publishes them as its docs. A pull request that adds, renames, or removes UI, settings, or a feature that the skill describes updates the skill in the same pull request.
 
-- Each file stays under 15,000 characters, because `read_skill` shortens a longer file.
+- Each file stays under 15,000 characters, half of `MAX_RESULT_CHARS` in `crates/hatoba-ai/src/tools.rs`, above which `read_skill` shortens a file.
 - Name UI labels in English, copied character for character from the `en` message tables in `apps/desktop/src/i18n/locales`. The other languages go in the label files, not the text.
 - The label files in `references/labels/` give those labels in each other language, by file and `## ` section, so the assistant can quote what the user sees. They are written from `AREAS` in `apps/desktop/src/i18n/hatobaSkillLabels.ts`, which lists the message keys of each section; only messages without a `|` can be listed, and a placeholder such as `{host}` stays in the text. To add a label, add its key there and write the files again (below). A new language gets its files from `LANGUAGE_NAME` in the same file, and each new file goes in `SKILL.md`'s list and in `crates/hatoba-ai/src/skills/builtin.rs`.
 - `{{HATOBA_VERSION}}` in `SKILL.md` is a placeholder that the app replaces with the running version.
@@ -214,7 +214,7 @@ CI also runs format and lint checks:
 cargo fmt --all --check
 node scripts/ci/comment-width.mjs   # Rust comment lines within 100 characters, which rustfmt does not wrap
 cargo clippy --workspace --all-targets -- -D warnings
-pnpm lint           # ESLint for the desktop frontend; warnings fail too
+pnpm lint           # ESLint for the desktop frontend and packages/ui; warnings fail too
 pnpm format:check   # Prettier; `pnpm format` rewrites the files it reports
 ```
 
