@@ -519,7 +519,7 @@ All endpoints live under `/v1`. Requests and responses are JSON (`Content-Type: 
 #### Server requirements
 
 - **Setup token**: set at deployment as the Worker secret `SETUP_TOKEN`, with `wrangler secret put SETUP_TOKEN` or by the app (§6.7). It stops someone else from initializing a freshly deployed, unconfigured Worker before you do. Without the token, `/v1/setup` always refuses (`401`), and it returns `503` when the secret is not configured. The secret can be deleted after initialization. The comparison runs in constant time, and so does the `auth_hash` comparison.
-- **Sessions**: a token is 32 random bytes (base64url), and D1 stores only its SHA-256. It is valid for 30 days and slides forward on use (the renewal is written at most once a minute). Each device (`device_id`) keeps only one session of each kind.
+- **Sessions**: a token is 32 random bytes (base64url), and D1 stores only its SHA-256. It is valid for 30 days and slides forward on use (the renewal is written at most once a minute). Each device (`device_id`) keeps only one session of each kind. The insert checks again, in the same transaction, that the credential the session is issued for still matches `meta`, so a sign-in or recovery that overlaps a password change gets `401` instead of a session that outlives the change.
 - **Recovery sessions**: a session issued by `/v1/recover` is valid for 15 minutes and can call only `PUT /v1/vault/password`. Other endpoints return `403`.
 - **Rate limits**: `/v1/setup`, `/v1/login`, and `/v1/recover` allow 10 requests per minute for each source IP and endpoint, through the Workers Rate Limiting binding, and return `429` beyond that. Each Cloudflare data center counts separately.
 - **Size limits**: at most 100 changes per push, and at most 64 KB per envelope.
@@ -619,6 +619,8 @@ Structural errors (missing fields, wrong types, invalid IDs, `deleted` inconsist
 
 - Full session: revokes **all other** sessions, and the caller stays signed in (`relogin_required: false`).
 - Recovery session: revokes **all** sessions, including the caller's (`relogin_required: true`), and the client must sign in again with the new password.
+
+When the caller's session no longer exists by the time the transaction runs, for example because another password change revoked it, the transaction changes nothing and the request gets `401`.
 
 #### Error codes
 

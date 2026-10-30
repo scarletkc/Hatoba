@@ -2,7 +2,7 @@ import type { MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { SESSION_TOUCH_INTERVAL_MS, SESSION_TTL_MS, type SessionScope } from "./config";
 import type { AppEnv } from "./env";
-import { ApiError } from "./errors";
+import { ApiError, invalidSession } from "./errors";
 import { sha256Hex } from "./util";
 
 /** Returns the token of an `Authorization: Bearer <token>` header, or null. */
@@ -77,11 +77,7 @@ export const requireSession =
       .first<SessionRow>();
 
     const now = Date.now();
-    if (!row || row.expires_at <= now) {
-      throw new ApiError(401, "invalid_session", "Session is unknown or has expired", {
-        "WWW-Authenticate": "Bearer",
-      });
-    }
+    if (!row || row.expires_at <= now) throw invalidSession();
     if (!allow.includes(row.scope)) {
       throw new ApiError(403, "insufficient_scope", "This session is not allowed to call this endpoint");
     }
