@@ -23,8 +23,9 @@ const FLUSH_INTERVAL: Duration = Duration::from_millis(8);
 const FLUSH_BYTES: usize = 32 * 1024;
 const EVENT_CAPACITY: usize = 128;
 /// How much of the client's protocol replies may wait to go out before the server is taken to have
-/// stopped reading. A server that keeps sending option offers while it reads nothing would otherwise
-/// grow them without end. The user's input does not count: a large paste waits as long as it needs.
+/// stopped reading. A server that keeps sending option offers while it reads nothing would
+/// otherwise grow them without end. The user's input does not count: a large paste waits as long
+/// as it needs.
 const OUT_LIMIT: usize = 1024 * 1024;
 /// Why the connection closed when [`OUT_LIMIT`] was reached.
 const STALLED: &str = "The server stopped reading what Hatoba sends.";
