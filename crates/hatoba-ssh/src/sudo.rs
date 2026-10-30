@@ -64,13 +64,14 @@ const INSTALL_SCRIPT: &str = "IFS= read -r x; [ \"$x\" = hatoba-sudo ] || exit 9
      else [ -d \"$(dirname -- \"$f\")\" ] || exit 2; fi; cat -- \"$t\" > \"$f\" || exit 1";
 
 /// As root: prints the marker, then, for the regular file on stdin's second line, its size on a
-/// line of its own, then the file. Stdin's first line is the marker. Exit statuses: 2 no such file,
-/// 3 a directory, 6 not a regular file, 9 no marker or path; 1 when the file cannot be read, with
-/// the message on stderr.
+/// line of its own, then that many bytes of the file, so a log that grows meanwhile still comes
+/// whole as it was. Stdin's first line is the marker. Exit statuses: 2 no such file, 3 a directory,
+/// 6 not a regular file, 9 no marker or path; 1 when the file cannot be read, with the message on
+/// stderr.
 const READ_SCRIPT: &str = "IFS= read -r x; [ \"$x\" = hatoba-sudo ] || exit 9; \
      echo hatoba-sudo; IFS= read -r f || exit 9; \
      [ -d \"$f\" ] && exit 3; [ -e \"$f\" ] || exit 2; [ -f \"$f\" ] || exit 6; \
-     n=$(wc -c < \"$f\") || exit 1; echo $n; exec cat -- \"$f\"";
+     n=$(wc -c < \"$f\") || exit 1; n=$(echo $n); echo $n; exec head -c $n -- \"$f\"";
 
 /// How much of a download's stdout may come before the size line: what the login shell's startup
 /// files print, and the marker.
