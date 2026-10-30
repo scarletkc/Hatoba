@@ -3,10 +3,10 @@
 //! output is batched (§10.3), every 8 ms or once 32 KB have built up, into a bounded channel. When
 //! the WebView falls behind, the channel fills and the server is no longer read, so about 4 MB is
 //! held at most. Writes go out on a task of their own, so a server that stops reading never stalls
-//! the output.
+//! the output; once 1 MB waits for such a server, the connection closes.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use bytes::{Bytes, BytesMut};
@@ -21,6 +21,11 @@ use crate::login::{AutoLogin, LOGIN_WINDOW};
 const FLUSH_INTERVAL: Duration = Duration::from_millis(8);
 const FLUSH_BYTES: usize = 32 * 1024;
 const EVENT_CAPACITY: usize = 128;
+/// How much may wait to go out before the server is taken to have stopped reading. A server that
+/// keeps sending option offers while it reads nothing would otherwise grow the replies without end.
+const OUT_LIMIT: usize = 1024 * 1024;
+/// Why the connection closed when [`OUT_LIMIT`] was reached.
+const STALLED: &str = "The server stopped reading what Hatoba sends.";
 
 /// What a Telnet tab sends.
 #[derive(Debug)]
@@ -127,11 +132,16 @@ async fn run<S>(
     S: AsyncRead + AsyncWrite + Send + 'static,
 {
     let (mut reader, writer) = tokio::io::split(stream);
-    let (out, out_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-    let mut write_task = tokio::spawn(write_loop(writer, out_rx));
+    let (tx, out_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    let queued = Arc::new(AtomicUsize::new(0));
+    let out = Outbox {
+        tx,
+        queued: queued.clone(),
+    };
+    let mut write_task = tokio::spawn(write_loop(writer, out_rx, queued));
 
     let mut telnet = Telnet::new(cols, rows);
-    let _ = out.send(telnet.start());
+    out.send(telnet.start());
     let login_until = Instant::now() + LOGIN_WINDOW;
 
     let mut buf = vec![0u8; 16 * 1024];
@@ -143,14 +153,16 @@ async fn run<S>(
                 Ok(0) => break None,
                 Ok(n) => {
                     let received = telnet.receive(&buf[..n]);
-                    if !received.reply.is_empty() {
-                        let _ = out.send(received.reply);
+                    if !out.send(received.reply) {
+                        break Some(STALLED.to_owned());
                     }
                     if Instant::now() >= login_until || login_stopped.load(Ordering::SeqCst) {
                         login.stop();
                     }
-                    if let Some(answer) = login.output(&received.data) {
-                        let _ = out.send(telnet.encode(answer.as_bytes()));
+                    if let Some(answer) = login.output(&received.data)
+                        && !out.send(telnet.encode(answer.as_bytes()))
+                    {
+                        break Some(STALLED.to_owned());
                     }
                     pending.extend_from_slice(&received.data);
                     if flush_at.is_none() || pending.len() >= FLUSH_BYTES {
@@ -165,12 +177,13 @@ async fn run<S>(
             command = commands.recv() => match command {
                 Some(Command::Input(data)) => {
                     login.typed(&data);
-                    let _ = out.send(telnet.encode(&data));
+                    if !out.send(telnet.encode(&data)) {
+                        break Some(STALLED.to_owned());
+                    }
                 }
                 Some(Command::Resize { cols, rows }) => {
-                    let naws = telnet.resize(cols, rows);
-                    if !naws.is_empty() {
-                        let _ = out.send(naws);
+                    if !out.send(telnet.resize(cols, rows)) {
+                        break Some(STALLED.to_owned());
                     }
                 }
                 Some(Command::StopLogin) => login.stop(),
@@ -199,17 +212,36 @@ async fn run<S>(
     let _ = events.send(TelnetEvent::Closed { error }).await;
 }
 
+/// What waits to go out to the server, counted against [`OUT_LIMIT`].
+struct Outbox {
+    tx: mpsc::UnboundedSender<Vec<u8>>,
+    queued: Arc<AtomicUsize>,
+}
+
+impl Outbox {
+    /// Queues `data`; `false` when more than [`OUT_LIMIT`] would then wait.
+    fn send(&self, data: Vec<u8>) -> bool {
+        if data.is_empty() {
+            return true;
+        }
+        if self.queued.fetch_add(data.len(), Ordering::SeqCst) + data.len() > OUT_LIMIT {
+            return false;
+        }
+        let _ = self.tx.send(data);
+        true
+    }
+}
+
 async fn write_loop<W: AsyncWrite>(
     writer: W,
     mut out: mpsc::UnboundedReceiver<Vec<u8>>,
+    queued: Arc<AtomicUsize>,
 ) -> std::io::Result<()> {
     let mut writer = std::pin::pin!(writer);
     while let Some(data) = out.recv().await {
-        if data.is_empty() {
-            continue;
-        }
         writer.write_all(&data).await?;
         writer.flush().await?;
+        queued.fetch_sub(data.len(), Ordering::SeqCst);
     }
     let _ = writer.shutdown().await;
     Ok(())
@@ -318,6 +350,34 @@ mod tests {
         let mut buf = [0u8; 64];
         let typed = tokio::time::timeout(Duration::from_millis(300), server.read(&mut buf)).await;
         assert!(typed.is_err(), "the client typed {:?}", typed);
+    }
+
+    #[tokio::test]
+    async fn a_server_that_stops_reading_is_disconnected() {
+        let (client, mut server) = duplex(4096);
+        let (_session, mut events) =
+            TelnetSession::start(client, 80, 24, AutoLogin::new(None, None));
+        // The server reads nothing, and offers an option it is refused, over and over.
+        tokio::spawn(async move {
+            let offer = [255u8, 251, 99].repeat(4096);
+            for _ in 0..200 {
+                if server.write_all(&offer).await.is_err() {
+                    break;
+                }
+            }
+        });
+        let error = tokio::time::timeout(Duration::from_secs(30), async {
+            loop {
+                match events.recv().await {
+                    Some(TelnetEvent::Closed { error }) => break error,
+                    Some(TelnetEvent::Data(_)) => {}
+                    None => panic!("the session ended without Closed"),
+                }
+            }
+        })
+        .await
+        .expect("the session stayed open");
+        assert_eq!(error.as_deref(), Some(STALLED));
     }
 
     #[tokio::test]
