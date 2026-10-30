@@ -977,6 +977,8 @@ async fn upload_as_root(
         let cancel = CancellationToken::new();
         let copying = sftp.upload(local, &staged, ctx.progress(), cancel.clone());
         ctx.copy_until_stopped(copying, &cancel).await?;
+        // Not stopped once begun: the copy writes the file in place, so stopping it would leave the
+        // file cut short, and closing the channel does not end it on the host anyway.
         sudo::install(session, run_as, &staged, &to, name)
             .await
             .map_err(|e| copy_error(&to, e))
