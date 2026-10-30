@@ -96,6 +96,7 @@ flowchart LR
 2. **Local first.** Every read and write goes to the local SQLite database first, and sync runs in the background. Without a network, or without sync configured, every feature works.
 3. **Local and cloud data use the same ciphertext format.** The local database also stores only ciphertext, which is decrypted in memory after unlock.
 4. **`hatoba-core` does not depend on Tauri**, so a future mobile app can reuse it.
+5. **No Hatoba-only restrictions** ([#119](https://github.com/scarletkc/Hatoba/issues/119)). Defaults match comparable tools: Claude Code, Codex, and Cursor for the AI assistant, and OpenSSH, Termius, Tabby, Windows Terminal, 1Password, and Bitwarden for the rest of the app. Hatoba adds no safeguard, approval, confirmation, or limit that they don't have. Text shown up front stays only when the user needs it to finish a task or it prevents real data loss; requirements go into links, defaults, or error messages.
 
 ### 3.3 Repository layout
 
@@ -987,6 +988,7 @@ The design tokens and shared components define the visuals (§0). This section o
 - Shortcuts: see WIN-04 in §9.1, and MAC-03 in §9.2 for macOS.
 - Input methods: the Enter that commits an input method candidate never submits, saves, or sends.
 - The theme follows the system by default, and every token has a light and a dark value.
+- Narrow pages: a page in the main area is at its narrowest in the smallest window (`MIN_SIZE` in [`platform/window.rs`](../apps/desktop/src-tauri/src/platform/window.rs)) with the navigation rail and the AI panel open, and nothing on it may run under the AI panel or make the page scroll sideways at that width. Its controls go in `PageHeader`, which moves them under the title and then wraps them onto more rows; controls that would take several rows can show only their icons in a narrow page, as the hosts page's view switch does. A table drops its last columns instead of scrolling sideways: with container queries when its columns are fixed, as in `HostsPage.module.css`, or with `fitColumns` in `features/dashboard/logic.ts` when the user picks them.
 - Internationalization: **all copy is externalized from day one, with no hard-coded strings** (P0). Simplified Chinese, Traditional Chinese, Japanese, and English translations are P1, and the default follows the system language. MCP server errors (AI-29) are the exception: their messages stay in English under a translated label.
 - §9.1 covers the Windows title bar, fonts, and backdrop, and §9.2 the macOS ones.
 
