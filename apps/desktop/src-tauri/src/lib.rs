@@ -265,6 +265,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             dto::SyncStatus,
             dto::HostKeyPrompt,
             dto::AuthPrompt,
+            dto::AuthPromptClosed,
             dto::SessionStateEvent,
             dto::TransferProgressEvent,
             dto::RemoteEditEvent,

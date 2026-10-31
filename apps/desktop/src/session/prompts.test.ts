@@ -11,7 +11,8 @@ vi.mock("@/ipc/api", async (importActual) => ({
   },
 }));
 
-const { cancelSessionPrompts, pushAuthPrompt, pushHostKeyPrompt, usePrompts } = await import("./prompts");
+const { cancelSessionPrompts, closeAuthPrompt, pushAuthPrompt, pushHostKeyPrompt, usePrompts } =
+  await import("./prompts");
 
 const hostKey = (request_id: string, session_id: string): HostKeyPrompt => ({
   request_id,
@@ -53,6 +54,23 @@ describe("pushAuthPrompt", () => {
     expect(answered.auths).toEqual([["sudo1", ["pw"]]]);
     usePrompts.setState({ items: [] });
     answered.auths.length = 0;
+  });
+});
+
+describe("closeAuthPrompt", () => {
+  it("drops the prompt no longer waited for, unanswered, and leaves the others", () => {
+    pushAuthPrompt({ ...login("sudo1", "", false), session_id: null, sudo: true });
+    pushAuthPrompt(login("ki1", "s1", false));
+    pushAuthPrompt({ ...login("sudo2", "", false), session_id: null, sudo: true });
+
+    closeAuthPrompt({ request_id: "sudo1" });
+    closeAuthPrompt({ request_id: "ki1" });
+
+    expect(answered.auths).toEqual([]);
+    const left = usePrompts.getState().items;
+    expect(left).toHaveLength(1);
+    expect(left[0].kind === "secret" && left[0].requestId).toBe("sudo2");
+    usePrompts.setState({ items: [] });
   });
 });
 

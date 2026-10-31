@@ -422,6 +422,14 @@ pub struct AuthPrompt {
     pub target: String,
 }
 
+/// An `ssh://auth-prompt` that is no longer waited for, because the request that asked it ended
+/// unanswered: its dialog closes.
+#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "ssh://auth-prompt-closed")]
+pub struct AuthPromptClosed {
+    pub request_id: String,
+}
+
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct TestResult {
     pub ok: bool,

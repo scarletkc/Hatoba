@@ -631,6 +631,7 @@ export const events = {
 	sftpEdit: makeEvent<RemoteEditEvent>("sftp://edit"),
 	sftpQuit: makeEvent<RemoteEditQuitEvent>("sftp://quit"),
 	sshAuthPrompt: makeEvent<AuthPrompt>("ssh://auth-prompt"),
+	sshAuthPromptClosed: makeEvent<AuthPromptClosed>("ssh://auth-prompt-closed"),
 	sshConnections: makeEvent<ConnectionsEvent>("ssh://connections"),
 	sshForwardsLost: makeEvent<ForwardsLostEvent>("ssh://forwards-lost"),
 	sshHostkeyPrompt: makeEvent<HostKeyPrompt>("ssh://hostkey-prompt"),
@@ -1383,6 +1384,14 @@ export type AuthPrompt = {
 	wrong: boolean,
 	/**  `user@host:port` of the hop that asks. */
 	target: string,
+};
+
+/**
+ *  An `ssh://auth-prompt` that is no longer waited for, because the request that asked it ended
+ *  unanswered: its dialog closes.
+ */
+export type AuthPromptClosed = {
+	request_id: string,
 };
 
 export type AuthPromptField = {

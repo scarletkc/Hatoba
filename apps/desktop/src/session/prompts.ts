@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { api } from "@/ipc/api";
-import type { AuthPrompt, HostKeyPrompt, HostView } from "@/ipc/types";
+import type { AuthPrompt, AuthPromptClosed, HostKeyPrompt, HostView } from "@/ipc/types";
 
 /**
  * A request for a one-off secret (SSH-03): never stored anywhere, only handed to `ssh_connect`, or
@@ -28,6 +28,8 @@ export type PromptItem =
       resolve: (value: string | null) => void;
       /** The backend session asking, for a quick connection's login password. */
       sessionId?: string | null;
+      /** The `ssh://auth-prompt` this answers, for a sudo password. */
+      requestId?: string;
     }
   | { key: string; kind: "username"; target: string; resolve: (value: string | null) => void };
 
@@ -59,7 +61,7 @@ export function pushAuthPrompt(prompt: AuthPrompt) {
     const request: SecretRequest = { kind: "sudo", hostName: prompt.name, target: prompt.target, wrong: prompt.wrong };
     const resolve = (value: string | null) =>
       void api.auth_prompt_respond(prompt.request_id, value === null ? null : [value]).catch(() => {});
-    push({ kind: "secret", request, resolve });
+    push({ kind: "secret", request, resolve, requestId: prompt.request_id });
     return;
   }
   if (prompt.password) {
@@ -80,6 +82,13 @@ export function cancelSessionPrompts(sessionId: string) {
     else if (item.kind === "auth" && item.prompt.session_id === sessionId) answerAuth(item, null);
     else if (item.kind === "secret" && item.sessionId === sessionId) answerSecret(item, null);
   }
+}
+
+/** The backend no longer waits for this prompt, so it closes unanswered. */
+export function closeAuthPrompt({ request_id }: AuthPromptClosed) {
+  const waited = (i: PromptItem) =>
+    (i.kind === "auth" && i.prompt.request_id === request_id) || (i.kind === "secret" && i.requestId === request_id);
+  usePrompts.setState((s) => ({ items: s.items.filter((i) => !waited(i)) }));
 }
 
 /** Resolves with the typed secret, or `null` when the user cancels. */

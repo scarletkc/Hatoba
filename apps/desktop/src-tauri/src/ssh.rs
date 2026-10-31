@@ -19,7 +19,7 @@ use tokio::sync::{OnceCell, oneshot};
 use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
-use crate::dto::{AuthPrompt, AuthPromptField, HostKeyPrompt, HostKeyPromptKind};
+use crate::dto::{AuthPrompt, AuthPromptClosed, AuthPromptField, HostKeyPrompt, HostKeyPromptKind};
 use crate::error::{AppError, AppResult, SshErrorKind};
 use crate::state::{AppState, now_ms, state};
 use crate::{connection, sync};
@@ -522,12 +522,16 @@ pub async fn ask_sudo_password(
     target: &str,
     wrong: bool,
 ) -> Option<Zeroizing<String>> {
-    let state = state(app);
     let request_id = uuid::Uuid::now_v7().to_string();
     let (tx, rx) = oneshot::channel();
-    lock(&state.ssh.auth_waiters).insert(request_id.clone(), tx);
-    let event = AuthPrompt {
+    lock(&state(app).ssh.auth_waiters).insert(request_id.clone(), tx);
+    // Dropped with this future too, when the `hatoba` request stops while it waits.
+    let _open = OpenPrompt {
+        app,
         request_id: request_id.clone(),
+    };
+    let event = AuthPrompt {
+        request_id,
         session_id: None,
         name: name.to_owned(),
         instructions: String::new(),
@@ -541,7 +545,6 @@ pub async fn ask_sudo_password(
         target: target.to_owned(),
     };
     if event.emit(app).is_err() {
-        lock(&state.ssh.auth_waiters).remove(&request_id);
         return None;
     }
     let answers = tokio::time::timeout(PROMPT_TIMEOUT, rx)
@@ -549,12 +552,28 @@ pub async fn ask_sudo_password(
         .ok()
         .and_then(Result::ok)
         .flatten();
-    lock(&state.ssh.auth_waiters).remove(&request_id);
     answers?
         .into_iter()
         .next()
         .filter(|a| !a.is_empty())
         .map(Zeroizing::new)
+}
+
+/// An `ssh://auth-prompt` being waited for. Dropped, it stops the wait, and closes the dialog if
+/// it is still unanswered.
+struct OpenPrompt<'a> {
+    app: &'a AppHandle,
+    request_id: String,
+}
+
+impl Drop for OpenPrompt<'_> {
+    fn drop(&mut self) {
+        let waiting = lock(&state(self.app).ssh.auth_waiters).remove(&self.request_id);
+        if waiting.is_some() {
+            let request_id = std::mem::take(&mut self.request_id);
+            let _ = AuthPromptClosed { request_id }.emit(self.app);
+        }
+    }
 }
 
 /// What stopped a connection made without the user (HOST-14): the host key it could not check,
