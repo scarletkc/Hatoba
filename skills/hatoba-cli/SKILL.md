@@ -18,7 +18,7 @@ Before you first use it, run `hatoba --help`, which describes the commands, opti
 ## While it runs
 
 - When Hatoba needs a host key checked or a password, it asks in its window and your call waits. Before a host whose `auth` is `ask`, tell the user to expect that, and give a host's first call a long timeout.
-- For a command that needs root, run `hatoba exec --sudo <host> <command>`, and `hatoba cp --sudo` for a file only root can read or write. `exec` has no terminal, so a `sudo` inside the command cannot ask for its password; with `--sudo`, Hatoba asks the user in its window when sudo wants one, so give the call a long timeout. The whole command runs as root, where `~` and `$HOME` are root's, and the host's sudo has to let the login user run `sh` as root.
+- For a command that needs root, run `hatoba exec --sudo <host> <command>`, and `hatoba cp --sudo` for a file only root can read or write. `exec` has no terminal, so a `sudo` inside the command cannot ask for its password; with `--sudo`, Hatoba asks the user in its window when sudo wants one, so give the call a long timeout.
 - For a step that needs the user, such as an interactive program, run `hatoba <name>`: it opens a terminal on the host in Hatoba for them.
 - After your tool's timeout or a `hatoba:` error, check what the command got done before you run it again.
 

@@ -295,24 +295,10 @@ pub async fn download(
     cancel: CancellationToken,
 ) -> Result<(), RemoteFileError> {
     let stdin = request(run_as, &[remote])?;
-    let (part, file) = create_local_part(local)
+    // What only root can read stays readable only by this user here.
+    let (part, file) = create_local_part(local, true)
         .await
         .map_err(RemoteFileError::Ssh)?;
-    // What only root can read stays readable only by this user here.
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if let Err(e) = file
-            .set_permissions(std::fs::Permissions::from_mode(0o600))
-            .await
-        {
-            let _ = tokio::fs::remove_file(&part).await;
-            return Err(RemoteFileError::Ssh(SshError::io_context(
-                &format!("create {}", part.display()),
-                &e,
-            )));
-        }
-    }
     let command = root_command(run_as, READ_SCRIPT);
     let received = receive(session, &command, stdin, &part, file, &progress, &cancel).await;
     match received {
