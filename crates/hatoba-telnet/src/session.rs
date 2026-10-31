@@ -159,10 +159,11 @@ async fn run<S>(
         out.send(telnet.start());
     }
     let mut line = LineDiscipline::default();
-    // Where the output stands, so the client's own echo never shows a password: a line started
-    // at a password prompt stays hidden until Enter, whatever the server prints meanwhile.
+    // Where the output stands, so the client's own echo never shows a password: once a line meets
+    // a password prompt, even one that came after its first keys, it stays hidden until Enter,
+    // whatever the server prints meanwhile.
     let mut screen = LastLine::default();
-    let mut hidden: Option<bool> = None;
+    let mut hidden = false;
     let login_until = Instant::now() + LOGIN_WINDOW;
 
     let mut buf = vec![0u8; 16 * 1024];
@@ -200,19 +201,21 @@ async fn run<S>(
                     // While the server does not echo, the client does, but not at a password
                     // prompt, and keeps a line until Enter unless the server takes characters.
                     let echo = !telnet.server_echoes();
-                    let hide = *hidden.get_or_insert_with(|| screen.asks_password());
-                    if data.contains(&b'\r') {
-                        hidden = None;
-                    }
-                    let typed = line.input(
-                        &data,
-                        echo && !hide,
-                        echo && !telnet.server_suppresses_go_ahead(),
-                    );
-                    out.send(telnet.encode(&typed.send));
-                    if !show(&mut pending, &mut flush_at, &events, &typed.echo).await {
-                        write_task.abort();
-                        return;
+                    let edit = echo && !telnet.server_suppresses_go_ahead();
+                    // A line at a time, as a paste can bring several.
+                    for piece in data.split_inclusive(|&b| b == b'\r' || b == b'\n') {
+                        hidden |= screen.asks_password();
+                        let typed = line.input(piece, echo && !hidden, edit);
+                        out.send(telnet.encode(&typed.send));
+                        if !show(&mut pending, &mut flush_at, &events, &typed.echo).await {
+                            write_task.abort();
+                            return;
+                        }
+                        if piece.ends_with(b"\r") || piece.ends_with(b"\n") {
+                            // The prompt has its answer.
+                            hidden = false;
+                            screen.clear();
+                        }
                     }
                 }
                 Some(Command::Resize { cols, rows }) => out.send(telnet.resize(cols, rows)),
@@ -531,6 +534,44 @@ mod tests {
         assert_eq!(read_some(&mut server).await, b"hunter2\r\n");
         let shown = tokio::time::timeout(Duration::from_millis(200), events.recv()).await;
         assert!(shown.is_err(), "the client showed {shown:?}");
+    }
+
+    #[tokio::test]
+    async fn a_password_typed_ahead_of_its_prompt_shows_only_the_keys_before_it() {
+        let (client, mut server) = duplex(4096);
+        let (session, mut events) =
+            TelnetSession::start(client, 80, 24, false, AutoLogin::new(None, None));
+        session.write(b"h".to_vec()).unwrap();
+        assert_eq!(next_data(&mut events).await, b"h");
+        server.write_all(b"Password: ").await.unwrap();
+        assert_eq!(next_data(&mut events).await, b"Password: ");
+        session.write(b"unter2\r".to_vec()).unwrap();
+        assert_eq!(read_some(&mut server).await, b"hunter2\r\n");
+        let shown = tokio::time::timeout(Duration::from_millis(200), events.recv()).await;
+        assert!(shown.is_err(), "the client showed {shown:?}");
+    }
+
+    #[tokio::test]
+    async fn a_paste_shows_the_lines_after_a_password() {
+        let (client, mut server) = duplex(4096);
+        let (session, mut events) =
+            TelnetSession::start(client, 80, 24, false, AutoLogin::new(None, None));
+        server.write_all(b"Password: ").await.unwrap();
+        assert_eq!(next_data(&mut events).await, b"Password: ");
+        session.write(b"hunter2\rshow version\r".to_vec()).unwrap();
+        let sent = b"hunter2\r\nshow version\r\n";
+        let mut received = vec![0u8; sent.len()];
+        tokio::time::timeout(Duration::from_secs(5), server.read_exact(&mut received))
+            .await
+            .expect("the lines did not arrive")
+            .unwrap();
+        assert_eq!(received, sent);
+        let echo = b"show version\r\n";
+        let mut shown = Vec::new();
+        while shown.len() < echo.len() {
+            shown.extend(next_data(&mut events).await);
+        }
+        assert_eq!(shown, echo);
     }
 
     #[tokio::test]

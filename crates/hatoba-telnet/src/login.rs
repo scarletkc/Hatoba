@@ -176,7 +176,8 @@ impl LastLine {
             .to_lowercase()
     }
 
-    fn clear(&mut self) {
+    /// Forgets the line, as once the user answered it.
+    pub fn clear(&mut self) {
         self.line.clear();
     }
 
