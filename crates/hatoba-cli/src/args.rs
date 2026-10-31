@@ -11,7 +11,7 @@ hatoba: use the hosts saved in Hatoba from the command line
 Usage:
   hatoba hosts [--json]                         List the saved hosts
   hatoba exec [options] <host> [--] <command>   Run a command on a host
-  hatoba cp [--no-prompt] <source> <target>     Copy a file to or from a host
+  hatoba cp [options] <source> <target>         Copy a file to or from a host
   hatoba <name> | hatoba [user@]<address>       Open a terminal in Hatoba
 
 <host> is the name or id of a saved host, as hatoba hosts --json lists them;
@@ -25,6 +25,7 @@ leaves the old file as it was.
 
 Options:
   --cwd <dir>    Start the command in <dir>, absolute or from the home directory
+  --sudo         Run the command, or read or write the file on the host, as root
   --no-prompt    Fail instead of asking in Hatoba for a host key, password or code
   --json         Print the hosts as JSON
 
@@ -35,6 +36,16 @@ after the command started. Ending exec stops the command and what it started;
 on hosts without sh, such as Windows, it may keep running. A command that ends
 by itself leaves what it started in the background running. hosts and cp exit
 with 1 when they fail, and a command line hatoba can't read exits with 2.
+
+--sudo runs the command as root through sudo, which has to let the login user
+run sh as root. The command starts in the same directory with the same shell,
+but with the environment sudo sets, so ~ and $HOME in it are root's. cp --sudo
+copies the file as root, as sudo cp would: a file already at the target keeps
+its owner and permissions, a new one belongs to root, and a copy to the host
+that fails while writing can leave the file cut short. When sudo asks for a
+password, Hatoba tries the host's saved password, then asks in its window and
+remembers the answer until it locks or the host has had no --sudo for 15
+minutes.
 
 A host key not trusted yet, or a password or code that isn't saved, is asked in
 the Hatoba window, and the command waits up to 10 minutes for the answer. A
@@ -57,11 +68,13 @@ pub enum Command {
         command: String,
         cwd: Option<String>,
         prompt: bool,
+        sudo: bool,
     },
     Copy {
         source: Place,
         target: Place,
         prompt: bool,
+        sudo: bool,
     },
     /// Anything else opens Hatoba with these arguments (HOST-13).
     Open(Vec<OsString>),
@@ -119,6 +132,7 @@ fn hosts(args: &[String]) -> Result<Command, String> {
 fn exec(args: Vec<String>) -> Result<Command, String> {
     let mut cwd = None;
     let mut prompt = true;
+    let mut sudo = false;
     let mut host = None;
     let mut args = args.into_iter();
     let mut command = Vec::new();
@@ -130,6 +144,7 @@ fn exec(args: Vec<String>) -> Result<Command, String> {
             }
             "--cwd" => cwd = Some(args.next().ok_or("--cwd needs a directory")?),
             "--no-prompt" => prompt = false,
+            "--sudo" => sudo = true,
             "-h" | "--help" => return Ok(Command::Help),
             a if a.starts_with("--cwd=") => cwd = Some(a["--cwd=".len()..].to_owned()),
             a if a.starts_with('-') && a != "-" => {
@@ -157,16 +172,19 @@ fn exec(args: Vec<String>) -> Result<Command, String> {
         command,
         cwd: cwd.filter(|d| !d.is_empty()),
         prompt,
+        sudo,
     })
 }
 
 fn copy(args: &[String]) -> Result<Command, String> {
     let mut prompt = true;
+    let mut sudo = false;
     let mut paths = Vec::new();
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--no-prompt" => prompt = false,
+            "--sudo" => sudo = true,
             "-h" | "--help" => return Ok(Command::Help),
             "--" => {
                 paths.extend(args.by_ref().map(String::as_str));
@@ -190,6 +208,7 @@ fn copy(args: &[String]) -> Result<Command, String> {
                 source,
                 target,
                 prompt,
+                sudo,
             })
         }
         _ => Err(
@@ -249,6 +268,7 @@ mod tests {
                 command: command.into(),
                 cwd: cwd.map(Into::into),
                 prompt,
+                sudo: false,
             })
         };
         assert_eq!(
@@ -275,6 +295,21 @@ mod tests {
             parse_words(&["exec", "db", "cd /app && make"]),
             exec("db", "cd /app && make", None, true)
         );
+        assert_eq!(
+            parse_words(&["exec", "--sudo", "db", "systemctl", "restart", "nginx"]),
+            Ok(Command::Exec {
+                host: "db".into(),
+                command: "systemctl restart nginx".into(),
+                cwd: None,
+                prompt: true,
+                sudo: true,
+            })
+        );
+        // Once the command starts, --sudo is the command's.
+        assert_eq!(
+            parse_words(&["exec", "db", "ls", "--sudo"]),
+            exec("db", "ls --sudo", None, true)
+        );
         assert!(parse_words(&["exec", "db"]).is_err());
         assert!(parse_words(&["exec"]).is_err());
         assert!(parse_words(&["exec", "db", "--cwd"]).is_err());
@@ -293,10 +328,17 @@ mod tests {
                     path: "/tmp/".into()
                 },
                 prompt: true,
+                sudo: false,
             })
         );
         assert_eq!(
-            parse_words(&["cp", "--no-prompt", "My Server:logs/a.log", "./a:b.log"]),
+            parse_words(&[
+                "cp",
+                "--no-prompt",
+                "My Server:logs/a.log",
+                "--sudo",
+                "./a:b.log"
+            ]),
             Ok(Command::Copy {
                 source: Place::Remote {
                     host: "My Server".into(),
@@ -304,6 +346,7 @@ mod tests {
                 },
                 target: Place::Local("./a:b.log".into()),
                 prompt: false,
+                sudo: true,
             })
         );
         assert_eq!(
@@ -315,6 +358,7 @@ mod tests {
                     path: String::new()
                 },
                 prompt: true,
+                sudo: false,
             })
         );
         assert!(parse_words(&["cp", "-report.txt", "db:"]).is_err());

@@ -11,6 +11,7 @@
 import type {
   AppInfo as RustAppInfo,
   AuthPrompt,
+  AuthPromptClosed,
   CliActivityEvent,
   ClosePromptEvent,
   ConnectionsEvent,
@@ -64,6 +65,7 @@ export interface EventMap {
   "sync://status": SyncStatus;
   "ssh://hostkey-prompt": HostKeyPrompt;
   "ssh://auth-prompt": AuthPrompt;
+  "ssh://auth-prompt-closed": AuthPromptClosed;
   "ssh://state": SessionStateEvent;
   "transfer://progress": TransferProgressEvent;
   "sftp://edit": RemoteEditEvent;
