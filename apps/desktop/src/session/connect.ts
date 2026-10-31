@@ -1,5 +1,5 @@
 import { toast } from "@hatoba/ui";
-import { hostById, useVaultData } from "@/app/data";
+import { hostById, telnetHostById, useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
@@ -10,7 +10,7 @@ import { endTabEdits } from "./edits";
 import { startSessionListeners } from "./listeners";
 import { loadLocalShells, preferredShell, shellName } from "./localShells";
 import { askPassword, askUsername } from "./prompts";
-import { formatTarget, savedHostFor } from "./quickConnect";
+import { formatTarget, formatTelnetTarget, savedHostFor } from "./quickConnect";
 import { ensureSession, getSession, type Credentials } from "./session";
 
 const NONE: Credentials = { password: null, passphrase: null };
@@ -56,6 +56,24 @@ export async function connectTarget(typed: { address: string; port: number; user
   useTabs.getState().openSession({ hostId: null, target }, `${username}@${target.address}`);
 }
 
+/** TELNET-02: open a new terminal tab on a saved Telnet host and connect. */
+export function connectTelnetHost(hostId: string): void {
+  startSessionListeners();
+  const host = telnetHostById(hostId);
+  if (!host) {
+    toast(t("terminal.hostMissing"), "error");
+    return;
+  }
+  useTabs.getState().openSession({ hostId: null, target: null, telnet: { hostId } }, host.name);
+}
+
+/** TELNET-05: open a Telnet tab on a target typed into the hosts search field, without saving a host. */
+export function connectTelnetTarget(address: string, port: number): void {
+  startSessionListeners();
+  const telnet = { hostId: null, address, port };
+  useTabs.getState().openSession({ hostId: null, target: null, telnet }, formatTelnetTarget(telnet));
+}
+
 /**
  * LOCAL-01: open a local terminal tab on `shell`, or on the shell picked in Settings → Terminal, else
  * the system default.
@@ -84,7 +102,7 @@ export async function reconnectSession(tabId: string): Promise<void> {
   const session = getSession(tabId);
   if (!session || session.status === "connecting") return;
   // A quick connection saved as a host since (Save as Host) reconnects as that host.
-  if (session.local) {
+  if (session.local || session.telnet) {
     await session.reconnect(async () => NONE);
     return;
   }
@@ -107,6 +125,12 @@ export async function closeSessionTab(tabId: string): Promise<void> {
 
 /** Jump to the host's edit page (from the error card / menu). */
 export function editSessionHost(hostId: string | null) {
+  const telnet = telnetHostById(hostId);
+  if (telnet) {
+    useApp.getState().navigate({ kind: "telnet-edit", hostId: telnet.id, groupId: telnet.group_id, back: null });
+    useTabs.getState().activate("home");
+    return;
+  }
   const host = hostById(hostId);
   if (!host) return;
   useApp.getState().navigate({ kind: "host-edit", hostId: host.id, groupId: host.group_id, back: null });

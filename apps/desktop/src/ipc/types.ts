@@ -17,6 +17,7 @@ import type {
   ConnectionsEvent,
   ForwardsLostEvent,
   HostKeyPrompt,
+  HostView,
   LaunchEvent,
   McpServerStatus,
   NotificationTarget,
@@ -24,6 +25,7 @@ import type {
   RemoteEditQuitEvent,
   SessionStateEvent,
   SyncStatus,
+  TelnetHostView,
   TransferProgressEvent,
   TrayUpdateEvent,
   VaultLockedEvent,
@@ -35,6 +37,17 @@ export type * from "./bindings";
 
 /** `web` stands in for the platform until `app_info` answers; Rust never sends it. */
 export type AppInfo = Omit<RustAppInfo, "platform"> & { platform: RustAppInfo["platform"] | "web" };
+
+/** A Telnet host as the host list holds it: without the `auth_kind` every SSH host has, which tells the two apart. */
+export type ListedTelnetHost = TelnetHostView & { auth_kind?: never };
+
+/** An SSH host or a Telnet host, as the host list shows them. */
+export type AnyHostView = HostView | ListedTelnetHost;
+
+/** Whether a host from the host list is a Telnet host (TELNET-01). */
+export function isTelnetHost(host: AnyHostView): host is ListedTelnetHost {
+  return host.auth_kind === undefined;
+}
 
 /**
  * Terminal output arrives on a per-session Tauri Channel as raw bytes (ArrayBuffer), §10.3.

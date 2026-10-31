@@ -17,6 +17,7 @@ import type {
   SshErrorKind,
   StarPrompt,
   SyncStatus,
+  TelnetHostView,
   VaultStatus,
 } from "../types";
 import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
@@ -35,6 +36,7 @@ import { mockStats } from "./data";
 import { applyPatch } from "./patch";
 import { readStoredPrefs } from "./prefs";
 import { FakeShell } from "./shell";
+import { FakeTelnet } from "./telnet";
 import { mockLocalShells } from "./local";
 import { passedLocale, VISITOR, VISITOR_HOST, visitorPlatform } from "./visitor";
 import { version as appVersion } from "../../../package.json";
@@ -123,6 +125,7 @@ export function createMockApi(): HatobaApi {
   const BUNDLED_WORKER = "0.2.0";
 
   let hosts: HostView[] = demo === "empty" ? [] : D.HOSTS.map((h) => ({ ...h }));
+  let telnetHosts: TelnetHostView[] = demo === "empty" || VISITOR ? [] : D.TELNET_HOSTS.map((h) => ({ ...h }));
   let groups: GroupView[] = demo === "empty" ? [] : D.GROUPS.map((g) => ({ ...g }));
   let keys: KeyView[] = demo === "empty" ? [] : D.KEYS.map((k) => ({ ...k }));
   let proxies: ProxyView[] = demo === "empty" ? [] : D.PROXIES.map((p) => ({ ...p }));
@@ -274,6 +277,7 @@ export function createMockApi(): HatobaApi {
     null;
   const listeners = new Map<string, Set<(p: unknown) => void>>();
   const shells = new Map<string, FakeShell>();
+  const telnets = new Map<string, FakeTelnet>();
   const { unlock: unlockEdits, ...edits } = createEditsMock(emit, startTransfer, q.get("edit"));
   const dashboard = createDashboardMock({
     host: (hid) => hosts.find((h) => h.id === hid),
@@ -353,6 +357,44 @@ export function createMockApi(): HatobaApi {
     throw appError(code, detail, extra);
   }
 
+  /** TELNET-02 in the mock: a fake switch console; a host refused by the probe refuses the connection too. */
+  async function openTelnet(host: TelnetHostView, hostId: string | null, onFrame: FrameHandler): Promise<string> {
+    needUnlocked();
+    await delay(300);
+    // The vault may have locked while connecting.
+    needUnlocked();
+    if (hostId && D.PROBE[hostId] === false)
+      fail("ssh", `connect to ${host.address}:${host.port}: connection refused`, { ssh_kind: "refused" });
+    const sid = id("t");
+    const fake = new FakeTelnet(host, (bytes) => onFrame(frame(FRAME_DATA, bytes)));
+    telnets.set(sid, fake);
+    if (hostId) telnetHosts = telnetHosts.map((h) => (h.id === hostId ? { ...h, last_connected_at: Date.now() } : h));
+    setTimeout(() => {
+      emit("ssh://state", {
+        session_id: sid,
+        host_id: hostId,
+        state: "connected",
+        latency_ms: null,
+        error: null,
+        exit_status: null,
+      });
+      fake.start();
+    }, 0);
+    fake.onExit = () => {
+      onFrame(frame(FRAME_CLOSED, new Uint8Array()));
+      emit("ssh://state", {
+        session_id: sid,
+        host_id: hostId,
+        state: "disconnected",
+        latency_ms: null,
+        error: null,
+        exit_status: null,
+      });
+      telnets.delete(sid);
+    };
+    return sid;
+  }
+
   function needUnlocked() {
     if (vaultState !== "unlocked") fail("locked");
   }
@@ -369,7 +411,9 @@ export function createMockApi(): HatobaApi {
     return proxies
       .map((p) => ({
         ...p,
-        host_ids: hosts.filter((h) => h.proxy_mode === "proxy" && h.proxy_id === p.id).map((h) => h.id),
+        host_ids: [...hosts, ...telnetHosts]
+          .filter((h) => h.proxy_mode === "proxy" && h.proxy_id === p.id)
+          .map((h) => h.id),
       }))
       .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
   }
@@ -495,6 +539,7 @@ export function createMockApi(): HatobaApi {
       if (password.length < 8) fail("invalid_input", "password too short", { field: "password" });
       vaultState = "unlocked";
       hosts = [];
+      telnetHosts = [];
       groups = [];
       keys = [];
       sync = {
@@ -716,11 +761,12 @@ export function createMockApi(): HatobaApi {
     group_delete: async (gid) => {
       groups = groups.filter((g) => g.id !== gid);
       hosts = hosts.map((h) => (h.group_id === gid ? { ...h, group_id: null } : h));
+      telnetHosts = telnetHosts.map((h) => (h.group_id === gid ? { ...h, group_id: null } : h));
       touch();
     },
     tags_list: async () => {
       const counts = new Map<string, number>();
-      hosts.forEach((h) => h.tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1)));
+      [...hosts, ...telnetHosts].forEach((h) => h.tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1)));
       return [...counts.entries()]
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .map(([name, count]) => ({ name, count }));
@@ -1118,6 +1164,81 @@ export function createMockApi(): HatobaApi {
     local_close: async (sid) => {
       shells.get(sid)?.stop();
       shells.delete(sid);
+    },
+    telnet_hosts_list: async () => {
+      needUnlocked();
+      return telnetHosts.map((h) => ({ ...h }));
+    },
+    telnet_host_save: async (input) => {
+      needUnlocked();
+      if (!input.address.trim()) fail("invalid_input", "address is required", { field: "address" });
+      if (byteCount(input.ai_notes) > HOST_NOTES_MAX_BYTES)
+        fail("invalid_input", "AI notes are limited to 16 KB", { field: "ai_notes" });
+      if (input.proxy_mode === "proxy" && !proxies.some((p) => p.id === input.proxy_id))
+        fail("invalid_input", "proxy not found", { field: "proxy_id" });
+      const existing = input.id ? telnetHosts.find((h) => h.id === input.id) : undefined;
+      const view: TelnetHostView = {
+        id: existing?.id ?? id("t"),
+        name: input.name.trim() || Array.from(input.address.trim()).slice(0, 128).join(""),
+        address: input.address.trim(),
+        port: input.port || 23,
+        username: input.username.trim(),
+        has_password: input.password !== null ? input.password.length > 0 : !!existing?.has_password,
+        group_id: input.group_id,
+        tags: input.tags,
+        favorite: input.favorite,
+        proxy_mode: input.proxy_mode,
+        proxy_id: input.proxy_mode === "proxy" ? input.proxy_id : null,
+        note: input.note,
+        ai_notes: input.ai_notes,
+        updated_at: Date.now(),
+        last_connected_at: existing?.last_connected_at ?? null,
+      };
+      telnetHosts = existing ? telnetHosts.map((h) => (h.id === view.id ? view : h)) : [...telnetHosts, view];
+      touch();
+      return view;
+    },
+    telnet_host_delete: async (hid) => {
+      telnetHosts = telnetHosts.filter((h) => h.id !== hid);
+      touch();
+    },
+    telnet_host_duplicate: async (hid) => {
+      const h = telnetHosts.find((x) => x.id === hid) ?? fail("not_found");
+      const copy = { ...h, id: id("t"), name: `${h.name}-copy`, favorite: false, last_connected_at: null };
+      telnetHosts = [...telnetHosts, copy];
+      touch();
+      return copy;
+    },
+    telnet_host_set_favorite: async (hid, favorite) => {
+      telnetHosts = telnetHosts.map((h) => (h.id === hid ? { ...h, favorite } : h));
+      touch();
+    },
+    telnet_host_copy_password: async () => {},
+    telnet_open_target: async (address, port, _options, onFrame: FrameHandler) => {
+      const host: TelnetHostView = {
+        ...D.TELNET_HOSTS[1],
+        id: "",
+        name: address,
+        address,
+        port,
+        username: "",
+        has_password: false,
+      };
+      return openTelnet(host, null, onFrame);
+    },
+    telnet_open: async (hostId, _options, onFrame: FrameHandler) => {
+      needUnlocked();
+      const host = telnetHosts.find((h) => h.id === hostId) ?? fail("not_found", "host not found");
+      return openTelnet(host, hostId, onFrame);
+    },
+    telnet_write: async (sid, data) => {
+      telnets.get(sid)?.input(data);
+    },
+    telnet_write_bytes: async () => {},
+    telnet_resize: async () => {},
+    telnet_close: async (sid) => {
+      telnets.get(sid)?.stop();
+      telnets.delete(sid);
     },
     ssh_stats_start: async (sid, onEvent) => {
       const shell = shells.get(sid) ?? fail("not_found", "session");

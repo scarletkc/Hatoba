@@ -32,6 +32,7 @@ import type { AuthKind, HostInput, HostView, KeyView, ProxyMode, QuickTarget } f
 import { proxySummary } from "@/features/settings/proxyLogic";
 import { cx } from "@/lib/cx";
 import { ENV_FOCUS_ID, EnvVarsSection } from "./EnvVarsSection";
+import { ProtocolRow, type HostDraft } from "./ProtocolRow";
 import { envInput, envRows, envTooLarge, validateEnvRows, type EnvRow } from "./envVars";
 import { useHostsUi } from "./ui";
 import s from "./HostEditPage.module.css";
@@ -79,24 +80,29 @@ const BACKEND_FIELDS: Record<string, FieldKey> = {
   env: "env",
 };
 
-function initialForm(host: HostView | undefined, groupId: string | null, prefill: QuickTarget | undefined): Form {
+function initialForm(
+  host: HostView | undefined,
+  groupId: string | null,
+  prefill: QuickTarget | undefined,
+  draft: HostDraft | undefined,
+): Form {
   return {
-    name: host?.name ?? prefill?.address ?? "",
-    address: host?.address ?? prefill?.address ?? "",
-    port: String(host?.port ?? prefill?.port ?? 22),
-    username: host?.username ?? prefill?.username ?? "",
+    name: host?.name ?? draft?.name ?? prefill?.address ?? "",
+    address: host?.address ?? draft?.address ?? prefill?.address ?? "",
+    port: host ? String(host.port) : (draft?.port ?? String(prefill?.port ?? 22)),
+    username: host?.username ?? draft?.username ?? prefill?.username ?? "",
     authKind: host?.auth_kind ?? "password",
-    password: "",
+    password: draft?.password ?? "",
     replacing: false,
     keyId: host?.key_id ?? null,
     groupId: host ? host.group_id : groupId,
-    tags: host?.tags ?? [],
+    tags: host?.tags ?? draft?.tags ?? [],
     jumpHostId: host?.jump_host_id ?? null,
-    proxyMode: host?.proxy_mode ?? "device_default",
-    proxyId: host?.proxy_id ?? null,
-    note: host?.note ?? "",
-    aiNotes: host?.ai_notes ?? "",
-    favorite: host?.favorite ?? false,
+    proxyMode: host?.proxy_mode ?? draft?.proxyMode ?? "device_default",
+    proxyId: host?.proxy_id ?? draft?.proxyId ?? null,
+    note: host?.note ?? draft?.note ?? "",
+    aiNotes: host?.ai_notes ?? draft?.aiNotes ?? "",
+    favorite: host?.favorite ?? draft?.favorite ?? false,
     env: envRows(host?.env ?? []),
   };
 }
@@ -110,6 +116,7 @@ export function HostEditPage({
   groupId,
   back,
   prefill,
+  draft,
 }: {
   hostId: string | null;
   groupId: string | null;
@@ -117,6 +124,8 @@ export function HostEditPage({
   back: string | null;
   /** A quick-connect target the new host starts from (HOST-12). */
   prefill?: QuickTarget;
+  /** What a new host carries over from the Telnet editor's form, when the protocol was switched. */
+  draft?: HostDraft;
 }) {
   const t = useT();
   const navigate = useApp((st) => st.navigate);
@@ -128,7 +137,7 @@ export function HostEditPage({
   const tagList = useVaultData((st) => st.tags);
 
   const host = useMemo(() => hosts.find((h) => h.id === hostId), [hosts, hostId]);
-  const [form, setForm] = useState<Form>(() => initialForm(host, groupId, prefill));
+  const [form, setForm] = useState<Form>(() => initialForm(host, groupId, prefill, draft));
   const [errors, setErrors] = useState<Errors>({});
   const [userTouched, setUserTouched] = useState(false);
   // Save or Test Connection was tried: empty required fields show as problems from now on.
@@ -404,6 +413,33 @@ export function HostEditPage({
         <div className={s.column}>
           <Section title={t("hosts.edit.sec.basic")}>
             <Group>
+              {!hostId && (
+                <ProtocolRow
+                  value="ssh"
+                  onChange={(p) =>
+                    p === "telnet" &&
+                    navigate({
+                      kind: "telnet-edit",
+                      hostId: null,
+                      groupId: form.groupId,
+                      back,
+                      draft: {
+                        name: form.name,
+                        address: form.address,
+                        port: form.port.trim() === "22" ? undefined : form.port,
+                        username: form.username,
+                        password: form.authKind === "password" ? form.password : "",
+                        tags: form.tags,
+                        proxyMode: form.proxyMode,
+                        proxyId: form.proxyId,
+                        note: form.note,
+                        aiNotes: form.aiNotes,
+                        favorite: form.favorite,
+                      },
+                    })
+                  }
+                />
+              )}
               <FormRow label={t("hosts.f.name")} htmlFor="host-name" error={errors.name}>
                 <TextField
                   id="host-name"

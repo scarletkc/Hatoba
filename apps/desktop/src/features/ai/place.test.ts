@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { TabSource } from "@/app/tabs";
 import { translate, type MessageKey, type Params } from "@/i18n";
-import type { HostView, QuickTarget } from "@/ipc/types";
+import type { HostView, QuickTarget, TelnetHostView } from "@/ipc/types";
 import { connectionFor, conversationPlace, movedFrom, moves, placeLabel, placeName } from "./place";
 import { serverLabel } from "./calls/revertText";
 
 const t = (key: MessageKey, params?: Params) => translate("en", key, params);
 const host = (id: string, name: string, address: string, port = 22, username = "root") =>
-  ({ id, name, address, port, username }) as HostView;
+  ({ id, name, address, port, username, auth_kind: "agent" }) as HostView;
+const telnetHost = { id: "t-sw", name: "core-sw", address: "10.0.0.2", port: 23, username: "admin" } as TelnetHostView;
 const hosts = [
   host("h-prod", "prod-db", "10.0.0.5"),
   host("h-web", "web-1", "10.0.0.9"),
@@ -102,6 +103,26 @@ describe("movedFrom (AI-09)", () => {
     expect(movedFrom(onTarget(target("10.0.0.7")), hostTab("h-gone"), hosts)).toBeNull();
     // Two hosts with one name.
     expect(movedFrom(onHost("h-web"), hostTab("h-web-2"), hosts)).toBeNull();
+  });
+});
+
+describe("Telnet tabs (TELNET-04)", () => {
+  const all = [...hosts, telnetHost];
+  const telnetTab = (hostId: string): TabSource => ({ hostId: null, target: null, telnet: { hostId } });
+  const quickTelnet: TabSource = {
+    hostId: null,
+    target: null,
+    telnet: { hostId: null, address: "10.0.0.3", port: 23 },
+  };
+
+  it("move a conversation to their saved host, and leave it where it was without one", () => {
+    expect(movedFrom(onHost("h-prod"), telnetTab("t-sw"), all)).toEqual({ from: "prod-db", to: "core-sw" });
+    expect(moves(onHost("t-sw"), telnetTab("t-sw"))).toBe(false);
+    expect(moves(onHost("h-prod"), quickTelnet)).toBe(false);
+  });
+
+  it("are what Connect to opens for a conversation on a Telnet host", () => {
+    expect(connectionFor(onHost("t-sw"), all)).toEqual({ name: "core-sw", source: telnetTab("t-sw") });
   });
 });
 

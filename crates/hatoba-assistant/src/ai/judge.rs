@@ -9,7 +9,7 @@ use hatoba_ai::mcp::deferred;
 use hatoba_ai::tools;
 use hatoba_core::Vault;
 use hatoba_core::model::{
-    AiConversation, AiModelRef as CoreModelRef, Item, MAX_CUSTOM_INSTRUCTIONS_BYTES,
+    AiConversation, AiModelRef as CoreModelRef, MAX_CUSTOM_INSTRUCTIONS_BYTES,
     MAX_HOST_AI_NOTES_BYTES,
 };
 use hatoba_core::sync::SharedVault;
@@ -19,7 +19,7 @@ use super::blocks::leading_blocks;
 use super::calls::{calls_of, open_call_at};
 use super::entries::{Entries, find_conversation};
 use super::job::proxy_call;
-use super::places::{host_name, local_name, target_name};
+use super::places::{host_name, local_name, saved_host, target_name};
 use super::request::{bytes_prefix, resolve_model};
 use super::{AiManager, MCP_PREFIX, guard, unlocked};
 use crate::dto::{AiAutoVerdict, AiJudgeAnswer, AiJudgeDecision, AiJudgeSampleOutcome, AiModelRef};
@@ -354,9 +354,8 @@ fn judge_rules(v: &Vault, conversation: &AiConversation) -> String {
     let host = conversation
         .host_id
         .as_deref()
-        .and_then(|id| v.get(id))
-        .and_then(Item::as_host);
-    let notes = host.map_or("", |h| bytes_prefix(&h.ai_notes, MAX_HOST_AI_NOTES_BYTES));
+        .and_then(|id| saved_host(v, id));
+    let notes = host.map_or("", |h| bytes_prefix(h.ai_notes, MAX_HOST_AI_NOTES_BYTES));
     [
         ("Custom instructions:", instructions),
         ("Notes for this host:", notes),

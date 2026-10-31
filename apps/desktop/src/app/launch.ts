@@ -2,20 +2,25 @@ import { useEffect } from "react";
 import { launchAction } from "@/features/hosts/launchAction";
 import { useHostsUi } from "@/features/hosts/ui";
 import { api } from "@/ipc/api";
-import { connectHost, connectTarget } from "@/session/connect";
+import { connectHost, connectTarget, connectTelnetHost, connectTelnetTarget } from "@/session/connect";
 import { useVaultData } from "./data";
 import { useApp } from "./store";
 import { useTabs } from "./tabs";
 
 /** Connects what a command line names, or shows it in the hosts page's search box. */
 function runLaunch(args: string[]) {
-  const action = launchAction(args, useVaultData.getState().hosts);
+  const { hosts, telnetHosts } = useVaultData.getState();
+  const action = launchAction(args, hosts, telnetHosts);
   switch (action?.kind) {
     case "host":
-      void connectHost(action.hostId);
+      if (telnetHosts.some((h) => h.id === action.hostId)) connectTelnetHost(action.hostId);
+      else void connectHost(action.hostId);
       break;
     case "target":
       void connectTarget(action.target);
+      break;
+    case "telnet":
+      connectTelnetTarget(action.target.address, action.target.port);
       break;
     case "search":
       useApp.getState().navigate({ kind: "hosts", group: null });

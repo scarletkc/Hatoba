@@ -26,7 +26,7 @@ use crate::state::AppState;
 
 pub(crate) const FRAME_DATA: u8 = 0;
 pub(crate) const FRAME_CLOSED: u8 = 1;
-const FRAME_ERROR: u8 = 2;
+pub(crate) const FRAME_ERROR: u8 = 2;
 /// The session id, sent before connecting: the tab can then answer the session's host-key and
 /// login prompts for itself if it closes while they are open.
 const FRAME_SESSION: u8 = 3;

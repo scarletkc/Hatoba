@@ -153,6 +153,12 @@ fn remove(v: &mut Vault, id: &str) -> AppResult<()> {
             v.put(Some(&host_id), Item::Host(host))?;
         }
     }
+    for (host_id, mut host) in v.telnet_hosts() {
+        if host.proxy.proxy_id() == Some(id) {
+            host.proxy = HostProxy::DeviceDefault;
+            v.put(Some(&host_id), Item::TelnetHost(host))?;
+        }
+    }
     if device_default(v).as_deref() == Some(id) {
         let stored = v.local_prefs()?;
         let mut prefs = stored

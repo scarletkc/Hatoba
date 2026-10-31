@@ -54,8 +54,13 @@ pub async fn ai_memory_save(
                 .and_then(Item::as_ai_memory)
                 .is_some_and(|m| m.host_id.as_deref() == Some(host_id))
         };
+        // A Telnet host takes host memories too (TELNET-04).
+        let saved = |host_id: &str| {
+            v.get(host_id)
+                .is_some_and(|i| i.as_host().is_some() || i.as_telnet_host().is_some())
+        };
         if let Some(host_id) = &input.host_id
-            && v.get(host_id).and_then(Item::as_host).is_none()
+            && !saved(host_id)
             && !kept(host_id)
         {
             return Err(AppError::not_found("host"));

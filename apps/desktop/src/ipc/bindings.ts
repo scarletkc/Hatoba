@@ -225,6 +225,31 @@ export const commands = {
 	localResize: (sessionId: string, cols: number, rows: number) => __TAURI_INVOKE<null>("local_resize", { sessionId, cols, rows }),
 	/**  Ends the shell and the console programs it started. */
 	localClose: (sessionId: string) => __TAURI_INVOKE<null>("local_close", { sessionId }),
+	telnetHostsList: () => __TAURI_INVOKE<TelnetHostView[]>("telnet_hosts_list"),
+	telnetHostSave: (input: TelnetHostInput) => __TAURI_INVOKE<TelnetHostView>("telnet_host_save", { input }),
+	telnetHostDelete: (id: string) => __TAURI_INVOKE<null>("telnet_host_delete", { id }),
+	telnetHostDuplicate: (id: string) => __TAURI_INVOKE<TelnetHostView>("telnet_host_duplicate", { id }),
+	telnetHostSetFavorite: (id: string, favorite: boolean) => __TAURI_INVOKE<null>("telnet_host_set_favorite", { id, favorite }),
+	/**
+	 *  SEC-08: copies a Telnet host's saved password to the clipboard from Rust, as
+	 *  `host_copy_password` does for SSH hosts.
+	 */
+	telnetHostCopyPassword: (id: string) => __TAURI_INVOKE<null>("telnet_host_copy_password", { id }),
+	/**
+	 *  Connects a tab to the Telnet host `host_id` (TELNET-02) and returns the session id. Its
+	 *  output streams on `channel` until the connection ends or `telnet_close`.
+	 */
+	telnetOpen: (hostId: string, options: LocalOpenOptions, channel: Channel<TermFrame>) => __TAURI_INVOKE<string>("telnet_open", { hostId, options, channel }),
+	/**
+	 *  Quick connect (TELNET-05): connects a tab to `address:port`, which is not saved as a host,
+	 *  through this device's default proxy. The user logs in by hand.
+	 */
+	telnetOpenTarget: (address: string, port: number, options: LocalOpenOptions, channel: Channel<TermFrame>) => __TAURI_INVOKE<string>("telnet_open_target", { address, port, options, channel }),
+	telnetWrite: (sessionId: string, data: string) => __TAURI_INVOKE<null>("telnet_write", { sessionId, data }),
+	/**  Writes bytes as they are, for xterm's binary mouse reports (see `ssh_write_bytes`). */
+	telnetWriteBytes: (sessionId: string, data: number[]) => __TAURI_INVOKE<null>("telnet_write_bytes", { sessionId, data }),
+	telnetResize: (sessionId: string, cols: number, rows: number) => __TAURI_INVOKE<null>("telnet_resize", { sessionId, cols, rows }),
+	telnetClose: (sessionId: string) => __TAURI_INVOKE<null>("telnet_close", { sessionId }),
 	hostkeyRespond: (requestId: string, accept: boolean) => __TAURI_INVOKE<void>("hostkey_respond", { requestId, accept }),
 	authPromptRespond: (requestId: string, answers: string[] | null) => __TAURI_INVOKE<void>("auth_prompt_respond", { requestId, answers }),
 	/**  Every host's forwards, by host and then by bind and destination port. */
@@ -1259,6 +1284,11 @@ export type AiTurnContext = {
 	/**  A connected terminal tab is attached; `false` offers no terminal tools (AI-09). */
 	tab: boolean,
 	/**
+	 *  `host_id` names a Telnet host, and the tab is its Telnet session (TELNET-04): the
+	 *  terminal tools are only `read_terminal` and `send_input`.
+	 */
+	telnet?: boolean,
+	/**
 	 *  The tab's SSH session while it is connected, whose server's identification string the
 	 *  system prompt states (§13.1).
 	 */
@@ -1984,7 +2014,7 @@ export type ImportResult = {
 /**  Where a host import reads from (SSH-11, SSH-12, SSH-15). */
 export type ImportSource = "ssh_config" | "xshell" | "finalshell" | "mobaxterm" | "putty" | "securecrt" | "tabby";
 
-export type ItemType = "host" | "group" | "key" | "known_host" | "forward" | "snippet" | "proxy" | "ai_provider" | "search_provider" | "ai_conversation" | "ai_message" | "skill" | "skill_file" | "mcp_server" | "ai_memory" | "settings";
+export type ItemType = "host" | "telnet_host" | "group" | "key" | "known_host" | "forward" | "snippet" | "proxy" | "ai_provider" | "search_provider" | "ai_conversation" | "ai_message" | "skill" | "skill_file" | "mcp_server" | "ai_memory" | "settings";
 
 export type KeyAlgorithm = "ed25519" | "ecdsa" | "rsa";
 
@@ -2656,6 +2686,46 @@ export type SyncTestResult = {
 export type TagCount = {
 	name: string,
 	count: number,
+};
+
+export type TelnetHostInput = {
+	id: string | null,
+	name: string,
+	address: string,
+	port: number,
+	username: string,
+	/**  `None` keeps the saved password (HOST-08); empty removes it. */
+	password: string | null,
+	group_id: string | null,
+	tags: string[],
+	favorite: boolean,
+	proxy_mode: ProxyMode,
+	/**  Required when `proxy_mode` is `proxy`, ignored otherwise. */
+	proxy_id: string | null,
+	note: string,
+	/**  At most 16 KB of UTF-8 (AI-37). */
+	ai_notes: string,
+};
+
+/**  A Telnet host (TELNET-01). Its password never leaves Rust: only whether one is saved. */
+export type TelnetHostView = {
+	id: string,
+	name: string,
+	address: string,
+	port: number,
+	/**  Typed at the login prompt; empty to type it by hand (TELNET-03). */
+	username: string,
+	has_password: boolean,
+	group_id: string | null,
+	tags: string[],
+	favorite: boolean,
+	proxy_mode: ProxyMode,
+	proxy_id: string | null,
+	note: string,
+	ai_notes: string,
+	updated_at: number,
+	/**  Device-local, as for SSH hosts (HOST-06). */
+	last_connected_at: number | null,
 };
 
 /**

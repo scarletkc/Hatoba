@@ -72,7 +72,7 @@ fn hosts(app: &App, json: bool) -> i32 {
                     return FAILED;
                 }
                 if hosts.is_empty() && !json {
-                    eprintln!("hatoba: no hosts are saved in Hatoba yet");
+                    eprintln!("hatoba: no SSH hosts are saved in Hatoba yet");
                 }
             }
             Ok(Some(Frame::End(end))) => return ended(end, FAILED),

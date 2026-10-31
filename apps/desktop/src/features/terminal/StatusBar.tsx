@@ -15,6 +15,8 @@ const DOT: Record<TabStatus, string> = {
 interface Props {
   /** A local tab (§7.5): its shell runs on this computer, so it has no resource usage, forwards or SFTP. */
   local: boolean;
+  /** A Telnet tab (§7.6), which has no resource usage, forwards or SFTP either. */
+  telnet: boolean;
   status: TabStatus;
   /** `user@host:port`, when the host still exists. */
   target: string | null;
@@ -46,6 +48,7 @@ interface Props {
 /** The 36px bar above a terminal. */
 export function StatusBar({
   local,
+  telnet,
   status,
   target,
   via,
@@ -87,7 +90,7 @@ export function StatusBar({
       )}
       {connected && latencyMs != null && <span className={s.latency}>{latencyMs} ms</span>}
       <div className={s.spacer} />
-      {local ? null : statsOn && connected ? (
+      {local || telnet ? null : statsOn && connected ? (
         <StatsReadout stats={stats} open={statsOpen} onClick={onStats} />
       ) : (
         <IconButton icon="gauge" label={t("terminal.stats.show")} disabled={!connected} onClick={onShowStats} />
@@ -122,7 +125,7 @@ export function StatusBar({
           {forwardCount > 0 && <span className={s.fwdCount}>{forwardCount}</span>}
         </button>
       )}
-      {!local && (
+      {!local && !telnet && (
         <button
           type="button"
           className={cx(

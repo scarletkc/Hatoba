@@ -16,12 +16,12 @@ import { useHostConnection } from "@/session/connections";
 import { openForwards, useHostForwardRules } from "@/session/forwards";
 import { patchInfo, useSessionInfo } from "@/session/info";
 import { shellName } from "@/session/localShells";
-import { formatTarget, savedHostFor } from "@/session/quickConnect";
+import { formatTarget, formatTelnetTarget, savedHostFor } from "@/session/quickConnect";
 import { ensureSession, type LiveSession } from "@/session/session";
 import { useTermSettings, useTerminalChrome } from "@/session/theme";
 import { ForwardsPopover } from "./ForwardsPopover";
 import { FindBar } from "./FindBar";
-import { ConnectingOverlay, DisconnectedBanner, ErrorCard, LocalErrorCard } from "./Overlays";
+import { ConnectingOverlay, DisconnectedBanner, ErrorCard, LocalErrorCard, TelnetErrorCard } from "./Overlays";
 import { clearStats, startStats, stopStats, useSessionStats } from "./stats";
 import { StatsPopover } from "./StatsPopover";
 import { StatusBar } from "./StatusBar";
@@ -43,6 +43,11 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
   // A quick connection (HOST-12) whose target has been saved as a host since.
   const savedHost = useVaultData((st) => (tab.target ? savedHostFor(st.hosts, tab.target) : undefined));
   const jumpName = useVaultData((st) => st.hosts.find((h) => h.id === host?.jump_host_id)?.name ?? null);
+  // §7.6: a Telnet tab's host, which has no SSH extras: resource usage, SFTP or forwards.
+  const telnet = tab.telnet ?? null;
+  const telnetHost = useVaultData((st) =>
+    telnet?.hostId ? st.telnetHosts.find((h) => h.id === telnet.hostId) : undefined,
+  );
   const chrome = useTerminalChrome();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -120,13 +125,16 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
     };
   }, [sessionId]);
   const local = tab.local ?? null;
+  const telnetTarget = telnetHost ?? (telnet && telnet.hostId === null ? telnet : null);
   const target = local
     ? `${t("terminal.local.thisComputer")} · ${shellName(local, t)}`
-    : host
-      ? `${host.username}@${host.address}:${host.port}`
-      : tab.target
-        ? formatTarget(tab.target)
-        : null;
+    : telnet
+      ? telnetTarget && `telnet ${formatTelnetTarget(telnetTarget)}`
+      : host
+        ? `${host.username}@${host.address}:${host.port}`
+        : tab.target
+          ? formatTarget(tab.target)
+          : null;
   const quickTarget = tab.target;
 
   const buildMenu = (context: boolean): MenuEntry[] => {
@@ -173,6 +181,37 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
       onSelect: () => askAiAbout(tab.id, selection),
     };
     if (context) return [copy, paste, selectAll, { kind: "separator" }, askAi, { kind: "separator" }, clear, find];
+    if (telnet) {
+      return [
+        {
+          label: t("terminal.menu.reconnect"),
+          icon: "arrow-clockwise",
+          disabled: tab.status === "connecting",
+          onSelect: () => void reconnectSession(tab.id),
+        },
+        {
+          label: t("terminal.menu.disconnect"),
+          icon: "plugs",
+          disabled: !connected,
+          onSelect: () => void session.disconnect(),
+        },
+        { kind: "separator" },
+        copy,
+        paste,
+        clear,
+        selectAll,
+        { kind: "separator" },
+        find,
+        askAi,
+        { kind: "separator" },
+        {
+          label: t("terminal.menu.editHost"),
+          icon: "pencil-simple",
+          disabled: !telnetHost,
+          onSelect: () => editSessionHost(telnetHost?.id ?? null),
+        },
+      ];
+    }
     if (local) {
       return [
         {
@@ -242,6 +281,7 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
     <div className={cx(s.root, !active && s.hidden)} inert={!active}>
       <StatusBar
         local={!!local}
+        telnet={!!telnet}
         status={tab.status}
         target={target}
         via={jumpName}
@@ -276,11 +316,22 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
         <div className={s.termArea} style={{ background: chrome.background }}>
           <div ref={containerRef} className={s.term} onContextMenu={onContextMenu} />
           {findOpen && <FindBar session={session} onClose={closeFind} />}
-          {tab.status === "connecting" && <ConnectingOverlay name={host?.name ?? tab.title} local={!!local} />}
+          {tab.status === "connecting" && (
+            <ConnectingOverlay name={host?.name ?? telnetHost?.name ?? tab.title} local={!!local} />
+          )}
           {tab.status === "failed" && local && (
             <LocalErrorCard name={tab.title} error={info.error} onRetry={() => void reconnectSession(tab.id)} />
           )}
-          {tab.status === "failed" && !local && (
+          {tab.status === "failed" && telnet && (
+            <TelnetErrorCard
+              name={telnetHost?.name ?? tab.title}
+              target={telnetTarget}
+              error={info.error}
+              onRetry={() => void reconnectSession(tab.id)}
+              onEdit={telnetHost ? () => editSessionHost(telnetHost.id) : null}
+            />
+          )}
+          {tab.status === "failed" && !local && !telnet && (
             <ErrorCard
               name={host?.name ?? tab.title}
               host={host}
@@ -301,7 +352,7 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
             />
           )}
         </div>
-        {info.sftpOpen && connected && tab.sessionId && !local && (
+        {info.sftpOpen && connected && tab.sessionId && !local && !telnet && (
           <SftpPanel
             key={tab.sessionId}
             tabId={tab.id}

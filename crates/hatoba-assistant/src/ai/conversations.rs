@@ -97,7 +97,8 @@ impl AiManager {
             let hosts: Vec<(String, String)> = v
                 .hosts()
                 .into_iter()
-                .map(|(id, h)| (id, h.name.clone()))
+                .map(|(id, h)| (id, h.name))
+                .chain(v.telnet_hosts().into_iter().map(|(id, h)| (id, h.name)))
                 .collect();
             (original, v.ai_entries(conversation_id)?, hosts)
         };

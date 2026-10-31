@@ -30,10 +30,10 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | File | Read it when the question is about |
 |---|---|
 | `references/hosts-and-connecting.md` | The host list and editor, quick connect from the search box, authentication methods, jump hosts, proxies, environment variables, importing hosts from an SSH config or another SSH client (Xshell, FinalShell, MobaXterm, PuTTY, SecureCRT, Tabby), host key prompts, connecting and reconnecting |
-| `references/command-line.md` | The `hatoba` command: opening hosts from a terminal, and letting coding agents and scripts use the saved hosts with `hatoba hosts`, `hatoba exec` and `hatoba cp` |
+| `references/command-line.md` | The `hatoba` command: opening hosts from a terminal, and letting coding agents and scripts use the saved SSH hosts with `hatoba hosts`, `hatoba exec` and `hatoba cp` |
 | `references/resource-usage.md` | Resource usage on the hosts page: every host's status, CPU, memory, disk and network as a list or cards, sorting, thresholds, how hosts are read, hosts that need a password or failed to sign in, leaving hosts out |
 | `references/keys-vault-and-lock.md` | The master password, recovery code, locking and auto-lock, Windows Hello and Touch ID, the PIN, the encrypted backup, and the Keys page (import, generate, deploy) |
-| `references/terminal.md` | The terminal tab: local terminal tabs and their shells, status bar, copy and paste, search, links, context menus, and the Terminal settings (font, cursor, scrollback, local terminal shell) |
+| `references/terminal.md` | The terminal tab: local terminal tabs and their shells, Telnet hosts and tabs, status bar, copy and paste, search, links, context menus, and the Terminal settings (font, cursor, scrollback, local terminal shell) |
 | `references/sftp.md` | The SFTP file panel: browsing, upload, download, rename, delete, transfers |
 | `references/port-forwarding.md` | Port forwarding (local, remote and SOCKS): creating rules, auto-start, starting and stopping them on the host's shared connection |
 | `references/sync.md` | Cloud Sync: what syncs, the setup wizard, joining a cloud vault from a device that has its own, the status page, devices, conflicts, restoring on a new device, disconnecting |
@@ -99,4 +99,4 @@ The `main` branch can be ahead of the latest release and of the user's version, 
 
 ## Not in Hatoba (current version)
 
-Split panes in a terminal, session logs, snippets, uploading or downloading whole folders over SFTP, `ProxyCommand`, SOCKS4 and HTTPS proxies, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH (Telnet, serial, RDP, VNC).
+Split panes in a terminal, session logs, snippets, uploading or downloading whole folders over SFTP, `ProxyCommand`, SOCKS4 and HTTPS proxies, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH and Telnet (serial, RDP, VNC).

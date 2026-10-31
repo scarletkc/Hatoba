@@ -98,6 +98,55 @@ export function ErrorCard({
   );
 }
 
+/** TELNET-02: the Telnet connection could not be made. */
+export function TelnetErrorCard({
+  name,
+  target,
+  error,
+  onRetry,
+  onEdit,
+}: {
+  name: string;
+  target: { address: string; port: number } | null;
+  error: AppError | null;
+  onRetry(): void;
+  /** Opens the saved host's editor; null for a quick connection. */
+  onEdit: (() => void) | null;
+}) {
+  const t = useT();
+  const where = { host: target?.address, port: target?.port, timeoutSec: 15 };
+  const body = !error
+    ? ""
+    : error.ssh_kind === "refused"
+      ? t("terminal.telnet.refused", { host: where.host ?? "", port: where.port ?? 23 })
+      : errorMessage(t, error, where);
+  return (
+    <div className={s.scrim}>
+      <div role="alertdialog" aria-labelledby="term-err-title" className={s.card}>
+        <div className={s.cardHead}>
+          <Icon name="plugs" size={20} color="#ff6b61" />
+          <div id="term-err-title" className={s.cardTitle}>
+            {t("terminal.err.title", { name })}
+          </div>
+        </div>
+        <div className={s.cardBody}>{body}</div>
+        <div className={s.cardActions}>
+          <div className={s.grow} />
+          {onEdit && (
+            <button type="button" className={s.darkButton} onClick={onEdit}>
+              {t("terminal.err.editHost")}
+            </button>
+          )}
+          <button type="button" className={s.primaryButton} onClick={onRetry}>
+            <Icon name="arrow-clockwise" size={13} />
+            {t("btn.retry")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** LOCAL-01: the tab's shell could not start. */
 export function LocalErrorCard({ name, error, onRetry }: { name: string; error: AppError | null; onRetry(): void }) {
   const t = useT();

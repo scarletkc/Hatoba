@@ -97,6 +97,7 @@ export default defineMessages({
     "terminal.local.exitedReason": "{shell} 已退出（{reason}）",
     "terminal.local.restart": "重新启动",
     "terminal.local.restarting": "正在重新启动",
+    "terminal.telnet.refused": "{host}:{port} 拒绝了连接，设备可能没有开启 Telnet，或端口不对。",
     "terminal.shell.pwsh": "PowerShell",
     "terminal.shell.powershell": "Windows PowerShell",
     "terminal.shell.cmd": "命令提示符",
@@ -321,6 +322,8 @@ export default defineMessages({
     "terminal.local.exitedReason": "{shell} exited ({reason})",
     "terminal.local.restart": "Restart",
     "terminal.local.restarting": "Restarting",
+    "terminal.telnet.refused":
+      "{host}:{port} refused the connection. Telnet may be off on the device, or the port is wrong.",
     "terminal.shell.pwsh": "PowerShell",
     "terminal.shell.powershell": "Windows PowerShell",
     "terminal.shell.cmd": "Command Prompt",
@@ -548,6 +551,8 @@ export default defineMessages({
     "terminal.local.exitedReason": "{shell} が終了しました（{reason}）",
     "terminal.local.restart": "再起動",
     "terminal.local.restarting": "再起動中",
+    "terminal.telnet.refused":
+      "{host}:{port} に接続を拒否されました。デバイスで Telnet が有効になっていないか、ポートが違う可能性があります。",
     "terminal.shell.pwsh": "PowerShell",
     "terminal.shell.powershell": "Windows PowerShell",
     "terminal.shell.cmd": "コマンド プロンプト",
@@ -770,6 +775,7 @@ export default defineMessages({
     "terminal.local.exitedReason": "{shell} 已結束（{reason}）",
     "terminal.local.restart": "重新啟動",
     "terminal.local.restarting": "正在重新啟動",
+    "terminal.telnet.refused": "{host}:{port} 拒絕了連線，裝置可能沒有開啟 Telnet，或連接埠不對。",
     "terminal.shell.pwsh": "PowerShell",
     "terminal.shell.powershell": "Windows PowerShell",
     "terminal.shell.cmd": "命令提示字元",

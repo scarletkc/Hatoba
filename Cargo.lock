@@ -2399,6 +2399,7 @@ dependencies = [
  "hatoba-ipc",
  "hatoba-local",
  "hatoba-ssh",
+ "hatoba-telnet",
  "keyring",
  "libc",
  "objc2-foundation",
@@ -2495,6 +2496,17 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tokio-util",
+ "tracing",
+ "zeroize",
+]
+
+[[package]]
+name = "hatoba-telnet"
+version = "0.7.6"
+dependencies = [
+ "bytes",
+ "thiserror 2.0.21",
+ "tokio",
  "tracing",
  "zeroize",
 ]

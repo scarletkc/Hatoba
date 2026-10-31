@@ -10,6 +10,7 @@ import type {
   ZoomView,
 } from "@/ipc/types";
 import { detectLocale, setLocale, type Locale } from "@/i18n";
+import type { HostDraft } from "@/features/hosts/ProtocolRow";
 import { applyZoom } from "@/lib/zoom";
 
 /** What the "home" tab shows. Session tabs are tracked in `tabs.ts`. */
@@ -24,6 +25,17 @@ export type Page =
       back: string | null;
       /** A new host starts from this quick-connect target (HOST-12). */
       prefill?: QuickTarget;
+      /** A new host starts from what the Telnet editor's form had when its protocol was switched. */
+      draft?: HostDraft;
+    }
+  /** A Telnet host's editor (TELNET-01); a new one may start from the SSH editor's form. */
+  | {
+      kind: "telnet-edit";
+      hostId: string | null;
+      groupId: string | null;
+      /** The group whose hosts Back and Save return to, or null for every host. */
+      back: string | null;
+      draft?: HostDraft;
     }
   | { kind: "keys" }
   | { kind: "sync" }

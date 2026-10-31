@@ -11,7 +11,7 @@ import {
   toast,
   type SelectOption,
 } from "@hatoba/ui";
-import { useVaultData } from "@/app/data";
+import { useAllHosts, useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
@@ -30,7 +30,8 @@ import s from "./ProxiesPane.module.css";
 export function ProxiesPane() {
   const t = useT();
   const proxies = useVaultData((st) => st.proxies);
-  const hosts = useVaultData((st) => st.hosts);
+  // SSH-13: SSH and Telnet hosts both name proxies.
+  const hosts = useAllHosts();
   const [prefs, setPrefs] = usePrefs();
   const [dialog, setDialog] = useState<{ proxy: ProxyView | null } | null>(null);
   const defaultId = prefs.default_proxy_id;

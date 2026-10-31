@@ -1,6 +1,12 @@
 import type { HostView } from "@/ipc/types";
 import type { ListSort } from "./ui";
 
+/** What the host list filters and sorts by, which SSH and Telnet hosts both have. */
+export type HostLike = Pick<
+  HostView,
+  "name" | "address" | "port" | "username" | "tags" | "favorite" | "group_id" | "last_connected_at"
+>;
+
 /** What the hosts page lists: a group or every host, narrowed to favorites and to hosts with every one of `tags`. */
 export interface HostFilter {
   group: string | null;
@@ -8,7 +14,7 @@ export interface HostFilter {
   tags: string[];
 }
 
-export function applyFilter(hosts: HostView[], filter: HostFilter): HostView[] {
+export function applyFilter<T extends HostLike>(hosts: T[], filter: HostFilter): T[] {
   return hosts.filter(
     (h) =>
       (filter.group === null || h.group_id === filter.group) &&
@@ -18,9 +24,9 @@ export function applyFilter(hosts: HostView[], filter: HostFilter): HostView[] {
 }
 
 /** The host list's order (HOST-05): the latest connection first, the name, or the address. */
-export function sortHosts(hosts: HostView[], sort: ListSort, locale: string): HostView[] {
+export function sortHosts<T extends HostLike>(hosts: T[], sort: ListSort, locale: string): T[] {
   const collator = new Intl.Collator(locale, { numeric: true, sensitivity: "base" });
-  const byName = (a: HostView, b: HostView) => collator.compare(a.name, b.name);
+  const byName = (a: T, b: T) => collator.compare(a.name, b.name);
   const out = [...hosts];
   switch (sort) {
     case "recent":

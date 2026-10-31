@@ -200,9 +200,30 @@ pub(super) struct Place {
 
 /// A host's display name, when the host exists.
 pub(super) fn host_name(v: &Vault, host_id: &str) -> Option<String> {
-    v.get(host_id)
-        .and_then(Item::as_host)
-        .map(|h| h.name.clone())
+    saved_host(v, host_id).map(|h| h.name.to_owned())
+}
+
+/// What the assistant is told of a saved host, SSH or Telnet (TELNET-04).
+pub(super) struct SavedHost<'a> {
+    pub(super) name: &'a str,
+    pub(super) username: &'a str,
+    pub(super) ai_notes: &'a str,
+}
+
+pub(super) fn saved_host<'a>(v: &'a Vault, host_id: &str) -> Option<SavedHost<'a>> {
+    match v.get(host_id)? {
+        Item::Host(h) => Some(SavedHost {
+            name: &h.name,
+            username: &h.username,
+            ai_notes: &h.ai_notes,
+        }),
+        Item::TelnetHost(h) => Some(SavedHost {
+            name: &h.name,
+            username: &h.username,
+            ai_notes: &h.ai_notes,
+        }),
+        _ => None,
+    }
 }
 
 /// The host or computer whose host memories a conversation on it shows (AI-53), named as notes

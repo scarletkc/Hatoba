@@ -11,6 +11,7 @@ function pageKey(page: Page): Key {
   switch (page.kind) {
     case "hosts":
     case "host-edit":
+    case "telnet-edit":
       return "hosts";
     case "keys":
       return "keys";

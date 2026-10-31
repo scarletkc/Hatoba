@@ -437,7 +437,7 @@ pub fn status(app: &AppHandle) -> SyncStatus {
         let (mut hosts, mut keys, mut groups) = (0, 0, 0);
         for (_, item) in vault.items() {
             match item {
-                Item::Host(_) => hosts += 1,
+                Item::Host(_) | Item::TelnetHost(_) => hosts += 1,
                 Item::Key(_) => keys += 1,
                 Item::Group(_) => groups += 1,
                 _ => {}

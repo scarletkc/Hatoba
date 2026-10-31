@@ -230,10 +230,11 @@ function TooLargeNotice({ item }: { item: TooLargeItem }) {
 
   let text: string;
   let action: ReactNode = null;
-  if (item.item_type === "host") {
+  if (item.item_type === "host" || item.item_type === "telnet_host") {
+    const kind = item.item_type === "host" ? "host-edit" : "telnet-edit";
     text = t("sync.tooLarge.host", { name: item.item_name });
     action = (
-      <LinkButton onClick={() => navigate({ kind: "host-edit", hostId: item.item_id, groupId: null, back: null })}>
+      <LinkButton onClick={() => navigate({ kind, hostId: item.item_id, groupId: null, back: null })}>
         {t("hosts.editHost")}
       </LinkButton>
     );

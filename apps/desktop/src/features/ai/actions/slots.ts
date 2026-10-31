@@ -4,7 +4,13 @@
  */
 
 import { useTabs, type TabSource } from "@/app/tabs";
-import { connectHost, connectTarget, openLocalTerminal } from "@/session/connect";
+import {
+  connectHost,
+  connectTarget,
+  connectTelnetHost,
+  connectTelnetTarget,
+  openLocalTerminal,
+} from "@/session/connect";
 import { api, toAppError } from "@/ipc/api";
 import type { AiEffort, AiModelRef, AiPermissionMode, NotificationTarget } from "@/ipc/types";
 import { resetAllowances } from "../rules/allowances";
@@ -268,11 +274,15 @@ export function openNotified({ tab, conversation_id }: NotificationTarget) {
  */
 export async function connectConversation(source: TabSource | "local") {
   const before = new Set(useTabs.getState().tabs.map((x) => x.id));
-  await (source === "local" || source.local
-    ? openLocalTerminal()
-    : source.hostId !== null
-      ? connectHost(source.hostId)
-      : connectTarget(source.target));
+  if (source !== "local" && source.telnet) {
+    if (source.telnet.hostId !== null) connectTelnetHost(source.telnet.hostId);
+    else connectTelnetTarget(source.telnet.address, source.telnet.port);
+  } else
+    await (source === "local" || source.local
+      ? openLocalTerminal()
+      : source.hostId !== null
+        ? connectHost(source.hostId)
+        : connectTarget(source.target));
   const tab = useTabs.getState().tabs.find((x) => !before.has(x.id));
   if (tab) moveSlot(HOME_SLOT, tab.id);
 }

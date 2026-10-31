@@ -125,22 +125,22 @@ const STATUS_RANK: Record<HostPhase, number> = {
  * Orders `hosts`, which come in the host list's order. Values sort highest first and hosts without one last;
  * ties keep the host list's order.
  */
-export function sortForDashboard(
-  hosts: HostView[],
+export function sortForDashboard<T extends Pick<HostView, "id" | "name">>(
+  hosts: T[],
   sort: DashboardSort,
   readouts: Record<string, HostReadout>,
   locale: string,
-): HostView[] {
+): T[] {
   if (sort === "list") return hosts;
   if (sort === "name") {
     const collator = new Intl.Collator(locale, { numeric: true, sensitivity: "base" });
     return [...hosts].sort((a, b) => collator.compare(a.name, b.name));
   }
   if (sort === "status") {
-    const rank = (h: HostView) => STATUS_RANK[readouts[h.id]?.phase ?? "waiting"];
+    const rank = (h: T) => STATUS_RANK[readouts[h.id]?.phase ?? "waiting"];
     return [...hosts].sort((a, b) => rank(a) - rank(b));
   }
-  const value = (h: HostView): number | null => {
+  const value = (h: T): number | null => {
     const r = latestReading(readouts[h.id]);
     switch (sort) {
       case "cpu":

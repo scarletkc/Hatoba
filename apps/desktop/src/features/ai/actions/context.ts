@@ -5,7 +5,7 @@
 
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
-import { useTabs, type SessionTab } from "@/app/tabs";
+import { tabHostId, useTabs, type SessionTab } from "@/app/tabs";
 import { getSession, type LiveSession } from "@/session/session";
 import { t, type MessageKey, type Params } from "@/i18n";
 import type { AiEffort, AiModelRef, AiTurnContext } from "@/ipc/types";
@@ -59,7 +59,7 @@ export function turnContext(slotId: string): AiTurnContext | null {
     provider_id: model.provider_id,
     model_id: model.model_id,
     effort: slotEffort(slotId),
-    host_id: attached ? attached.tab.hostId : (conversation?.host_id ?? null),
+    host_id: attached ? tabHostId(attached.tab) : (conversation?.host_id ?? null),
     target: attached ? attached.tab.target : (conversation?.quick_target ?? null),
     local: attached
       ? localOf(attached.tab)
@@ -67,6 +67,7 @@ export function turnContext(slotId: string): AiTurnContext | null {
         ? { device: conversation.local, shell: null, kind: null }
         : null,
     tab: connected,
+    telnet: !!attached?.tab.telnet,
     session_id: connected ? (attached.tab.sessionId ?? null) : null,
     disabled_mcp_servers: slot.mcpOff,
     permission_mode: slot.mode,

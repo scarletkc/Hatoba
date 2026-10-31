@@ -135,6 +135,48 @@ pub struct HostEnvVar {
     pub value: String,
 }
 
+/// A Telnet host (TELNET-01). Its password never leaves Rust: only whether one is saved.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct TelnetHostView {
+    pub id: String,
+    pub name: String,
+    pub address: String,
+    pub port: u16,
+    /// Typed at the login prompt; empty to type it by hand (TELNET-03).
+    pub username: String,
+    pub has_password: bool,
+    pub group_id: Option<String>,
+    pub tags: Vec<String>,
+    pub favorite: bool,
+    pub proxy_mode: ProxyMode,
+    pub proxy_id: Option<String>,
+    pub note: String,
+    pub ai_notes: String,
+    pub updated_at: i64,
+    /// Device-local, as for SSH hosts (HOST-06).
+    pub last_connected_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Deserialize, Type)]
+pub struct TelnetHostInput {
+    pub id: Option<String>,
+    pub name: String,
+    pub address: String,
+    pub port: u16,
+    pub username: String,
+    /// `None` keeps the saved password (HOST-08); empty removes it.
+    pub password: Option<String>,
+    pub group_id: Option<String>,
+    pub tags: Vec<String>,
+    pub favorite: bool,
+    pub proxy_mode: ProxyMode,
+    /// Required when `proxy_mode` is `proxy`, ignored otherwise.
+    pub proxy_id: Option<String>,
+    pub note: String,
+    /// At most 16 KB of UTF-8 (AI-37).
+    pub ai_notes: String,
+}
+
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct GroupView {
     pub id: String,
@@ -795,6 +837,7 @@ pub struct ConflictField {
 #[serde(rename_all = "snake_case")]
 pub enum ItemType {
     Host,
+    TelnetHost,
     Group,
     Key,
     KnownHost,

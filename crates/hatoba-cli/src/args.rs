@@ -9,14 +9,15 @@ pub const HELP: &str = "\
 hatoba: use the hosts saved in Hatoba from the command line
 
 Usage:
-  hatoba hosts [--json]                         List the saved hosts
+  hatoba hosts [--json]                         List the saved SSH hosts
   hatoba exec [options] <host> [--] <command>   Run a command on a host
   hatoba cp [options] <source> <target>         Copy a file to or from a host
   hatoba <name> | hatoba [user@]<address>       Open a terminal in Hatoba
+  hatoba telnet <address> [<port>]              Open a Telnet terminal in Hatoba
 
-<host> is the name or id of a saved host, as hatoba hosts --json lists them;
-<name> is its name. Any other first word also opens Hatoba, so a misspelled
-command prints nothing and exits with 0.
+<host> is the name or id of a saved SSH host, as hatoba hosts --json lists
+them; <name> is the name of a saved SSH or Telnet host. Any other first word
+also opens Hatoba, so a misspelled command prints nothing and exits with 0.
 In cp, one side is <host>:<path> and the other a local path. A remote path is
 from the home directory. A target that is a folder or ends with / gets the file
 under its own name. A file already at the target is replaced; on the host, the

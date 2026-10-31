@@ -1,8 +1,56 @@
 import { describe, expect, it } from "vitest";
-import type { HostView } from "@/ipc/types";
-import { formatTarget, parseQuickConnect, savedHostFor } from "./quickConnect";
+import type { HostView, TelnetHostView } from "@/ipc/types";
+import {
+  formatTarget,
+  formatTelnetTarget,
+  parseQuickConnect,
+  parseTelnet,
+  savedHostFor,
+  savedTelnetHostFor,
+} from "./quickConnect";
 
 const target = (address: string, port: number, username: string | null) => ({ address, port, username });
+
+describe("parseTelnet (TELNET-05)", () => {
+  const telnet = (address: string, port: number) => ({ ok: true, target: { address, port }, search: address });
+
+  it("reads the telnet command and telnet:// URLs", () => {
+    expect(parseTelnet("telnet 10.0.0.2")).toEqual(telnet("10.0.0.2", 23));
+    expect(parseTelnet("  TELNET switch-1 2001 ")).toEqual(telnet("switch-1", 2001));
+    expect(parseTelnet("telnet [2001:db8::1] 23")).toEqual(telnet("2001:db8::1", 23));
+    expect(parseTelnet("telnet://router.lan:2323")).toEqual(telnet("router.lan", 2323));
+    expect(parseTelnet("telnet://router.lan/")).toEqual(telnet("router.lan", 23));
+    expect(parseTelnet("telnet://2001:db8::")).toEqual(telnet("2001:db8::", 23));
+  });
+
+  it("says when the port is not one", () => {
+    for (const q of ["telnet host 0", "telnet host 70000", "telnet host ssh", "telnet://host:99999"])
+      expect(parseTelnet(q), q).toEqual({ ok: false, problem: { kind: "port" }, search: "host" });
+  });
+
+  it("leaves anything else to ssh and search", () => {
+    for (const q of [
+      "telnet",
+      "telnet ",
+      "telnet a b c",
+      "telnet://u@host",
+      "telnet://router:",
+      "telnet://[::1]:",
+      "telnet :",
+      "telnet ::",
+      "telnetd host",
+      "ssh host",
+    ])
+      expect(parseTelnet(q), q).toBeNull();
+  });
+
+  it("finds the saved Telnet host at the address and port, and formats targets", () => {
+    const saved = [{ id: "t", address: "Router.lan", port: 23 }] as TelnetHostView[];
+    expect(savedTelnetHostFor(saved, { address: "router.lan", port: 23 })?.id).toBe("t");
+    expect(savedTelnetHostFor(saved, { address: "router.lan", port: 2323 })).toBeUndefined();
+    expect(formatTelnetTarget({ address: "2001:db8::1", port: 23 })).toBe("[2001:db8::1]:23");
+  });
+});
 
 describe("parseQuickConnect", () => {
   it("leaves plain searches alone", () => {
@@ -17,6 +65,8 @@ describe("parseQuickConnect", () => {
       "deploy@",
       "@host",
       "prod deploy@db",
+      "telnet://admin@router",
+      "TELNET://admin@router:23",
     ])
       expect(parseQuickConnect(q), q).toBeNull();
   });

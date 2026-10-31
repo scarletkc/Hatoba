@@ -12,11 +12,11 @@ import {
   useMenu,
   type MenuEntry,
 } from "@hatoba/ui";
-import { useVaultData } from "@/app/data";
+import { useAllHosts } from "@/app/data";
 import { useApp } from "@/app/store";
 import { formatRelative, useT } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { AiConversationView, AiSearchHit, HostView } from "@/ipc/types";
+import type { AiConversationView, AiSearchHit, AnyHostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import {
   deleteConversation,
@@ -80,7 +80,7 @@ export function History({
   const t = useT();
   const history = useAi((st) => st.history);
   const failed = useAi((st) => st.historyFailed);
-  const hosts = useVaultData((st) => st.hosts);
+  const hosts = useAllHosts();
   const [renaming, setRenaming] = useState<string | null>(null);
   const menu = useMenu();
   const [menuEntries, setMenuEntries] = useState<MenuEntry[]>([]);
@@ -293,7 +293,7 @@ function SearchResults({
   search: Search;
   query: string;
   history: AiConversationView[] | null;
-  hosts: HostView[];
+  hosts: AnyHostView[];
   currentId: string | null;
   onOpen: (hit: AiSearchHit) => void;
   onRetry: () => void;

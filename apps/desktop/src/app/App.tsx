@@ -7,6 +7,7 @@ import { useAiLifecycle } from "@/features/ai/lifecycle";
 import { clearReadouts } from "@/features/dashboard/readings";
 import { ForwardsPage } from "@/features/hosts/ForwardsPage";
 import { HostEditPage } from "@/features/hosts/HostEditPage";
+import { TelnetEditPage } from "@/features/hosts/TelnetEditPage";
 import { HostsPage } from "@/features/hosts/HostsPage";
 import { useHostsUi } from "@/features/hosts/ui";
 import { KeysPage } from "@/features/keys/KeysPage";
@@ -191,11 +192,22 @@ function HomePage({ page }: { page: Page }) {
     case "host-edit":
       return (
         <HostEditPage
-          key={page.hostId ?? `new:${page.prefill ? JSON.stringify(page.prefill) : ""}`}
+          key={page.hostId ?? `new:${page.prefill ? JSON.stringify(page.prefill) : ""}${page.draft ? ":draft" : ""}`}
           hostId={page.hostId}
           groupId={page.groupId}
           back={page.back}
           prefill={page.prefill}
+          draft={page.draft}
+        />
+      );
+    case "telnet-edit":
+      return (
+        <TelnetEditPage
+          key={page.hostId ?? `new-telnet${page.draft ? ":draft" : ""}`}
+          hostId={page.hostId}
+          groupId={page.groupId}
+          back={page.back}
+          draft={page.draft}
         />
       );
     case "keys":

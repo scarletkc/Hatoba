@@ -1,4 +1,5 @@
-import type { HostView } from "@/ipc/types";
+import { formatTelnetTarget } from "@/session/quickConnect";
+import { isTelnetHost, type AnyHostView } from "@/ipc/types";
 import type { ShellDialect } from "../rules/commandRules";
 
 export interface HostInfo {
@@ -10,6 +11,10 @@ export interface HostInfo {
   dialect?: ShellDialect;
 }
 
-export function hostInfo(host: HostView | undefined): HostInfo | null {
-  return host ? { name: host.name, target: `${host.username}@${host.address}:${host.port}` } : null;
+export function hostInfo(host: AnyHostView | undefined): HostInfo | null {
+  if (!host) return null;
+  return {
+    name: host.name,
+    target: isTelnetHost(host) ? `telnet ${formatTelnetTarget(host)}` : `${host.username}@${host.address}:${host.port}`,
+  };
 }

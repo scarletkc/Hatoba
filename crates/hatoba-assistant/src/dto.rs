@@ -632,6 +632,10 @@ pub struct AiTurnContext {
     pub local: Option<AiLocalTab>,
     /// A connected terminal tab is attached; `false` offers no terminal tools (AI-09).
     pub tab: bool,
+    /// `host_id` names a Telnet host, and the tab is its Telnet session (TELNET-04): the
+    /// terminal tools are only `read_terminal` and `send_input`.
+    #[serde(default)]
+    pub telnet: bool,
     /// The tab's SSH session while it is connected, whose server's identification string the
     /// system prompt states (§13.1).
     pub session_id: Option<String>,

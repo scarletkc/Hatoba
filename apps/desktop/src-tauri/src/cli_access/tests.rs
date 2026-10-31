@@ -1,5 +1,5 @@
 use hatoba_core::KdfParams;
-use hatoba_core::model::{Group, HostProxy, KeyAlgorithm, SshKey};
+use hatoba_core::model::{Group, HostProxy, KeyAlgorithm, SshKey, TelnetHost};
 use zeroize::Zeroizing;
 
 use super::*;
@@ -47,6 +47,34 @@ fn hosts_are_found_by_id_or_by_name() {
     let both = find_host(&v, "db").unwrap_err();
     assert!(both.contains(&db) && both.contains(&twin), "{both}");
     assert_eq!(find_host(&v, &twin).unwrap().0, twin);
+}
+
+#[test]
+fn a_telnet_host_is_left_out_and_named_as_one() {
+    let mut v = vault();
+    let switch = v
+        .put(
+            None,
+            Item::TelnetHost(TelnetHost {
+                name: "Core Switch".to_owned(),
+                address: "10.0.0.2".to_owned(),
+                ..TelnetHost::default()
+            }),
+        )
+        .unwrap();
+    assert!(host_list(&v).is_empty());
+    for wanted in [switch.as_str(), "core switch"] {
+        let error = find_host(&v, wanted).unwrap_err();
+        assert!(
+            error.contains("is a Telnet host") && error.contains("Run hatoba Core Switch to open"),
+            "{error}"
+        );
+    }
+    // An SSH host of the same name is the one a command means.
+    let ssh = v
+        .put(None, Item::Host(host("core switch", HostAuth::Agent)))
+        .unwrap();
+    assert_eq!(find_host(&v, "Core Switch").unwrap().0, ssh);
 }
 
 #[test]

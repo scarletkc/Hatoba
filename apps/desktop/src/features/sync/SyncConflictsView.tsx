@@ -10,6 +10,7 @@ import s from "./Sync.module.css";
 
 const TYPE_ICON: Record<ConflictView["item_type"], string> = {
   host: "hard-drives",
+  telnet_host: "network",
   key: "key",
   group: "folder-simple",
   known_host: "fingerprint",

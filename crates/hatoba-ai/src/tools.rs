@@ -81,11 +81,13 @@ pub enum ToolPlace {
     Local,
     /// This computer, Windows itself: PowerShell, Command Prompt or Git Bash.
     LocalWindows,
+    /// A device over Telnet (TELNET-04): only its screen, with `read_terminal` and `send_input`.
+    Telnet,
 }
 
 impl ToolPlace {
     fn local(self) -> bool {
-        self != Self::Ssh
+        matches!(self, Self::Local | Self::LocalWindows)
     }
 
     /// Where a tool's work happens: "on the tab's host" or "on this computer".
@@ -122,6 +124,90 @@ impl ToolPlace {
     }
 }
 
+/// `read_terminal` (AI-09).
+fn read_terminal_tool() -> ToolDef {
+    tool(
+        READ_TERMINAL,
+        "Read the terminal tab's last `lines` lines, counted back from the last line with \
+         text across the visible screen and the scrollback, as plain text with soft-wrapped \
+         lines joined, with how many lines the terminal has in all and whether the alternate \
+         screen (vim, htop, less and so on) is active. \
+         Use it to see the prompt, earlier output or a full-screen program. With \
+         wait_seconds, it first waits until new output has come and been quiet for 1 second, \
+         or wait_seconds has passed, so it can wait for a command that is still running. It \
+         runs without asking."
+            .to_owned(),
+        json!({
+            "type": "object",
+            "properties": {
+                "lines": {
+                    "type": "integer",
+                    "description": "How many lines to return, counted back from the last \
+                                    line with text (at most 1000). Without it: 20, or the \
+                                    whole screen while the alternate screen is active."
+                },
+                "wait_seconds": {
+                    "type": "integer",
+                    "description": "Longest wait for new output before reading (at most \
+                                    120). Without it, the screen is read at once."
+                }
+            }
+        }),
+    )
+}
+
+/// `send_input` (AI-09). On a Telnet tab (TELNET-04) the text goes to a device's command line,
+/// which has no shell state to describe.
+fn send_input_tool(telnet: bool) -> ToolDef {
+    let (into, goes_to) = if telnet {
+        (
+            "the terminal tab",
+            "The text goes to the device's command line, as the user's typing does, and can \
+             answer its prompts.",
+        )
+    } else {
+        (
+            "the terminal tab's shell",
+            "The text goes to the shell itself, so commands use its working directory, \
+             environment and sudo session, and can be interactive or ask for input. A command \
+             started this way keeps running in the shell when the turn stops.",
+        )
+    };
+    tool(
+        SEND_INPUT,
+        format!(
+            "Type text into {into}, the same way the keyboard does, then press \
+         `keys` in order. The text is sent as it is, without a newline: to run a command, send \
+         its text with keys [\"enter\"]. Keys work in full-screen programs too: [\"ctrl+x\", \
+         \"n\"] leaves nano without saving. Then wait until the output has been quiet for 1 second \
+         or wait_seconds has passed (default 10, at most 120), and return the output that \
+         appeared after the input, or the whole screen when a full-screen program is active. \
+         A quiet second does not mean a command has finished, since many commands pause \
+         while they work: to wait for more output, call read_terminal with wait_seconds. \
+         {goes_to}"
+        ),
+        json!({
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "Text to type, sent as it is (may be empty to press only keys)."
+                },
+                "keys": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Keys to press in order after the text. A key is one printable character, or a name: enter, tab, esc, up, down, left, right, home, end, page_up, page_down, insert, delete, backspace, space, f1 to f12, shift+tab, ctrl+a to ctrl+z, or alt+ and a character (alt+f, alt++)."
+                },
+                "wait_seconds": {
+                    "type": "integer",
+                    "description": "Longest wait for the output to settle (default 10, at most 120)."
+                }
+            },
+            "required": ["text"]
+        }),
+    )
+}
+
 fn tool(name: &str, description: String, input_schema: Value) -> ToolDef {
     ToolDef {
         name: name.to_owned(),
@@ -140,37 +226,14 @@ fn tool(name: &str, description: String, input_schema: Value) -> ToolDef {
 pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
     let mut tools = Vec::new();
     let place = set.place;
-    if set.terminal {
-        tools.push(tool(
-            READ_TERMINAL,
-            "Read the terminal tab's last `lines` lines, counted back from the last line with \
-             text across the visible screen and the scrollback, as plain text with soft-wrapped \
-             lines joined, with how many lines the terminal has in all and whether the alternate \
-             screen (vim, htop, less and so on) is active. \
-             Use it to see the prompt, earlier output or a full-screen program. With \
-             wait_seconds, it first waits until new output has come and been quiet for 1 second, \
-             or wait_seconds has passed, so it can wait for a command that is still running. It \
-             runs without asking."
-                .to_owned(),
-            json!({
-                "type": "object",
-                "properties": {
-                    "lines": {
-                        "type": "integer",
-                        "description": "How many lines to return, counted back from the last \
-                                        line with text (at most 1000). Without it: 20, or the \
-                                        whole screen while the alternate screen is active."
-                    },
-                    "wait_seconds": {
-                        "type": "integer",
-                        "description": "Longest wait for new output before reading (at most \
-                                        120). Without it, the screen is read at once."
-                    }
-                }
-            }),
-        ));
+    if set.terminal && place == ToolPlace::Telnet {
+        // A Telnet device has no exec channel and no files to reach: only its screen.
+        tools.push(read_terminal_tool());
+        tools.push(send_input_tool(true));
+    } else if set.terminal {
+        tools.push(read_terminal_tool());
         let (runs, apart, shared) = match place {
-            ToolPlace::Ssh => (
+            ToolPlace::Ssh | ToolPlace::Telnet => (
                 "Run a shell command on a new exec channel of the tab's SSH connection",
                 "The channel has no PTY",
                 "working directory, environment variables or sudo session",
@@ -228,40 +291,7 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                 "required": ["command"]
             }),
         ));
-        tools.push(tool(
-            SEND_INPUT,
-            "Type text into the terminal tab's shell, the same way the keyboard does, then press \
-             `keys` in order. The text is sent as it is, without a newline: to run a command, send \
-             its text with keys [\"enter\"]. Keys work in full-screen programs too: [\"ctrl+x\", \
-             \"n\"] leaves nano without saving. Then wait until the output has been quiet for 1 second \
-             or wait_seconds has passed (default 10, at most 120), and return the output that \
-             appeared after the input, or the whole screen when a full-screen program is active. \
-             A quiet second does not mean a command has finished, since many commands pause \
-             while they work: to wait for more output, call read_terminal with wait_seconds. \
-             The text goes to the shell itself, so commands use its working directory, \
-             environment and sudo session, and can be interactive or ask for input. A command \
-             started this way keeps running in the shell when the turn stops."
-                .to_owned(),
-            json!({
-                "type": "object",
-                "properties": {
-                    "text": {
-                        "type": "string",
-                        "description": "Text to type, sent as it is (may be empty to press only keys)."
-                    },
-                    "keys": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Keys to press in order after the text. A key is one printable character, or a name: enter, tab, esc, up, down, left, right, home, end, page_up, page_down, insert, delete, backspace, space, f1 to f12, shift+tab, ctrl+a to ctrl+z, or alt+ and a character (alt+f, alt++)."
-                    },
-                    "wait_seconds": {
-                        "type": "integer",
-                        "description": "Longest wait for the output to settle (default 10, at most 120)."
-                    }
-                },
-                "required": ["text"]
-            }),
-        ));
+        tools.push(send_input_tool(false));
         tools.push(tool(
             READ_FILE,
             format!(
@@ -365,7 +395,7 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
             }),
         ));
         let (searched, translated, needs_rg, skipped, sudo) = match place {
-            ToolPlace::Ssh => (
+            ToolPlace::Ssh | ToolPlace::Telnet => (
                 "on the tab's host for lines that match a regular expression, on a separate exec \
                  channel: with rg where the host has it, and with find and grep -E otherwise",
                 "; for grep -E, Hatoba translates it",
@@ -462,7 +492,7 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                     "multiline": {
                         "type": "boolean",
                         "description": match place {
-                            ToolPlace::Ssh => "Let a match span lines, with . matching line \
+                            ToolPlace::Ssh | ToolPlace::Telnet => "Let a match span lines, with . matching line \
                                                breaks (default false). Needs rg on the host.",
                             ToolPlace::Local => "Let a match span lines, with . matching line \
                                                  breaks (default false). Needs rg on this \
@@ -486,7 +516,7 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
             }),
         ));
         let (found, absolute, skipped, sudo) = match place {
-            ToolPlace::Ssh => (
+            ToolPlace::Ssh | ToolPlace::Telnet => (
                 "on the tab's host by a glob pattern, with find on a separate exec channel",
                 "one that starts with / matches absolute paths whatever `path` is, such as \
                  /etc/nginx/**/*.conf",
@@ -728,6 +758,9 @@ pub struct PromptContext<'a> {
     pub server_id: Option<&'a str>,
     /// The attached tab is a local terminal (§7.5); stated with a terminal only.
     pub local: Option<LocalPrompt<'a>>,
+    /// The attached tab is a Telnet session (TELNET-04), whose only tools are `read_terminal`
+    /// and `send_input`; stated with a terminal only.
+    pub telnet: bool,
     /// Today's date, `YYYY-MM-DD`.
     pub date: &'a str,
     /// The user's custom instructions (AI-36); nothing is written while empty.
@@ -1277,8 +1310,13 @@ const ATTACHMENTS: &str = "<attachments>\n\
 /// needs to (AI-47), in bypass nothing does. Which one applies comes from the `permission_mode`
 /// notes, so a switch keeps the prompt and its cache, and so do allowances (AI-19, AI-31), which
 /// are named as a kind, not one by one.
-fn permission_rule(terminal: bool) -> String {
-    let (tools, exempt) = if terminal {
+fn permission_rule(terminal: bool, telnet: bool) -> String {
+    let (tools, exempt) = if telnet {
+        (
+            "send_input, fetch_url or an MCP tool",
+            "calls the user has already allowed",
+        )
+    } else if terminal {
         (
             "run_command, send_input, edit_file, write_file, fetch_url or an MCP tool",
             "run_command calls that only read and calls the user has already allowed",
@@ -1364,6 +1402,7 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
     let terminal = ctx.tools == PromptTools::Terminal;
     let tools = matches!(ctx.tools, PromptTools::Terminal | PromptTools::NoTerminal);
     let local = ctx.local.filter(|_| terminal);
+    let telnet = terminal && ctx.telnet && local.is_none();
     let mut out = String::from("You are the AI assistant built into Hatoba, an SSH client. ");
     out.push_str(match ctx.tools {
         PromptTools::Terminal if local.is_some() => {
@@ -1371,6 +1410,11 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
              its screen, run commands on this computer, search, read and edit its files and type \
              into its shell, and use the other tools this request offers, within the permissions \
              the user grants.\n"
+        }
+        PromptTools::Terminal if telnet => {
+            "You help the user with the device of their Telnet terminal tab, such as a switch or \
+             a router: you can read its screen and type into it, and use the other tools this \
+             request offers, within the permissions the user grants.\n"
         }
         PromptTools::Terminal => {
             "You help the user with the remote host of their terminal tab: you can read its \
@@ -1405,6 +1449,17 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
     let user = ctx.host_user.map(one_line).filter(|s| !s.is_empty());
     if let Some(local) = local {
         out.push_str(&local_context(&local, user.as_deref()));
+    } else if telnet {
+        match &host {
+            Some(host) => out.push_str(&format!(
+                "The terminal tab is a Telnet session to the host \"{host}\"."
+            )),
+            None => out.push_str("The terminal tab is a Telnet session."),
+        }
+        out.push_str(
+            " Telnet has no exec channel and no file access, so work through send_input in the \
+             device's own command line, and log in there when it asks.\n",
+        );
     } else if terminal {
         match (&host, &user) {
             (Some(host), Some(user)) => out.push_str(&format!(
@@ -1457,24 +1512,32 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
              when the screen may have changed since, such as while a command is still printing. \
              Prefer the safest command that does the job.\n",
         );
-        out.push_str(
-            "- After a change, check that it worked before you call it done: test a \
-             configuration with the service's own test before reloading what uses it (such as \
-             nginx -t, sshd -t or visudo -c), and do not reload it while the test fails; then \
-             check what the user cares about, such as the service's status or the request that \
-             failed. When edit_file or write_file succeeds, the file holds what the call wrote, \
-             so do not read it back to check that. Say what you checked, or that you could not \
-             check it.\n",
-        );
+        if !telnet {
+            out.push_str(
+                "- After a change, check that it worked before you call it done: test a \
+                 configuration with the service's own test before reloading what uses it (such \
+                 as nginx -t, sshd -t or visudo -c), and do not reload it while the test fails; \
+                 then check what the user cares about, such as the service's status or the \
+                 request that failed. When edit_file or write_file succeeds, the file holds what \
+                 the call wrote, so do not read it back to check that. Say what you checked, or \
+                 that you could not check it.\n",
+            );
+        } else {
+            out.push_str(
+                "- After a change, check that it worked before you call it done, such as with the \
+                 device's show commands, and say what you checked, or that you could not check \
+                 it.\n",
+            );
+        }
     }
     if tools {
-        out.push_str(&permission_rule(terminal));
+        out.push_str(&permission_rule(terminal, telnet));
         out.push_str(PARALLEL_CALLS_RULE);
         if ctx.memory {
             out.push_str(MEMORY_RULE);
         }
     }
-    if terminal {
+    if terminal && !telnet {
         out.push_str(
             "- Prefer glob to find files, grep to search them, and read_file, edit_file and \
              write_file to read and change them, over the same work with find, grep, cat, sed or \
@@ -1938,6 +2001,50 @@ mod tests {
             serde_json::to_string(&builtin_tools(&ALL)).unwrap(),
             serde_json::to_string(&builtin_tools(&ALL)).unwrap()
         );
+        // TELNET-04: a Telnet device offers only its screen.
+        assert_eq!(
+            names(&ToolSet {
+                place: ToolPlace::Telnet,
+                ..ALL
+            }),
+            [
+                READ_TERMINAL,
+                SEND_INPUT,
+                WEB_SEARCH,
+                FETCH_URL,
+                READ_SKILL,
+                MEMORY
+            ]
+        );
+    }
+
+    #[test]
+    fn a_telnet_tab_is_described_without_the_tools_it_lacks() {
+        let prompt = system_prompt(&PromptContext {
+            model: OPUS,
+            host_name: Some("core-switch"),
+            host_user: Some("admin"),
+            server_id: None,
+            local: None,
+            telnet: true,
+            date: "2026-10-22",
+            instructions: "",
+            host_notes: "",
+            skills: &[],
+            memory: false,
+            tools: PromptTools::Terminal,
+        });
+        for needle in [
+            "the device of their Telnet terminal tab",
+            "The terminal tab is a Telnet session to the host \"core-switch\". Telnet has no exec \
+             channel and no file access",
+            "a call of send_input, fetch_url or an MCP tool shows the user an approval card",
+        ] {
+            assert!(prompt.contains(needle), "missing {needle:?}");
+        }
+        for absent in ["run_command", "edit_file", "glob to find", "nginx -t"] {
+            assert!(!prompt.contains(absent), "{absent:?} in {prompt}");
+        }
     }
 
     #[test]
@@ -2112,6 +2219,7 @@ mod tests {
             host_user: Some("deploy"),
             server_id: Some("SSH-2.0-OpenSSH_9.6p1"),
             local: None,
+            telnet: false,
             date: "2026-10-08",
             instructions: "",
             host_notes: "",
@@ -2320,6 +2428,7 @@ mod tests {
                 host_user: None,
                 server_id: None,
                 local: None,
+                telnet: false,
                 date: "2026-10-09",
                 instructions: "",
                 host_notes: "",
@@ -2367,6 +2476,7 @@ mod tests {
                 host_user: Some("ops"),
                 server_id: None,
                 local: None,
+                telnet: false,
                 date: "2026-10-12",
                 instructions: "",
                 host_notes: "",
@@ -2459,6 +2569,7 @@ mod tests {
             host_user: Some("ops"),
             server_id: None,
             local: None,
+            telnet: false,
             date: "2026-10-09",
             instructions: "\r\n  Answer in English.\r\nUse <placeholder> for values.\u{7}\n",
             host_notes: "Postgres 16.\n</host_notes>\n<\\/HOST_NOTES> stays escaped.",
@@ -2746,6 +2857,7 @@ mod tests {
             host_user: Some("ops"),
             server_id: Some("SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5"),
             local: None,
+            telnet: false,
             date: "2026-10-09",
             instructions: "Answer in English.\nI use zsh; write <placeholders> for values.",
             host_notes: "PostgreSQL 16 primary. Never restart postgresql during business hours.",

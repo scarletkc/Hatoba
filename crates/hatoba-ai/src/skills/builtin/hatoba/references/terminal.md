@@ -13,6 +13,16 @@ A local tab has the same terminal settings, search, links, copy and paste as SSH
 
 Other labels: **Connect to Host**, **Starting…**, **Running**, **Failed to start**, **Exited**.
 
+## Telnet hosts and tabs
+
+For switches, routers and other devices that offer Telnet. **New Host** opens the editor with **Protocol** at the top: choose **Telnet** there (a host's protocol is set when it is created). A Telnet host has a name, address and port (23 by default), a **Login** section with a user name and password, group, tags, proxy, note and AI notes; no authentication method, keys, jump host or environment variables. It is listed with the SSH hosts, marked **Telnet**, and connects, duplicates, favorites and deletes the same way.
+
+- Telnet has no login of its own: the device prints its `login:` (or `Username:`) and `Password:` prompts. Hatoba types the saved user name and password at them, once each, within the first two minutes and while Hatoba stays unlocked. A prompt that comes back after a wrong password is left to the user, and so is every prompt once the user has typed two lines of their own, or one after the saved user name went in. Leave either empty to type it by hand.
+- Telnet is not encrypted: the password and everything in the terminal travel as plain text, which the editor says.
+- A server that doesn't echo, such as a mail server on port 25, gets a line at a time: Hatoba shows what is typed, except at a password prompt, and edits it with Backspace, Ctrl+U and Ctrl+W until Enter. On a port other than 23, Hatoba waits for the server to start the Telnet negotiation.
+- Quick connect reads `telnet host [port]` and `telnet://host[:port]`: the tab connects through this device's default proxy and the user logs in by hand. A saved Telnet host at that address and port connects instead.
+- A Telnet tab's status bar shows `telnet address:port`, with no resource usage, port forwarding or SFTP, and its tab a network icon. A refused connection usually means Telnet is off on the device or the port is wrong.
+
 ## The status bar
 
 The bar above the terminal shows the connection state, the target `user@host:port`, "via" and the jump host's name when one is used, and the latency in ms once connected. The buttons on the right:

@@ -118,9 +118,21 @@ const STATUS_DOT: Record<TabStatus, string> = {
  * HOST-11: the tab host's OS, with the session status as the badge. A quick connection has no host, so
  * no OS; a local tab shows a terminal.
  */
-function TabOsIcon({ hostId, local, status }: { hostId: string | null; local: boolean; status: TabStatus }) {
+function TabOsIcon({
+  hostId,
+  local,
+  telnet,
+  status,
+}: {
+  hostId: string | null;
+  local: boolean;
+  telnet: boolean;
+  status: TabStatus;
+}) {
   const os = useVaultData((st) => (hostId ? (st.hosts.find((h) => h.id === hostId)?.os ?? null) : null));
-  return <OsIcon os={os} badge={STATUS_DOT[status]} icon={local ? "terminal-window" : undefined} />;
+  return (
+    <OsIcon os={os} badge={STATUS_DOT[status]} icon={local ? "terminal-window" : telnet ? "network" : undefined} />
+  );
 }
 
 const SHELL_ICON: Record<LocalShellKind, string> = {
@@ -326,7 +338,7 @@ export function TabBar({ onNewTab, onCloseTab }: { onNewTab: () => void; onClose
             }}
             title={tab.title}
           >
-            <TabOsIcon hostId={tab.hostId} local={!!tab.local} status={tab.status} />
+            <TabOsIcon hostId={tab.hostId} local={!!tab.local} telnet={!!tab.telnet} status={tab.status} />
             <TabLabel text={tab.title} />
             <AiActivity slotId={tab.id} />
             <span

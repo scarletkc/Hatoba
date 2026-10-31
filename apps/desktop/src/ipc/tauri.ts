@@ -9,7 +9,13 @@ type FrameCommand = {
 }[keyof HatobaApi];
 
 /** Every command that streams terminal frames, so a new one fails the type check until it is here. */
-const FRAME_COMMANDS: Record<FrameCommand, true> = { ssh_connect: true, ssh_connect_target: true, local_open: true };
+const FRAME_COMMANDS: Record<FrameCommand, true> = {
+  ssh_connect: true,
+  ssh_connect_target: true,
+  local_open: true,
+  telnet_open: true,
+  telnet_open_target: true,
+};
 
 /** `aiConversationPin` → `ai_conversation_pin`, as `HatobaApi` names the command. */
 const snakeCase = (name: string) => name.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);

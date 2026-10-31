@@ -10,14 +10,23 @@ export interface LocalShell {
   kind: LocalShellKind;
 }
 
+/** What a Telnet tab connects to (§7.6): a saved Telnet host, or a quick-connect target (TELNET-05). */
+export type TelnetSource = { hostId: string } | { hostId: null; address: string; port: number };
+
 /**
- * What a tab connects to: a saved host, a quick-connect target that is not one (HOST-12), or a shell
- * of this computer (§7.5).
+ * What a tab connects to: a saved host, a quick-connect target that is not one (HOST-12), a shell
+ * of this computer (§7.5), or Telnet (§7.6).
  */
 export type TabSource =
-  | { hostId: string; target: null; local?: undefined }
-  | { hostId: null; target: QuickTarget; local?: undefined }
-  | { hostId: null; target: null; local: LocalShell };
+  | { hostId: string; target: null; local?: undefined; telnet?: undefined }
+  | { hostId: null; target: QuickTarget; local?: undefined; telnet?: undefined }
+  | { hostId: null; target: null; local: LocalShell; telnet?: undefined }
+  | { hostId: null; target: null; local?: undefined; telnet: TelnetSource };
+
+/** The saved host a tab connects to, SSH or Telnet; null for a quick connection or a local tab. */
+export function tabHostId(tab: TabSource): string | null {
+  return tab.hostId ?? tab.telnet?.hostId ?? null;
+}
 
 /** One terminal tab (TERM-01). The same host may be open in several tabs. */
 export type SessionTab = TabSource & {
@@ -77,7 +86,9 @@ export const useTabs = create<TabsState>((set, get) => ({
       return { tabs };
     }),
   adoptHost: (id, hostId, title) =>
-    set((s) => ({ tabs: s.tabs.map((t) => (t.id === id && !t.local ? { ...t, hostId, target: null, title } : t)) })),
+    set((s) => ({
+      tabs: s.tabs.map((t) => (t.id === id && !t.local && !t.telnet ? { ...t, hostId, target: null, title } : t)),
+    })),
   update: (id, patch) =>
     set((s) => ({
       tabs: s.tabs.map((t) => (t.id === id ? { ...t, ...patch } : t)),

@@ -8,6 +8,7 @@ import { useVaultData } from "@/app/data";
 import { getLocale, t } from "@/i18n";
 import { api } from "@/ipc/api";
 import { pickSavePath } from "@/lib/native";
+import { hostInfo } from "../calls/hostInfo";
 import { conversationMarkdown, exportFileName } from "../history/exportMarkdown";
 import { forkModel, forkTitle } from "../fork";
 import { getSlot, slotOf, updateConversation, useAi } from "../store";
@@ -122,13 +123,14 @@ export async function exportConversation(id: string) {
   try {
     const detail = await api.ai_conversation_get(id);
     const conversation = detail.conversation;
-    const host = useVaultData.getState().hosts.find((h) => h.id === conversation.host_id);
+    const { hosts, telnetHosts } = useVaultData.getState();
+    const host = [...hosts, ...telnetHosts].find((h) => h.id === conversation.host_id);
     const when = new Intl.DateTimeFormat(getLocale(), { dateStyle: "medium", timeStyle: "short" });
     const text = conversationMarkdown(
       {
         conversation,
         entries: detail.entries,
-        host: host ? { name: host.name, target: `${host.username}@${host.address}:${host.port}` } : null,
+        host: hostInfo(host),
       },
       { t, time: (ms) => when.format(ms) },
     );

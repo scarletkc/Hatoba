@@ -9,11 +9,11 @@ import {
   type ReactNode,
 } from "react";
 import { Button, EmptyState, Icon, IconButton, LinkButton, Spinner } from "@hatoba/ui";
-import { useVaultData } from "@/app/data";
+import { useAllHosts } from "@/app/data";
 import { useApp } from "@/app/store";
-import { useTabs, type SessionTab } from "@/app/tabs";
+import { tabHostId, useTabs, type SessionTab } from "@/app/tabs";
 import { useT } from "@/i18n";
-import type { HostView } from "@/ipc/types";
+import type { AnyHostView } from "@/ipc/types";
 import { shortcutLabel } from "@/lib/platform";
 import { cx } from "@/lib/cx";
 import { reconnectSession } from "@/session/connect";
@@ -55,8 +55,8 @@ export function AiPanel({ slotId }: { slotId: string }) {
   const slot = stored ?? blank;
   const catalog = useAi((st) => st.catalog);
   const tab = useTabs((st) => (slotId === HOME_SLOT ? undefined : st.tabs.find((x) => x.id === slotId)));
-  const hosts = useVaultData((st) => st.hosts);
-  const tabHost = tab ? hosts.find((h) => h.id === tab.hostId) : undefined;
+  const hosts = useAllHosts();
+  const tabHost = tab ? hosts.find((h) => h.id === tabHostId(tab)) : undefined;
   // §7.5: a local tab is this computer, named so wherever a tab's host is named.
   const local = tab?.local
     ? {
@@ -177,10 +177,7 @@ export function AiPanel({ slotId }: { slotId: string }) {
           <span className={s.title} title={title}>
             {title}
           </span>
-          <span
-            className={s.host}
-            title={tabHost ? `${tabHost.username}@${tabHost.address}:${tabHost.port}` : undefined}
-          >
+          <span className={s.host} title={hostInfo(tabHost)?.target}>
             {hostLabel}
           </span>
         </div>
@@ -277,8 +274,8 @@ function Notices({
   slotId: string;
   slot: Slot;
   tab: SessionTab | undefined;
-  tabHost: HostView | undefined;
-  hosts: HostView[];
+  tabHost: AnyHostView | undefined;
+  hosts: AnyHostView[];
 }) {
   const t = useT();
   const device = useApp((st) => st.info.device_name);
@@ -361,7 +358,7 @@ function Notices({
   return items.length > 0 ? <div className={s.notices}>{items}</div> : null;
 }
 
-function EmptyConversation({ tab, host }: { tab: SessionTab | undefined; host: HostView | undefined }) {
+function EmptyConversation({ tab, host }: { tab: SessionTab | undefined; host: AnyHostView | undefined }) {
   const t = useT();
   return (
     <EmptyState

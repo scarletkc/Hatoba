@@ -6,7 +6,7 @@
 import { toast } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
-import { useTabs } from "@/app/tabs";
+import { tabHostId, useTabs } from "@/app/tabs";
 import { t } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { DroppedFile } from "@/ipc/types";
@@ -74,7 +74,9 @@ export function selectionHost(tabId: string): string {
   const tab = useTabs.getState().tabs.find((x) => x.id === tabId);
   if (!tab) return "";
   if (tab.local) return localName(useApp.getState().info.device_name);
-  return useVaultData.getState().hosts.find((h) => h.id === tab.hostId)?.name ?? tab.title;
+  const id = tabHostId(tab);
+  const { hosts, telnetHosts } = useVaultData.getState();
+  return [...hosts, ...telnetHosts].find((h) => h.id === id)?.name ?? tab.title;
 }
 
 /** What the chip attaches to the next message, or null when it does not show. */

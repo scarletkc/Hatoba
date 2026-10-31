@@ -2,12 +2,12 @@
 
 ## The hosts page
 
-**Hosts** in the rail opens it. A host is one saved SSH destination, in at most one group (groups have one level), with any number of free-text tags.
+**Hosts** in the rail opens it. A host is one saved SSH or Telnet destination, in at most one group (groups have one level), with any number of free-text tags.
 
 - The header has a search box (fuzzy match on name, address, user name and tags; Ctrl+Shift+K or ⌘⇧K), **Import**, and **New Host**, with **New Group** under the arrow beside it. It also takes unsaved targets (Quick connect below).
 - Under it: **Favorites**, **Tags** (hosts with every tag picked; × removes a tag), the sort order, **Resource Usage** (`references/resource-usage.md`) and **List** or **Cards**, which this device keeps.
 - Group buttons above the hosts open a group; **Hosts** before its name goes back. Its **…** (or a right-click on its button) has **Rename Group** and **Delete Group**, which keeps the hosts.
-- A row or card shows the name, `user@address:port`, tags, and the last connection; a row also the jump host. The dot is green when the host is connected or answers a TCP probe, grey otherwise; **Failed** (red): the last attempt this launch failed.
+- A row or card shows the name, `user@address:port` (`telnet address:port` for Telnet), tags, and the last connection; a row also the jump host. The dot is green when the host is connected or answers a TCP probe, grey otherwise; **Failed** (red): the last attempt this launch failed.
 - To connect: double-click, select and press Enter, or click **Connect**. Arrow keys move the selection; typing searches. A host can be open in several tabs. Right-click for its menu.
 - Ctrl+click (⌘-click on macOS) or Shift+click selects several hosts; a click beside the rows selects none. The right-click menu of several has **Connect** (a tab each), **Add to Favorites** or **Remove from Favorites**, and **Delete**, for all of them.
 
@@ -31,7 +31,7 @@ Other labels: **Not saved**, **Remove from Recent**, **Username**.
 
 ## Import hosts
 
-**Import**, in the header of the host list and in the empty list, opens a menu: **SSH Config** reads `~/.ssh/config` (on Windows `%USERPROFILE%\.ssh\config`), and Xshell, FinalShell, MobaXterm, PuTTY, SecureCRT and Tabby read that client's saved sessions where it keeps them on this device. The dialog lists the SSH hosts and imports the ones you tick. Entries whose name already exists are unticked and marked **Already exists**. For sessions kept elsewhere or brought from another computer, **Choose File** or **Choose Folder** reads them from there:
+**Import** (in the header or the empty list) opens a menu: **SSH Config** reads `~/.ssh/config` (on Windows `%USERPROFILE%\.ssh\config`), and Xshell, FinalShell, MobaXterm, PuTTY, SecureCRT and Tabby read that client's saved sessions where it keeps them on this device. The dialog lists the SSH hosts and imports the ones you tick. Entries whose name exists are unticked and marked **Already exists**. For sessions kept elsewhere or brought from another computer, **Choose File** or **Choose Folder** reads them from there:
 
 - Xshell: the sessions folder in `Documents\NetSarang Computer\<version>\Xshell\Sessions`, a sessions folder kept elsewhere, or an `.xts` file from Xshell's **File → Export**.
 - FinalShell: its data folder (`%LOCALAPPDATA%\finalshell` on Windows, `~/Library/FinalShell` on macOS, `~/.finalshell` on Linux), or a copy of it.
@@ -54,11 +54,11 @@ Other labels: **Select All**, **Select None**.
 
 ## The host editor
 
-**New Host**, **Edit** in the row menu, or **Edit Host** (in a terminal tab's **More actions** menu, or on the connection-failed card) opens the editor on the home tab. **Save** (or Ctrl+S, or Enter in a text field) saves, **Cancel** or the back arrow leaves, and Esc leaves an untouched form. The star in the header toggles the favorite. The address is required (it is the default name), and the port must be 1 to 65535.
+**New Host**, **Edit** in the row menu, or **Edit Host** (a terminal tab's **More actions**, or the connection-failed card) opens the editor on the home tab. **Save** (or Ctrl+S, or Enter in a text field) saves, **Cancel** or the back arrow leaves, and Esc leaves an untouched form. The star in the header toggles the favorite. The address is required (it is the default name), and the port must be 1 to 65535. A Telnet host's editor: `references/terminal.md`.
 
 Other labels: **Username**, **Organization & Network**.
 
-- **Test Connection** connects with the current form values (saved or not), authenticates, checks the host key (you may be asked to trust it), shows the latency, and disconnects. It does not save the host.
+- **Test Connection** connects with the form's values (saved or not), authenticates, checks the host key (you may be asked to trust it), shows the latency, and disconnects, without saving the host.
 - **Delete Host** is at the bottom of the editor for an existing host.
 - **Notes** are for you only. **AI Notes** go to the AI assistant in every request of a conversation on the host; see `references/ai-instructions.md`.
 - A host's port forwards are on the **Port Forwarding** page (**Forwards** in the navigation rail), not in the editor; see `references/port-forwarding.md`.
@@ -77,7 +77,7 @@ Other labels: **Username**, **Organization & Network**.
 
 ## Jump host
 
-**Jump Host** (ProxyJump) routes the connection through another saved host. Pick it from the list; the list excludes the host itself, and a loop of jump hosts is rejected. A jump host can have its own jump host. Each hop uses its own saved settings, and a jump host must use a saved password, a key with its passphrase saved, or **SSH Agent**. The status bar of the tab shows "via" and the jump host's name.
+**Jump Host** (ProxyJump) routes the connection through another saved host. The list leaves out the host itself, and a loop of jump hosts is rejected. A jump host can have its own jump host. Each hop uses its own saved settings, and a jump host must use a saved password, a key with its passphrase saved, or **SSH Agent**. The status bar of the tab shows "via" and the jump host's name.
 
 ## Proxy
 
@@ -87,13 +87,13 @@ Other labels: **Username**, **Organization & Network**.
 - **No proxy**: always connect directly.
 - A saved proxy, by name.
 
-With a jump host, the jump host's own choice applies and the picker is disabled. Quick connections use this device's default. The host list's reachability dots go through the same proxy. **Manage Proxies** opens Settings → Proxies, where proxies are added, edited and deleted (`references/settings.md`). Deleting a proxy switches the hosts that named it to **Device default**. When the proxy of a host, or this device's default, was deleted on another device, the picker shows **Deleted proxy** and connecting fails until another one is chosen.
+With a jump host, the jump host's own choice applies and the picker is disabled. Quick connections use this device's default. The host list's reachability dots go through the same proxy. **Manage Proxies** opens Settings → Proxies (`references/settings.md`). Deleting a proxy switches the hosts that named it to **Device default**. When the proxy of a host, or this device's default, was deleted on another device, the picker shows **Deleted proxy** and connecting fails until another one is chosen.
 
 ## Environment variables
 
 **Environment Variables** in the host editor lists `NAME=value` pairs, like `SetEnv` in OpenSSH. **Add Variable** adds a row and × removes one; they are saved with the host by **Save** and sync with it. When a terminal opens, Hatoba asks the server to set each one before the shell starts.
 
-- The server sets only the names its sshd `AcceptEnv` setting lists and ignores the rest; the shell still starts, without them. Many servers (Debian and Ubuntu by default) accept only `LANG` and `LC_*`. To use other names, the server's administrator adds them to `AcceptEnv` in `/etc/ssh/sshd_config` and reloads sshd. Running `env` or `echo $NAME` in the terminal shows what arrived.
+- The server sets only the names its sshd `AcceptEnv` setting lists and ignores the rest; the shell still starts, without them. Many servers (Debian and Ubuntu by default) accept only `LANG` and `LC_*`. To use other names, the server's administrator adds them to `AcceptEnv` in `/etc/ssh/sshd_config` and reloads sshd. `env` in the terminal shows what arrived.
 - Hatoba sends `LANG=C.UTF-8` by default; a host's `LANG` replaces it. `TERM` sets the terminal type instead (`xterm-256color` by default) and needs no `AcceptEnv`.
 - Only the terminal's shell gets them. SFTP, the resource usage readout and the AI assistant's commands run without them.
 - A name uses letters, digits and `_`, doesn't start with a digit, is case-sensitive, and appears once per host. A value can't contain a line break or another control character. A host can have at most 64 variables, 16 KB of names and values together.
@@ -111,6 +111,6 @@ Other labels: **Fingerprint**, **Trusted fingerprint**, **Fingerprint received n
 ## When a connection fails or ends
 
 - A failed attempt shows a card over the terminal titled "Can’t connect to" plus the host name. It gives the reason, a short code (for example ETIMEDOUT) with the time, and the buttons **Copy Diagnostics**, **Ask AI** (attaches the diagnostics in the AI panel without sending them; see `references/ai-attachments.md`), **Edit Host** and **Retry**. Diagnostics hold the host, user, auth method, error and time, and no secrets. A quick connection has no **Edit Host** button. See `references/troubleshooting-connections.md` for each reason.
-- A connection that ends later (the server closed it, the network dropped, keepalives went unanswered) shows the banner **Connection closed** with **Reconnect**. Hatoba never reconnects by itself. **More actions** has Reconnect and Disconnect too.
+- A connection that ends later (closed by the server, a dropped network, unanswered keepalives) shows the banner **Connection closed** with **Reconnect**. Hatoba never reconnects by itself. **More actions** has Reconnect and Disconnect too.
 - Closing a tab (the × on the tab, middle-click, or Ctrl+Shift+W / ⌘W) ends its session.
 - Locking keeps open sessions connected in the background unless **Disconnect all sessions when locked** is on (Settings → Security).

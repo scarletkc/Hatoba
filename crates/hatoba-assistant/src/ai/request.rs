@@ -23,7 +23,7 @@ use zeroize::Zeroizing;
 use super::entries::{Entries, cancel_open_calls, find_conversation};
 use super::job::web_search_for;
 use super::notes::mcp_deferred;
-use super::places::{local_name, quick_label};
+use super::places::{local_name, quick_label, saved_host};
 use super::skills::enabled_skills;
 use super::{AiEnv, Halt, Request, Turn, chatgpt, lock, memory};
 use crate::dto::{AiEffort, AiLocalTab, AiTurnContext, AiTurnEvent, LocalShellKind};
@@ -147,11 +147,7 @@ pub(super) fn prompt(
     fallback: Option<PromptTools>,
     server_id: Option<&str>,
 ) -> (String, Vec<ToolDef>) {
-    let host = context
-        .host_id
-        .as_deref()
-        .and_then(|id| v.get(id))
-        .and_then(Item::as_host);
+    let host = context.host_id.as_deref().and_then(|id| saved_host(v, id));
     let target = context.target.as_ref().map(quick_label);
     // §7.5: a local tab's computer, named like a host, and its shell.
     let local = local_tab(context);
@@ -195,21 +191,24 @@ pub(super) fn prompt(
             provider: provider.map_or("", |p| p.name.as_str()),
         },
         host_name: host
-            .map(|h| h.name.as_str())
+            .as_ref()
+            .map(|h| h.name)
             .or(target.as_deref())
             .or(local_named.as_deref()),
         host_user: host
-            .map(|h| h.username.as_str())
+            .as_ref()
+            .map(|h| h.username)
             .or(context.target.as_ref().map(|t| t.username.as_str()))
             .or(local_user.as_deref()),
         server_id,
         local: local_prompt,
+        telnet: context.telnet,
         date: &date,
         instructions: bytes_prefix(
             &settings.ai.custom_instructions,
             MAX_CUSTOM_INSTRUCTIONS_BYTES,
         ),
-        host_notes: host.map_or("", |h| bytes_prefix(&h.ai_notes, MAX_HOST_AI_NOTES_BYTES)),
+        host_notes: host.map_or("", |h| bytes_prefix(h.ai_notes, MAX_HOST_AI_NOTES_BYTES)),
         skills: &skills,
         memory: settings.ai.memory,
         tools: offered,
@@ -247,6 +246,9 @@ fn local_tab(context: &AiTurnContext) -> Option<&AiLocalTab> {
 /// Where the terminal tools act, which their descriptions say: a host, or this computer with
 /// `sh` (macOS, Linux, WSL) or Windows itself (§7.5).
 fn tool_place(context: &AiTurnContext) -> ToolPlace {
+    if context.telnet {
+        return ToolPlace::Telnet;
+    }
     match local_tab(context).and_then(|l| l.kind) {
         None => ToolPlace::Ssh,
         Some(LocalShellKind::Unix | LocalShellKind::Wsl) => ToolPlace::Local,
