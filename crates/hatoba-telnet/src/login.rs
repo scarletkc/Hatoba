@@ -7,9 +7,9 @@
 //! once the password is typed, once the user presses Enter after the saved user name went in
 //! without a password prompt, after the user has pressed Enter twice (a user name and a password
 //! of their own), or once [`LOGIN_WINDOW`] has passed, so a later `su`, `enable` or `sudo` never
-//! gets the password. An Enter at a prompt the user answers, a line that ends with `:`, is a user
-//! name of their own, after which the saved one is not typed; one at a banner is not. A prompt
-//! that comes back after a wrong password is left to the user.
+//! gets the password. A line the user starts at a prompt, a line that ends with `:`, is a user
+//! name of their own, after which the saved one is not typed; an Enter at a banner is not. A
+//! prompt that comes back after a wrong password is left to the user.
 
 use std::time::Duration;
 
@@ -28,31 +28,16 @@ const PASSWORD_PROMPTS: [&str; 2] = ["password:", "passcode:"];
 pub struct AutoLogin {
     username: Option<Zeroizing<String>>,
     password: Option<Zeroizing<String>>,
-    /// The output's last line so far, escape sequences left out.
-    line: Vec<u8>,
-    /// Inside an escape sequence of the output.
-    escape: Escape,
+    line: LastLine,
+    /// Whether the line the user is typing answers a prompt, as the output stood at its first
+    /// key, before the server echoed it.
+    answering: Option<bool>,
     /// Enter presses of the user's own.
     user_lines: u8,
     /// The saved user name went in, so the next prompt has to ask for the password before the
     /// user presses Enter.
     typed_user: bool,
     done: bool,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Escape {
-    None,
-    /// After ESC.
-    Start,
-    /// In a CSI sequence, until its final byte.
-    Csi,
-    /// After ESC and an intermediate byte, as in `ESC ( B`, until the final byte.
-    Intermediate,
-    /// In an OSC or other string sequence, until BEL or ST.
-    String,
-    /// After ESC in a string sequence: a backslash ends it (ST).
-    StringEsc,
 }
 
 impl AutoLogin {
@@ -65,8 +50,8 @@ impl AutoLogin {
         Self {
             username,
             password,
-            line: Vec::new(),
-            escape: Escape::None,
+            line: LastLine::default(),
+            answering: None,
             user_lines: 0,
             typed_user: false,
             done,
@@ -89,10 +74,16 @@ impl AutoLogin {
     /// Notes the user's own input: their Enter after the saved user name, or their second Enter,
     /// ends the login.
     pub fn typed(&mut self, input: &[u8]) {
-        let enters = input.iter().filter(|&&b| b == b'\r').count();
-        if self.done || enters == 0 {
+        if self.done || input.is_empty() {
             return;
         }
+        let at_prompt = self.line.text().ends_with(':');
+        let answering = *self.answering.get_or_insert(at_prompt);
+        let enters = input.iter().filter(|&&b| b == b'\r').count();
+        if enters == 0 {
+            return;
+        }
+        self.answering = None;
         // The device let the user in without asking for the password.
         if self.typed_user {
             self.stop();
@@ -103,10 +94,7 @@ impl AutoLogin {
             .saturating_add(u8::try_from(enters).unwrap_or(u8::MAX));
         if self.user_lines >= 2 {
             self.stop();
-        } else if String::from_utf8_lossy(&self.line)
-            .trim_end()
-            .ends_with(':')
-        {
+        } else if answering {
             // The user answered a prompt with a user name of their own: the saved one is not
             // typed after it.
             self.username = None;
@@ -121,18 +109,14 @@ impl AutoLogin {
         if self.done {
             return None;
         }
-        for &byte in data {
-            self.push(byte);
-        }
-        let text = String::from_utf8_lossy(&self.line)
-            .trim_end()
-            .to_lowercase();
-        if PASSWORD_PROMPTS.iter().any(|p| text.ends_with(p)) {
+        self.line.push(data);
+        if self.line.asks_password() {
             let password = self.password.take();
             // Whatever happens at this prompt, the login is over.
             self.stop();
             return password.map(|p| Zeroizing::new(format!("{}\r", p.as_str())));
         }
+        let text = self.line.text();
         if USER_PROMPTS.iter().any(|p| text.ends_with(p)) {
             self.line.clear();
             let username = self.username.take()?;
@@ -144,8 +128,59 @@ impl AutoLogin {
         }
         None
     }
+}
 
-    fn push(&mut self, byte: u8) {
+/// The output's last line, escape sequences left out, to find a prompt in.
+#[derive(Default)]
+pub struct LastLine {
+    line: Vec<u8>,
+    /// Inside an escape sequence of the output.
+    escape: Escape,
+}
+
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Escape {
+    #[default]
+    None,
+    /// After ESC.
+    Start,
+    /// In a CSI sequence, until its final byte.
+    Csi,
+    /// After ESC and an intermediate byte, as in `ESC ( B`, until the final byte.
+    Intermediate,
+    /// In an OSC or other string sequence, until BEL or ST.
+    String,
+    /// After ESC in a string sequence: a backslash ends it (ST).
+    StringEsc,
+}
+
+impl LastLine {
+    /// Reads a chunk of output.
+    pub fn push(&mut self, data: &[u8]) {
+        for &byte in data {
+            self.byte(byte);
+        }
+    }
+
+    /// Whether the line ends at a password prompt.
+    #[must_use]
+    pub fn asks_password(&self) -> bool {
+        let text = self.text();
+        PASSWORD_PROMPTS.iter().any(|p| text.ends_with(p))
+    }
+
+    /// The line in lower case, without the spaces at its end.
+    fn text(&self) -> String {
+        String::from_utf8_lossy(&self.line)
+            .trim_end()
+            .to_lowercase()
+    }
+
+    fn clear(&mut self) {
+        self.line.clear();
+    }
+
+    fn byte(&mut self, byte: u8) {
         match self.escape {
             Escape::None => match byte {
                 0x1b => self.escape = Escape::Start,
@@ -279,6 +314,18 @@ mod tests {
         l.typed(b"root\r");
         assert_eq!(typed(l.output(b"\r\nlogin: ")), None);
         assert_eq!(typed(l.output(b"\r\nPassword: ")), Some("pw\r".into()));
+    }
+
+    #[test]
+    fn a_user_name_the_device_echoes_is_still_the_users_own() {
+        let mut l = login("admin", "pw");
+        l.output(b"Operator ID: ");
+        for key in [b"r", b"o", b"o", b"t"] {
+            l.typed(key);
+            l.output(key);
+        }
+        l.typed(b"\r");
+        assert_eq!(typed(l.output(b"\r\nlogin: ")), None);
     }
 
     #[test]

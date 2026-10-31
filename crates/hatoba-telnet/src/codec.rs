@@ -226,7 +226,8 @@ impl Telnet {
     }
 
     /// Whether the server suppresses go-ahead, taking input a character at a time. Until it does,
-    /// the client sends a line at a time ([`crate::line`]).
+    /// and while the server does not echo either, the client sends a line at a time
+    /// ([`crate::line`]).
     #[must_use]
     pub fn server_suppresses_go_ahead(&self) -> bool {
         self.him[usize::from(SGA)].enabled

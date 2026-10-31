@@ -1,8 +1,8 @@
 //! The client's own echo and line editing (RFC 857, RFC 858) for a server that leaves them to it,
-//! as the `telnet` command and PuTTY do. While the server does not echo, what is typed shows from
-//! here; while it does not suppress go-ahead, input goes out a line at a time, edited here with
-//! Backspace, Ctrl+U and Ctrl+W. Network devices do both themselves and get every key as typed;
-//! a mail server or a bare device console does neither.
+//! as the `telnet` command does. While the server does not echo, what is typed shows from here,
+//! but not at a password prompt; while it neither echoes nor suppresses go-ahead, input goes out
+//! a line at a time, edited here with Backspace, Ctrl+U and Ctrl+W. Network devices echo and get
+//! every key as typed; a mail server or a bare device console does neither.
 
 /// A line being typed for a server that takes whole lines.
 #[derive(Default)]
@@ -34,9 +34,8 @@ pub struct Typed {
 }
 
 impl LineDiscipline {
-    /// Reads the terminal's input. With `echo`, the server does not echo, so it shows from here;
-    /// with `edit`, the server takes whole lines, so it is kept until Enter. Without either, it
-    /// goes as it is.
+    /// Reads a piece of the terminal's input, as one key or one paste sends it. With `echo`, it
+    /// shows from here; with `edit`, it is kept until Enter. Without either, it goes as it is.
     pub fn input(&mut self, data: &[u8], echo: bool, edit: bool) -> Typed {
         let mut out = Typed::default();
         if !edit {
@@ -45,6 +44,15 @@ impl LineDiscipline {
                 return out;
             }
         }
+        self.read(data, echo, edit, &mut out);
+        // Escape on its own comes alone, unlike Alt with a key, so the next key stays a key.
+        if self.escape == Escape::Start {
+            self.escape = Escape::None;
+        }
+        out
+    }
+
+    fn read(&mut self, data: &[u8], echo: bool, edit: bool, out: &mut Typed) {
         for c in String::from_utf8_lossy(data).chars() {
             // Keys such as the arrows have nothing to move in a line, nor anything to show.
             if self.in_escape(c) {
@@ -106,7 +114,6 @@ impl LineDiscipline {
                 }
             }
         }
-        out
     }
 
     /// The line typed so far, which goes as it is once the server takes input a character at a
@@ -206,6 +213,14 @@ mod tests {
         );
         assert_eq!(l.input(b"\x03", true, true), typed(b"\x03", b""));
         assert_eq!(l.input(b"\r", false, true), typed(b"abc\r", b""));
+    }
+
+    #[test]
+    fn escape_on_its_own_does_nothing_and_the_next_key_stays() {
+        let mut l = LineDiscipline::default();
+        l.input(b"ab", true, true);
+        assert_eq!(l.input(b"\x1b", true, true), typed(b"", b""));
+        assert_eq!(l.input(b"c\r", true, true), typed(b"abc\r", b"c\r\n"));
     }
 
     #[test]

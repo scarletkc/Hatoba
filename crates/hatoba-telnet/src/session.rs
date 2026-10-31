@@ -19,7 +19,7 @@ use tokio::time::Instant;
 use crate::codec::Telnet;
 use crate::error::TelnetError;
 use crate::line::LineDiscipline;
-use crate::login::{AutoLogin, LOGIN_WINDOW};
+use crate::login::{AutoLogin, LOGIN_WINDOW, LastLine};
 
 const FLUSH_INTERVAL: Duration = Duration::from_millis(8);
 const FLUSH_BYTES: usize = 32 * 1024;
@@ -159,6 +159,8 @@ async fn run<S>(
         out.send(telnet.start());
     }
     let mut line = LineDiscipline::default();
+    // Where the output stands, so the client's own echo never shows a password.
+    let mut screen = LastLine::default();
     let login_until = Instant::now() + LOGIN_WINDOW;
 
     let mut buf = vec![0u8; 16 * 1024];
@@ -173,9 +175,10 @@ async fn run<S>(
                     if !out.reply(received.reply) {
                         break Some(STALLED.to_owned());
                     }
-                    if telnet.server_suppresses_go_ahead() {
+                    if telnet.server_echoes() || telnet.server_suppresses_go_ahead() {
                         out.send(telnet.encode(&line.flush()));
                     }
+                    screen.push(&received.data);
                     if Instant::now() >= login_until || login_stopped.load(Ordering::SeqCst) {
                         login.stop();
                     }
@@ -192,10 +195,13 @@ async fn run<S>(
             command = commands.recv() => match command {
                 Some(Command::Input(data)) => {
                     login.typed(&data);
+                    // While the server does not echo, the client does, but not at a password
+                    // prompt, and keeps a line until Enter unless the server takes characters.
+                    let echo = !telnet.server_echoes();
                     let typed = line.input(
                         &data,
-                        !telnet.server_echoes(),
-                        !telnet.server_suppresses_go_ahead(),
+                        echo && !screen.asks_password(),
+                        echo && !telnet.server_suppresses_go_ahead(),
                     );
                     out.send(telnet.encode(&typed.send));
                     if !show(&mut pending, &mut flush_at, &events, &typed.echo).await {
@@ -486,6 +492,33 @@ mod tests {
             shown.extend(next_data(&mut events).await);
         }
         assert_eq!(shown, echo);
+    }
+
+    #[tokio::test]
+    async fn a_password_for_a_server_that_does_not_echo_does_not_show() {
+        let (client, mut server) = duplex(4096);
+        let (session, mut events) =
+            TelnetSession::start(client, 80, 24, false, AutoLogin::new(None, None));
+        server.write_all(b"Password: ").await.unwrap();
+        assert_eq!(next_data(&mut events).await, b"Password: ");
+        session.write(b"hunter2\r".to_vec()).unwrap();
+        assert_eq!(read_some(&mut server).await, b"hunter2\r\n");
+        let shown = tokio::time::timeout(Duration::from_millis(200), events.recv()).await;
+        assert!(shown.is_err(), "the client showed {shown:?}");
+    }
+
+    #[tokio::test]
+    async fn a_server_that_echoes_gets_every_key_as_typed() {
+        let (client, mut server) = duplex(4096);
+        let (session, mut events) =
+            TelnetSession::start(client, 80, 24, false, AutoLogin::new(None, None));
+        // It echoes, but never suppresses go-ahead.
+        server.write_all(&[255, 251, 1]).await.unwrap();
+        server.write_all(b"> ").await.unwrap();
+        assert_eq!(next_data(&mut events).await, b"> ");
+        assert_eq!(read_some(&mut server).await, [255, 253, 1]);
+        session.write(b"a".to_vec()).unwrap();
+        assert_eq!(read_some(&mut server).await, b"a");
     }
 
     #[tokio::test]

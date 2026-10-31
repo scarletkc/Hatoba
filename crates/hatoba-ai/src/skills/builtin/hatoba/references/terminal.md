@@ -19,7 +19,7 @@ For switches, routers and other devices that offer Telnet. **New Host** opens th
 
 - Telnet has no login of its own: the device prints its `login:` (or `Username:`) and `Password:` prompts. Hatoba types the saved user name and password at them, once each, within the first two minutes and while Hatoba stays unlocked. A prompt that comes back after a wrong password is left to the user, and so is every prompt once the user has typed two lines of their own, or one after the saved user name went in. Leave either empty to type it by hand.
 - Telnet is not encrypted: the password and everything in the terminal travel as plain text, which the editor says.
-- A server that doesn't echo, such as a mail server on port 25, gets a line at a time: Hatoba shows what is typed and edits it with Backspace, Ctrl+U and Ctrl+W until Enter. On a port other than 23, Hatoba waits for the server to start the Telnet negotiation.
+- A server that doesn't echo, such as a mail server on port 25, gets a line at a time: Hatoba shows what is typed, except at a password prompt, and edits it with Backspace, Ctrl+U and Ctrl+W until Enter. On a port other than 23, Hatoba waits for the server to start the Telnet negotiation.
 - Quick connect reads `telnet host [port]` and `telnet://host[:port]`: the tab connects through this device's default proxy and the user logs in by hand. A saved Telnet host at that address and port connects instead.
 - A Telnet tab's status bar shows `telnet address:port`, with no resource usage, port forwarding or SFTP, and its tab a network icon. A refused connection usually means Telnet is off on the device or the port is wrong.
 
