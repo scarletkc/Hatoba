@@ -483,9 +483,9 @@ pub(crate) fn find_host(vault: &Vault, wanted: &str) -> Result<(String, Host), S
                 "{wanted} is a Telnet host, and exec and cp work only on SSH hosts. Run hatoba \
                  {name} to open it in Hatoba."
             ),
-            None => format!(
-                "no saved host is named {wanted}. Run hatoba hosts to see their names."
-            ),
+            None => {
+                format!("no saved host is named {wanted}. Run hatoba hosts to see their names.")
+            }
         }),
         n => {
             named.sort_by(|a, b| a.0.cmp(&b.0));
