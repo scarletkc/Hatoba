@@ -22,7 +22,7 @@ sha2.workspace = true
 bytes.workspace = true
 futures.workspace = true
 # `ring` instead of the default `aws-lc-rs` backend: no NASM/CMake needed for Windows builds.
-russh = { version = "0.64.1", default-features = false, features = ["ring", "flate2", "rsa"] }
+russh = { version = "0.65.0", default-features = false, features = ["ring", "flate2", "rsa"] }
 russh-sftp = "3"
 # Legacy encrypted PEM (Proc-Type: 4,ENCRYPTED) decryption; versions match russh's own.
 aes = "0.9"

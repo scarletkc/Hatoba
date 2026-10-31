@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use hatoba_ssh::{AuthMethod, ConnectConfig, KeyboardInteractive, PromptRequest};
-use russh::keys::{Algorithm, PrivateKey, PublicKey};
-use russh::server::{Auth, Config, Handler, Response};
+use russh::keys::{Algorithm, PrivateKey};
+use russh::server::{Auth, Config, Handler, Response, VerifiedPublicKey};
 use russh::{MethodKind, MethodSet};
 use tokio::net::TcpListener;
 use zeroize::Zeroizing;
@@ -69,7 +69,11 @@ struct AskHandler {
 impl Handler for AskHandler {
     type Error = russh::Error;
 
-    async fn auth_publickey(&mut self, _user: &str, _key: &PublicKey) -> Result<Auth, Self::Error> {
+    async fn auth_publickey(
+        &mut self,
+        _user: &str,
+        _key: VerifiedPublicKey<'_>,
+    ) -> Result<Auth, Self::Error> {
         self.keys_offered.fetch_add(1, Ordering::SeqCst);
         Ok(Auth::reject())
     }

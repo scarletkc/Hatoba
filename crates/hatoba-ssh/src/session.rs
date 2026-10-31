@@ -15,7 +15,7 @@ use zeroize::Zeroizing;
 use crate::auth::{self, AuthContext};
 use crate::error::{SshError, SshErrorKind};
 use crate::forward::{self, DynamicForward, ForwardHandle, LocalForward, RemoteForward};
-use crate::handler::{ClientHandler, CloseReason, SessionShared};
+use crate::handler::{Banners, ClientHandler, CloseReason, SessionShared};
 use crate::hostkey::HostKeyVerifier;
 use crate::interactive::KeyboardInteractive;
 use crate::net::{ConnectClock, Phase, ceil_ms, tcp_connect};
@@ -229,12 +229,19 @@ async fn connect_hop(
 ) -> Result<Hop, SshError> {
     let clock = ConnectClock::new();
     let shared = SessionShared::new();
+    let (banner_waits, banners) = mpsc::unbounded_channel();
+    let banners = tokio::sync::Mutex::new(banners);
     let handler = ClientHandler::new(
         spec.host.to_owned(),
         spec.port,
         Arc::clone(verifier),
         Arc::clone(&shared),
         Arc::clone(&clock),
+        Banners {
+            username: spec.username.to_owned(),
+            interactive: interactive.cloned(),
+            waits: banner_waits,
+        },
     );
 
     let work = async {
@@ -293,6 +300,7 @@ async fn connect_hop(
             clock: &clock,
             shared: &shared,
             agent_sockets: spec.agent_sockets,
+            banners: &banners,
         };
         auth::authenticate(&mut handle, &ctx, spec.auth).await?;
         Ok::<_, SshError>((handle, rtt))
@@ -311,7 +319,8 @@ async fn connect_hop(
 ///
 /// `cfg.connect_timeout` bounds DNS + TCP + handshake + authentication of each
 /// hop; time spent in the `verifier` or the keyboard-interactive callback does
-/// not count. Failures are classified (see [`SshErrorKind`]).
+/// not count, nor does the server's wait after a banner the callback shows.
+/// Failures are classified (see [`SshErrorKind`]).
 pub async fn connect(
     cfg: ConnectConfig,
     verifier: Arc<dyn HostKeyVerifier>,

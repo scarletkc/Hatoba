@@ -44,7 +44,7 @@ pub use config::{SshConfigHost, parse_ssh_config, parse_ssh_config_with_home};
 pub use error::{SshError, SshErrorKind};
 pub use forward::{DynamicForward, ForwardHandle, LocalForward, RemoteForward};
 pub use hostkey::{HostKeyInfo, HostKeyVerifier};
-pub use interactive::{KeyboardInteractive, Prompt, PromptRequest};
+pub use interactive::{Banner, BannerWait, KeyboardInteractive, Prompt, PromptRequest};
 pub use keys::{
     GenerateKind, KeyAlgorithm, KeyError, ParsedKey, fingerprint_sha256, generate_key,
     parse_private_key, try_fingerprint_sha256,
