@@ -18,7 +18,7 @@ import {
   useMenu,
   type MenuEntry,
 } from "@hatoba/ui";
-import { useVaultData } from "@/app/data";
+import { useAllHosts } from "@/app/data";
 import { LOCAL_TARGET, removeAllowance, savedAllowances, useAllowances } from "@/features/ai/rules/allowances";
 import { EFFORTS, effortKey } from "@/features/ai/effort";
 import { answersText, verdictText } from "@/features/ai/rules/autoText";
@@ -725,7 +725,8 @@ const ALLOWANCE_ICON: Record<string, string> = {
 function SavedApprovals() {
   const t = useT();
   const list = useAllowances((st) => st.list);
-  const hosts = useVaultData((st) => st.hosts);
+  // TELNET-04: approvals on a Telnet host are saved for it too.
+  const hosts = useAllHosts();
   useEffect(() => {
     savedAllowances().catch((e) => toast(aiErrorMessage(t, e), "error"));
   }, [t]);

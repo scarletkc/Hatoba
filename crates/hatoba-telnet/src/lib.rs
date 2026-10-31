@@ -7,6 +7,7 @@
 
 pub mod codec;
 pub mod error;
+pub mod line;
 pub mod login;
 pub mod session;
 

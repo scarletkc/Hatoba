@@ -4,7 +4,8 @@
 //! the WebView falls behind, the channel fills and the server is no longer read, so about 4 MB is
 //! held at most. Writes go out on a task of their own, so a server that stops reading never stalls
 //! the output; once 1 MB of the client's own protocol replies waits for such a server, the
-//! connection closes.
+//! connection closes. While the server leaves echo or line editing to the client, the input goes
+//! through [`LineDiscipline`], whose echo joins the output.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -17,6 +18,7 @@ use tokio::time::Instant;
 
 use crate::codec::Telnet;
 use crate::error::TelnetError;
+use crate::line::LineDiscipline;
 use crate::login::{AutoLogin, LOGIN_WINDOW};
 
 const FLUSH_INTERVAL: Duration = Duration::from_millis(8);
@@ -57,11 +59,14 @@ pub struct TelnetSession {
 
 impl TelnetSession {
     /// Starts the protocol on `stream`, a connection to the server, with a window of `cols` ×
-    /// `rows`, and returns the session and its events.
+    /// `rows`, and returns the session and its events. With `negotiate`, as on the Telnet port,
+    /// the client opens the option negotiation ([`Telnet::start`]); otherwise it only answers the
+    /// server's.
     pub fn start<S>(
         stream: S,
         cols: u16,
         rows: u16,
+        negotiate: bool,
         login: AutoLogin,
     ) -> (Arc<Self>, mpsc::Receiver<TelnetEvent>)
     where
@@ -74,6 +79,7 @@ impl TelnetSession {
             stream,
             cols,
             rows,
+            negotiate,
             login,
             login_stopped.clone(),
             commands_rx,
@@ -123,10 +129,15 @@ impl Drop for TelnetSession {
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "what `TelnetSession::start` takes, with the session's channels"
+)]
 async fn run<S>(
     stream: S,
     cols: u16,
     rows: u16,
+    negotiate: bool,
     mut login: AutoLogin,
     login_stopped: Arc<AtomicBool>,
     mut commands: mpsc::UnboundedReceiver<Command>,
@@ -144,7 +155,10 @@ async fn run<S>(
     let mut write_task = tokio::spawn(write_loop(writer, out_rx, queued));
 
     let mut telnet = Telnet::new(cols, rows);
-    out.send(telnet.start());
+    if negotiate {
+        out.send(telnet.start());
+    }
+    let mut line = LineDiscipline::default();
     let login_until = Instant::now() + LOGIN_WINDOW;
 
     let mut buf = vec![0u8; 16 * 1024];
@@ -159,19 +173,18 @@ async fn run<S>(
                     if !out.reply(received.reply) {
                         break Some(STALLED.to_owned());
                     }
+                    if telnet.server_suppresses_go_ahead() {
+                        out.send(telnet.encode(&line.flush()));
+                    }
                     if Instant::now() >= login_until || login_stopped.load(Ordering::SeqCst) {
                         login.stop();
                     }
                     if let Some(answer) = login.output(&received.data) {
                         out.send(telnet.encode(answer.as_bytes()));
                     }
-                    pending.extend_from_slice(&received.data);
-                    if flush_at.is_none() || pending.len() >= FLUSH_BYTES {
-                        if !send_pending(&mut pending, &events).await {
-                            write_task.abort();
-                            return;
-                        }
-                        flush_at = Some(Instant::now() + FLUSH_INTERVAL);
+                    if !show(&mut pending, &mut flush_at, &events, &received.data).await {
+                        write_task.abort();
+                        return;
                     }
                 }
                 Err(e) => break Some(e.to_string()),
@@ -179,7 +192,16 @@ async fn run<S>(
             command = commands.recv() => match command {
                 Some(Command::Input(data)) => {
                     login.typed(&data);
-                    out.send(telnet.encode(&data));
+                    let typed = line.input(
+                        &data,
+                        !telnet.server_echoes(),
+                        !telnet.server_suppresses_go_ahead(),
+                    );
+                    out.send(telnet.encode(&typed.send));
+                    if !show(&mut pending, &mut flush_at, &events, &typed.echo).await {
+                        write_task.abort();
+                        return;
+                    }
                 }
                 Some(Command::Resize { cols, rows }) => out.send(telnet.resize(cols, rows)),
                 Some(Command::StopLogin) => login.stop(),
@@ -258,6 +280,27 @@ async fn write_loop<W: AsyncWrite>(
     Ok(())
 }
 
+/// Adds output for the terminal to what has built up, and sends it when it is due. `false` once
+/// nobody listens.
+async fn show(
+    pending: &mut BytesMut,
+    flush_at: &mut Option<Instant>,
+    events: &mpsc::Sender<TelnetEvent>,
+    data: &[u8],
+) -> bool {
+    if data.is_empty() {
+        return true;
+    }
+    pending.extend_from_slice(data);
+    if flush_at.is_none() || pending.len() >= FLUSH_BYTES {
+        if !send_pending(pending, events).await {
+            return false;
+        }
+        *flush_at = Some(Instant::now() + FLUSH_INTERVAL);
+    }
+    true
+}
+
 /// Sends what has built up, at most [`FLUSH_BYTES`] an event. `false` once nobody listens.
 async fn send_pending(pending: &mut BytesMut, events: &mpsc::Sender<TelnetEvent>) -> bool {
     while !pending.is_empty() {
@@ -304,7 +347,7 @@ mod tests {
     async fn logs_in_and_passes_the_terminal_through() {
         let (client, mut server) = duplex(4096);
         let login = AutoLogin::new(Some("admin".into()), Some("pw".into()));
-        let (session, mut events) = TelnetSession::start(client, 80, 24, login);
+        let (session, mut events) = TelnetSession::start(client, 80, 24, true, login);
 
         // The client's offers come first.
         assert_eq!(read_some(&mut server).await[..3], [255, 251, 31]);
@@ -336,7 +379,7 @@ mod tests {
     async fn closing_the_session_ends_it_with_closed() {
         let (client, mut server) = duplex(4096);
         let (session, mut events) =
-            TelnetSession::start(client, 80, 24, AutoLogin::new(None, None));
+            TelnetSession::start(client, 80, 24, true, AutoLogin::new(None, None));
         read_some(&mut server).await;
         session.close();
         match tokio::time::timeout(Duration::from_secs(5), events.recv()).await {
@@ -350,7 +393,7 @@ mod tests {
     async fn a_stopped_login_types_nothing_at_the_prompts() {
         let (client, mut server) = duplex(4096);
         let login = AutoLogin::new(Some("admin".into()), Some("pw".into()));
-        let (session, mut events) = TelnetSession::start(client, 80, 24, login);
+        let (session, mut events) = TelnetSession::start(client, 80, 24, true, login);
         read_some(&mut server).await;
         // The prompt comes right after the stop, before the task can have read its command.
         session.stop_login();
@@ -367,7 +410,7 @@ mod tests {
     async fn a_server_that_stops_reading_is_disconnected() {
         let (client, mut server) = duplex(4096);
         let (_session, mut events) =
-            TelnetSession::start(client, 80, 24, AutoLogin::new(None, None));
+            TelnetSession::start(client, 80, 24, true, AutoLogin::new(None, None));
         // The server reads nothing, and offers an option it is refused, over and over.
         tokio::spawn(async move {
             let offer = [255u8, 251, 99].repeat(4096);
@@ -395,8 +438,12 @@ mod tests {
     async fn a_large_paste_reaches_a_server_that_reads() {
         let (client, mut server) = duplex(4096);
         let (session, mut events) =
-            TelnetSession::start(client, 80, 24, AutoLogin::new(None, None));
+            TelnetSession::start(client, 80, 24, true, AutoLogin::new(None, None));
         read_some(&mut server).await;
+        // The server echoes and takes characters, so the paste goes as it is typed.
+        server.write_all(&[255, 251, 1, 255, 251, 3]).await.unwrap();
+        server.write_all(b"$ ").await.unwrap();
+        assert_eq!(next_data(&mut events).await, b"$ ");
         let paste = vec![b'a'; 3 * OUT_LIMIT];
         session.write(paste.clone()).unwrap();
         let mut received = vec![0u8; paste.len()];
@@ -409,9 +456,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn on_another_port_the_server_opens_the_negotiation() {
+        let (client, mut server) = duplex(4096);
+        let (_session, _events) =
+            TelnetSession::start(client, 80, 24, false, AutoLogin::new(None, None));
+        let mut buf = [0u8; 64];
+        let sent = tokio::time::timeout(Duration::from_millis(300), server.read(&mut buf)).await;
+        assert!(sent.is_err(), "the client sent {sent:?}");
+        // The server's own requests are answered.
+        server.write_all(&[255, 253, 31]).await.unwrap();
+        assert_eq!(
+            read_some(&mut server).await,
+            [255, 251, 31, 255, 250, 31, 0, 80, 0, 24, 255, 240]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_server_that_leaves_echo_and_editing_to_the_client_gets_lines_shown_here() {
+        let (client, mut server) = duplex(4096);
+        let (session, mut events) =
+            TelnetSession::start(client, 80, 24, false, AutoLogin::new(None, None));
+        server.write_all(b"220 mail ESMTP\r\n").await.unwrap();
+        assert_eq!(next_data(&mut events).await, b"220 mail ESMTP\r\n");
+        session.write(b"EHLX\x7fO x\r".to_vec()).unwrap();
+        assert_eq!(read_some(&mut server).await, b"EHLO x\r\n");
+        let echo = b"EHLX\x08 \x08O x\r\n";
+        let mut shown = Vec::new();
+        while shown.len() < echo.len() {
+            shown.extend(next_data(&mut events).await);
+        }
+        assert_eq!(shown, echo);
+    }
+
+    #[tokio::test]
     async fn resizes_reach_the_server_once_it_asks() {
         let (client, mut server) = duplex(4096);
-        let (session, _events) = TelnetSession::start(client, 80, 24, AutoLogin::new(None, None));
+        let (session, _events) =
+            TelnetSession::start(client, 80, 24, true, AutoLogin::new(None, None));
         read_some(&mut server).await;
         server.write_all(&[255, 253, 31]).await.unwrap();
         assert_eq!(

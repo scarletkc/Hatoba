@@ -4,9 +4,12 @@
 //! other output. The saved user name is typed at a prompt that ends with `login:`, `username:`,
 //! `user name:` or `user:`, and the saved password at one that ends with `password:` or
 //! `passcode:`, each once and only while the prompt is the last thing on the screen. It stops
-//! once the password is typed, after the user has pressed Enter twice (a user name and a password
-//! of their own), or once [`LOGIN_WINDOW`] has passed, so a later `sudo` never gets the password.
-//! A prompt that comes back after a wrong password is left to the user.
+//! once the password is typed, once the user presses Enter after the saved user name went in
+//! without a password prompt, after the user has pressed Enter twice (a user name and a password
+//! of their own), or once [`LOGIN_WINDOW`] has passed, so a later `su`, `enable` or `sudo` never
+//! gets the password. An Enter at a prompt the user answers, a line that ends with `:`, is a user
+//! name of their own, after which the saved one is not typed; one at a banner is not. A prompt
+//! that comes back after a wrong password is left to the user.
 
 use std::time::Duration;
 
@@ -31,6 +34,9 @@ pub struct AutoLogin {
     escape: Escape,
     /// Enter presses of the user's own.
     user_lines: u8,
+    /// The saved user name went in, so the next prompt has to ask for the password before the
+    /// user presses Enter.
+    typed_user: bool,
     done: bool,
 }
 
@@ -41,6 +47,8 @@ enum Escape {
     Start,
     /// In a CSI sequence, until its final byte.
     Csi,
+    /// After ESC and an intermediate byte, as in `ESC ( B`, until the final byte.
+    Intermediate,
     /// In an OSC or other string sequence, until BEL or ST.
     String,
     /// After ESC in a string sequence: a backslash ends it (ST).
@@ -60,6 +68,7 @@ impl AutoLogin {
             line: Vec::new(),
             escape: Escape::None,
             user_lines: 0,
+            typed_user: false,
             done,
         }
     }
@@ -77,18 +86,29 @@ impl AutoLogin {
         self.password = None;
     }
 
-    /// Notes the user's own input: their second Enter ends the login.
+    /// Notes the user's own input: their Enter after the saved user name, or their second Enter,
+    /// ends the login.
     pub fn typed(&mut self, input: &[u8]) {
-        if self.done {
+        let enters = input.iter().filter(|&&b| b == b'\r').count();
+        if self.done || enters == 0 {
             return;
         }
-        self.user_lines = self.user_lines.saturating_add(
-            u8::try_from(input.iter().filter(|&&b| b == b'\r').count()).unwrap_or(u8::MAX),
-        );
+        // The device let the user in without asking for the password.
+        if self.typed_user {
+            self.stop();
+            return;
+        }
+        self.user_lines = self
+            .user_lines
+            .saturating_add(u8::try_from(enters).unwrap_or(u8::MAX));
         if self.user_lines >= 2 {
             self.stop();
-        } else if self.user_lines == 1 {
-            // The user typed a user name of their own: the saved one is not typed after it.
+        } else if String::from_utf8_lossy(&self.line)
+            .trim_end()
+            .ends_with(':')
+        {
+            // The user answered a prompt with a user name of their own: the saved one is not
+            // typed after it.
             self.username = None;
             if self.password.is_none() {
                 self.stop();
@@ -116,6 +136,7 @@ impl AutoLogin {
         if USER_PROMPTS.iter().any(|p| text.ends_with(p)) {
             self.line.clear();
             let username = self.username.take()?;
+            self.typed_user = true;
             if self.password.is_none() {
                 self.stop();
             }
@@ -145,8 +166,14 @@ impl AutoLogin {
                 self.escape = match byte {
                     b'[' => Escape::Csi,
                     b']' | b'P' | b'X' | b'^' | b'_' => Escape::String,
+                    0x20..=0x2f => Escape::Intermediate,
                     _ => Escape::None,
                 };
+            }
+            Escape::Intermediate => {
+                if !(0x20..=0x2f).contains(&byte) {
+                    self.escape = Escape::None;
+                }
             }
             Escape::Csi => {
                 if (0x40..=0x7e).contains(&byte) {
@@ -247,9 +274,39 @@ mod tests {
     #[test]
     fn the_users_own_user_name_still_gets_the_saved_password() {
         let mut l = login("admin", "pw");
+        // A prompt that is not known, which the user answers.
+        assert_eq!(typed(l.output(b"Operator ID: ")), None);
         l.typed(b"root\r");
-        assert_eq!(typed(l.output(b"login: ")), None);
+        assert_eq!(typed(l.output(b"\r\nlogin: ")), None);
         assert_eq!(typed(l.output(b"\r\nPassword: ")), Some("pw\r".into()));
+    }
+
+    #[test]
+    fn enter_at_a_banner_keeps_the_saved_user_name() {
+        let mut l = login("admin", "pw");
+        assert_eq!(typed(l.output(b"Press any key to continue")), None);
+        l.typed(b"\r");
+        assert_eq!(typed(l.output(b"\r\nUsername: ")), Some("admin\r".into()));
+        assert_eq!(typed(l.output(b"\r\nPassword: ")), Some("pw\r".into()));
+    }
+
+    #[test]
+    fn enter_after_the_saved_user_name_without_a_password_prompt_ends_the_login() {
+        let mut l = login("admin", "pw");
+        assert_eq!(typed(l.output(b"router login: ")), Some("admin\r".into()));
+        assert_eq!(typed(l.output(b"admin\r\n$ ")), None);
+        l.typed(b"su\r");
+        assert!(l.is_done());
+        assert_eq!(typed(l.output(b"su\r\nPassword: ")), None);
+    }
+
+    #[test]
+    fn an_escape_with_an_intermediate_byte_leaves_nothing_in_the_prompt() {
+        let mut l = login("admin", "pw");
+        assert_eq!(
+            typed(l.output(b"\x1b[1mPassword:\x1b(B\x1b[m ")),
+            Some("pw\r".into())
+        );
     }
 
     #[test]

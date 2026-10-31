@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
-use hatoba_core::model::{Item, MAX_HOST_AI_NOTES_BYTES, TelnetHost};
+use hatoba_core::model::{Item, MAX_HOST_AI_NOTES_BYTES, TELNET_PORT, TelnetHost};
 use hatoba_core::vault::Vault;
 use hatoba_telnet::{AutoLogin, TelnetEvent, TelnetSession};
 use tauri::ipc::Channel;
@@ -14,7 +14,7 @@ use tokio::sync::mpsc;
 use zeroize::Zeroizing;
 
 use crate::commands::hosts::{MAX_NAME_CHARS, check_item_size, proxy_from_input, tags_from_input};
-use crate::commands::ssh::{FRAME_CLOSED, FRAME_DATA, TermFrame, emit_state};
+use crate::commands::ssh::{FRAME_CLOSED, FRAME_DATA, FRAME_ERROR, TermFrame, emit_state};
 use crate::convert::telnet_host_view;
 use crate::dto::{LocalOpenOptions, SessionState, TelnetHostInput, TelnetHostView};
 use crate::error::{AppError, AppResult, SshErrorKind};
@@ -328,7 +328,9 @@ async fn open(
         if !vault.is_unlocked() {
             return Err(AppError::locked());
         }
-        let (session, events) = TelnetSession::start(stream, cols, rows, login);
+        // As the `telnet` command does, only the Telnet port opens the option negotiation.
+        let negotiate = target.port == TELNET_PORT;
+        let (session, events) = TelnetSession::start(stream, cols, rows, negotiate, login);
         let live = Arc::new(TelnetLive::new(session, target.host_id.clone()));
         state.telnet.insert(session_id.clone(), live.clone());
         if let Some(host_id) = &target.host_id
@@ -371,7 +373,13 @@ fn pump(
                 TelnetEvent::Closed { error } => {
                     // A connection Hatoba closed, on lock or quit, ended without an error.
                     let error = error.filter(|_| !live.is_closed());
-                    let _ = channel.send(TermFrame::new(FRAME_CLOSED, b""));
+                    // Why it ended shows in the terminal, as for SSH tabs.
+                    let _ = match &error {
+                        Some(message) => {
+                            channel.send(TermFrame::new(FRAME_ERROR, message.as_bytes()))
+                        }
+                        None => channel.send(TermFrame::new(FRAME_CLOSED, b"")),
+                    };
                     emit_state(
                         &app,
                         &session_id,

@@ -103,8 +103,10 @@ impl Telnet {
         }
     }
 
-    /// What the client sends first: it offers the window size and the terminal type, and asks the
-    /// server to echo and to suppress go-ahead, as PuTTY does.
+    /// What the client sends first on the Telnet port: it offers the window size and the terminal
+    /// type, and asks the server to echo and to suppress go-ahead, as PuTTY does. On another port
+    /// the client waits for the server to start, as the `telnet` command does, so a service such
+    /// as SMTP gets no Telnet commands.
     pub fn start(&mut self) -> Vec<u8> {
         let mut out = Vec::new();
         for option in [NAWS, TTYPE, SGA] {
@@ -216,10 +218,18 @@ impl Telnet {
         }
     }
 
-    /// Whether the server echoes what is typed. Until it does, a password typed at a prompt shows.
+    /// Whether the server echoes what is typed. Until it does, the client echoes it
+    /// ([`crate::line`]).
     #[must_use]
     pub fn server_echoes(&self) -> bool {
         self.him[usize::from(ECHO)].enabled
+    }
+
+    /// Whether the server suppresses go-ahead, taking input a character at a time. Until it does,
+    /// the client sends a line at a time ([`crate::line`]).
+    #[must_use]
+    pub fn server_suppresses_go_ahead(&self) -> bool {
+        self.him[usize::from(SGA)].enabled
     }
 
     fn negotiate(&mut self, command: u8, option: u8, reply: &mut Vec<u8>) {

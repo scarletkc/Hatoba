@@ -137,9 +137,11 @@ export function useCommandMenu({
   const triggerKey = trigger ? `${trigger.sign}${trigger.start}` : null;
   const open = !!trigger && dismissed !== triggerKey;
 
+  // TELNET-04: a Telnet device has no files to list.
+  const telnet = useTabs((st) => !!st.tabs.find((x) => x.id === slotId)?.telnet);
   const session = useTabs((st) => {
     const tab = st.tabs.find((x) => x.id === slotId);
-    return tab?.status === "connected" ? (tab.sessionId ?? null) : null;
+    return tab?.status === "connected" && !tab.telnet ? (tab.sessionId ?? null) : null;
   });
   const skills = useSkills((st) => st.skills);
   const servers = useMcp((st) => st.servers);
@@ -297,11 +299,28 @@ export function useCommandMenu({
     const hostRoom = Math.max(Math.ceil(room / 2), room - resources.length);
     const list = [...[...host.slice(0, hostRoom), ...resources].slice(0, room), ...local];
     if (list.length === 0)
-      list.push({ key: "none", icon: "info", label: session ? t("ai.mention.none") : t("ai.mention.noTerminal") });
+      list.push({
+        key: "none",
+        icon: "info",
+        label: session || telnet ? t("ai.mention.none") : t("ai.mention.noTerminal"),
+      });
     return list;
     // The pick closures read the draft through `replace` at pick time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, trigger?.sign, trigger?.query, trigger?.start, skills, sources, session, listings, dirKey, draft, t]);
+  }, [
+    open,
+    trigger?.sign,
+    trigger?.query,
+    trigger?.start,
+    skills,
+    sources,
+    session,
+    telnet,
+    listings,
+    dirKey,
+    draft,
+    t,
+  ]);
 
   function commandRow(item: CommandItem, pick: (how: "enter" | "tab") => void): Row {
     switch (item.kind) {

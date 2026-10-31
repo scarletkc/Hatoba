@@ -73,7 +73,8 @@ impl TelnetManager {
     /// Takes a session out. Its saved login stops before the registry is let go, so a lock that
     /// no longer finds it here has nothing to stop.
     pub fn take(&self, id: &str) -> Option<Arc<TelnetLive>> {
-        let live = lock(&self.sessions).remove(id)?;
+        let mut sessions = lock(&self.sessions);
+        let live = sessions.remove(id)?;
         live.session.stop_login();
         Some(live)
     }
