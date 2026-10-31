@@ -711,13 +711,11 @@ impl Ctx<'_> {
         };
         let kept = cli.kept_sudo(&key);
         if let Some(password) = kept.clone() {
-            let takes = self.sudo_takes(session, &password, target, what).await;
-            if takes == Ok(true) {
+            if self.sudo_takes(session, &password, target, what).await? {
                 cli.keep_sudo(key, password.clone());
                 return Ok(RunAs::Sudo(Some(password)));
             }
             cli.forget_sudo(&key);
-            takes?;
         }
         let saved = state(self.app)
             .with_unlocked(|v| {
