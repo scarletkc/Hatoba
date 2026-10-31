@@ -1,15 +1,18 @@
 import { create } from "zustand";
 import { api } from "@/ipc/api";
-import type { AuthPrompt, HostKeyPrompt, HostView } from "@/ipc/types";
+import type { AuthPrompt, AuthPromptClosed, HostKeyPrompt, HostView } from "@/ipc/types";
 
-/** A request for a one-off secret (SSH-03): never stored anywhere, only handed to `ssh_connect`. */
+/**
+ * A request for a one-off secret (SSH-03): never stored anywhere, only handed to `ssh_connect`, or
+ * a sudo password for `hatoba exec --sudo` and `hatoba cp --sudo` (HOST-15).
+ */
 export interface SecretRequest {
-  kind: "password" | "passphrase";
+  kind: "password" | "passphrase" | "sudo";
   /** Host display name. */
   hostName: string;
   /** `user@address:port`. */
   target: string;
-  /** The previously supplied passphrase was rejected. */
+  /** The previously supplied passphrase or sudo password was rejected. */
   wrong?: boolean;
   /** The login password of a quick connection (HOST-12), not of a saved host. */
   oneOff?: boolean;
@@ -25,6 +28,8 @@ export type PromptItem =
       resolve: (value: string | null) => void;
       /** The backend session asking, for a quick connection's login password. */
       sessionId?: string | null;
+      /** The `ssh://auth-prompt` this answers. */
+      requestId?: string;
     }
   | { key: string; kind: "username"; target: string; resolve: (value: string | null) => void };
 
@@ -52,12 +57,19 @@ export function pushHostKeyPrompt(prompt: HostKeyPrompt) {
 }
 
 export function pushAuthPrompt(prompt: AuthPrompt) {
+  if (prompt.sudo) {
+    const request: SecretRequest = { kind: "sudo", hostName: prompt.name, target: prompt.target, wrong: prompt.wrong };
+    const resolve = (value: string | null) =>
+      void api.auth_prompt_respond(prompt.request_id, value === null ? null : [value]).catch(() => {});
+    push({ kind: "secret", request, resolve, requestId: prompt.request_id });
+    return;
+  }
   if (prompt.password) {
     // A quick connection's login password is asked like an "ask every time" one (SSH-03).
     const request: SecretRequest = { kind: "password", hostName: prompt.target, target: prompt.target, oneOff: true };
     const resolve = (value: string | null) =>
       void api.auth_prompt_respond(prompt.request_id, value === null ? null : [value]).catch(() => {});
-    push({ kind: "secret", request, resolve, sessionId: prompt.session_id });
+    push({ kind: "secret", request, resolve, sessionId: prompt.session_id, requestId: prompt.request_id });
     return;
   }
   push({ kind: "auth", prompt });
@@ -70,6 +82,13 @@ export function cancelSessionPrompts(sessionId: string) {
     else if (item.kind === "auth" && item.prompt.session_id === sessionId) answerAuth(item, null);
     else if (item.kind === "secret" && item.sessionId === sessionId) answerSecret(item, null);
   }
+}
+
+/** The backend no longer waits for this prompt, so it closes unanswered. */
+export function closeAuthPrompt({ request_id }: AuthPromptClosed) {
+  const waited = (i: PromptItem) =>
+    (i.kind === "auth" && i.prompt.request_id === request_id) || (i.kind === "secret" && i.requestId === request_id);
+  usePrompts.setState((s) => ({ items: s.items.filter((i) => !waited(i)) }));
 }
 
 /** Resolves with the typed secret, or `null` when the user cancels. */

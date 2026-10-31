@@ -1,6 +1,6 @@
 import { api } from "@/ipc/api";
 import { quitEditing, useEdits } from "./edits";
-import { pushAuthPrompt, pushHostKeyPrompt } from "./prompts";
+import { closeAuthPrompt, pushAuthPrompt, pushHostKeyPrompt } from "./prompts";
 import { routeStateEvent } from "./session";
 import { watchTerminalAppearance } from "./theme";
 import { useTransfers } from "./transfers";
@@ -17,6 +17,7 @@ export function startSessionListeners() {
   void api.listen("ssh://state", routeStateEvent);
   void api.listen("ssh://hostkey-prompt", pushHostKeyPrompt);
   void api.listen("ssh://auth-prompt", pushAuthPrompt);
+  void api.listen("ssh://auth-prompt-closed", closeAuthPrompt);
   void api.listen("transfer://progress", (ev) => useTransfers.getState().handle(ev));
   // SFTP-05: listening first, so no change between the two is lost.
   void api

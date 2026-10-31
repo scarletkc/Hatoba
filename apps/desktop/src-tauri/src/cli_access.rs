@@ -8,17 +8,21 @@
 //! Questions a connection has for the user (an untrusted host key, a password that is not saved, a
 //! code) appear in the window as they do for a terminal, which comes to the front, and the command
 //! says what it waits for; `--no-prompt` fails instead.
+//!
+//! `--sudo` runs the command, or reads or writes the remote file, as root (`hatoba_ssh::sudo`).
+//! When sudo asks for a password, the one given in the window for the host within the last 15
+//! minutes goes first, then the host's saved password, then the window asks, as for a connection.
 
 mod pool;
 #[cfg(test)]
 mod tests;
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use hatoba_cli::SWITCH;
 use hatoba_cli::protocol::{
@@ -27,12 +31,15 @@ use hatoba_cli::protocol::{
 use hatoba_core::model::{Host, HostAuth, Item};
 use hatoba_core::vault::Vault;
 use hatoba_ssh::remote_command::{self, Output, Stopped};
-use hatoba_ssh::{SftpClient, SshError, SshSession, TransferProgress};
+use hatoba_ssh::remote_file::RemoteFileError;
+use hatoba_ssh::sudo::{self, Access, AccessError, Checked, RunAs};
+use hatoba_ssh::{SftpClient, SshError, SshSession, TransferProgress, target_label};
 use tauri::AppHandle;
 use tauri_specta::Event;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use zeroize::Zeroizing;
 
 use crate::dto::{
     CliActivity, CliActivityEvent, CliActivityKind, CliActivityState, HostKeyPromptKind,
@@ -47,6 +54,10 @@ const REQUEST_WAIT: Duration = Duration::from_secs(10);
 const IDLE_CHECK: Duration = Duration::from_secs(60);
 /// How many uses Settings lists.
 const ACTIVITY: usize = 20;
+/// How long a sudo password given in the window is kept after its host's last `--sudo`.
+const SUDO_KEPT: Duration = Duration::from_secs(15 * 60);
+/// How many sudo passwords the window asks for before a request fails.
+const SUDO_TRIES: usize = 3;
 
 const LOCKED: &str = "Hatoba is locked. Unlock it, then run the command again.";
 
@@ -60,6 +71,17 @@ pub struct CliAccess {
     /// Newest first.
     activity: Mutex<VecDeque<CliActivity>>,
     next_id: AtomicU64,
+    /// The sudo passwords given in the window, by host and the way it connects ([`sudo_key`]).
+    sudo: Mutex<HashMap<String, KeptPassword>>,
+    /// Lets one request at a time find the sudo password for a [`sudo_key`], so the others wait
+    /// and take the one it found instead of asking again.
+    sudo_turns: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+}
+
+struct KeptPassword {
+    password: Zeroizing<String>,
+    /// The clock's time, not an `Instant`, so that time asleep counts, as it does for sudo.
+    used: SystemTime,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -71,10 +93,41 @@ impl CliAccess {
         lock(&self.epoch).clone()
     }
 
-    /// Stops every command and copy, and closes the connections.
+    /// Stops every command and copy, closes the connections, and forgets the sudo passwords.
     fn end_epoch(&self) {
         std::mem::take(&mut *lock(&self.epoch)).cancel();
         self.pool.close_all();
+        lock(&self.sudo).clear();
+        lock(&self.sudo_turns).clear();
+    }
+
+    fn sudo_turn(&self, key: &str) -> Arc<tokio::sync::Mutex<()>> {
+        lock(&self.sudo_turns)
+            .entry(key.to_owned())
+            .or_default()
+            .clone()
+    }
+
+    /// The sudo password given in the window for `key`, unless [`SUDO_KEPT`] has passed since it
+    /// was last used, or the clock went back.
+    fn kept_sudo(&self, key: &str) -> Option<Zeroizing<String>> {
+        let mut kept = lock(&self.sudo);
+        kept.retain(|_, k| k.used.elapsed().is_ok_and(|e| e < SUDO_KEPT));
+        kept.get(key).map(|k| k.password.clone())
+    }
+
+    fn keep_sudo(&self, key: String, password: Zeroizing<String>) {
+        lock(&self.sudo).insert(
+            key,
+            KeptPassword {
+                password,
+                used: SystemTime::now(),
+            },
+        );
+    }
+
+    fn forget_sudo(&self, key: &str) {
+        lock(&self.sudo).remove(key);
     }
 
     /// SEC-03: nothing runs behind the lock screen, no connection stays, and the list of what ran
@@ -345,20 +398,26 @@ async fn handle(
             Err(_) => End::error(LOCKED),
         },
         Op::Exec {
-            host, command, cwd, ..
-        } => exec(&ctx, &host, command, cwd).await,
+            host,
+            command,
+            cwd,
+            sudo,
+            ..
+        } => exec(&ctx, &host, command, cwd, sudo).await,
         Op::Upload {
             host,
             local,
             remote,
+            sudo,
             ..
-        } => upload(&ctx, &host, local, remote).await,
+        } => upload(&ctx, &host, local, remote, sudo).await,
         Op::Download {
             host,
             remote,
             local,
+            sudo,
             ..
-        } => download(&ctx, &host, remote, local).await,
+        } => download(&ctx, &host, remote, local, sudo).await,
     }
 }
 
@@ -609,6 +668,137 @@ impl Ctx<'_> {
             .await
             .map_err(|e| format!("can't copy files with {}: {}", target.name, e.message))
     }
+
+    /// How a `--sudo` request runs as root on the host: as the login user when that is root, or
+    /// through sudo, with the password sudo asks for, if it asks for one. `what` is what a stop
+    /// stops.
+    async fn run_as(
+        &self,
+        session: &SshSession,
+        target: &Target,
+        what: &str,
+    ) -> Result<RunAs, String> {
+        let name = &target.name;
+        if session.server_os() == Some(hatoba_ssh::ServerOs::Windows) {
+            return Err(format!("{name} runs Windows, which has no sudo."));
+        }
+        let access = tokio::select! {
+            access = sudo::access(session) => access,
+            () = self.stopped() => return Err(self.stop_message(what)),
+        };
+        match access {
+            Ok(Access::Root) => return Ok(RunAs::Login),
+            Ok(Access::NoPassword) => return Ok(RunAs::Sudo(None)),
+            Ok(Access::Password) => {}
+            Err(AccessError::NoSudo) => {
+                return Err(format!("{name} has no sudo, which --sudo needs."));
+            }
+            Err(AccessError::Failed(message)) if message.is_empty() => {
+                return Err(format!("can't run sudo on {name}."));
+            }
+            Err(AccessError::Failed(message)) => {
+                return Err(format!("can't run sudo on {name}: {message}"));
+            }
+            Err(AccessError::Ssh(e)) => {
+                return Err(format!("can't run sudo on {name}: {}", e.message));
+            }
+        }
+        let cli = &state(self.app).cli;
+        let key = sudo_key(target);
+        let _turn = tokio::select! {
+            turn = cli.sudo_turn(&key).lock_owned() => turn,
+            () = self.stopped() => return Err(self.stop_message(what)),
+        };
+        let kept = cli.kept_sudo(&key);
+        if let Some(password) = kept.clone() {
+            if self.sudo_takes(session, &password, target, what).await? {
+                cli.keep_sudo(key, password.clone());
+                return Ok(RunAs::Sudo(Some(password)));
+            }
+            cli.forget_sudo(&key);
+        }
+        let saved = state(self.app)
+            .with_unlocked(|v| {
+                Ok(
+                    match v.get(&target.id).and_then(Item::as_host).map(|h| &h.auth) {
+                        Some(HostAuth::Password { password }) if !password.is_empty() => {
+                            Some(password.clone())
+                        }
+                        _ => None,
+                    },
+                )
+            })
+            .map_err(|_| LOCKED.to_owned())?;
+        if let Some(password) = saved.filter(|p| kept.as_ref() != Some(p))
+            && self.sudo_takes(session, &password, target, what).await?
+        {
+            return Ok(RunAs::Sudo(Some(password)));
+        }
+        if !self.prompt {
+            return Err(format!(
+                "sudo on {name} asks for a password that isn't saved. Run the command without \
+                 --no-prompt to enter it in Hatoba."
+            ));
+        }
+        let label = target_label(session.username(), session.host(), session.port());
+        for attempt in 0..SUDO_TRIES {
+            crate::platform::window::reopen_main(self.app);
+            let _ = self.tx.try_send(Frame::Notice(format!(
+                "waiting for you to enter the sudo password for {label} in Hatoba"
+            )));
+            let asked = tokio::select! {
+                asked = ssh::ask_sudo_password(self.app, name, &label, attempt > 0) => asked,
+                () = self.stopped() => return Err(self.stop_message(what)),
+            };
+            let Some(password) = asked else {
+                return Err(format!(
+                    "the sudo password for {name} wasn't entered in Hatoba."
+                ));
+            };
+            if self.sudo_takes(session, &password, target, what).await? {
+                cli.keep_sudo(key, password.clone());
+                return Ok(RunAs::Sudo(Some(password)));
+            }
+        }
+        Err(format!(
+            "sudo on {name} didn't take the password {SUDO_TRIES} times."
+        ))
+    }
+
+    /// Whether sudo takes `password`; an error when it refuses for another reason.
+    async fn sudo_takes(
+        &self,
+        session: &SshSession,
+        password: &str,
+        target: &Target,
+        what: &str,
+    ) -> Result<bool, String> {
+        let checked = tokio::select! {
+            checked = sudo::check(session, password) => checked,
+            () = self.stopped() => return Err(self.stop_message(what)),
+        };
+        let name = &target.name;
+        match checked {
+            Ok(Checked::Accepted) => Ok(true),
+            Ok(Checked::Wrong) => Ok(false),
+            Ok(Checked::Refused(message)) if message.is_empty() => {
+                Err(format!("sudo on {name} refused."))
+            }
+            Ok(Checked::Refused(message)) => Err(format!("sudo on {name}: {message}")),
+            Err(e) => Err(format!("can't run sudo on {name}: {}", e.message)),
+        }
+    }
+}
+
+/// What a sudo password is kept by: the host and the way it connects, so a host that now connects
+/// as another user is asked again.
+fn sudo_key(target: &Target) -> String {
+    format!("{}\n{}", target.id, target.config)
+}
+
+/// What a request does in Settings' list: `text`, after `sudo` for `--sudo`.
+fn detail(sudo: bool, text: String) -> String {
+    if sudo { format!("sudo {text}") } else { text }
 }
 
 /// Why a connection could not be set up from the vault.
@@ -642,18 +832,28 @@ fn unattended_error(e: &AppError, outcome: &Unattended, name: &str) -> String {
     }
 }
 
-async fn exec(ctx: &Ctx<'_>, host: &str, command: String, cwd: Option<String>) -> End {
+async fn exec(ctx: &Ctx<'_>, host: &str, command: String, cwd: Option<String>, sudo: bool) -> End {
     let target = match ctx.target(host) {
         Ok(target) => target,
         Err(message) => return End::error(message),
     };
-    let id = ctx.begin(CliActivityKind::Exec, &target, command.clone());
-    let end = run_exec(ctx, &target, &command, cwd.as_deref()).await;
+    let id = ctx.begin(
+        CliActivityKind::Exec,
+        &target,
+        detail(sudo, command.clone()),
+    );
+    let end = run_exec(ctx, &target, &command, cwd.as_deref(), sudo).await;
     ctx.finish(&id, &end);
     end
 }
 
-async fn run_exec(ctx: &Ctx<'_>, target: &Target, command: &str, cwd: Option<&str>) -> End {
+async fn run_exec(
+    ctx: &Ctx<'_>,
+    target: &Target,
+    command: &str,
+    cwd: Option<&str>,
+    sudo: bool,
+) -> End {
     let lease = match ctx.lease(target).await {
         Ok(lease) => lease,
         Err(message) => return End::error(message),
@@ -665,8 +865,23 @@ async fn run_exec(ctx: &Ctx<'_>, target: &Target, command: &str, cwd: Option<&st
             target.name
         ));
     }
+    let run_as = if sudo {
+        match ctx.run_as(&lease.session, target, "the command").await {
+            Ok(run_as) => run_as,
+            Err(message) => return End::error(message),
+        }
+    } else {
+        RunAs::Login
+    };
     let (output, mut pieces) = mpsc::channel(16);
-    let run = remote_command::run_streaming(&lease.session, command, cwd, ctx.stopped(), output);
+    let run = remote_command::run_streaming_as(
+        &lease.session,
+        command,
+        cwd,
+        &run_as,
+        ctx.stopped(),
+        output,
+    );
     let pass_on = async {
         while let Some(piece) = pieces.recv().await {
             let frame = match piece {
@@ -700,7 +915,7 @@ async fn run_exec(ctx: &Ctx<'_>, target: &Target, command: &str, cwd: Option<&st
     }
 }
 
-async fn upload(ctx: &Ctx<'_>, host: &str, local: String, remote: String) -> End {
+async fn upload(ctx: &Ctx<'_>, host: &str, local: String, remote: String, sudo: bool) -> End {
     let target = match ctx.target(host) {
         Ok(target) => target,
         Err(message) => return End::error(message),
@@ -708,9 +923,9 @@ async fn upload(ctx: &Ctx<'_>, host: &str, local: String, remote: String) -> End
     let id = ctx.begin(
         CliActivityKind::Upload,
         &target,
-        format!("{local} → {remote}"),
+        detail(sudo, format!("{local} → {remote}")),
     );
-    let end = match run_upload(ctx, &target, Path::new(&local), &remote).await {
+    let end = match run_upload(ctx, &target, Path::new(&local), &remote, sudo).await {
         Ok(()) => End::ok(),
         Err(message) => End::error(message),
     };
@@ -723,6 +938,7 @@ async fn run_upload(
     target: &Target,
     local: &Path,
     remote: &str,
+    sudo: bool,
 ) -> Result<(), String> {
     let meta = std::fs::metadata(local).map_err(|e| format!("{}: {e}", local.display()))?;
     if meta.is_dir() {
@@ -737,8 +953,15 @@ async fn run_upload(
         .ok_or_else(|| format!("{} has no file name", local.display()))?
         .to_owned();
     let lease = ctx.lease(target).await?;
+    let run_as = match sudo {
+        true => Some(ctx.run_as(&lease.session, target, "the copy").await?),
+        false => None,
+    };
     let sftp = ctx.sftp(&lease, target).await?;
     let result = async {
+        if let Some(run_as) = &run_as {
+            return upload_as_root(ctx, &lease.session, &sftp, run_as, local, remote, &name).await;
+        }
         let remote = remote_target(&sftp, remote, &name).await?;
         let cancel = CancellationToken::new();
         let copying = sftp.upload(local, &remote, ctx.progress(), cancel.clone());
@@ -749,7 +972,39 @@ async fn run_upload(
     result
 }
 
-async fn download(ctx: &Ctx<'_>, host: &str, remote: String, local: String) -> End {
+/// `hatoba cp --sudo` to the host: the file goes over SFTP into a folder that only the login user
+/// can open, and from there, as root, to `remote` (`hatoba_ssh::sudo::install`).
+async fn upload_as_root(
+    ctx: &Ctx<'_>,
+    session: &SshSession,
+    sftp: &SftpClient,
+    run_as: &RunAs,
+    local: &Path,
+    remote: &str,
+    name: &str,
+) -> Result<(), String> {
+    let mut to = absolute(sftp, remote).await?;
+    if to.ends_with('/') {
+        to = join_remote(&to, name);
+    }
+    let dir = sudo::temp_dir(session).await.map_err(|e| e.message)?;
+    let result = async {
+        let staged = sudo::temp_file(&dir);
+        let cancel = CancellationToken::new();
+        let copying = sftp.upload(local, &staged, ctx.progress(), cancel.clone());
+        ctx.copy_until_stopped(copying, &cancel).await?;
+        // Not stopped once begun: the copy writes the file in place, so stopping it would leave the
+        // file cut short, and closing the channel does not end it on the host anyway.
+        sudo::install(session, run_as, &staged, &to, name)
+            .await
+            .map_err(|e| copy_error(&to, e))
+    }
+    .await;
+    remove_temp_dir(session, &dir).await;
+    result
+}
+
+async fn download(ctx: &Ctx<'_>, host: &str, remote: String, local: String, sudo: bool) -> End {
     let target = match ctx.target(host) {
         Ok(target) => target,
         Err(message) => return End::error(message),
@@ -757,9 +1012,9 @@ async fn download(ctx: &Ctx<'_>, host: &str, remote: String, local: String) -> E
     let id = ctx.begin(
         CliActivityKind::Download,
         &target,
-        format!("{remote} → {local}"),
+        detail(sudo, format!("{remote} → {local}")),
     );
-    let end = match run_download(ctx, &target, &remote, PathBuf::from(&local)).await {
+    let end = match run_download(ctx, &target, &remote, PathBuf::from(&local), sudo).await {
         Ok(()) => End::ok(),
         Err(message) => End::error(message),
     };
@@ -772,16 +1027,27 @@ async fn run_download(
     target: &Target,
     remote: &str,
     mut local: PathBuf,
+    sudo: bool,
 ) -> Result<(), String> {
     let lease = ctx.lease(target).await?;
+    let run_as = match sudo {
+        true => Some(ctx.run_as(&lease.session, target, "the copy").await?),
+        false => None,
+    };
     let sftp = ctx.sftp(&lease, target).await?;
     let result = async {
-        let remote = expand_home(&sftp, remote).await?;
+        let remote = match run_as {
+            Some(_) => absolute(&sftp, remote).await?,
+            None => expand_home(&sftp, remote).await?,
+        };
         if local.is_dir() {
             let name = remote.rsplit('/').find(|n| !n.is_empty()).ok_or_else(|| {
                 format!("{remote} is a folder. hatoba cp copies one file at a time.")
             })?;
             local.push(name);
+        }
+        if let Some(run_as) = &run_as {
+            return download_as_root(ctx, &lease.session, run_as, &remote, &local).await;
         }
         let cancel = CancellationToken::new();
         let copying = sftp.download(&remote, &local, ctx.progress(), cancel.clone());
@@ -790,6 +1056,64 @@ async fn run_download(
     .await;
     sftp.close().await;
     result
+}
+
+/// `hatoba cp --sudo` from the host: root reads the file `remote` onto the exec channel
+/// (`hatoba_ssh::sudo::download`), so no copy of it is left on the host. A stopped download still
+/// runs to its end, which removes what it wrote here.
+async fn download_as_root(
+    ctx: &Ctx<'_>,
+    session: &SshSession,
+    run_as: &RunAs,
+    remote: &str,
+    local: &Path,
+) -> Result<(), String> {
+    let cancel = CancellationToken::new();
+    let copying = sudo::download(
+        session,
+        run_as,
+        remote,
+        local,
+        ctx.progress(),
+        cancel.clone(),
+    );
+    tokio::pin!(copying);
+    let result = tokio::select! {
+        result = &mut copying => result,
+        () = ctx.stopped() => {
+            cancel.cancel();
+            copying.await
+        }
+    };
+    result.map_err(|e| {
+        if cancel.is_cancelled() {
+            ctx.stop_message("the copy")
+        } else {
+            copy_error(remote, e)
+        }
+    })
+}
+
+/// Removes the folder a `--sudo` copy went through; one left behind keeps its copy where only the
+/// login user can open it.
+async fn remove_temp_dir(session: &SshSession, dir: &str) {
+    if let Err(e) = sudo::remove_temp_dir(session, dir).await {
+        tracing::debug!(
+            "hatoba cp --sudo left its folder on the host: {}",
+            e.message
+        );
+    }
+}
+
+/// What a `--sudo` copy of `path` that failed on the host says.
+fn copy_error(path: &str, e: RemoteFileError) -> String {
+    match e {
+        RemoteFileError::Ssh(e) => e.message,
+        RemoteFileError::IsDirectory => {
+            format!("{path} is a folder. hatoba cp copies one file at a time.")
+        }
+        e => format!("{path}: {e}"),
+    }
 }
 
 /// A remote path with `~` and `~/…` from the home directory. An empty one is the home directory,
@@ -808,6 +1132,17 @@ async fn expand_home(sftp: &SftpClient, path: &str) -> Result<String, String> {
     } else {
         join_remote(&home, rest)
     })
+}
+
+/// A remote path as root's scripts take it: absolute, with `~`, `~/…` and any other relative one
+/// from the login user's home directory.
+async fn absolute(sftp: &SftpClient, path: &str) -> Result<String, String> {
+    let path = expand_home(sftp, path).await?;
+    if path.starts_with('/') {
+        return Ok(path);
+    }
+    let home = sftp.home().await.map_err(|e| e.message)?;
+    Ok(join_remote(&home, &path))
 }
 
 /// Where an upload goes: into `path` when it is a folder or ends with `/`, under the file's name.

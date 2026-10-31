@@ -356,7 +356,7 @@ impl SftpClient {
             .open(remote)
             .await
             .map_err(|e| self.err("open", remote, e))?;
-        let (part, target) = match create_local_part(local).await {
+        let (part, target) = match create_local_part(local, false).await {
             Ok(created) => created,
             Err(e) => {
                 let _ = source.close().await;
@@ -802,7 +802,7 @@ impl SftpClient {
 }
 
 /// Throttled progress reporting with a smoothed transfer rate.
-struct Tracker {
+pub(crate) struct Tracker {
     started: Instant,
     total: u64,
     bytes: u64,
@@ -812,7 +812,7 @@ struct Tracker {
 }
 
 impl Tracker {
-    fn new(total: u64) -> Self {
+    pub(crate) fn new(total: u64) -> Self {
         let now = Instant::now();
         Self {
             started: now,
@@ -824,7 +824,7 @@ impl Tracker {
         }
     }
 
-    fn advance(&mut self, n: u64, progress: &impl Fn(TransferProgress)) {
+    pub(crate) fn advance(&mut self, n: u64, progress: &impl Fn(TransferProgress)) {
         self.bytes += n;
         let dt = self.last_report.elapsed();
         if dt < PROGRESS_INTERVAL {
@@ -845,8 +845,12 @@ impl Tracker {
         });
     }
 
+    pub(crate) fn bytes(&self) -> u64 {
+        self.bytes
+    }
+
     /// Final event with the average rate over the whole transfer.
-    fn finish(&mut self, progress: &impl Fn(TransferProgress)) {
+    pub(crate) fn finish(&mut self, progress: &impl Fn(TransferProgress)) {
         let secs = self.started.elapsed().as_secs_f64().max(0.001);
         progress(TransferProgress {
             bytes: self.bytes,
@@ -857,18 +861,24 @@ impl Tracker {
 }
 
 /// Creates a new, empty temporary file next to `local` that no other file or
-/// transfer is using.
-async fn create_local_part(local: &Path) -> Result<(PathBuf, tokio::fs::File), SshError> {
+/// transfer is using; a `private` one only this user can open, from the start.
+pub(crate) async fn create_local_part(
+    local: &Path,
+    private: bool,
+) -> Result<(PathBuf, tokio::fs::File), SshError> {
+    let mut options = tokio::fs::OpenOptions::new();
+    // `create_new` (O_EXCL) fails on any existing entry, including a symlink.
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    if private {
+        options.mode(0o600);
+    }
+    #[cfg(not(unix))]
+    let _ = private;
     let mut last = None;
     for _ in 0..PART_ATTEMPTS {
         let part = part_path(local, &part_token());
-        // `create_new` (O_EXCL) fails on any existing entry, including a symlink.
-        match tokio::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&part)
-            .await
-        {
+        match options.open(&part).await {
             Ok(file) => return Ok((part, file)),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => last = Some((part, e)),
             Err(e) => {
@@ -1007,9 +1017,21 @@ mod tests {
     async fn local_part_never_reuses_an_existing_path() {
         let dir = tempfile::tempdir().unwrap();
         let local = dir.path().join("report.txt");
-        let (a, _fa) = create_local_part(&local).await.unwrap();
-        let (b, _fb) = create_local_part(&local).await.unwrap();
+        let (a, _fa) = create_local_part(&local, false).await.unwrap();
+        let (b, _fb) = create_local_part(&local, false).await.unwrap();
         assert_ne!(a, b);
         assert!(a.exists() && b.exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_private_local_part_is_created_for_this_user_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let (part, _file) = create_local_part(&dir.path().join("key"), true)
+            .await
+            .unwrap();
+        let mode = std::fs::metadata(&part).unwrap().permissions().mode();
+        assert_eq!(mode & 0o077, 0);
     }
 }

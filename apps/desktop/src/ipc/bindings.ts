@@ -631,6 +631,7 @@ export const events = {
 	sftpEdit: makeEvent<RemoteEditEvent>("sftp://edit"),
 	sftpQuit: makeEvent<RemoteEditQuitEvent>("sftp://quit"),
 	sshAuthPrompt: makeEvent<AuthPrompt>("ssh://auth-prompt"),
+	sshAuthPromptClosed: makeEvent<AuthPromptClosed>("ssh://auth-prompt-closed"),
 	sshConnections: makeEvent<ConnectionsEvent>("ssh://connections"),
 	sshForwardsLost: makeEvent<ForwardsLostEvent>("ssh://forwards-lost"),
 	sshHostkeyPrompt: makeEvent<HostKeyPrompt>("ssh://hostkey-prompt"),
@@ -1374,8 +1375,23 @@ export type AuthPrompt = {
 	 *  password (SSH-03) rather than as a server prompt; answered with one value.
 	 */
 	password: boolean,
+	/**
+	 *  The sudo password of the saved host `name`, for `hatoba exec --sudo` or `hatoba cp
+	 *  --sudo` (HOST-15), asked like a password; answered with one value.
+	 */
+	sudo: boolean,
+	/**  The sudo password given before was wrong. */
+	wrong: boolean,
 	/**  `user@host:port` of the hop that asks. */
 	target: string,
+};
+
+/**
+ *  An `ssh://auth-prompt` that is no longer waited for, because the request that asked it ended
+ *  unanswered: its dialog closes.
+ */
+export type AuthPromptClosed = {
+	request_id: string,
 };
 
 export type AuthPromptField = {

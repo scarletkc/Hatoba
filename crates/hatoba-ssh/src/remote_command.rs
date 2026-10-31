@@ -36,6 +36,7 @@ use crate::error::SshError;
 use crate::local_sh::LocalSh;
 use crate::server_os::ServerOs;
 use crate::session::{ExecOutput, ExecSlot, ExecWriter, MAX_EXEC_OUTPUT, SshSession};
+use crate::sudo::{self, RunAs};
 
 /// Starts the command it reads from stdin in a process group of its own, and ends the group when
 /// stdin ends. `$1` is a number: the script's marker is `hatoba-run-` and the number after it, a
@@ -56,6 +57,9 @@ use crate::session::{ExecOutput, ExecSlot, ExecWriter, MAX_EXEC_OUTPUT, SshSessi
 /// the empty stdin sshd gives a command that is sent none. Its exit status is the script's; one
 /// ended by a signal is 128 and the signal's number.
 ///
+/// As root through sudo ([`RunAs::Sudo`]), whose environment has root's `HOME` and `SHELL`, `$2`
+/// and `$3` are the login user's, which the directory and the shell come from instead.
+///
 /// When stdin ends, a second process sends the group TERM, waits up to 2 seconds for its
 /// processes to end, sends KILL to those left, waits up to 1 second more, and prints the marker
 /// and `ended` (no process of the group is left), `running` (one is, or is another user's and
@@ -69,14 +73,15 @@ use crate::session::{ExecOutput, ExecSlot, ExecWriter, MAX_EXEC_OUTPUT, SshSessi
 ///
 /// One line without single quotes or backslashes, like the file tools' scripts, so every common
 /// login shell reads it the same way.
-const SCRIPT: &str = "m=hatoba-run-$(($1+1)); s=${SHELL:-sh}; \
+const SCRIPT: &str = "m=hatoba-run-$(($1+1)); s=${3:-${SHELL:-sh}}; o=${2:-$HOME}; \
      if command -v setsid >/dev/null 2>&1; then g=setsid; \
      elif command -v perl >/dev/null 2>&1; then g=perl; else g=none; fi; \
-     echo \"$m $g\" || exit 1; IFS= read -r n || exit 9; IFS= read -r h || exit 9; \
+     echo \"$m $g\" || exit 1; IFS= read -r n || exit 9; [ \"$n\" -gt 0 ] 2>/dev/null || exit 9; \
+     IFS= read -r h || exit 9; \
      c=$(head -n $((n+1)); echo x); c=${c%x}; d=${c%\"$m\"-end?}; [ \"$d\" = \"$c\" ] && exit 9; \
      d=${d%?}; \
-     case $h in \"\") ;; \"~\") cd || exit;; \"~/\"*) cd \"$HOME/${h#??}\" || exit;; \
-     /*) cd \"$h\" || exit;; *) cd \"$HOME/$h\" || exit;; esac; \
+     case $h in \"\") ;; \"~\") cd \"$o\" || exit;; \"~/\"*) cd \"$o/${h#??}\" || exit;; \
+     /*) cd \"$h\" || exit;; *) cd \"$o/$h\" || exit;; esac; \
      exec 3<&0; case $g in \
      setsid) if env --default-signal=INT,QUIT true >/dev/null 2>&1; then \
      setsid env --default-signal=INT,QUIT \"$s\" -c \"$d\" </dev/null 3<&- & \
@@ -144,7 +149,7 @@ pub async fn run(
     workdir: Option<&str>,
     stop: impl Future<Output = ()>,
 ) -> Result<CommandRun, SshError> {
-    run_with(session, command, workdir, stop, None).await
+    run_with(session, command, workdir, &RunAs::Login, stop, None).await
 }
 
 /// [`run`], which sends what the command prints to `output` as it comes, and keeps none of it:
@@ -157,13 +162,36 @@ pub async fn run_streaming(
     stop: impl Future<Output = ()>,
     output: mpsc::Sender<Output>,
 ) -> Result<CommandRun, SshError> {
-    run_with(session, command, workdir, stop, Some(&output)).await
+    run_with(
+        session,
+        command,
+        workdir,
+        &RunAs::Login,
+        stop,
+        Some(&output),
+    )
+    .await
+}
+
+/// [`run_streaming`] as `run_as`: as root, the script itself runs through sudo, so a stop ends the
+/// command and every process it started as it does for the login user. A host that cannot run the
+/// script runs nothing as root.
+pub async fn run_streaming_as(
+    session: &SshSession,
+    command: &str,
+    workdir: Option<&str>,
+    run_as: &RunAs,
+    stop: impl Future<Output = ()>,
+    output: mpsc::Sender<Output>,
+) -> Result<CommandRun, SshError> {
+    run_with(session, command, workdir, run_as, stop, Some(&output)).await
 }
 
 async fn run_with(
     session: &SshSession,
     command: &str,
     workdir: Option<&str>,
+    run_as: &RunAs,
     stop: impl Future<Output = ()>,
     sink: Option<&mpsc::Sender<Output>>,
 ) -> Result<CommandRun, SshError> {
@@ -172,13 +200,18 @@ async fn run_with(
     let shared = session.shared();
     // Win32-OpenSSH runs commands with cmd.exe or PowerShell, which have no `sh`.
     if !shared.plain_commands() && session.server_os() != Some(ServerOs::Windows) {
-        match wrapped(session, command, workdir, stop.as_mut(), sink).await? {
+        match wrapped(session, command, workdir, run_as, stop.as_mut(), sink).await? {
             Some(run) => return Ok(run),
             None => {
                 tracing::info!("the host cannot run the command script; commands run as they are");
                 shared.set_plain_commands();
             }
         }
+    }
+    if run_as.is_sudo() {
+        return Err(SshError::other(
+            "this host has no sh to run the command with sudo",
+        ));
     }
     if workdir.is_some() {
         return Err(SshError::other(
@@ -202,6 +235,18 @@ fn check(command: &str, workdir: Option<&str>) -> Result<(), SshError> {
     Ok(())
 }
 
+/// The command line that starts [`SCRIPT`] with the number `n`, through sudo with the login user's
+/// home directory and shell, which the login shell fills in.
+fn command_line(run_as: &RunAs, n: u32) -> String {
+    match run_as {
+        RunAs::Login => format!("sh -c '{SCRIPT}' sh {n}"),
+        RunAs::Sudo(_) => format!(
+            "{}sh -c '{SCRIPT}' sh {n} \"$HOME\" \"$SHELL\"",
+            run_as.prefix()
+        ),
+    }
+}
+
 /// What [`SCRIPT`] reads once it is ready: the number of the command's lines, the directory, the
 /// command, and the line that ends it.
 fn request(command: &str, workdir: Option<&str>, marker: &str) -> String {
@@ -216,13 +261,18 @@ fn request(command: &str, workdir: Option<&str>, marker: &str) -> String {
 /// With a `sink`, the output goes there while the command runs, but not around the script's lines:
 /// what comes before the script is ready is held back until it is, and after a stop, until the
 /// script's report is taken out.
+///
+/// Through sudo, the password goes first, and a channel that ends before the script is ready is
+/// sudo's refusal, which the error quotes.
 async fn wrapped(
     session: &SshSession,
     command: &str,
     workdir: Option<&str>,
+    run_as: &RunAs,
     mut stop: Pin<&mut impl Future<Output = ()>>,
     sink: Option<&mpsc::Sender<Output>>,
 ) -> Result<Option<CommandRun>, SshError> {
+    let password = run_as.password_line()?;
     let n = nonce();
     let marker = marker(n);
     let Some((mut reader, writer, _slot)) = open(session, stop.as_mut()).await? else {
@@ -230,12 +280,20 @@ async fn wrapped(
     };
     writer
         .half()
-        .exec(true, format!("sh -c '{SCRIPT}' sh {n}"))
+        .exec(true, command_line(run_as, n))
         .await
         .map_err(SshError::from)?;
+    if let Some(password) = password {
+        writer
+            .half()
+            .data_bytes(Bytes::from(password))
+            .await
+            .map_err(SshError::from)?;
+    }
     let mut out = Collected::default();
 
-    // Until the script says it is ready, nothing goes to the host but the command line above.
+    // Until the script says it is ready, nothing goes to the host but the command line above, and
+    // sudo's password.
     loop {
         tokio::select! {
             biased;
@@ -254,6 +312,9 @@ async fn wrapped(
                     writer.ended();
                     if session.is_closed() {
                         return Err(session.close_error());
+                    }
+                    if run_as.is_sudo() {
+                        return Err(sudo::refused(&out.output.stderr));
                     }
                     return Ok(None);
                 }
@@ -714,6 +775,7 @@ async fn sleep_until(deadline: Option<Instant>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sudo::tests::sudo_with;
 
     /// As for the file tools' scripts: one line without single quotes or backslashes, and no
     /// `!` but that of `$!`, which csh and tcsh leave alone even with their history on.
@@ -764,8 +826,10 @@ mod tests {
             .into_iter()
             .chain((0..100).map(|_| nonce()))
         {
-            let line = format!("sh -c '{SCRIPT}' sh {n}");
-            assert!(!line.contains(&marker(n)), "{line}");
+            for run_as in [RunAs::Login, RunAs::Sudo(None), sudo_with("x")] {
+                let line = command_line(&run_as, n);
+                assert!(!line.contains(&marker(n)), "{line}");
+            }
         }
     }
 
@@ -779,6 +843,7 @@ mod tests {
         use std::time::Instant;
 
         use super::super::*;
+        use crate::sudo::tests::sudo_with;
 
         struct Local {
             child: Child,
@@ -874,6 +939,68 @@ mod tests {
             assert_eq!(status, Some(3));
             assert_eq!(stdout, "out\n");
             assert_eq!(stderr, "two\nlines");
+        }
+
+        /// Through sudo (the tests' own, which gives the command a `HOME` and `SHELL` of its own),
+        /// the password goes first, and the directory and the shell are still the login user's.
+        #[test]
+        fn script_runs_through_sudo_from_the_login_users_home() {
+            let home = tempfile::tempdir().unwrap();
+            let home = home.path().canonicalize().unwrap();
+            std::fs::create_dir(home.join("sub")).unwrap();
+            let (_sudo, path) = crate::sudo::tests::fake::sudo_dir();
+            let started = |password: &str| {
+                let n = nonce();
+                let mut child = Command::new("sh")
+                    .args(["-c", &command_line(&sudo_with("x"), n)])
+                    .current_dir(&home)
+                    .env("HOME", &home)
+                    .env("SHELL", "/bin/sh")
+                    .env("PATH", &path)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .unwrap();
+                writeln!(child.stdin.as_mut().unwrap(), "{password}").unwrap();
+                (child, marker(n))
+            };
+
+            let (mut child, marker) = started("secret");
+            let mut ready = String::new();
+            BufReader::new(child.stdout.as_mut().unwrap())
+                .read_line(&mut ready)
+                .unwrap();
+            write!(
+                child.stdin.as_mut().unwrap(),
+                "1\n~/sub\npwd -P; echo \"$HOME\"; cat; echo read $?\n{marker}-end\n"
+            )
+            .unwrap();
+            let local = Local {
+                child,
+                marker,
+                ready,
+            };
+            assert!(local.ready.starts_with(&format!("{} ", local.marker)));
+            let (status, stdout, stderr) = finish(local, None);
+            assert_eq!(status, Some(0), "{stderr}");
+            assert_eq!(
+                stdout,
+                format!(
+                    "{}\n/nonexistent-root\nread 0\n",
+                    home.join("sub").display()
+                )
+            );
+
+            // A wrong password runs nothing, and sudo says why.
+            let (child, _) = started("guess");
+            let out = child.wait_with_output().unwrap();
+            assert_eq!(out.status.code(), Some(1));
+            assert!(out.stdout.is_empty());
+            assert_eq!(
+                sudo::refused(&out.stderr).message,
+                "sudo: 1 incorrect password attempt"
+            );
         }
 
         #[test]
