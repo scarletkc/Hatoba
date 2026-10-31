@@ -22,6 +22,15 @@ describe("server messages", () => {
     ]);
   });
 
+  it("keeps a closing parenthesis that belongs to the link", () => {
+    expect(messageParts("Verify at https://example.com/verify_(alice).")).toEqual([
+      { text: "Verify at " },
+      { text: "https://example.com/verify_(alice)", href: "https://example.com/verify_(alice)" },
+      { text: "." },
+    ]);
+    expect(firstLink("(see https://example.com/wiki/Foo_(bar))")).toBe("https://example.com/wiki/Foo_(bar)");
+  });
+
   it("links only web addresses", () => {
     expect(messageParts("Authorized use only. file:///etc/passwd javascript:alert(1)")).toEqual([
       { text: "Authorized use only. file:///etc/passwd javascript:alert(1)" },
