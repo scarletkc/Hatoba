@@ -1,5 +1,5 @@
-//! The russh client handler: host key verification, the server's identification string,
-//! disconnect tracking, and the connections the server opens for remote forwards.
+//! The russh client handler: host key verification, the server's identification string and
+//! banners, disconnect tracking, and the connections the server opens for remote forwards.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -11,6 +11,7 @@ use tokio::sync::{mpsc, watch};
 
 use crate::error::{SshError, SshErrorKind};
 use crate::hostkey::{HostKeyInfo, HostKeyVerifier};
+use crate::interactive::{Banner, BannerWait, KeyboardInteractive};
 use crate::net::ConnectClock;
 
 /// Error type of [`ClientHandler`].
@@ -220,12 +221,43 @@ fn clean_server_id(raw: &[u8]) -> String {
     id.trim().to_owned()
 }
 
+/// Longest banner shown, in characters.
+const MAX_BANNER_CHARS: usize = 16 * 1024;
+/// Banners shown per connection; a server that sends more gets the rest ignored.
+const MAX_BANNERS: usize = 16;
+
+/// A banner as text to show: CR LF and a lone CR end a line with `\n`, other control characters
+/// but tab are dropped, as OpenSSH does, at most [`MAX_BANNER_CHARS`] characters are kept, and
+/// leading blank lines and trailing white space are trimmed.
+fn clean_banner(raw: &str) -> String {
+    let text: String = raw
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .chars()
+        .filter(|c| matches!(c, '\n' | '\t') || !c.is_control())
+        .take(MAX_BANNER_CHARS)
+        .collect();
+    text.trim_start_matches('\n').trim_end().to_owned()
+}
+
+/// Where a hop's banners go: its [`KeyboardInteractive`] callback, and the waits it returns to
+/// the authentication request in flight (`auth::answer`).
+pub(crate) struct Banners {
+    /// Login name on the hop.
+    pub(crate) username: String,
+    pub(crate) interactive: Option<Arc<dyn KeyboardInteractive>>,
+    pub(crate) waits: mpsc::UnboundedSender<BannerWait>,
+}
+
 pub(crate) struct ClientHandler {
     host: String,
     port: u16,
     verifier: Arc<dyn HostKeyVerifier>,
     shared: Arc<SessionShared>,
     clock: Arc<ConnectClock>,
+    banners: Banners,
+    /// How many banners went to the callback.
+    banners_shown: usize,
 }
 
 impl ClientHandler {
@@ -235,6 +267,7 @@ impl ClientHandler {
         verifier: Arc<dyn HostKeyVerifier>,
         shared: Arc<SessionShared>,
         clock: Arc<ConnectClock>,
+        banners: Banners,
     ) -> Self {
         Self {
             host,
@@ -242,6 +275,8 @@ impl ClientHandler {
             verifier,
             shared,
             clock,
+            banners,
+            banners_shown: 0,
         }
     }
 }
@@ -272,6 +307,42 @@ impl client::Handler for ClientHandler {
         session: &mut client::Session,
     ) -> Result<(), Self::Error> {
         self.shared.set_server_id(session.remote_sshid());
+        Ok(())
+    }
+
+    /// A message the server sent while signing in (`SSH_MSG_USERAUTH_BANNER`), for the
+    /// [`KeyboardInteractive`] callback to show.
+    async fn auth_banner(
+        &mut self,
+        banner: &str,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        let text = clean_banner(banner);
+        let Some(interactive) = &self.banners.interactive else {
+            return Ok(());
+        };
+        if text.is_empty() {
+            return Ok(());
+        }
+        if self.banners_shown == MAX_BANNERS {
+            tracing::debug!(
+                "ignored a banner from {}:{}: too many",
+                self.host,
+                self.port
+            );
+            return Ok(());
+        }
+        self.banners_shown += 1;
+        let shown = interactive.banner(Banner {
+            host: self.host.clone(),
+            port: self.port,
+            username: self.banners.username.clone(),
+            text,
+        });
+        if let Some(wait) = shown {
+            // Authentication has ended when nothing receives it any more.
+            let _ = self.banners.waits.send(wait);
+        }
         Ok(())
     }
 
@@ -356,5 +427,29 @@ mod tests {
         shared.set_server_id(b"SSH-2.0-first");
         shared.set_server_id(b"SSH-2.0-second");
         assert_eq!(shared.server_id(), Some("SSH-2.0-first"));
+    }
+
+    #[test]
+    fn banners_are_cleaned_and_capped() {
+        assert_eq!(
+            clean_banner(
+                "# Tailscale SSH requires an additional check.\n# To authenticate, visit: \
+                 https://login.tailscale.com/a/1234\n"
+            ),
+            "# Tailscale SSH requires an additional check.\n# To authenticate, visit: \
+             https://login.tailscale.com/a/1234"
+        );
+        assert_eq!(
+            clean_banner("\r\n\r\nAuthorized use only.\r\n\tMonitored.\r\n\r\n"),
+            "Authorized use only.\n\tMonitored."
+        );
+        // No escape sequence reaches a terminal, and a lone CR cannot hide what came before it.
+        assert_eq!(
+            clean_banner("\x1b]52;c;ZXZpbA==\x07red\x1b[31m\u{9b}2Jtext\rover\x08"),
+            "]52;c;ZXZpbA==red[31m2Jtext\nover"
+        );
+        assert_eq!(clean_banner("\r\n \t\r\n"), "");
+        let long = "a".repeat(MAX_BANNER_CHARS + 10);
+        assert_eq!(clean_banner(&long).chars().count(), MAX_BANNER_CHARS);
     }
 }

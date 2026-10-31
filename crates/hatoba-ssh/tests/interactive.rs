@@ -13,7 +13,7 @@ use hatoba_ssh::{
     AuthMethod, ConnectConfig, KeyboardInteractive, Prompt, PromptRequest, SshErrorKind, connect,
 };
 use russh::keys::{Algorithm, PrivateKey, PublicKey};
-use russh::server::{Auth, Config, Handler, Response};
+use russh::server::{Auth, Config, Handler, Response, VerifiedPublicKey};
 use russh::{MethodKind, MethodSet, SshId};
 use tokio::net::TcpListener;
 use zeroize::Zeroizing;
@@ -55,9 +55,13 @@ fn prompt(text: &'static str, echo: bool) -> Auth {
 impl Handler for MockHandler {
     type Error = russh::Error;
 
-    async fn auth_publickey(&mut self, _user: &str, key: &PublicKey) -> Result<Auth, Self::Error> {
+    async fn auth_publickey(
+        &mut self,
+        _user: &str,
+        key: VerifiedPublicKey<'_>,
+    ) -> Result<Auth, Self::Error> {
         if let Script::PublicKeyThenOtp(expected, _) = &self.script
-            && expected.key_data() == key.key_data()
+            && expected.key_data() == key.public_key.key_data()
         {
             return Ok(Auth::Reject {
                 proceed_with_methods: Some(MethodSet::from(&[MethodKind::KeyboardInteractive][..])),

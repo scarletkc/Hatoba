@@ -1,6 +1,6 @@
 # Troubleshooting: SSH connections
 
-Covers every kind of SSH failure, jump hosts, host key prompts, and dropped connections. Key and vault errors are in `references/troubleshooting.md`, sync errors in `references/troubleshooting-sync.md`, AI errors in `references/troubleshooting-ai.md`.
+Covers every kind of SSH failure, jump hosts, host key prompts, sign-in messages, and dropped connections. Key and vault errors are in `references/troubleshooting.md`, sync errors in `references/troubleshooting-sync.md`, AI errors in `references/troubleshooting-ai.md`.
 
 ## Reading a failure
 
@@ -90,6 +90,10 @@ The choices are in `references/hosts-and-connecting.md`. Only the first hop (the
 - First connection: compare the fingerprint with the server's, for example `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server. **Trust and Connect** saves and syncs it; **Cancel** fails with `host_key_rejected`.
 - Hatoba asks for a key type already saved for the host:port, so adding a type on the server changes nothing. **New host key for …** means it offers none: the old type was removed, or another machine answers there. The other type's trusted key is shown for reference; it never matches. Verify the new one as on a first connection; trusting it keeps the other.
 - **Host key has changed**: a saved type's key differs, after a reinstall or new keys, another machine at that address (reused IP, load balancer), or a man-in-the-middle. **Disconnect** is the default. When the change is explained, **Update Fingerprint and Connect** replaces that type's fingerprint on all synced devices. Saved fingerprints have no list or delete screen.
+
+## Sign-in messages
+
+A message the server sends while signing in (an SSH banner) prints in the terminal. When the server then holds the login, as Tailscale SSH's check mode does until you sign in at its link, the message also shows in a dialog, **Message from {target}**: **Open Link** opens the link in the browser, and **Cancel** stops connecting. The dialog closes once the server lets the login through, and the wait does not count toward the 15 seconds. `hatoba exec` and `hatoba cp` print the message on stderr and wait too; with `--no-prompt`, and for resource usage on the hosts page, the login times out in authentication instead.
 
 ## Dropped connections and keepalive
 

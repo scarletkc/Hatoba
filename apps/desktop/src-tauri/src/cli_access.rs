@@ -45,7 +45,7 @@ use crate::dto::{
     CliActivity, CliActivityEvent, CliActivityKind, CliActivityState, HostKeyPromptKind,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
-use crate::ssh::{self, Asking, OnAsk, Overrides, Unattended};
+use crate::ssh::{self, Asking, OnAsk, OnBanner, Overrides, Unattended};
 use crate::state::{now_ms, state};
 
 /// How long the command may take to send its request once connected.
@@ -615,7 +615,8 @@ impl Ctx<'_> {
             })
             .map_err(|e| AppError::internal(config_error(&e, &target.name)))?;
         if !self.prompt {
-            let (result, outcome) = ssh::connect_unattended(self.app, cfg).await;
+            let (result, outcome) =
+                ssh::connect_unattended(self.app, cfg, Some(self.banner_printer())).await;
             return result
                 .map_err(|e| AppError::internal(unattended_error(&e, &outcome, &target.name)));
         }
@@ -636,11 +637,26 @@ impl Ctx<'_> {
                 let _ = tx.try_send(Frame::Notice(text));
             }
         });
-        ssh::connect_asking(self.app, cfg, None, Some(on_ask))
-            .await
-            .map_err(|e| {
-                AppError::internal(format!("can't connect to {}: {}", target.name, e.detail))
-            })
+        ssh::connect_asking(
+            self.app,
+            cfg,
+            None,
+            Some(on_ask),
+            Some(self.banner_printer()),
+        )
+        .await
+        .map_err(|e| AppError::internal(format!("can't connect to {}: {}", target.name, e.detail)))
+    }
+
+    /// Prints the server's banners on the command's stderr, as `ssh` does.
+    fn banner_printer(&self) -> OnBanner {
+        // Weak, as the prompt handlers are.
+        let tx = self.tx.downgrade();
+        Arc::new(move |text| {
+            if let Some(tx) = tx.upgrade() {
+                let _ = tx.try_send(Frame::Stderr(format!("{text}\n").into_bytes()));
+            }
+        })
     }
 
     /// Reports a copy's progress to the command.

@@ -319,6 +319,14 @@ The labels that these files name in English, as the interface shows them in Simp
 | Update Fingerprint and Connect | 更新指纹并连接 |
 | New host key for {host}:{port} | {host}:{port} 提供了新的主机密钥 |
 
+### Sign-in messages
+
+| en | zh-CN |
+|---|---|
+| Message from {target} | {target} 发来的消息 |
+| Open Link | 打开链接 |
+| Cancel | 取消 |
+
 ### Dropped connections and keepalive
 
 | en | zh-CN |

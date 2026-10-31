@@ -464,6 +464,24 @@ pub struct AuthPrompt {
     pub target: String,
 }
 
+/// A message the server sent while signing in (`SSH_MSG_USERAUTH_BANNER`). The terminal tab
+/// connecting shows it in its terminal, as `ssh` prints it, and while the server holds the login,
+/// as Tailscale SSH's check mode does until the user signs in at its link, it shows in a dialog.
+/// `auth_prompt_respond` with no answers cancels the connection; `ssh://auth-prompt-closed` says
+/// the server answered, which closes the dialog.
+#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "ssh://auth-banner")]
+pub struct AuthBanner {
+    pub request_id: String,
+    /// The terminal tab's session; `None` for a connection without a terminal, such as a port
+    /// forward's (FWD-05).
+    pub session_id: Option<String>,
+    /// `user@host:port` of the hop that sent it.
+    pub target: String,
+    /// Lines end with `\n`; the only other control character is tab.
+    pub text: String,
+}
+
 /// An `ssh://auth-prompt` that is no longer waited for, because the request that asked it ended
 /// unanswered: its dialog closes.
 #[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]

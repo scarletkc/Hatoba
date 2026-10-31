@@ -1,7 +1,9 @@
 //! Authentication of one SSH hop: password, private key, agent, none,
 //! keyboard-interactive, ask and agent-then-ask (SSH-01, SSH-02, SSH-08, SSH-09).
 
+use std::future::{Future, poll_fn};
 use std::sync::Arc;
+use std::task::Poll;
 
 use russh::MethodKind;
 use russh::MethodSet;
@@ -9,12 +11,13 @@ use russh::client::{Handle, KeyboardInteractiveAuthResponse};
 use russh::keys::PrivateKeyWithHashAlg;
 use russh::keys::agent::AgentIdentity;
 use russh::keys::ssh_key::HashAlg;
+use tokio::sync::{Mutex, mpsc};
 use zeroize::Zeroizing;
 
 use crate::agent;
 use crate::error::{SshError, SshErrorKind};
 use crate::handler::{ClientHandler, CloseReason, SessionShared};
-use crate::interactive::{KeyboardInteractive, Prompt, PromptRequest};
+use crate::interactive::{BannerWait, KeyboardInteractive, Prompt, PromptRequest};
 use crate::keys;
 use crate::net::ConnectClock;
 use crate::session::AuthMethod;
@@ -31,6 +34,43 @@ pub(crate) struct AuthContext<'a> {
     pub shared: &'a Arc<SessionShared>,
     /// The ssh-agent sockets this hop tries (SSH-09); empty uses the platform's agent.
     pub agent_sockets: &'a [String],
+    /// The waits of the banners shown to the user, from the handler ([`answer`]).
+    pub banners: &'a Mutex<mpsc::UnboundedReceiver<BannerWait>>,
+}
+
+/// Waits for the server's answer to an authentication request. A banner that comes meanwhile
+/// and that someone sees ([`KeyboardInteractive::banner`]) pauses the connect timeout until the
+/// answer, since the server may hold the login until the user acts on it, as Tailscale SSH's check
+/// mode does until they sign in at the link it sends. The user giving up first cancels the login.
+async fn answer<F: Future>(ctx: &AuthContext<'_>, request: F) -> Result<F::Output, SshError> {
+    let mut banners = ctx.banners.lock().await;
+    let mut waits: Vec<BannerWait> = Vec::new();
+    let mut paused = None;
+    tokio::pin!(request);
+    let answer = loop {
+        tokio::select! {
+            answer = &mut request => break Ok(answer),
+            Some(wait) = banners.recv() => {
+                paused.get_or_insert_with(|| ctx.clock.pause());
+                waits.push(wait);
+            }
+            () = any_ended(&mut waits) => break Err(SshError::cancelled()),
+        }
+    };
+    // A banner that came with the answer has nothing left to wait for either.
+    while banners.try_recv().is_ok() {}
+    answer
+}
+
+/// Ends once one of `waits` does.
+fn any_ended(waits: &mut [BannerWait]) -> impl Future<Output = ()> + '_ {
+    poll_fn(move |cx| {
+        if waits.iter_mut().any(|w| w.as_mut().poll(cx).is_ready()) {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    })
 }
 
 /// Authenticates `handle` as `ctx.username`. On failure the error is
@@ -43,7 +83,7 @@ pub(crate) async fn authenticate(
     // Probe with "none": it succeeds on open servers and otherwise tells us
     // which methods are offered, so we do not burn attempts on methods the
     // server has disabled.
-    let offered = match handle.authenticate_none(ctx.username).await? {
+    let offered = match answer(ctx, handle.authenticate_none(ctx.username)).await?? {
         russh::client::AuthResult::Success => return Ok(()),
         russh::client::AuthResult::Failure {
             remaining_methods, ..
@@ -71,9 +111,9 @@ pub(crate) async fn authenticate(
             } else {
                 None
             };
-            let result = handle
-                .authenticate_publickey(ctx.username, PrivateKeyWithHashAlg::new(key, hash))
-                .await?;
+            let request =
+                handle.authenticate_publickey(ctx.username, PrivateKeyWithHashAlg::new(key, hash));
+            let result = answer(ctx, request).await??;
             finish(handle, ctx, result, "the server rejected the private key").await
         }
         AuthMethod::Agent => agent_auth(handle, ctx).await,
@@ -169,9 +209,8 @@ async fn ask(
     let Some(password) = answers.and_then(|a| a.into_iter().next()) else {
         return Err(SshError::cancelled());
     };
-    let result = handle
-        .authenticate_password(ctx.username, password.as_str())
-        .await?;
+    let request = handle.authenticate_password(ctx.username, password.as_str());
+    let result = answer(ctx, request).await??;
     finish(handle, ctx, result, "the server rejected the password").await
 }
 
@@ -185,9 +224,8 @@ async fn password_auth(
     let has_ki = offered.contains(&MethodKind::KeyboardInteractive);
 
     if has_password || !has_ki {
-        let result = handle
-            .authenticate_password(ctx.username, password.as_str())
-            .await?;
+        let request = handle.authenticate_password(ctx.username, password.as_str());
+        let result = answer(ctx, request).await??;
         return finish(handle, ctx, result, "the server rejected the password").await;
     }
     // PasswordAuthentication is off but keyboard-interactive (PAM) is on:
@@ -256,9 +294,11 @@ async fn keyboard_interactive(
     password: Option<&Zeroizing<String>>,
 ) -> Result<(), SshError> {
     let mut password_unused = password;
-    let mut response = handle
-        .authenticate_keyboard_interactive_start(ctx.username, None)
-        .await?;
+    let mut response = answer(
+        ctx,
+        handle.authenticate_keyboard_interactive_start(ctx.username, None),
+    )
+    .await??;
 
     for _ in 0..MAX_KI_ROUNDS {
         match response {
@@ -321,11 +361,10 @@ async fn keyboard_interactive(
                     }
                     answers
                 };
-                response = handle
-                    .authenticate_keyboard_interactive_respond(
-                        answers.iter().map(|a| a.as_str().to_owned()).collect(),
-                    )
-                    .await?;
+                let request = handle.authenticate_keyboard_interactive_respond(
+                    answers.iter().map(|a| a.as_str().to_owned()).collect(),
+                );
+                response = answer(ctx, request).await??;
             }
         }
     }
@@ -355,15 +394,19 @@ async fn agent_auth(
         let outcome = match identity {
             AgentIdentity::PublicKey { key, .. } => {
                 let hash = rsa_hash(handle, key.algorithm().is_rsa()).await;
-                handle
-                    .authenticate_publickey_with(ctx.username, key, hash, &mut agent)
-                    .await
+                let request =
+                    handle.authenticate_publickey_with(ctx.username, key, hash, &mut agent);
+                answer(ctx, request).await?
             }
             AgentIdentity::Certificate { certificate, .. } => {
                 let hash = rsa_hash(handle, certificate.algorithm().is_rsa()).await;
-                handle
-                    .authenticate_certificate_with(ctx.username, certificate, hash, &mut agent)
-                    .await
+                let request = handle.authenticate_certificate_with(
+                    ctx.username,
+                    certificate,
+                    hash,
+                    &mut agent,
+                );
+                answer(ctx, request).await?
             }
         };
         match outcome {

@@ -10,6 +10,7 @@
  */
 import type {
   AppInfo as RustAppInfo,
+  AuthBanner,
   AuthPrompt,
   AuthPromptClosed,
   CliActivityEvent,
@@ -65,6 +66,8 @@ export interface EventMap {
   "sync://status": SyncStatus;
   "ssh://hostkey-prompt": HostKeyPrompt;
   "ssh://auth-prompt": AuthPrompt;
+  /** A message the server sent while signing in (SSH-08). */
+  "ssh://auth-banner": AuthBanner;
   "ssh://auth-prompt-closed": AuthPromptClosed;
   "ssh://state": SessionStateEvent;
   "transfer://progress": TransferProgressEvent;

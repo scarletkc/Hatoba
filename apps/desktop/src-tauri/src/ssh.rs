@@ -9,9 +9,9 @@ use async_trait::async_trait;
 use hatoba_core::model::{Host, HostAuth, HostProxy, Item, KnownHost, ProxyKind as CoreProxyKind};
 use hatoba_core::vault::Vault;
 use hatoba_ssh::{
-    AuthMethod, ConnectConfig, HostKeyInfo, HostKeyVerifier, JumpHop, KeyboardInteractive,
-    PromptRequest, ProxyConfig, ProxyKind, SftpClient, ShellHandle, SshSession, StatsHandle,
-    target_label,
+    AuthMethod, Banner, BannerWait, ConnectConfig, HostKeyInfo, HostKeyVerifier, JumpHop,
+    KeyboardInteractive, PromptRequest, ProxyConfig, ProxyKind, SftpClient, ShellHandle,
+    SshSession, StatsHandle, target_label,
 };
 use tauri::AppHandle;
 use tauri_specta::Event;
@@ -19,7 +19,9 @@ use tokio::sync::{OnceCell, oneshot};
 use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
-use crate::dto::{AuthPrompt, AuthPromptClosed, AuthPromptField, HostKeyPrompt, HostKeyPromptKind};
+use crate::dto::{
+    AuthBanner, AuthPrompt, AuthPromptClosed, AuthPromptField, HostKeyPrompt, HostKeyPromptKind,
+};
 use crate::error::{AppError, AppResult, SshErrorKind};
 use crate::state::{AppState, now_ms, state};
 use crate::{connection, sync};
@@ -191,6 +193,10 @@ pub enum Asking {
 /// Called before each question a connection puts to the user, for someone who waits on it
 /// elsewhere (HOST-15).
 pub type OnAsk = Arc<dyn Fn(Asking) + Send + Sync>;
+
+/// Shows the text of a message the server sent while signing in, where the connection's output
+/// goes: the `hatoba` command prints it as `ssh` does (HOST-15).
+pub type OnBanner = Arc<dyn Fn(&str) + Send + Sync>;
 
 fn auth_method(
     vault: &Vault,
@@ -456,11 +462,13 @@ impl HostKeyVerifier for Verifier {
     }
 }
 
-/// keyboard-interactive / 2FA prompts relayed to the WebView (SSH-08).
+/// keyboard-interactive / 2FA prompts relayed to the WebView (SSH-08), and the server's banners.
 pub struct Interactive {
     pub app: AppHandle,
     pub session_id: Option<String>,
     pub on_ask: Option<OnAsk>,
+    /// Shows the banners instead of the window.
+    pub on_banner: Option<OnBanner>,
 }
 
 #[async_trait]
@@ -470,7 +478,7 @@ impl KeyboardInteractive for Interactive {
         let (tx, rx) = oneshot::channel();
         lock(&state(&self.app).ssh.auth_waiters).insert(request_id.clone(), tx);
         let _open = OpenPrompt {
-            app: &self.app,
+            app: self.app.clone(),
             request_id: request_id.clone(),
         };
         let event = AuthPrompt {
@@ -512,6 +520,34 @@ impl KeyboardInteractive for Interactive {
         (answers.len() == request.prompts.len())
             .then(|| answers.into_iter().map(Zeroizing::new).collect())
     }
+
+    /// An `ssh://auth-banner` for the window, which waits until the user gives up on it, or is
+    /// dropped when the server answers.
+    fn banner(&self, banner: Banner) -> Option<BannerWait> {
+        if let Some(on_banner) = &self.on_banner {
+            on_banner(&banner.text);
+            // Whoever shows it stops the connection to give up.
+            return Some(Box::pin(std::future::pending()));
+        }
+        let request_id = uuid::Uuid::now_v7().to_string();
+        let (tx, rx) = oneshot::channel();
+        lock(&state(&self.app).ssh.auth_waiters).insert(request_id.clone(), tx);
+        let open = OpenPrompt {
+            app: self.app.clone(),
+            request_id: request_id.clone(),
+        };
+        let event = AuthBanner {
+            request_id,
+            session_id: self.session_id.clone(),
+            target: target_label(&banner.username, &banner.host, banner.port),
+            text: banner.text,
+        };
+        event.emit(&self.app).ok()?;
+        Some(Box::pin(async move {
+            let _open = open;
+            let _ = rx.await;
+        }))
+    }
 }
 
 /// Asks in the window for the sudo password of `target` (`user@host:port`) on the saved host
@@ -528,7 +564,7 @@ pub async fn ask_sudo_password(
     lock(&state(app).ssh.auth_waiters).insert(request_id.clone(), tx);
     // Dropped with this future too, when the `hatoba` request stops while it waits.
     let _open = OpenPrompt {
-        app,
+        app: app.clone(),
         request_id: request_id.clone(),
     };
     let event = AuthPrompt {
@@ -560,19 +596,19 @@ pub async fn ask_sudo_password(
         .map(Zeroizing::new)
 }
 
-/// An `ssh://auth-prompt` being waited for. Dropped, it stops the wait, and closes the dialog if
-/// it is still unanswered.
-struct OpenPrompt<'a> {
-    app: &'a AppHandle,
+/// An `ssh://auth-prompt` or `ssh://auth-banner` being waited for. Dropped, it stops the wait,
+/// and closes the dialog if it is still unanswered.
+struct OpenPrompt {
+    app: AppHandle,
     request_id: String,
 }
 
-impl Drop for OpenPrompt<'_> {
+impl Drop for OpenPrompt {
     fn drop(&mut self) {
-        let waiting = lock(&state(self.app).ssh.auth_waiters).remove(&self.request_id);
+        let waiting = lock(&state(&self.app).ssh.auth_waiters).remove(&self.request_id);
         if waiting.is_some() {
             let request_id = std::mem::take(&mut self.request_id);
-            let _ = AuthPromptClosed { request_id }.emit(self.app);
+            let _ = AuthPromptClosed { request_id }.emit(&self.app);
         }
     }
 }
@@ -682,8 +718,9 @@ impl HostKeyVerifier for UnattendedVerifier {
     }
 }
 
-/// Answers no keyboard-interactive prompt, so a login that needs one fails at once.
-struct UnattendedPrompts(Arc<Unattended>);
+/// Answers no keyboard-interactive prompt, so a login that needs one fails at once, and waits
+/// on no banner, which the `OnBanner` shows if there is one.
+struct UnattendedPrompts(Arc<Unattended>, Option<OnBanner>);
 
 #[async_trait]
 impl KeyboardInteractive for UnattendedPrompts {
@@ -700,13 +737,22 @@ impl KeyboardInteractive for UnattendedPrompts {
         }
         None
     }
+
+    fn banner(&self, banner: Banner) -> Option<BannerWait> {
+        if let Some(on_banner) = &self.1 {
+            on_banner(&banner.text);
+        }
+        None
+    }
 }
 
 /// Connects without the user (HOST-14): a host key that is not trusted yet and a prompt from
-/// the server both fail the connection, and the returned [`Unattended`] says which did.
+/// the server both fail the connection, and the returned [`Unattended`] says which did. The
+/// server's banners go to `on_banner`.
 pub async fn connect_unattended(
     app: &AppHandle,
     mut cfg: ConnectConfig,
+    on_banner: Option<OnBanner>,
 ) -> (AppResult<SshSession>, Arc<Unattended>) {
     let saved_password = cfg
         .jump
@@ -722,7 +768,7 @@ pub async fn connect_unattended(
     crate::ssh_agent::resolve(&mut cfg).await;
     let attempt = Attempt::of(&cfg);
     attempt.log_start();
-    cfg.keyboard_interactive = Some(Arc::new(UnattendedPrompts(Arc::clone(&outcome))));
+    cfg.keyboard_interactive = Some(Arc::new(UnattendedPrompts(Arc::clone(&outcome), on_banner)));
     let verifier = Arc::new(UnattendedVerifier {
         app: app.clone(),
         outcome: Arc::clone(&outcome),
@@ -758,15 +804,17 @@ pub async fn connect_with(
     cfg: ConnectConfig,
     session_id: Option<String>,
 ) -> AppResult<SshSession> {
-    connect_asking(app, cfg, session_id, None).await
+    connect_asking(app, cfg, session_id, None, None).await
 }
 
-/// [`connect_with`], calling `on_ask` before each question to the user.
+/// [`connect_with`], calling `on_ask` before each question to the user, and showing the server's
+/// banners with `on_banner` rather than in the window.
 pub async fn connect_asking(
     app: &AppHandle,
     mut cfg: ConnectConfig,
     session_id: Option<String>,
     on_ask: Option<OnAsk>,
+    on_banner: Option<OnBanner>,
 ) -> AppResult<SshSession> {
     crate::ssh_agent::resolve(&mut cfg).await;
     let attempt = Attempt::of(&cfg);
@@ -775,6 +823,7 @@ pub async fn connect_asking(
         app: app.clone(),
         session_id: session_id.clone(),
         on_ask: on_ask.clone(),
+        on_banner,
     }));
     let verifier = Arc::new(Verifier {
         app: app.clone(),
@@ -1045,14 +1094,14 @@ mod tests {
         };
         let at_jump = outcome(1);
         assert!(
-            UnattendedPrompts(Arc::clone(&at_jump))
+            UnattendedPrompts(Arc::clone(&at_jump), None)
                 .respond(request())
                 .await
                 .is_none()
         );
         assert!(at_jump.prompted() && at_jump.password_prompted());
         let at_key = outcome(2);
-        UnattendedPrompts(Arc::clone(&at_key))
+        UnattendedPrompts(Arc::clone(&at_key), None)
             .respond(request())
             .await;
         assert!(at_key.prompted() && !at_key.password_prompted());

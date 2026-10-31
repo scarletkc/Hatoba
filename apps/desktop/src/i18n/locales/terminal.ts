@@ -155,6 +155,9 @@ export default defineMessages({
     "terminal.auth.title": "需要额外验证",
     "terminal.auth.titleFor": "{name}",
     "terminal.auth.submit": "验证",
+    "terminal.banner.title": "{target} 发来的消息",
+    "terminal.banner.waiting": "正在等待服务器…",
+    "terminal.banner.open": "打开链接",
 
     // SFTP panel
     "sftp.title": "SFTP",
@@ -377,6 +380,9 @@ export default defineMessages({
     "terminal.auth.title": "Additional verification required",
     "terminal.auth.titleFor": "{name}",
     "terminal.auth.submit": "Verify",
+    "terminal.banner.title": "Message from {target}",
+    "terminal.banner.waiting": "Waiting for the server…",
+    "terminal.banner.open": "Open Link",
 
     "sftp.title": "SFTP",
     "sftp.upload": "Upload files",
@@ -607,6 +613,9 @@ export default defineMessages({
     "terminal.auth.title": "追加の認証が必要です",
     "terminal.auth.titleFor": "{name}",
     "terminal.auth.submit": "認証",
+    "terminal.banner.title": "{target} からのメッセージ",
+    "terminal.banner.waiting": "サーバーを待っています…",
+    "terminal.banner.open": "リンクを開く",
 
     "sftp.title": "SFTP",
     "sftp.upload": "ファイルをアップロード",
@@ -833,6 +842,9 @@ export default defineMessages({
     "terminal.auth.title": "需要額外驗證",
     "terminal.auth.titleFor": "{name}",
     "terminal.auth.submit": "驗證",
+    "terminal.banner.title": "{target} 傳來的訊息",
+    "terminal.banner.waiting": "正在等待伺服器…",
+    "terminal.banner.open": "開啟連結",
 
     // SFTP panel
     "sftp.title": "SFTP",
