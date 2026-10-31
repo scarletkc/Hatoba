@@ -29,8 +29,14 @@ describe("server messages", () => {
       { text: "." },
     ]);
     expect(firstLink("(see https://example.com/wiki/Foo_(bar))")).toBe("https://example.com/wiki/Foo_(bar)");
+    expect(firstLink("https://example.com/a)b(c)")).toBe("https://example.com/a)b(c)");
     // A run as long as a banner can be stays fast.
     expect(firstLink(`https://example.com/a${")".repeat(16_000)}`)).toBe("https://example.com/a");
+  });
+
+  it("keeps the bracket of an IPv6 address", () => {
+    expect(firstLink("Open http://[fd7a:115c:a1e0::1].")).toBe("http://[fd7a:115c:a1e0::1]");
+    expect(firstLink("(at http://[::1])")).toBe("http://[::1]");
   });
 
   it("links a scheme in capitals", () => {

@@ -9,22 +9,25 @@ const LINK = /https?:\/\/[^\s<>"'`]+/gi;
 /** Punctuation that ends a sentence after a link rather than belonging to it. */
 const TRAILING = ".,;:!?)]}";
 
-/** `link` without the punctuation after it. A `)` that closes a `(` in the link stays. */
+/**
+ * `link` without the punctuation after it. A `)` or `]` that closes a `(` or `[` before it in the
+ * link stays, as the `]` of an IPv6 address does.
+ */
 function trimLink(link: string): string {
-  let open = 0;
-  let close = 0;
-  for (const c of link) {
-    if (c === "(") open++;
-    else if (c === ")") close++;
+  const open = { ")": 0, "]": 0 };
+  /** The indexes of the brackets that close one. */
+  const closing = new Set<number>();
+  for (let i = 0; i < link.length; i++) {
+    const c = link[i];
+    if (c === "(") open[")"]++;
+    else if (c === "[") open["]"]++;
+    else if ((c === ")" || c === "]") && open[c] > 0) {
+      open[c]--;
+      closing.add(i);
+    }
   }
   let end = link.length;
-  while (end > 0 && TRAILING.includes(link[end - 1])) {
-    if (link[end - 1] === ")") {
-      if (open >= close) break;
-      close--;
-    }
-    end--;
-  }
+  while (end > 0 && TRAILING.includes(link[end - 1]) && !closing.has(end - 1)) end--;
   return link.slice(0, end);
 }
 
