@@ -159,8 +159,10 @@ async fn run<S>(
         out.send(telnet.start());
     }
     let mut line = LineDiscipline::default();
-    // Where the output stands, so the client's own echo never shows a password.
+    // Where the output stands, so the client's own echo never shows a password: a line started
+    // at a password prompt stays hidden until Enter, whatever the server prints meanwhile.
     let mut screen = LastLine::default();
+    let mut hidden: Option<bool> = None;
     let login_until = Instant::now() + LOGIN_WINDOW;
 
     let mut buf = vec![0u8; 16 * 1024];
@@ -198,9 +200,13 @@ async fn run<S>(
                     // While the server does not echo, the client does, but not at a password
                     // prompt, and keeps a line until Enter unless the server takes characters.
                     let echo = !telnet.server_echoes();
+                    let hide = *hidden.get_or_insert_with(|| screen.asks_password());
+                    if data.contains(&b'\r') {
+                        hidden = None;
+                    }
                     let typed = line.input(
                         &data,
-                        echo && !screen.asks_password(),
+                        echo && !hide,
                         echo && !telnet.server_suppresses_go_ahead(),
                     );
                     out.send(telnet.encode(&typed.send));
@@ -502,6 +508,26 @@ mod tests {
         server.write_all(b"Password: ").await.unwrap();
         assert_eq!(next_data(&mut events).await, b"Password: ");
         session.write(b"hunter2\r".to_vec()).unwrap();
+        assert_eq!(read_some(&mut server).await, b"hunter2\r\n");
+        let shown = tokio::time::timeout(Duration::from_millis(200), events.recv()).await;
+        assert!(shown.is_err(), "the client showed {shown:?}");
+    }
+
+    #[tokio::test]
+    async fn a_password_stays_hidden_when_the_server_prints_meanwhile() {
+        let (client, mut server) = duplex(4096);
+        let (session, mut events) =
+            TelnetSession::start(client, 80, 24, false, AutoLogin::new(None, None));
+        server.write_all(b"Password: ").await.unwrap();
+        assert_eq!(next_data(&mut events).await, b"Password: ");
+        session.write(b"hun".to_vec()).unwrap();
+        // The session reads its keys before the server's next line.
+        for _ in 0..10 {
+            tokio::task::yield_now().await;
+        }
+        server.write_all(b"\r\nLink up\r\n").await.unwrap();
+        assert_eq!(next_data(&mut events).await, b"\r\nLink up\r\n");
+        session.write(b"ter2\r".to_vec()).unwrap();
         assert_eq!(read_some(&mut server).await, b"hunter2\r\n");
         let shown = tokio::time::timeout(Duration::from_millis(200), events.recv()).await;
         assert!(shown.is_err(), "the client showed {shown:?}");
