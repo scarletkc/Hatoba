@@ -1,4 +1,4 @@
-//! Other programs use the saved hosts through the `hatoba` command (HOST-15): `hatoba hosts`
+//! Other programs use the saved SSH hosts through the `hatoba` command (HOST-15): `hatoba hosts`
 //! lists them, `hatoba exec` runs a command on one, `hatoba cp` copies a file to or from one.
 //! The command asks this app over a local endpoint (`hatoba_cli::endpoint`), which only the user
 //! can open; the app signs in with the vault's credentials and sends back only what the command
@@ -464,7 +464,8 @@ pub(crate) fn host_list(vault: &Vault) -> Vec<HostInfo> {
 }
 
 /// The saved host a command names: by its id, or by its name as `hatoba <name>` finds it
-/// (HOST-13), which several hosts may share.
+/// (HOST-13), which several hosts may share. Only SSH hosts run commands and copy files; naming a
+/// Telnet host says so (TELNET-01).
 pub(crate) fn find_host(vault: &Vault, wanted: &str) -> Result<(String, Host), String> {
     if let Some(host) = vault.get(wanted).and_then(Item::as_host) {
         return Ok((wanted.to_owned(), host.clone()));
@@ -477,9 +478,15 @@ pub(crate) fn find_host(vault: &Vault, wanted: &str) -> Result<(String, Host), S
         .collect();
     match named.len() {
         1 => Ok(named.remove(0)),
-        0 => Err(format!(
-            "no saved host is named {wanted}. Run hatoba hosts to see their names."
-        )),
+        0 => Err(match telnet_name(vault, wanted, &key) {
+            Some(name) => format!(
+                "{wanted} is a Telnet host, and exec and cp work only on SSH hosts. Run hatoba \
+                 {name} to open it in Hatoba."
+            ),
+            None => format!(
+                "no saved host is named {wanted}. Run hatoba hosts to see their names."
+            ),
+        }),
         n => {
             named.sort_by(|a, b| a.0.cmp(&b.0));
             let ids: Vec<&str> = named.iter().map(|(id, _)| id.as_str()).collect();
@@ -489,6 +496,18 @@ pub(crate) fn find_host(vault: &Vault, wanted: &str) -> Result<(String, Host), S
             ))
         }
     }
+}
+
+/// The name of the Telnet host `wanted` names by its id or its name, which `hatoba <name>` opens.
+fn telnet_name(vault: &Vault, wanted: &str, key: &str) -> Option<String> {
+    if let Some(host) = vault.get(wanted).and_then(Item::as_telnet_host) {
+        return Some(host.name.trim().to_owned());
+    }
+    vault
+        .telnet_hosts()
+        .into_iter()
+        .map(|(_, h)| h.name.trim().to_owned())
+        .find(|name| name.to_lowercase() == key)
 }
 
 /// The host a request is for.

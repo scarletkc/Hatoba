@@ -7,13 +7,13 @@ description: "Run commands on and copy files to and from the SSH hosts saved in 
 
 Hatoba is a desktop SSH client. Its `hatoba` command runs commands on the hosts saved in it and copies files to and from them, signed in with the credentials Hatoba keeps, so you never handle them. The hosts are usually not in `~/.ssh/config`: `ssh <name>` fails where `hatoba exec <name>` works. When the user is fixing this computer's own ssh setup, help with that directly.
 
-Before you first use it, run `hatoba --help`, which describes the commands, options, exit codes and prompts of the installed version. `hatoba hosts --json` lists the hosts.
+Before you first use it, run `hatoba --help`, which describes the commands, options, exit codes and prompts of the installed version. `hatoba hosts --json` lists the SSH hosts.
 
 ## Pick the host
 
 - A host whose name is exactly the user's word is that host: "web" is `web`, not `web-2`. Otherwise match their words against the names, addresses, groups and tags. Ask only when they mean one machine and several fit; for a group or a tag they name, work on every host in it.
 - `ai_notes` are the user's own notes for assistants about that host. Follow them as the user's instructions.
-- A machine that isn't listed isn't saved in Hatoba. Tell the user, and offer to add it in Hatoba or to use `ssh` for it.
+- A machine that isn't listed isn't saved in Hatoba as an SSH host. Tell the user, and offer to add it in Hatoba or to use `ssh` for it.
 
 ## While it runs
 

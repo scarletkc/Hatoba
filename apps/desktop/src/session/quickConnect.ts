@@ -7,7 +7,7 @@ export interface TypedTarget {
   username: string | null;
 }
 
-/** Why a typed ssh command cannot be quick-connected. */
+/** Why a typed ssh or telnet command cannot be quick-connected. */
 export type QuickProblem = { kind: "option"; option: string } | { kind: "command" } | { kind: "port" };
 
 /**
@@ -140,11 +140,18 @@ export interface TelnetTarget {
 }
 
 /**
+ * What the hosts search field makes of a typed Telnet target (TELNET-05). `search` filters the saved
+ * hosts, as for HOST-12; a port outside 1–65535 is a problem, shown as for ssh syntax.
+ */
+export type TelnetParse =
+  { ok: true; target: TelnetTarget; search: string } | { ok: false; problem: { kind: "port" }; search: string };
+
+/**
  * Reads `telnet host [port]` and `telnet://host[:port]` (TELNET-05), as the `telnet` command takes
  * them, with an IPv6 address bare or in brackets. Anything else returns null: the input is then read
- * as an ssh target or a search. `search` filters the saved hosts, as for HOST-12.
+ * as an ssh target or a search.
  */
-export function parseTelnet(input: string): { target: TelnetTarget; search: string } | null {
+export function parseTelnet(input: string): TelnetParse | null {
   const text = input.trim();
   let address: string;
   let portText: string | undefined;
@@ -167,8 +174,8 @@ export function parseTelnet(input: string): { target: TelnetTarget; search: stri
   // An IPv6 address has a digit: `:` and `::` name no server.
   if (address.includes(":") && !/[0-9a-f]/i.test(address)) return null;
   const port = portText === undefined ? 23 : parsePort(portText);
-  if (Number.isNaN(port)) return null;
-  return { target: { address, port }, search: address };
+  if (Number.isNaN(port)) return { ok: false, problem: { kind: "port" }, search: address };
+  return { ok: true, target: { address, port }, search: address };
 }
 
 /** The saved Telnet host at a typed Telnet target's address and port, so it logs in as saved. */

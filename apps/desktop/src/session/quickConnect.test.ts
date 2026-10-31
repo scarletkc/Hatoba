@@ -12,13 +12,20 @@ import {
 const target = (address: string, port: number, username: string | null) => ({ address, port, username });
 
 describe("parseTelnet (TELNET-05)", () => {
+  const telnet = (address: string, port: number) => ({ ok: true, target: { address, port }, search: address });
+
   it("reads the telnet command and telnet:// URLs", () => {
-    expect(parseTelnet("telnet 10.0.0.2")).toEqual({ target: { address: "10.0.0.2", port: 23 }, search: "10.0.0.2" });
-    expect(parseTelnet("  TELNET switch-1 2001 ")?.target).toEqual({ address: "switch-1", port: 2001 });
-    expect(parseTelnet("telnet [2001:db8::1] 23")?.target).toEqual({ address: "2001:db8::1", port: 23 });
-    expect(parseTelnet("telnet://router.lan:2323")?.target).toEqual({ address: "router.lan", port: 2323 });
-    expect(parseTelnet("telnet://router.lan/")?.target).toEqual({ address: "router.lan", port: 23 });
-    expect(parseTelnet("telnet://2001:db8::")?.target).toEqual({ address: "2001:db8::", port: 23 });
+    expect(parseTelnet("telnet 10.0.0.2")).toEqual(telnet("10.0.0.2", 23));
+    expect(parseTelnet("  TELNET switch-1 2001 ")).toEqual(telnet("switch-1", 2001));
+    expect(parseTelnet("telnet [2001:db8::1] 23")).toEqual(telnet("2001:db8::1", 23));
+    expect(parseTelnet("telnet://router.lan:2323")).toEqual(telnet("router.lan", 2323));
+    expect(parseTelnet("telnet://router.lan/")).toEqual(telnet("router.lan", 23));
+    expect(parseTelnet("telnet://2001:db8::")).toEqual(telnet("2001:db8::", 23));
+  });
+
+  it("says when the port is not one", () => {
+    for (const q of ["telnet host 0", "telnet host 70000", "telnet host ssh", "telnet://host:99999"])
+      expect(parseTelnet(q), q).toEqual({ ok: false, problem: { kind: "port" }, search: "host" });
   });
 
   it("leaves anything else to ssh and search", () => {
@@ -26,8 +33,6 @@ describe("parseTelnet (TELNET-05)", () => {
       "telnet",
       "telnet ",
       "telnet a b c",
-      "telnet host 0",
-      "telnet host 70000",
       "telnet://u@host",
       "telnet://router:",
       "telnet://[::1]:",

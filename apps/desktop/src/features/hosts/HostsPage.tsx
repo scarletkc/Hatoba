@@ -220,7 +220,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   // A typed target that is a saved host connects as that host, with its key and jump host.
   const exact = useMemo<AnyHostView | undefined>(
     () =>
-      telnetTyped
+      telnetTyped?.ok
         ? savedTelnetHostFor(telnetHosts, telnetTyped.target)
         : parsed?.ok
           ? savedHostFor(hosts, parsed.target)
@@ -232,7 +232,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   const unsavedRecents = useMemo(() => recents.filter((r) => !savedHostFor(hosts, r)), [recents, hosts]);
   const quickRows = useMemo(() => {
     const rows: QuickRowItem[] = [];
-    if (telnetTyped && !exact) rows.push({ id: TELNET_ROW, telnet: telnetTyped.target, recent: null });
+    if (telnetTyped?.ok && !exact) rows.push({ id: TELNET_ROW, telnet: telnetTyped.target, recent: null });
     if (parsed?.ok && !exact)
       rows.push({
         id: TYPED_ROW,
@@ -246,7 +246,8 @@ export function HostsPage({ group: requested }: { group: string | null }) {
           rows.push({ id: `quick:recent:${formatTarget(r)}`, target: r, recent: r });
     return rows;
   }, [telnetTyped, parsed, exact, unsavedRecents, searchText]);
-  const problem = parsed && !parsed.ok ? parsed.problem : null;
+  const typedInput = telnetTyped ?? parsed;
+  const problem = typedInput && !typedInput.ok ? typedInput.problem : null;
   const notice = parsed?.ok ? parsed.notice : undefined;
 
   const hostById = useMemo(() => new Map(allHosts.map((h) => [h.id, h])), [allHosts]);
@@ -770,7 +771,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
       e.preventDefault();
       // The list may still show an earlier keystroke: connect what the field says now.
       const typed = parseTelnet(query);
-      if (!typed) return;
+      if (!typed?.ok) return;
       const saved = savedTelnetHostFor(telnetHosts, typed.target);
       if (saved) connect(saved.id);
       else connectTelnetTarget(typed.target.address, typed.target.port);
@@ -1467,7 +1468,7 @@ function QuickRow({ item, selected, connectLabel, hint, removeLabel, onSelect, o
   );
 }
 
-/** An ssh command quick connect cannot run, with the reason. It is not selectable. */
+/** An ssh or telnet command quick connect cannot run, with the reason. It is not selectable. */
 function ProblemRow({ problem }: { problem: QuickProblem }) {
   const t = useT();
   const text =
