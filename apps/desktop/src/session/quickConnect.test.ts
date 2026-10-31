@@ -65,6 +65,8 @@ describe("parseQuickConnect", () => {
       "deploy@",
       "@host",
       "prod deploy@db",
+      "telnet://admin@router",
+      "TELNET://admin@router:23",
     ])
       expect(parseQuickConnect(q), q).toBeNull();
   });

@@ -83,6 +83,8 @@ function parseDestination(token: string): { address: string; port: number | null
  */
 export function parseQuickConnect(input: string): QuickParse | null {
   const text = input.trim();
+  // A telnet:// URL, even one with a user, is Telnet's (TELNET-05), not an ssh target.
+  if (/^telnet:\/\//i.test(text)) return null;
   const command = /^ssh\s/i.test(text);
   if (!command && !text.includes("@") && !/^ssh:\/\//i.test(text)) return null;
   const tokens = (command ? text.replace(/^ssh\s+/i, "") : text).split(/\s+/).filter(Boolean);
