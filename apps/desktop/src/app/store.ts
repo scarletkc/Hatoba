@@ -11,6 +11,7 @@ import type {
 } from "@/ipc/types";
 import { detectLocale, setLocale, type Locale } from "@/i18n";
 import type { HostDraft } from "@/features/hosts/ProtocolRow";
+import { setWindowTheme } from "@/lib/native";
 import { applyZoom } from "@/lib/zoom";
 
 /** What the "home" tab shows. Session tabs are tracked in `tabs.ts`. */
@@ -180,6 +181,8 @@ export function applyPrefs(prefs: LocalPrefs) {
     void document.body?.offsetHeight;
     delete root.dataset.themeSwitch;
   }
+  // Mica follows the window's theme, not the page's: a dark page on a light system would sit on light Mica.
+  if (root.dataset.material === "mica") void setWindowTheme(prefs.appearance === "system" ? null : theme);
   root.dataset.density = prefs.density;
   setLocale(resolveLocale(prefs));
 }

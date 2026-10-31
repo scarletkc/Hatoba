@@ -44,6 +44,18 @@ export async function pickOpenPath(options: {
   return typeof path === "string" ? path : null;
 }
 
+/**
+ * Sets the native window's theme, which Mica takes its tint from (WIN-07); `null` follows the system. Tauri also sets
+ * the page's prefers-color-scheme to the window's theme, so `null` keeps it following the system.
+ */
+export async function setWindowTheme(theme: "light" | "dark" | null): Promise<void> {
+  if (!isTauri()) return;
+  const { getCurrentWindow } = await import("@tauri-apps/api/window");
+  await getCurrentWindow()
+    .setTheme(theme)
+    .catch(() => {});
+}
+
 /** Whether the window has the focus; hidden to the tray (WIN-10) or minimized, it does not. A plain browser asks the page. */
 export async function windowFocused(): Promise<boolean> {
   if (!isTauri()) return document.hasFocus();
