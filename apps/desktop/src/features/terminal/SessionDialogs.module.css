@@ -65,6 +65,35 @@
   white-space: pre-wrap;
 }
 
+/* The server's message as a terminal shows it. */
+.message {
+  margin-top: 12px;
+  max-height: 260px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--fill);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.message a {
+  color: var(--accent);
+}
+
+.waiting {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--fg2);
+}
+
 .wrong {
   margin-top: 10px;
 }

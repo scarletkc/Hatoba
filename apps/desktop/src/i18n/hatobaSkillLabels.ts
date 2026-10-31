@@ -514,6 +514,7 @@ export const AREAS: Area[] = [
           "terminal.hostkey.update",
           "terminal.hostkey.additionalTitle",
         ],
+        "Sign-in messages": ["terminal.banner.title", "terminal.banner.open", "btn.cancel"],
         "Dropped connections and keepalive": [
           "terminal.disconnected",
           "terminal.menu.reconnect",

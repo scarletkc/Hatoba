@@ -1002,30 +1002,47 @@ export function createMockApi(): HatobaApi {
         if (!accepted) failWith(appError("ssh", "host key rejected", { ssh_kind: "host_key_rejected" }));
         trustedQuickHosts.add(endpoint);
       }
-      // No ssh-agent here: the server asks for the password.
-      const answers = await new Promise<string[] | null>((resolve) => {
-        const rid = id("ap");
-        pendingAuth.set(rid, resolve);
-        const host = target.address.includes(":") ? `[${target.address}]` : target.address;
-        emit("ssh://auth-prompt", {
-          request_id: rid,
-          session_id: sid,
-          name: target.address,
-          instructions: "",
-          prompts: [{ prompt: "Password: ", echo: false }],
-          password: true,
-          sudo: false,
-          wrong: false,
-          target: `${target.username}@${host}:${target.port}`,
+      const host = target.address.includes(":") ? `[${target.address}]` : target.address;
+      if (target.address.endsWith(".ts.net")) {
+        // Tailscale SSH's check mode: the server says where to sign in and holds the login until then.
+        const rid = id("ab");
+        const signedIn = await new Promise<boolean>((resolve) => {
+          pendingAuth.set(rid, () => resolve(false));
+          emit("ssh://auth-banner", {
+            request_id: rid,
+            session_id: sid,
+            target: `${target.username}@${host}:${target.port}`,
+            text: "# Tailscale SSH requires an additional check.\n# To authenticate, visit: https://login.tailscale.com/a/l7c4b9e2f1a3",
+          });
+          setTimeout(() => resolve(true), 8000);
         });
-      });
-      if (!answers) failWith(appError("ssh", "operation cancelled", { ssh_kind: "cancelled" }));
-      if (answers![0] === "wrong")
-        failWith(
-          appError("ssh", "the server rejected the password (server accepts: publickey, password)", {
-            ssh_kind: "auth_failed",
-          }),
-        );
+        if (pendingAuth.delete(rid)) emit("ssh://auth-prompt-closed", { request_id: rid });
+        if (!signedIn) failWith(appError("ssh", "operation cancelled", { ssh_kind: "cancelled" }));
+      } else {
+        // No ssh-agent here: the server asks for the password.
+        const answers = await new Promise<string[] | null>((resolve) => {
+          const rid = id("ap");
+          pendingAuth.set(rid, resolve);
+          emit("ssh://auth-prompt", {
+            request_id: rid,
+            session_id: sid,
+            name: target.address,
+            instructions: "",
+            prompts: [{ prompt: "Password: ", echo: false }],
+            password: true,
+            sudo: false,
+            wrong: false,
+            target: `${target.username}@${host}:${target.port}`,
+          });
+        });
+        if (!answers) failWith(appError("ssh", "operation cancelled", { ssh_kind: "cancelled" }));
+        if (answers![0] === "wrong")
+          failWith(
+            appError("ssh", "the server rejected the password (server accepts: publickey, password)", {
+              ssh_kind: "auth_failed",
+            }),
+          );
+      }
       await delay(300);
       const shellHost: HostView = {
         ...D.HOSTS[0],

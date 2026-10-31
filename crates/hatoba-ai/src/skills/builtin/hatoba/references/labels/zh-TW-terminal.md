@@ -319,6 +319,14 @@ The labels that these files name in English, as the interface shows them in Trad
 | Update Fingerprint and Connect | 更新指紋並連線 |
 | New host key for {host}:{port} | {host}:{port} 提供了新的主機金鑰 |
 
+### Sign-in messages
+
+| en | zh-TW |
+|---|---|
+| Message from {target} | {target} 傳來的訊息 |
+| Open Link | 開啟連結 |
+| Cancel | 取消 |
+
 ### Dropped connections and keepalive
 
 | en | zh-TW |

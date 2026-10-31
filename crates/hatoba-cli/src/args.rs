@@ -50,7 +50,9 @@ minutes.
 A host key not trusted yet, or a password or code that isn't saved, is asked in
 the Hatoba window, and the command waits up to 10 minutes for the answer. A
 jump host can't ask for a password: it needs a saved one, a key or the SSH
-agent. Passwords and keys stay in Hatoba.
+agent. Passwords and keys stay in Hatoba. A message the server sends while
+signing in goes to stderr, and the command waits while the server holds the
+login, as Tailscale SSH does until you sign in at the link it prints.
 
 Hatoba has to be running and unlocked, with Settings > General >
 \"Let other programs use saved hosts\" on.

@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import type { AuthPrompt, HostKeyPrompt } from "@/ipc/types";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AuthBanner, AuthPrompt, HostKeyPrompt } from "@/ipc/types";
 
 const answered = vi.hoisted(() => ({ hostkeys: [] as [string, boolean][], auths: [] as [string, string[] | null][] }));
 
@@ -11,7 +11,7 @@ vi.mock("@/ipc/api", async (importActual) => ({
   },
 }));
 
-const { cancelSessionPrompts, closeAuthPrompt, pushAuthPrompt, pushHostKeyPrompt, usePrompts } =
+const { cancelSessionPrompts, closeAuthPrompt, pushAuthBanner, pushAuthPrompt, pushHostKeyPrompt, usePrompts } =
   await import("./prompts");
 
 const hostKey = (request_id: string, session_id: string): HostKeyPrompt => ({
@@ -93,5 +93,61 @@ describe("cancelSessionPrompts", () => {
     const left = usePrompts.getState().items;
     expect(left).toHaveLength(1);
     expect(left[0].kind === "secret" && left[0].sessionId).toBe("s2");
+  });
+});
+
+const banner = (request_id: string, session_id: string | null): AuthBanner => ({
+  request_id,
+  session_id,
+  target: "alice@nas.example.ts.net:22",
+  text: "# To authenticate, visit: https://login.tailscale.com/a/1234",
+});
+
+describe("pushAuthBanner", () => {
+  beforeEach(() => {
+    usePrompts.setState({ items: [] });
+    answered.auths.length = 0;
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("shows a banner once the server has held the login for a second, until it answers", () => {
+    vi.useFakeTimers();
+    pushAuthBanner(banner("b1", null));
+    vi.advanceTimersByTime(999);
+    expect(usePrompts.getState().items).toEqual([]);
+    vi.advanceTimersByTime(1);
+    const [item] = usePrompts.getState().items;
+    expect(item.kind === "banner" && item.banner.request_id).toBe("b1");
+
+    closeAuthPrompt({ request_id: "b1" });
+    expect(usePrompts.getState().items).toEqual([]);
+    expect(answered.auths).toEqual([]);
+  });
+
+  it("never shows a banner the server answers at once", () => {
+    vi.useFakeTimers();
+    pushAuthBanner(banner("b1", "s1"));
+    closeAuthPrompt({ request_id: "b1" });
+    vi.advanceTimersByTime(5000);
+    expect(usePrompts.getState().items).toEqual([]);
+  });
+
+  it("stops waiting on the banners of a closed tab's connection, shown or not", () => {
+    vi.useFakeTimers();
+    pushAuthBanner(banner("b1", "s1"));
+    vi.advanceTimersByTime(1000);
+    pushAuthBanner(banner("b2", "s1"));
+    pushAuthBanner(banner("b3", "s2"));
+
+    cancelSessionPrompts("s1");
+    vi.advanceTimersByTime(1000);
+
+    expect(answered.auths).toEqual([
+      ["b2", null],
+      ["b1", null],
+    ]);
+    const left = usePrompts.getState().items;
+    expect(left).toHaveLength(1);
+    expect(left[0].kind === "banner" && left[0].banner.request_id).toBe("b3");
   });
 });

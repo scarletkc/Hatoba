@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Button, ErrorText, Icon, Modal, TextField } from "@hatoba/ui";
+import { Button, ErrorText, Icon, Modal, Spinner, TextField } from "@hatoba/ui";
 import { useT } from "@/i18n";
+import { openExternal } from "@/lib/clipboard";
 import { cx } from "@/lib/cx";
+import { firstLink, messageParts } from "@/session/banner";
 import { startSessionListeners } from "@/session/listeners";
 import {
   answerAuth,
+  answerBanner,
   answerHostKey,
   answerSecret,
   answerUsername,
@@ -13,7 +16,7 @@ import {
 } from "@/session/prompts";
 import s from "./SessionDialogs.module.css";
 
-/** Global host-key / keyboard-interactive / one-off secret dialogs (mounted once by App). */
+/** Global host-key / keyboard-interactive / server message / one-off secret dialogs (mounted once by App). */
 export function SessionDialogs() {
   const item = usePrompts((st) => st.items[0]);
   // Backend events are wired once, after boot, and stay wired while the vault is locked.
@@ -28,6 +31,8 @@ export function SessionDialogs() {
       );
     case "auth":
       return <AuthPromptDialog key={item.key} item={item} />;
+    case "banner":
+      return <BannerDialog key={item.key} item={item} />;
     case "secret":
       return <SecretDialog key={item.key} item={item} />;
     case "username":
@@ -177,6 +182,60 @@ function AuthPromptDialog({ item }: { item: PromptItem & { kind: "auth" } }) {
           </Button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+/**
+ * A message the server sent while signing in, shown while the server holds the login, as Tailscale SSH's
+ * check mode does until the user signs in at its link. It closes when the server goes on; **Cancel** stops
+ * connecting.
+ */
+function BannerDialog({ item }: { item: PromptItem & { kind: "banner" } }) {
+  const t = useT();
+  const b = item.banner;
+  const link = firstLink(b.text);
+  const cancel = useCallback(() => answerBanner(item), [item]);
+  return (
+    <Modal center onClose={cancel} closeOnBackdrop={false}>
+      <div role="dialog" aria-modal aria-labelledby="banner-title" className={s.card}>
+        <div className={s.head}>
+          <Icon name="chat-text" size={20} color="var(--accent)" />
+          <div id="banner-title" className={s.title}>
+            {t("terminal.banner.title", { target: b.target })}
+          </div>
+        </div>
+        <div className={cx(s.message, "selectable")}>
+          {messageParts(b.text).map(({ text, href }, i) =>
+            href ? (
+              <a
+                key={i}
+                href={href}
+                onClick={(e) => {
+                  e.preventDefault();
+                  void openExternal(href);
+                }}
+              >
+                {text}
+              </a>
+            ) : (
+              text
+            ),
+          )}
+        </div>
+        <div className={s.actions}>
+          <div className={s.waiting} role="status">
+            <Spinner size={14} />
+            {t("terminal.banner.waiting")}
+          </div>
+          <Button onClick={cancel}>{t("btn.cancel")}</Button>
+          {link && (
+            <Button variant="primary" autoFocus onClick={() => void openExternal(link)}>
+              {t("terminal.banner.open")}
+            </Button>
+          )}
+        </div>
+      </div>
     </Modal>
   );
 }

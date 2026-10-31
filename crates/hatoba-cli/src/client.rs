@@ -175,6 +175,13 @@ fn copy(app: &App, source: Place, target: Place, prompt: bool, sudo: bool) -> i3
                 }
                 eprintln!("hatoba: {text}");
             }
+            // What the server printed while signing in.
+            Ok(Some(Frame::Stderr(bytes))) => {
+                if std::mem::take(&mut shown) {
+                    eprintln!();
+                }
+                let _ = write_out(&mut io::stderr(), &bytes);
+            }
             Ok(Some(Frame::End(end))) => {
                 if shown {
                     eprintln!();

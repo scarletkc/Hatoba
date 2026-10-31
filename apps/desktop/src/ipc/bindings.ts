@@ -630,6 +630,7 @@ export const events = {
 	cliActivity: makeEvent<CliActivityEvent>("cli://activity"),
 	sftpEdit: makeEvent<RemoteEditEvent>("sftp://edit"),
 	sftpQuit: makeEvent<RemoteEditQuitEvent>("sftp://quit"),
+	sshAuthBanner: makeEvent<AuthBanner>("ssh://auth-banner"),
 	sshAuthPrompt: makeEvent<AuthPrompt>("ssh://auth-prompt"),
 	sshAuthPromptClosed: makeEvent<AuthPromptClosed>("ssh://auth-prompt-closed"),
 	sshConnections: makeEvent<ConnectionsEvent>("ssh://connections"),
@@ -1360,6 +1361,26 @@ export type AppInfo = {
 };
 
 export type Appearance = "system" | "light" | "dark";
+
+/**
+ *  A message the server sent while signing in (`SSH_MSG_USERAUTH_BANNER`). The terminal tab
+ *  connecting shows it in its terminal, as `ssh` prints it, and while the server holds the login,
+ *  as Tailscale SSH's check mode does until the user signs in at its link, it shows in a dialog.
+ *  `auth_prompt_respond` with no answers cancels the connection; `ssh://auth-prompt-closed` says
+ *  the server answered, which closes the dialog.
+ */
+export type AuthBanner = {
+	request_id: string,
+	/**
+	 *  The terminal tab's session; `None` for a connection without a terminal, such as a port
+	 *  forward's (FWD-05).
+	 */
+	session_id: string | null,
+	/**  `user@host:port` of the hop that sent it. */
+	target: string,
+	/**  Lines end with `\n`; the only other control character is tab. */
+	text: string,
+};
 
 export type AuthKind = "password" | "key" | "agent" | "ask";
 

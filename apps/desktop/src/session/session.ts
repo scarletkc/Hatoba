@@ -17,6 +17,7 @@ import {
   FRAME_ERROR,
   FRAME_SESSION,
   type AppError,
+  type AuthBanner,
   type HostView,
   type QuickTarget,
   type SessionStateEvent,
@@ -26,7 +27,7 @@ import { isMac } from "@/lib/platform";
 import { editSessionChanged } from "./edits";
 import { clearInfo, getInfo, patchInfo } from "./info";
 import { confirmMultilinePaste } from "./paste";
-import { askPassword, askSecret, cancelSessionPrompts } from "./prompts";
+import { askPassword, askSecret, cancelSessionPrompts, pushAuthBanner, stopWaiting } from "./prompts";
 import { useRecentTargets } from "./recent";
 import { searchColors } from "./schemes";
 import { resolveScheme, terminalOptions, useTermSettings } from "./theme";
@@ -71,6 +72,24 @@ export function ensureSession(tabId: string): LiveSession | null {
 /** The backend sessions of the tabs connected to a saved host. */
 export function hostSessionIds(hostId: string): string[] {
   return [...byTab.values()].flatMap((x) => (x.hostId === hostId && x.sessionId ? [x.sessionId] : []));
+}
+
+/**
+ * A message the server sent while signing in. The tab connecting prints it in its terminal, as `ssh`
+ * does, and it shows in a dialog while the server holds the login. One for a tab that has closed
+ * cancels that tab's connection.
+ */
+export function routeAuthBanner(ev: AuthBanner) {
+  const sid = ev.session_id;
+  if (sid !== null) {
+    const tab = [...byTab.values()].find((x) => x.connectingAs(sid));
+    if (!tab) {
+      stopWaiting(ev.request_id);
+      return;
+    }
+    tab.printBanner(ev.text);
+  }
+  pushAuthBanner(ev);
 }
 
 /** Route an `ssh://state` event to the tab that owns the session. */
@@ -419,6 +438,17 @@ export class LiveSession {
     earlyEvents.delete(sid);
     early?.forEach((ev) => this.onState(ev));
     if (this.active && this.status === "connected") this.term.focus();
+  }
+
+  /** Whether this tab is connecting as backend session `sid`. */
+  connectingAs(sid: string): boolean {
+    return this.isConnecting && this.pendingSessionId === sid;
+  }
+
+  /** A message the server sent while signing in, printed on a line of its own. */
+  printBanner(text: string) {
+    const atLineStart = this.term.buffer.active.cursorX === 0;
+    this.term.write(`${atLineStart ? "" : "\r\n"}${text.replaceAll("\n", "\r\n")}\r\n`);
   }
 
   private fail(err: AppError) {

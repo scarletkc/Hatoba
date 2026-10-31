@@ -1130,7 +1130,7 @@ async fn connect_step(
     }
     // The connection's hops are those of the plan's chain, unless the vault changed in between.
     let same_chain = cfg.jump.len() + 1 == hops.len();
-    let (result, outcome) = connect_unattended(app, cfg).await;
+    let (result, outcome) = connect_unattended(app, cfg, None).await;
     let hop = outcome.hop().filter(|_| same_chain);
     drop(permit);
     let session = match result {

@@ -319,6 +319,14 @@ The labels that these files name in English, as the interface shows them in Japa
 | Update Fingerprint and Connect | フィンガープリントを更新して接続 |
 | New host key for {host}:{port} | {host}:{port} の新しいホストキー |
 
+### Sign-in messages
+
+| en | ja |
+|---|---|
+| Message from {target} | {target} からのメッセージ |
+| Open Link | リンクを開く |
+| Cancel | キャンセル |
+
 ### Dropped connections and keepalive
 
 | en | ja |
