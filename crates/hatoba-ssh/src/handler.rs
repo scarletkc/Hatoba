@@ -223,6 +223,8 @@ fn clean_server_id(raw: &[u8]) -> String {
 
 /// Longest banner shown, in characters.
 const MAX_BANNER_CHARS: usize = 16 * 1024;
+/// Banners shown per connection; a server that sends more gets the rest ignored.
+const MAX_BANNERS: usize = 16;
 
 /// A banner as text to show: CR LF and a lone CR end a line with `\n`, other control characters
 /// but tab are dropped, as OpenSSH does, at most [`MAX_BANNER_CHARS`] characters are kept, and
@@ -254,6 +256,8 @@ pub(crate) struct ClientHandler {
     shared: Arc<SessionShared>,
     clock: Arc<ConnectClock>,
     banners: Banners,
+    /// How many banners went to the callback.
+    banners_shown: usize,
 }
 
 impl ClientHandler {
@@ -272,6 +276,7 @@ impl ClientHandler {
             shared,
             clock,
             banners,
+            banners_shown: 0,
         }
     }
 }
@@ -319,6 +324,15 @@ impl client::Handler for ClientHandler {
         if text.is_empty() {
             return Ok(());
         }
+        if self.banners_shown == MAX_BANNERS {
+            tracing::debug!(
+                "ignored a banner from {}:{}: too many",
+                self.host,
+                self.port
+            );
+            return Ok(());
+        }
+        self.banners_shown += 1;
         let shown = interactive.banner(Banner {
             host: self.host.clone(),
             port: self.port,

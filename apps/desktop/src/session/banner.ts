@@ -5,17 +5,23 @@ export interface MessagePart {
   href?: string;
 }
 
-const LINK = /https?:\/\/[^\s<>"'`]+/g;
+const LINK = /https?:\/\/[^\s<>"'`]+/gi;
 /** Punctuation that ends a sentence after a link rather than belonging to it. */
 const TRAILING = ".,;:!?)]}";
 
 /** `link` without the punctuation after it. A `)` that closes a `(` in the link stays. */
 function trimLink(link: string): string {
+  let open = 0;
+  let close = 0;
+  for (const c of link) {
+    if (c === "(") open++;
+    else if (c === ")") close++;
+  }
   let end = link.length;
   while (end > 0 && TRAILING.includes(link[end - 1])) {
     if (link[end - 1] === ")") {
-      const kept = link.slice(0, end);
-      if (kept.split("(").length >= kept.split(")").length) break;
+      if (open >= close) break;
+      close--;
     }
     end--;
   }

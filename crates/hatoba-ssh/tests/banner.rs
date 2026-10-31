@@ -1,6 +1,6 @@
 //! The server's banners (`SSH_MSG_USERAUTH_BANNER`), against an in-process server that sends one
-//! and then holds the "none" login, as Tailscale SSH's check mode does until the user signs in at
-//! the link in it.
+//! and then holds a login request, as Tailscale SSH's check mode holds the "none" login until the
+//! user signs in at the link in it.
 
 mod common;
 
@@ -16,7 +16,7 @@ use hatoba_ssh::{
     SshErrorKind, connect,
 };
 use russh::keys::{Algorithm, PrivateKey};
-use russh::server::{Auth, Config, Handler};
+use russh::server::{Auth, Config, Handler, PublicKeyOffer};
 use russh::{MethodKind, MethodSet, SshId};
 use tokio::net::TcpListener;
 use zeroize::Zeroizing;
@@ -24,7 +24,17 @@ use zeroize::Zeroizing;
 const CHECK: &str = "# Tailscale SSH requires an additional check.\r\n\
                      # To authenticate, visit: https://login.tailscale.com/a/1234\r\n";
 
+/// The request the server holds.
+#[derive(Clone, Copy)]
+enum Held {
+    /// The "none" probe, which it then lets through.
+    None,
+    /// The public key request, after rejecting "none" at once.
+    PublicKey,
+}
+
 struct HoldingHandler {
+    held: Held,
     hold: Duration,
 }
 
@@ -36,17 +46,33 @@ impl Handler for HoldingHandler {
     }
 
     async fn auth_none(&mut self, _user: &str) -> Result<Auth, Self::Error> {
+        match self.held {
+            Held::None => {
+                tokio::time::sleep(self.hold).await;
+                Ok(Auth::Accept)
+            }
+            Held::PublicKey => Ok(Auth::reject()),
+        }
+    }
+
+    async fn auth_publickey_offered(
+        &mut self,
+        _user: &str,
+        _offer: PublicKeyOffer<'_>,
+    ) -> Result<Auth, Self::Error> {
         tokio::time::sleep(self.hold).await;
         Ok(Auth::Accept)
     }
 }
 
-/// A server that sends [`CHECK`] and lets the login through after `hold`.
-async fn start_holding(hold: Duration) -> u16 {
+/// A server that sends [`CHECK`] and lets the `held` request through after `hold`.
+async fn start_holding(held: Held, hold: Duration) -> u16 {
     let key = PrivateKey::random(&mut russh::keys::key::safe_rng(), Algorithm::Ed25519).unwrap();
     let config = Arc::new(Config {
         keys: vec![key],
-        methods: MethodSet::from(&[MethodKind::None][..]),
+        methods: MethodSet::from(&[MethodKind::None, MethodKind::PublicKey][..]),
+        auth_rejection_time: Duration::from_millis(20),
+        auth_rejection_time_initial: Some(Duration::ZERO),
         server_id: SshId::Standard(Cow::Borrowed("SSH-2.0-HatobaMock_1.0 holding")),
         ..Config::default()
     });
@@ -56,7 +82,7 @@ async fn start_holding(hold: Duration) -> u16 {
         while let Ok((stream, _)) = listener.accept().await {
             let config = config.clone();
             tokio::spawn(async move {
-                let handler = HoldingHandler { hold };
+                let handler = HoldingHandler { held, hold };
                 if let Ok(running) = russh::server::run_stream(config, stream, handler).await {
                     let _ = running.await;
                 }
@@ -127,7 +153,7 @@ fn config(port: u16, shows: &Arc<Shows>, timeout: Duration) -> ConnectConfig {
 
 #[tokio::test]
 async fn the_banner_is_shown_cleaned_and_its_wait_ends_with_the_answer() {
-    let port = start_holding(Duration::ZERO).await;
+    let port = start_holding(Held::None, Duration::ZERO).await;
     let shows = Shows::new(true, None);
     let session = connect(
         config(port, &shows, Duration::from_secs(5)),
@@ -152,7 +178,7 @@ async fn the_banner_is_shown_cleaned_and_its_wait_ends_with_the_answer() {
 
 #[tokio::test]
 async fn a_login_held_after_a_banner_someone_sees_does_not_time_out() {
-    let port = start_holding(Duration::from_millis(2500)).await;
+    let port = start_holding(Held::None, Duration::from_millis(2500)).await;
     let shows = Shows::new(true, None);
     let started = Instant::now();
     let session = connect(
@@ -167,7 +193,7 @@ async fn a_login_held_after_a_banner_someone_sees_does_not_time_out() {
 
 #[tokio::test]
 async fn a_banner_nobody_sees_leaves_the_timeout_running() {
-    let port = start_holding(Duration::from_secs(10)).await;
+    let port = start_holding(Held::None, Duration::from_secs(10)).await;
     let shows = Shows::new(false, None);
     let started = Instant::now();
     let err = connect(
@@ -184,7 +210,7 @@ async fn a_banner_nobody_sees_leaves_the_timeout_running() {
 
 #[tokio::test]
 async fn giving_up_on_a_banner_cancels_the_login() {
-    let port = start_holding(Duration::from_secs(10)).await;
+    let port = start_holding(Held::None, Duration::from_secs(10)).await;
     let shows = Shows::new(true, Some(Duration::from_millis(200)));
     let started = Instant::now();
     let err = connect(
@@ -195,4 +221,19 @@ async fn giving_up_on_a_banner_cancels_the_login() {
     .unwrap_err();
     assert_eq!(err.kind, SshErrorKind::Cancelled, "{err}");
     assert!(started.elapsed() < Duration::from_secs(3));
+}
+
+#[tokio::test]
+async fn a_banner_waits_only_on_the_request_it_came_with() {
+    // The banner comes with the "none" probe, which the server rejects at once, and the server
+    // then holds the public key request: neither the pause nor giving up on the banner reaches it.
+    let port = start_holding(Held::PublicKey, Duration::from_secs(10)).await;
+    let shows = Shows::new(true, Some(Duration::from_millis(300)));
+    let mut c = config(port, &shows, Duration::from_secs(1));
+    c.auth = key_auth("ed25519", None);
+    let started = Instant::now();
+    let err = connect(c, Verifier::accepting()).await.unwrap_err();
+    assert_eq!(err.kind, SshErrorKind::Timeout, "{err}");
+    assert!(started.elapsed() < Duration::from_secs(5));
+    assert!(shows.ended.load(Ordering::SeqCst), "the wait was dropped");
 }

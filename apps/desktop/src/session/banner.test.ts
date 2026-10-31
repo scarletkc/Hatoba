@@ -29,6 +29,12 @@ describe("server messages", () => {
       { text: "." },
     ]);
     expect(firstLink("(see https://example.com/wiki/Foo_(bar))")).toBe("https://example.com/wiki/Foo_(bar)");
+    // A run as long as a banner can be stays fast.
+    expect(firstLink(`https://example.com/a${")".repeat(16_000)}`)).toBe("https://example.com/a");
+  });
+
+  it("links a scheme in capitals", () => {
+    expect(firstLink("Visit HTTPS://login.example.com/check now")).toBe("HTTPS://login.example.com/check");
   });
 
   it("links only web addresses", () => {
