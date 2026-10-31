@@ -190,6 +190,14 @@ pub async fn check(session: &impl Exec, password: &str) -> Result<Checked, SshEr
     Ok(parse_check(&out))
 }
 
+/// What sudo prints for a wrong password, and then sudo-rs, the sudo of Ubuntu since 25.10.
+const WRONG: [&str; 4] = [
+    "incorrect password attempt",
+    "Sorry, try again",
+    "Authentication failed, try again",
+    "incorrect authentication attempt",
+];
+
 fn parse_check(out: &ExecOutput) -> Checked {
     let stderr = String::from_utf8_lossy(&out.stderr);
     if reported(&out.stdout).is_none() {
@@ -197,7 +205,7 @@ fn parse_check(out: &ExecOutput) -> Checked {
     }
     if out.exit_status == Some(0) {
         Checked::Accepted
-    } else if stderr.contains("incorrect password attempt") || stderr.contains("Sorry, try again") {
+    } else if WRONG.iter().any(|w| stderr.contains(w)) {
         Checked::Wrong
     } else {
         Checked::Refused(last_line(&out.stderr))
@@ -539,6 +547,14 @@ pub(crate) mod tests {
             check(
                 Some(1),
                 "Sorry, try again.\nsudo: 1 incorrect password attempt\n"
+            ),
+            Checked::Wrong
+        );
+        assert_eq!(
+            check(
+                Some(1),
+                "Authentication failed, try again.\nsudo-rs: maximum 3 incorrect authentication \
+                 attempts\n"
             ),
             Checked::Wrong
         );

@@ -22,7 +22,7 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::{Duration, Instant};
+use std::time::{Duration, SystemTime};
 
 use hatoba_cli::SWITCH;
 use hatoba_cli::protocol::{
@@ -73,11 +73,15 @@ pub struct CliAccess {
     next_id: AtomicU64,
     /// The sudo passwords given in the window, by host and the way it connects ([`sudo_key`]).
     sudo: Mutex<HashMap<String, KeptPassword>>,
+    /// Lets one request at a time find the sudo password for a [`sudo_key`], so the others wait
+    /// and take the one it found instead of asking again.
+    sudo_turns: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
 }
 
 struct KeptPassword {
     password: Zeroizing<String>,
-    used: Instant,
+    /// The clock's time, not an `Instant`, so that time asleep counts, as it does for sudo.
+    used: SystemTime,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -94,13 +98,21 @@ impl CliAccess {
         std::mem::take(&mut *lock(&self.epoch)).cancel();
         self.pool.close_all();
         lock(&self.sudo).clear();
+        lock(&self.sudo_turns).clear();
+    }
+
+    fn sudo_turn(&self, key: &str) -> Arc<tokio::sync::Mutex<()>> {
+        lock(&self.sudo_turns)
+            .entry(key.to_owned())
+            .or_default()
+            .clone()
     }
 
     /// The sudo password given in the window for `key`, unless [`SUDO_KEPT`] has passed since it
-    /// was last used.
+    /// was last used, or the clock went back.
     fn kept_sudo(&self, key: &str) -> Option<Zeroizing<String>> {
         let mut kept = lock(&self.sudo);
-        kept.retain(|_, k| k.used.elapsed() < SUDO_KEPT);
+        kept.retain(|_, k| k.used.elapsed().is_ok_and(|e| e < SUDO_KEPT));
         kept.get(key).map(|k| k.password.clone())
     }
 
@@ -109,7 +121,7 @@ impl CliAccess {
             key,
             KeptPassword {
                 password,
-                used: Instant::now(),
+                used: SystemTime::now(),
             },
         );
     }
@@ -693,13 +705,19 @@ impl Ctx<'_> {
         }
         let cli = &state(self.app).cli;
         let key = sudo_key(target);
+        let _turn = tokio::select! {
+            turn = cli.sudo_turn(&key).lock_owned() => turn,
+            () = self.stopped() => return Err(self.stop_message(what)),
+        };
         let kept = cli.kept_sudo(&key);
         if let Some(password) = kept.clone() {
-            if self.sudo_takes(session, &password, target, what).await? {
+            let takes = self.sudo_takes(session, &password, target, what).await;
+            if takes == Ok(true) {
                 cli.keep_sudo(key, password.clone());
                 return Ok(RunAs::Sudo(Some(password)));
             }
             cli.forget_sudo(&key);
+            takes?;
         }
         let saved = state(self.app)
             .with_unlocked(|v| {
@@ -1078,7 +1096,8 @@ async fn download_as_root(
     })
 }
 
-/// Removes the folder a `--sudo` copy went through; one left behind only takes space.
+/// Removes the folder a `--sudo` copy went through; one left behind keeps its copy where only the
+/// login user can open it.
 async fn remove_temp_dir(session: &SshSession, dir: &str) {
     if let Err(e) = sudo::remove_temp_dir(session, dir).await {
         tracing::debug!(

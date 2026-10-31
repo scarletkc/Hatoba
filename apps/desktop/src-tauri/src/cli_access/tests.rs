@@ -145,11 +145,18 @@ fn a_sudo_password_is_kept_for_its_host_until_unused_for_15_minutes() {
     );
     // The host connects another way now.
     assert!(cli.kept_sudo("h1\nv2").is_none());
-    let Some(long_ago) = Instant::now().checked_sub(SUDO_KEPT) else {
-        return;
-    };
-    lock(&cli.sudo).get_mut("h1\nv1").unwrap().used = long_ago;
+    lock(&cli.sudo).get_mut("h1\nv1").unwrap().used = SystemTime::now() - SUDO_KEPT;
     assert!(cli.kept_sudo("h1\nv1").is_none());
     assert_eq!(detail(true, "ls".into()), "sudo ls");
     assert_eq!(detail(false, "ls".into()), "ls");
+}
+
+#[test]
+fn requests_for_one_host_find_its_sudo_password_one_at_a_time() {
+    let cli = CliAccess::default();
+    let first = cli.sudo_turn("h1\nv1").try_lock_owned().unwrap();
+    assert!(cli.sudo_turn("h1\nv1").try_lock_owned().is_err());
+    assert!(cli.sudo_turn("h2\nv1").try_lock_owned().is_ok());
+    drop(first);
+    assert!(cli.sudo_turn("h1\nv1").try_lock_owned().is_ok());
 }

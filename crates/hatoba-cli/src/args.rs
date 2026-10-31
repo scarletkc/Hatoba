@@ -37,9 +37,12 @@ on hosts without sh, such as Windows, it may keep running. A command that ends
 by itself leaves what it started in the background running. hosts and cp exit
 with 1 when they fail, and a command line hatoba can't read exits with 2.
 
---sudo runs the command with sudo, with the same shell and directory, and cp
---sudo copies the file as root, as sudo cp would: a file already at the target
-keeps its owner and permissions, a new one belongs to root. When sudo asks for a
+--sudo runs the command as root through sudo, which has to let the login user
+run sh as root. The command starts in the same directory with the same shell,
+but with the environment sudo sets, so ~ and $HOME in it are root's. cp --sudo
+copies the file as root, as sudo cp would: a file already at the target keeps
+its owner and permissions, a new one belongs to root, and a copy to the host
+that fails while writing can leave the file cut short. When sudo asks for a
 password, Hatoba tries the host's saved password, then asks in its window and
 remembers the answer until it locks or the host has had no --sudo for 15
 minutes.
