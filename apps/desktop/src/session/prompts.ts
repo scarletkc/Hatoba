@@ -28,7 +28,7 @@ export type PromptItem =
       resolve: (value: string | null) => void;
       /** The backend session asking, for a quick connection's login password. */
       sessionId?: string | null;
-      /** The `ssh://auth-prompt` this answers, for a sudo password. */
+      /** The `ssh://auth-prompt` this answers. */
       requestId?: string;
     }
   | { key: string; kind: "username"; target: string; resolve: (value: string | null) => void };
@@ -69,7 +69,7 @@ export function pushAuthPrompt(prompt: AuthPrompt) {
     const request: SecretRequest = { kind: "password", hostName: prompt.target, target: prompt.target, oneOff: true };
     const resolve = (value: string | null) =>
       void api.auth_prompt_respond(prompt.request_id, value === null ? null : [value]).catch(() => {});
-    push({ kind: "secret", request, resolve, sessionId: prompt.session_id });
+    push({ kind: "secret", request, resolve, sessionId: prompt.session_id, requestId: prompt.request_id });
     return;
   }
   push({ kind: "auth", prompt });

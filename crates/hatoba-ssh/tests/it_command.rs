@@ -425,6 +425,9 @@ async fn sudo_runs_the_command_and_the_copy_as_root() {
     };
     download(format!("{locked}/conf")).await.unwrap();
     assert_eq!(std::fs::read(&local).unwrap(), b"hello");
+    let mode =
+        std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(&local).unwrap().permissions());
+    assert_eq!(mode & 0o777, 0o600);
     // A file that is not there leaves the local one as it was, and no part file.
     std::fs::write(&local, b"old").unwrap();
     assert!(matches!(

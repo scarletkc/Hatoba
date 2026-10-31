@@ -466,12 +466,15 @@ pub struct Interactive {
 #[async_trait]
 impl KeyboardInteractive for Interactive {
     async fn respond(&self, request: PromptRequest) -> Option<Vec<Zeroizing<String>>> {
-        let state = state(&self.app);
         let request_id = uuid::Uuid::now_v7().to_string();
         let (tx, rx) = oneshot::channel();
-        lock(&state.ssh.auth_waiters).insert(request_id.clone(), tx);
-        let event = AuthPrompt {
+        lock(&state(&self.app).ssh.auth_waiters).insert(request_id.clone(), tx);
+        let _open = OpenPrompt {
+            app: &self.app,
             request_id: request_id.clone(),
+        };
+        let event = AuthPrompt {
+            request_id,
             session_id: self.session_id.clone(),
             name: if request.name.is_empty() {
                 request.host.clone()
@@ -498,7 +501,6 @@ impl KeyboardInteractive for Interactive {
             });
         }
         if event.emit(&self.app).is_err() {
-            lock(&state.ssh.auth_waiters).remove(&request_id);
             return None;
         }
         let answers = tokio::time::timeout(PROMPT_TIMEOUT, rx)
@@ -506,7 +508,6 @@ impl KeyboardInteractive for Interactive {
             .ok()
             .and_then(Result::ok)
             .flatten();
-        lock(&state.ssh.auth_waiters).remove(&request_id);
         let answers = answers?;
         (answers.len() == request.prompts.len())
             .then(|| answers.into_iter().map(Zeroizing::new).collect())

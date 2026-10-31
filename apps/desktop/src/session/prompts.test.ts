@@ -61,10 +61,12 @@ describe("closeAuthPrompt", () => {
   it("drops the prompt no longer waited for, unanswered, and leaves the others", () => {
     pushAuthPrompt({ ...login("sudo1", "", false), session_id: null, sudo: true });
     pushAuthPrompt(login("ki1", "s1", false));
+    pushAuthPrompt(login("pw1", "s1", true));
     pushAuthPrompt({ ...login("sudo2", "", false), session_id: null, sudo: true });
 
     closeAuthPrompt({ request_id: "sudo1" });
     closeAuthPrompt({ request_id: "ki1" });
+    closeAuthPrompt({ request_id: "pw1" });
 
     expect(answered.auths).toEqual([]);
     const left = usePrompts.getState().items;
