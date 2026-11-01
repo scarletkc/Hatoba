@@ -41,6 +41,7 @@ pub fn run(app: &App, command: Command) -> i32 {
                 cwd,
                 prompt,
                 sudo,
+                stdin: passes_stdin(),
             },
         ),
         Command::Copy {
@@ -48,7 +49,8 @@ pub fn run(app: &App, command: Command) -> i32 {
             target,
             prompt,
             sudo,
-        } => copy(app, source, target, prompt, sudo),
+            mode,
+        } => copy(app, source, target, prompt, sudo, mode),
         Command::Open(args) => open(app, args),
     }
 }
@@ -103,6 +105,7 @@ fn exec(app: &App, op: Op) -> i32 {
                 let _ = write_out(&mut stderr, &bytes);
             }
             Ok(Some(Frame::Notice(text))) => eprintln!("hatoba: {text}"),
+            Ok(Some(Frame::SendStdin(token))) => send_stdin(*app, token),
             Ok(Some(Frame::End(end))) => return ended(end, EXEC_FAILED),
             Ok(Some(_)) => {}
             Ok(None) | Err(_) => {
@@ -113,6 +116,46 @@ fn exec(app: &App, op: Op) -> i32 {
             }
         }
     }
+}
+
+/// Whether `exec` passes its stdin to the command: a pipe or a file, as a heredoc, `<` and `|`
+/// give it, but not a terminal, nor a device such as `/dev/null` or `NUL`.
+#[cfg(unix)]
+fn passes_stdin() -> bool {
+    use std::os::fd::AsFd;
+    use std::os::unix::fs::FileTypeExt;
+    let Ok(fd) = io::stdin().as_fd().try_clone_to_owned() else {
+        return false;
+    };
+    std::fs::File::from(fd).metadata().is_ok_and(|meta| {
+        let kind = meta.file_type();
+        kind.is_fifo() || kind.is_socket() || kind.is_file()
+    })
+}
+
+#[cfg(windows)]
+fn passes_stdin() -> bool {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::Storage::FileSystem::{FILE_TYPE_DISK, FILE_TYPE_PIPE, GetFileType};
+    // SAFETY: the handle is this process's stdin, or null without one, which is of no type.
+    let kind = unsafe { GetFileType(HANDLE(io::stdin().as_raw_handle())) };
+    kind == FILE_TYPE_PIPE || kind == FILE_TYPE_DISK
+}
+
+/// Sends this command's stdin to the app on a connection of its own, which ends where the stdin
+/// does. It runs on a thread, so the output keeps coming meanwhile; a command that ends first
+/// leaves it behind. Errors end it quietly: the app then gives the command's stdin its end.
+fn send_stdin(app: App, token: String) {
+    std::thread::spawn(move || {
+        let Ok(mut stream) = request(&app, Op::Stdin { token }) else {
+            return;
+        };
+        let _ = io::copy(&mut io::stdin().lock(), &mut stream);
+        // A pipe's last bytes are read before it closes.
+        #[cfg(windows)]
+        let _ = stream.sync_all();
+    });
 }
 
 /// Writes output as it came. A Windows console takes only UTF-8, so other bytes are shown as
@@ -127,7 +170,14 @@ fn write_out(to: &mut impl Write, bytes: &[u8]) -> io::Result<()> {
     to.flush()
 }
 
-fn copy(app: &App, source: Place, target: Place, prompt: bool, sudo: bool) -> i32 {
+fn copy(
+    app: &App,
+    source: Place,
+    target: Place,
+    prompt: bool,
+    sudo: bool,
+    mode: Option<u32>,
+) -> i32 {
     let op = match (source, target) {
         (Place::Local(local), Place::Remote { host, path }) => match absolute(&local) {
             Ok(local) => Op::Upload {
@@ -136,6 +186,7 @@ fn copy(app: &App, source: Place, target: Place, prompt: bool, sudo: bool) -> i3
                 remote: path,
                 prompt,
                 sudo,
+                mode,
             },
             Err(message) => return fail(&message, FAILED),
         },

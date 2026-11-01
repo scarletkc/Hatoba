@@ -316,6 +316,7 @@ async fn as_root(session: &SshSession, run_as: &RunAs, command: &str) -> String 
             command,
             Some("~"),
             run_as,
+            None,
             std::future::pending(),
             tx
         ),
@@ -329,6 +330,67 @@ async fn as_root(session: &SshSession, run_as: &RunAs, command: &str) -> String 
         String::from_utf8_lossy(&stderr)
     );
     String::from_utf8(stdout).unwrap()
+}
+
+/// Runs `command` as `run_as` with `input` as its stdin, and returns its exit status and stdout.
+async fn with_stdin(
+    session: &SshSession,
+    run_as: &RunAs,
+    command: &str,
+    input: Vec<u8>,
+) -> (Option<u32>, Vec<u8>) {
+    let (in_tx, in_rx) = tokio::sync::mpsc::channel(4);
+    let (tx, rx) = tokio::sync::mpsc::channel(8);
+    let feed = async move {
+        for chunk in input.chunks(64 * 1024) {
+            // A command that does not read it all ends first.
+            if in_tx.send(chunk.to_vec()).await.is_err() {
+                break;
+            }
+        }
+    };
+    let run = remote_command::run_streaming_as(
+        session,
+        command,
+        None,
+        run_as,
+        Some(in_rx),
+        std::future::pending(),
+        tx,
+    );
+    let (run, (stdout, _), ()) = tokio::time::timeout(
+        Duration::from_secs(30),
+        async { tokio::join!(run, received(rx), feed) },
+    )
+    .await
+    .expect("the command with a stdin did not end");
+    (run.unwrap().output.exit_status, stdout)
+}
+
+/// HOST-15: `hatoba exec` passes a stdin to the command, which ends where it does; a command that
+/// does not read it ends all the same.
+#[tokio::test]
+async fn a_stdin_reaches_the_command() {
+    let server = server!();
+    let session = server.connect_key("ed25519", None).await;
+    let login = RunAs::Login;
+    assert_eq!(
+        with_stdin(&session, &login, "cat; echo done", b"a\nb\n".to_vec()).await,
+        (Some(0), b"a\nb\ndone\n".to_vec())
+    );
+    let big = vec![b'x'; 1_000_000];
+    assert_eq!(
+        with_stdin(&session, &login, "wc -c | tr -d ' '", big.clone()).await,
+        (Some(0), b"1000000\n".to_vec())
+    );
+    assert_eq!(
+        with_stdin(&session, &login, "echo quick", big).await,
+        (Some(0), b"quick\n".to_vec())
+    );
+    assert_eq!(
+        with_stdin(&session, &login, "head -n 1", b"one\ntwo\n".to_vec()).await,
+        (Some(0), b"one\n".to_vec())
+    );
 }
 
 /// HOST-15: `hatoba exec --sudo` and `hatoba cp --sudo` where sudo asks for no password, as on
@@ -354,6 +416,11 @@ async fn sudo_runs_the_command_and_the_copy_as_root() {
         as_root(&session, &run_as, "id -u; pwd -P").await,
         format!("0\n{}\n", home.display())
     );
+    // A stdin reaches a command that runs as root, through a pipe the login user can write.
+    assert_eq!(
+        with_stdin(&session, &run_as, "cat; id -u", b"in\n".to_vec()).await,
+        (Some(0), b"in\n0\n".to_vec())
+    );
 
     // A stop ends a command that runs as root.
     let (tx, rx) = tokio::sync::mpsc::channel(8);
@@ -363,6 +430,7 @@ async fn sudo_runs_the_command_and_the_copy_as_root() {
             "sleep 307",
             None,
             &run_as,
+            None,
             started("sleep 307"),
             tx
         ),
@@ -390,15 +458,30 @@ async fn sudo_runs_the_command_and_the_copy_as_root() {
         .await
         .unwrap();
     assert_eq!(write.exit_status, Some(0));
-    sudo::install(&session, &run_as, &staged, &locked, "conf")
+    sudo::install(&session, &run_as, &staged, &locked, "conf", None)
         .await
         .unwrap();
     assert_eq!(
         as_root(&session, &run_as, &format!("stat -c %u {locked}/conf")).await,
         "0\n"
     );
+    sudo::install(&session, &run_as, &staged, &locked, "private", Some(0o600))
+        .await
+        .unwrap();
+    assert_eq!(
+        as_root(&session, &run_as, &format!("stat -c %a {locked}/private")).await,
+        "600\n"
+    );
     assert!(matches!(
-        sudo::install(&session, &run_as, &staged, &format!("{locked}/no/x"), "x").await,
+        sudo::install(
+            &session,
+            &run_as,
+            &staged,
+            &format!("{locked}/no/x"),
+            "x",
+            None
+        )
+        .await,
         Err(RemoteFileError::NoDirectory)
     ));
     sudo::remove_temp_dir(&session, &dir).await.unwrap();
