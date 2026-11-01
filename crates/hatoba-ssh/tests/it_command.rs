@@ -377,8 +377,7 @@ async fn stdin_commands_share_few_sessions() {
     let session = server.connect_key("ed25519", None).await;
     let (tx, _rx) = tokio::sync::mpsc::channel(8);
     let (_in_tx, in_rx) = tokio::sync::mpsc::channel(1);
-    let started = Instant::now();
-    let error = remote_command::run_streaming_as(
+    let run = remote_command::run_streaming_as(
         &session,
         "cat",
         None,
@@ -386,15 +385,12 @@ async fn stdin_commands_share_few_sessions() {
         Some(in_rx),
         std::future::pending(),
         tx,
-    )
-    .await
-    .unwrap_err();
-    assert!(error.message.contains("second session"), "{error}");
-    assert!(
-        started.elapsed() < Duration::from_secs(5),
-        "failed after {:?}",
-        started.elapsed()
     );
+    let error = tokio::time::timeout(Duration::from_secs(5), run)
+        .await
+        .expect("the command waited for a second session the host refused")
+        .unwrap_err();
+    assert!(error.message.contains("second session"), "{error}");
 
     let Some(server) = SshdServer::start_max_sessions(2) else {
         return;
