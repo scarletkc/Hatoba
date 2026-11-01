@@ -366,6 +366,53 @@ async fn with_stdin(
     (run.unwrap().output.exit_status, stdout)
 }
 
+/// HOST-15: a stdin takes a second session beside the command's. A host that allows one fails the
+/// command at once, and commands that pass theirs at the same time on a host that allows two take
+/// turns, instead of each holding one session and waiting for another.
+#[tokio::test]
+async fn stdin_commands_share_few_sessions() {
+    let Some(server) = SshdServer::start_max_sessions(1) else {
+        return;
+    };
+    let session = server.connect_key("ed25519", None).await;
+    let (tx, _rx) = tokio::sync::mpsc::channel(8);
+    let (_in_tx, in_rx) = tokio::sync::mpsc::channel(1);
+    let started = Instant::now();
+    let error = remote_command::run_streaming_as(
+        &session,
+        "cat",
+        None,
+        &RunAs::Login,
+        Some(in_rx),
+        std::future::pending(),
+        tx,
+    )
+    .await
+    .unwrap_err();
+    assert!(error.message.contains("second session"), "{error}");
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "failed after {:?}",
+        started.elapsed()
+    );
+
+    let Some(server) = SshdServer::start_max_sessions(2) else {
+        return;
+    };
+    let session = server.connect_key("ed25519", None).await;
+    let runs = (0..3).map(|i| {
+        let session = &session;
+        async move { with_stdin(session, &RunAs::Login, "cat", format!("{i}\n").into_bytes()).await }
+    });
+    for (i, run) in futures::future::join_all(runs)
+        .await
+        .into_iter()
+        .enumerate()
+    {
+        assert_eq!(run, (Some(0), format!("{i}\n").into_bytes()), "command {i}");
+    }
+}
+
 /// HOST-15: `hatoba exec` passes a stdin to the command, which ends where it does; a command that
 /// does not read it ends all the same.
 #[tokio::test]
