@@ -20,6 +20,7 @@ Before you first use it, run `hatoba --help`, which describes the commands, opti
 - When Hatoba needs a host key checked or a password, it asks in its window and your call waits. Before a host whose `auth` is `ask`, tell the user to expect that, and give a host's first call a long timeout.
 - A server can hold the login until the user acts on a message it sends, which `hatoba` prints on stderr, as Tailscale SSH does until they sign in at the link it prints. Pass the message on to the user; the call waits until the server lets the login through.
 - For a command that needs root, run `hatoba exec --sudo <host> <command>`, and `hatoba cp --sudo` for a file only root can read or write. `exec` has no terminal, so a `sudo` inside the command cannot ask for its password; with `--sudo`, Hatoba asks the user in its window when sudo wants one, so give the call a long timeout.
+- `exec` passes a stdin from a pipe, a file or a heredoc to the command, so a script or a file's content needs no quoting: `hatoba exec <host> 'sh -s' < script.sh`, or `hatoba exec --sudo <host> 'tee /etc/app.conf >/dev/null' < app.conf`. `hatoba cp --mode 600` sets the permissions of the file it copies to the host.
 - For a step that needs the user, such as an interactive program, run `hatoba <name>`: it opens a terminal on the host in Hatoba for them.
 - After your tool's timeout or a `hatoba:` error, check what the command got done before you run it again.
 

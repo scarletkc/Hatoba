@@ -514,6 +514,9 @@ struct ExecChannels {
     state: Mutex<ExecState>,
     /// Woken whenever the state changes.
     changed: Notify,
+    /// Taken by a command that opens a second channel beside its first
+    /// ([`SshSession::exec_pair_turn`]).
+    pairs: tokio::sync::Mutex<()>,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -879,6 +882,16 @@ impl SshSession {
     pub(crate) async fn open_exec_channel(
         &self,
     ) -> Result<(ChannelReadHalf, ExecWriter, ExecSlot), SshError> {
+        self.open_exec_channel_beside(0).await
+    }
+
+    /// [`open_exec_channel`](Self::open_exec_channel) for a caller that holds `held` exec channels
+    /// of the connection already, which it does not wait for: a refusal while it holds the only
+    /// ones open is the error.
+    pub(crate) async fn open_exec_channel_beside(
+        &self,
+        held: usize,
+    ) -> Result<(ChannelReadHalf, ExecWriter, ExecSlot), SshError> {
         let channels = &self.inner.exec;
         loop {
             let closes = channels.state().closes;
@@ -905,7 +918,7 @@ impl SshSession {
                     break;
                 }
                 // A channel opening may open, and then close.
-                if state.open > 0 || state.opening > 0 {
+                if state.open > held || state.opening > 0 {
                     changed.await;
                     continue;
                 }
@@ -913,6 +926,13 @@ impl SshSession {
             }
             tracing::debug!("exec: opening a channel the server refused again");
         }
+    }
+
+    /// Lets one command at a time hold a first exec channel while it opens a second: commands
+    /// that each held one and waited for another would otherwise take every session the server
+    /// allows and wait for good.
+    pub(crate) async fn exec_pair_turn(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.inner.exec.pairs.lock().await
     }
 
     /// Opens and splits a session channel once. The open runs in a task of its own: a call

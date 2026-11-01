@@ -17,23 +17,28 @@ Usage:
 
 <host> is the name or id of a saved SSH host, as hatoba hosts --json lists
 them; <name> is the name of a saved SSH or Telnet host. Any other first word
-also opens Hatoba, so a misspelled command prints nothing and exits with 0.
+also opens Hatoba, but a word one letter off a command, such as exce, fails.
 In cp, one side is <host>:<path> and the other a local path. A remote path is
 from the home directory. A target that is a folder or ends with / gets the file
 under its own name. A file already at the target is replaced; on the host, the
-new file belongs to the login user with default permissions. A copy that fails
-leaves the old file as it was.
+new file belongs to the login user and keeps the permissions of the file it
+replaces, or gets the default ones. A copy that fails leaves the old file as it
+was.
 
 Options:
   --cwd <dir>    Start the command in <dir>, absolute or from the home directory
   --sudo         Run the command, or read or write the file on the host, as root
+  --mode <mode>  Give the file copied to the host this octal mode, such as 600
   --no-prompt    Fail instead of asking in Hatoba for a host key, password or code
   --json         Print the hosts as JSON
 
-exec runs the command with the host's login shell, without a terminal, and with
-an empty stdin. It prints the command's stdout and stderr as they come and exits
-with the command's exit status, or with 255 when Hatoba failed, which may be
-after the command started. Ending exec stops the command and what it started;
+exec runs the command with the host's login shell and without a terminal. A
+stdin from a pipe or a file is the command's, as with ssh, so a script or a
+file's content needs no quoting: hatoba exec db 'sh -s' < deploy.sh. From a
+terminal or /dev/null, the command's stdin is empty. exec prints the command's
+stdout and stderr as they come and exits with the command's exit status, or
+with 255 when Hatoba failed, which may be after the command started. Ending
+exec stops the command and what it started;
 on hosts without sh, such as Windows, it may keep running. A command that ends
 by itself leaves what it started in the background running. hosts and cp exit
 with 1 when they fail, and a command line hatoba can't read exits with 2.
@@ -42,8 +47,9 @@ with 1 when they fail, and a command line hatoba can't read exits with 2.
 run sh as root. The command starts in the same directory with the same shell,
 but with the environment sudo sets, so ~ and $HOME in it are root's. cp --sudo
 copies the file as root, as sudo cp would: a file already at the target keeps
-its owner and permissions, a new one belongs to root, and a copy to the host
-that fails while writing can leave the file cut short. When sudo asks for a
+its owner and permissions, a new one belongs to root, --mode sets the
+permissions of either, and a copy to the host that fails while writing can
+leave the file cut short. When sudo asks for a
 password, Hatoba tries the host's saved password, then asks in its window and
 remembers the answer until it locks or the host has had no --sudo for 15
 minutes.
@@ -79,6 +85,8 @@ pub enum Command {
         target: Place,
         prompt: bool,
         sudo: bool,
+        /// The permission bits of the file a copy to the host writes.
+        mode: Option<u32>,
     },
     /// Anything else opens Hatoba with these arguments (HOST-13).
     Open(Vec<OsString>),
@@ -100,6 +108,9 @@ pub fn parse(args: Vec<OsString>) -> Result<Command, String> {
         return Ok(Command::Open(args));
     };
     if !COMMANDS.contains(&first) {
+        if let Some(command) = misspelled(first) {
+            return Err(format!("{first} is not a command. Did you mean {command}?"));
+        }
         return Ok(Command::Open(args));
     }
     let rest = args[1..]
@@ -116,6 +127,31 @@ pub fn parse(args: Vec<OsString>) -> Result<Command, String> {
         "cp" => copy(&rest),
         "--version" => Ok(Command::Version),
         _ => Ok(Command::Help),
+    }
+}
+
+/// The command `word` is one letter off, by a typo or two letters swapped, as `exce` is from
+/// `exec`. `cp` is left out: a two-letter host name is as likely as a typo of it.
+fn misspelled(word: &str) -> Option<&'static str> {
+    const LONG: [&str; 4] = ["hosts", "exec", "help", "telnet"];
+    let word = word.to_ascii_lowercase();
+    LONG.into_iter()
+        .find(|command| word != *command && one_letter_off(&word, command))
+}
+
+/// Whether `a` becomes `b` by adding, removing or changing one character, or swapping two that
+/// are next to each other.
+fn one_letter_off(a: &str, b: &str) -> bool {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let start = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+    let (a, b) = (&a[start..], &b[start..]);
+    match (a.len(), b.len()) {
+        (m, n) if m == n => {
+            a[1..] == b[1..] || (m >= 2 && a[0] == b[1] && a[1] == b[0] && a[2..] == b[2..])
+        }
+        (m, n) if m == n + 1 => a[1..] == *b,
+        (m, n) if m + 1 == n => *a == b[1..],
+        _ => false,
     }
 }
 
@@ -183,12 +219,19 @@ fn exec(args: Vec<String>) -> Result<Command, String> {
 fn copy(args: &[String]) -> Result<Command, String> {
     let mut prompt = true;
     let mut sudo = false;
+    let mut mode = None;
     let mut paths = Vec::new();
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--no-prompt" => prompt = false,
             "--sudo" => sudo = true,
+            "--mode" => {
+                mode = Some(octal(
+                    args.next().ok_or("--mode needs a mode, such as 600")?,
+                )?)
+            }
+            a if a.starts_with("--mode=") => mode = Some(octal(&a["--mode=".len()..])?),
             "-h" | "--help" => return Ok(Command::Help),
             "--" => {
                 paths.extend(args.by_ref().map(String::as_str));
@@ -207,18 +250,33 @@ fn copy(args: &[String]) -> Result<Command, String> {
     };
     let (source, target) = (place(source), place(target));
     match (&source, &target) {
+        (Place::Remote { .. }, Place::Local(_)) if mode.is_some() => {
+            Err("--mode is for a copy to a host".into())
+        }
         (Place::Local(_), Place::Remote { .. }) | (Place::Remote { .. }, Place::Local(_)) => {
             Ok(Command::Copy {
                 source,
                 target,
                 prompt,
                 sudo,
+                mode,
             })
         }
         _ => Err(
             "one of the source and the target has to be <host>:<path>, the other a local path"
                 .into(),
         ),
+    }
+}
+
+/// A mode in octal, as `chmod` takes it: three or four digits, such as 600 or 0755.
+fn octal(text: &str) -> Result<u32, String> {
+    let valid = (3..=4).contains(&text.len()) && text.bytes().all(|b| (b'0'..=b'7').contains(&b));
+    match u32::from_str_radix(text, 8) {
+        Ok(mode) if valid => Ok(mode),
+        _ => Err(format!(
+            "--mode takes three or four octal digits, such as 600 or 0755, not {text}"
+        )),
     }
 }
 
@@ -260,6 +318,32 @@ mod tests {
             assert_eq!(
                 parse_words(words),
                 Ok(Command::Open(words.iter().map(OsString::from).collect()))
+            );
+        }
+    }
+
+    #[test]
+    fn a_misspelled_command_fails_instead_of_opening_hatoba() {
+        for (word, command) in [
+            ("exce", "exec"),
+            ("exe", "exec"),
+            ("exex", "exec"),
+            ("eexec", "exec"),
+            ("host", "hosts"),
+            ("hsots", "hosts"),
+            ("hlep", "help"),
+            ("telent", "telnet"),
+        ] {
+            assert_eq!(
+                parse_words(&[word, "db", "ls"]),
+                Err(format!("{word} is not a command. Did you mean {command}?"))
+            );
+        }
+        // Host names that only look a little like a command.
+        for word in ["db", "cpp", "ghost", "web1", "exec.example.com", "Help"] {
+            assert!(
+                matches!(parse_words(&[word]), Ok(Command::Open(_))),
+                "{word}"
             );
         }
     }
@@ -333,6 +417,7 @@ mod tests {
                 },
                 prompt: true,
                 sudo: false,
+                mode: None,
             })
         );
         assert_eq!(
@@ -351,6 +436,7 @@ mod tests {
                 target: Place::Local("./a:b.log".into()),
                 prompt: false,
                 sudo: true,
+                mode: None,
             })
         );
         assert_eq!(
@@ -363,8 +449,33 @@ mod tests {
                 },
                 prompt: true,
                 sudo: false,
+                mode: None,
             })
         );
+        for words in [
+            &["cp", "--mode", "600", "wg0.conf", "db:/etc/wireguard/"][..],
+            &["cp", "wg0.conf", "--mode=0600", "db:/etc/wireguard/"],
+        ] {
+            assert!(
+                matches!(
+                    parse_words(words),
+                    Ok(Command::Copy {
+                        mode: Some(0o600),
+                        ..
+                    })
+                ),
+                "{words:?}"
+            );
+        }
+        for words in [
+            &["cp", "--mode", "rw", "a", "db:"][..],
+            &["cp", "--mode", "800", "a", "db:"],
+            &["cp", "--mode=60", "a", "db:"],
+            &["cp", "--mode", "600", "db:a", "a"],
+            &["cp", "a", "db:", "--mode"],
+        ] {
+            assert!(parse_words(words).is_err(), "{words:?}");
+        }
         assert!(parse_words(&["cp", "-report.txt", "db:"]).is_err());
         assert!(parse_words(&["cp", "a", "b"]).is_err());
         assert!(parse_words(&["cp", "db:a", "web:b"]).is_err());

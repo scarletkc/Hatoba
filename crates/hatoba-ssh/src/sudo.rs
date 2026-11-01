@@ -52,16 +52,23 @@ const REMOVE_SCRIPT: &str = "IFS= read -r d || exit 9; rm -rf -- \"$d\"";
 
 /// As root: copies the file on stdin's second line into the one on its third, or into a folder
 /// there, under the name on its fourth line, as `cp` would: in place, so a file already there keeps
-/// its owner, mode and links, while a new one belongs to root with root's umask. Stdin's first line
-/// is the marker. Exit statuses: 2 no such directory, 3 a directory in the file's place, 6 not a
-/// regular file, 8 a symbolic link to nothing, 9 no marker or path; 1 when the copy fails, with the
-/// message on stderr.
+/// its owner, mode and links, while a new one belongs to root with root's umask. The fifth line is
+/// `-`, or an octal mode the file gets before the content goes in, a new one made empty without
+/// permissions for others first, so the content is never readable by more than the mode lets.
+/// While it is written, the owner may write it and setuid and setgid are off, which a root without
+/// the capabilities to pass permissions or keep those bits needs, and the mode is set again after.
+/// Stdin's first line is the marker. Exit statuses: 2 no such
+/// directory, 3 a directory in the file's place, 6 not a regular file, 8 a symbolic link to
+/// nothing, 9 no marker or path; 1 when the copy fails, with the message on stderr.
 const INSTALL_SCRIPT: &str = "IFS= read -r x; [ \"$x\" = hatoba-sudo ] || exit 9; \
      echo hatoba-sudo; IFS= read -r t || exit 9; IFS= read -r f || exit 9; \
-     IFS= read -r b || exit 9; [ -d \"$f\" ] && f=${f%/}/$b; \
+     IFS= read -r b || exit 9; IFS= read -r m || exit 9; [ -d \"$f\" ] && f=${f%/}/$b; \
      [ -L \"$f\" ] && { [ -e \"$f\" ] || exit 8; }; \
      if [ -e \"$f\" ]; then [ -d \"$f\" ] && exit 3; [ -f \"$f\" ] || exit 6; \
-     else [ -d \"$(dirname -- \"$f\")\" ] || exit 2; fi; cat -- \"$t\" > \"$f\" || exit 1";
+     else [ -d \"$(dirname -- \"$f\")\" ] || exit 2; fi; \
+     case $m in -) ;; *) [ -e \"$f\" ] || (umask 077 && : > \"$f\") || exit 1; \
+     chmod \"$m\" \"$f\" && chmod u+w,ug-s \"$f\" || exit 1;; esac; \
+     cat -- \"$t\" > \"$f\" || exit 1; case $m in -) ;; *) chmod \"$m\" \"$f\" || exit 1;; esac";
 
 /// As root: prints the marker, then, for the regular file on stdin's second line, its size on a
 /// line of its own, then that many bytes of the file, so a log that grows meanwhile still comes
@@ -266,15 +273,18 @@ pub async fn remove_temp_dir(session: &impl Exec, dir: &str) -> Result<(), SshEr
 }
 
 /// As `run_as`, copies the file `from` into the file `to`, absolute, or into the folder `to` under
-/// `name`, as `cp` would: a file already there keeps its owner, mode and links.
+/// `name`, as `cp` would: a file already there keeps its owner, mode and links, unless `mode` gives
+/// the permission bits.
 pub async fn install(
     session: &impl Exec,
     run_as: &RunAs,
     from: &str,
     to: &str,
     name: &str,
+    mode: Option<u32>,
 ) -> Result<(), RemoteFileError> {
-    let stdin = request(run_as, &[from, to, name])?;
+    let mode = mode.map_or_else(|| "-".to_owned(), |m| format!("{:o}", m & 0o7777));
+    let stdin = request(run_as, &[from, to, name, &mode])?;
     let out = session
         .exec_output(&root_command(run_as, INSTALL_SCRIPT), Some(stdin))
         .await
@@ -433,7 +443,8 @@ fn size_line(stdout: &[u8]) -> Option<(u64, usize)> {
     Some((size, end + 1))
 }
 
-fn root_command(run_as: &RunAs, script: &str) -> String {
+/// `script` as `run_as`: through sudo's options, or as it is.
+pub(crate) fn root_command(run_as: &RunAs, script: &str) -> String {
     format!("{}{}", run_as.prefix(), command(script, None))
 }
 
@@ -668,6 +679,8 @@ exec env HOME=/nonexistent-root SHELL=/bin/false \"$@\"
     /// The scripts with the local `sh` and the fake `sudo`.
     #[cfg(unix)]
     mod local_sh {
+        use std::os::unix::fs::PermissionsExt;
+
         use super::fake::sudo_dir;
         use super::*;
         use crate::test_sh::{is_root, run_with};
@@ -745,17 +758,23 @@ exec env HOME=/nonexistent-root SHELL=/bin/false \"$@\"
             std::fs::write(&target, b"old").unwrap();
             let run_as = sudo_with("secret");
             let to = text(&target);
-            let install = |to: &str, name: &str| {
+            let install_mode = |to: &str, name: &str, mode: &str| {
                 parse_copy(
                     &sh(
                         &root_command(&run_as, INSTALL_SCRIPT),
-                        &request(&run_as, &[&file, to, name]).unwrap(),
+                        &request(&run_as, &[&file, to, name, mode]).unwrap(),
                     ),
                     RemoteFileError::NoDirectory,
                 )
             };
+            let install = |to: &str, name: &str| install_mode(to, name, "-");
+            let mode_of = |path: &std::path::Path| {
+                std::fs::metadata(path).unwrap().permissions().mode() & 0o7777
+            };
+            std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o640)).unwrap();
             install(to, "conf").unwrap();
             assert_eq!(std::fs::read(&target).unwrap(), b"new");
+            assert_eq!(mode_of(&target), 0o640);
             // Into a folder, under the name.
             install(text(&home_path), "other").unwrap();
             assert_eq!(std::fs::read(home_path.join("other")).unwrap(), b"new");
@@ -764,13 +783,19 @@ exec env HOME=/nonexistent-root SHELL=/bin/false \"$@\"
                 install(&missing, "x"),
                 Err(RemoteFileError::NoDirectory)
             ));
+            // A mode, for a new file and one already there.
+            install_mode(text(&home_path), "private", "600").unwrap();
+            assert_eq!(mode_of(&home_path.join("private")), 0o600);
+            install_mode(to, "conf", "604").unwrap();
+            assert_eq!(mode_of(&target), 0o604);
+            assert_eq!(std::fs::read(&target).unwrap(), b"new");
             // A wrong password writes nothing.
             let wrong = sudo_with("guess");
             std::fs::write(&target, b"old").unwrap();
             let refused = parse_copy(
                 &sh(
                     &root_command(&wrong, INSTALL_SCRIPT),
-                    &request(&wrong, &[&file, to, "conf"]).unwrap(),
+                    &request(&wrong, &[&file, to, "conf", "-"]).unwrap(),
                 ),
                 RemoteFileError::NoDirectory,
             );
