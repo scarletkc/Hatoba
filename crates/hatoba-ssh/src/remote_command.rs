@@ -87,7 +87,7 @@ const SCRIPT: &str = "m=hatoba-run-$(($1+1)); s=${3:-${SHELL:-sh}}; o=${2:-$HOME
      if command -v setsid >/dev/null 2>&1; then g=setsid; \
      elif command -v perl >/dev/null 2>&1; then g=perl; else g=none; fi; \
      exec 6</dev/null; if [ -n \"$4\" ] && e=$(mktemp -d 2>/dev/null); then \
-     z() { rm -rf -- \"$e\"; }; trap z EXIT; \
+     case $e in /*) ;; *) e=$PWD/$e;; esac; z() { rm -rf -- \"$e\"; }; trap z EXIT; \
      if mkfifo -m 600 \"$e/in\" 2>/dev/null; then \
      exec 7<>\"$e/in\" 6<\"$e/in\"; echo \"$m-in $e/in\"; fi; fi; \
      echo \"$m $g\" || exit 1; IFS= read -r n || exit 9; [ \"$n\" -gt 0 ] 2>/dev/null || exit 9; \
@@ -597,6 +597,11 @@ async fn input_opened(session: &SshSession, reader: &mut ChannelReadHalf) -> Res
                 if stderr.len() < MAX_EXEC_OUTPUT {
                     stderr.extend_from_slice(&data);
                 }
+            }
+            Some(ChannelMsg::Failure) => {
+                return Err(SshError::channel(
+                    "can't pass stdin to the command: the server refused to run its writer",
+                ));
             }
             Some(ChannelMsg::Close) | None => {
                 if session.is_closed() {

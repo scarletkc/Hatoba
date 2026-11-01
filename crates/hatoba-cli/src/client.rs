@@ -2,7 +2,7 @@
 //! the frames that come back into output and an exit status.
 
 use std::ffi::OsString;
-use std::io::{self, IsTerminal, Write};
+use std::io::{self, IsTerminal, Read, Write};
 use std::path::PathBuf;
 use std::process::{Command as Process, Stdio};
 
@@ -150,13 +150,31 @@ fn pipe_or_file() -> bool {
 
 /// Sends this command's stdin to the app on a connection of its own, which ends where the stdin
 /// does. It runs on a thread, so the output keeps coming meanwhile; a command that ends first
-/// leaves it behind. Errors end it quietly: the app then gives the command's stdin its end.
+/// leaves it behind, and the app closing the connection, as it does then, ends it quietly. A
+/// stdin that can't be read or sent ends `exec` with 255, which stops the command rather than let
+/// it take a stdin cut short for a whole one.
 fn send_stdin(app: App, token: String) {
     std::thread::spawn(move || {
-        let Ok(mut stream) = request(&app, Op::Stdin { token }) else {
-            return;
+        let mut stream = match request(&app, Op::Stdin { token }) {
+            Ok(stream) => stream,
+            Err(message) => std::process::exit(fail(
+                &format!("can't pass stdin to the command: {message}"),
+                EXEC_FAILED,
+            )),
         };
-        let _ = io::copy(&mut io::stdin().lock(), &mut stream);
+        let mut stdin = io::stdin().lock();
+        let mut buf = vec![0u8; 64 * 1024];
+        loop {
+            let n = match stdin.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => n,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) => std::process::exit(fail(&format!("can't read stdin: {e}"), EXEC_FAILED)),
+            };
+            if stream.write_all(&buf[..n]).is_err() {
+                return;
+            }
+        }
         // A pipe's last bytes are read before it closes.
         #[cfg(windows)]
         let _ = stream.sync_all();
