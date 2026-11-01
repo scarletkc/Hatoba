@@ -55,6 +55,8 @@ const REMOVE_SCRIPT: &str = "IFS= read -r d || exit 9; rm -rf -- \"$d\"";
 /// its owner, mode and links, while a new one belongs to root with root's umask. The fifth line is
 /// `-`, or an octal mode the file gets before the content goes in, a new one made empty without
 /// permissions for others first, so the content is never readable by more than the mode lets.
+/// While it is written, the owner may write it and setuid and setgid are off, which a root without
+/// the capabilities to pass permissions or keep those bits needs, and the mode is set again after.
 /// Stdin's first line is the marker. Exit statuses: 2 no such
 /// directory, 3 a directory in the file's place, 6 not a regular file, 8 a symbolic link to
 /// nothing, 9 no marker or path; 1 when the copy fails, with the message on stderr.
@@ -65,7 +67,8 @@ const INSTALL_SCRIPT: &str = "IFS= read -r x; [ \"$x\" = hatoba-sudo ] || exit 9
      if [ -e \"$f\" ]; then [ -d \"$f\" ] && exit 3; [ -f \"$f\" ] || exit 6; \
      else [ -d \"$(dirname -- \"$f\")\" ] || exit 2; fi; \
      case $m in -) ;; *) [ -e \"$f\" ] || (umask 077 && : > \"$f\") || exit 1; \
-     chmod \"$m\" \"$f\" || exit 1;; esac; cat -- \"$t\" > \"$f\" || exit 1";
+     chmod \"$m\" \"$f\" && chmod u+w,ug-s \"$f\" || exit 1;; esac; \
+     cat -- \"$t\" > \"$f\" || exit 1; case $m in -) ;; *) chmod \"$m\" \"$f\" || exit 1;; esac";
 
 /// As root: prints the marker, then, for the regular file on stdin's second line, its size on a
 /// line of its own, then that many bytes of the file, so a log that grows meanwhile still comes
