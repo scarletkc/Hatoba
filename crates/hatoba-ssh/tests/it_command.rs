@@ -358,10 +358,9 @@ async fn with_stdin(
         std::future::pending(),
         tx,
     );
-    let (run, (stdout, _), ()) = tokio::time::timeout(
-        Duration::from_secs(30),
-        async { tokio::join!(run, received(rx), feed) },
-    )
+    let (run, (stdout, _), ()) = tokio::time::timeout(Duration::from_secs(30), async {
+        tokio::join!(run, received(rx), feed)
+    })
     .await
     .expect("the command with a stdin did not end");
     (run.unwrap().output.exit_status, stdout)

@@ -17,23 +17,28 @@ Usage:
 
 <host> is the name or id of a saved SSH host, as hatoba hosts --json lists
 them; <name> is the name of a saved SSH or Telnet host. Any other first word
-also opens Hatoba, so a misspelled command prints nothing and exits with 0.
+also opens Hatoba, but a word one letter off a command, such as exce, fails.
 In cp, one side is <host>:<path> and the other a local path. A remote path is
 from the home directory. A target that is a folder or ends with / gets the file
 under its own name. A file already at the target is replaced; on the host, the
-new file belongs to the login user with default permissions. A copy that fails
-leaves the old file as it was.
+new file belongs to the login user and keeps the permissions of the file it
+replaces, or gets the default ones. A copy that fails leaves the old file as it
+was.
 
 Options:
   --cwd <dir>    Start the command in <dir>, absolute or from the home directory
   --sudo         Run the command, or read or write the file on the host, as root
+  --mode <mode>  Give the file copied to the host this octal mode, such as 600
   --no-prompt    Fail instead of asking in Hatoba for a host key, password or code
   --json         Print the hosts as JSON
 
-exec runs the command with the host's login shell, without a terminal, and with
-an empty stdin. It prints the command's stdout and stderr as they come and exits
-with the command's exit status, or with 255 when Hatoba failed, which may be
-after the command started. Ending exec stops the command and what it started;
+exec runs the command with the host's login shell and without a terminal. A
+stdin from a pipe or a file is the command's, as with ssh, so a script or a
+file's content needs no quoting: hatoba exec db 'sh -s' < deploy.sh. From a
+terminal or /dev/null, the command's stdin is empty. exec prints the command's
+stdout and stderr as they come and exits with the command's exit status, or
+with 255 when Hatoba failed, which may be after the command started. Ending
+exec stops the command and what it started;
 on hosts without sh, such as Windows, it may keep running. A command that ends
 by itself leaves what it started in the background running. hosts and cp exit
 with 1 when they fail, and a command line hatoba can't read exits with 2.
@@ -42,8 +47,9 @@ with 1 when they fail, and a command line hatoba can't read exits with 2.
 run sh as root. The command starts in the same directory with the same shell,
 but with the environment sudo sets, so ~ and $HOME in it are root's. cp --sudo
 copies the file as root, as sudo cp would: a file already at the target keeps
-its owner and permissions, a new one belongs to root, and a copy to the host
-that fails while writing can leave the file cut short. When sudo asks for a
+its owner and permissions, a new one belongs to root, --mode sets the
+permissions of either, and a copy to the host that fails while writing can
+leave the file cut short. When sudo asks for a
 password, Hatoba tries the host's saved password, then asks in its window and
 remembers the answer until it locks or the host has had no --sudo for 15
 minutes.
