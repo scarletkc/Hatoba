@@ -34,7 +34,7 @@ use tokio::time::Instant;
 
 use crate::error::SshError;
 use crate::local_sh::LocalSh;
-use crate::remote_file;
+use crate::remote_file::last_line;
 use crate::server_os::ServerOs;
 use crate::session::{ExecOutput, ExecSlot, ExecWriter, MAX_EXEC_OUTPUT, SshSession};
 use crate::sudo::{self, RunAs};
@@ -62,11 +62,13 @@ use crate::sudo::{self, RunAs};
 /// and `$3` are the login user's, which the directory and the shell come from instead.
 ///
 /// A fourth argument that is not empty asks for a stdin to pass: before the marker, the script
-/// makes a named pipe in a folder of `mktemp -d`, the login user's under sudo, and prints the
-/// marker and `-in` with its path, which [`INPUT_SCRIPT`] writes into; without that line, it could
-/// not make one. The command reads the pipe, waiting for the writer. The script keeps a reader of
-/// its own open until it ends, so the writer never waits for a reader that no longer comes, and
-/// removes the folder when it ends.
+/// makes a named pipe in a folder of `mktemp -d`, which only its user can open, and prints the
+/// marker and `-in` with its path, which [`INPUT_SCRIPT`] writes into as the same user; without
+/// that line, it could not make one. The script holds both ends of the pipe from the start, so
+/// the writer opens it without waiting, and the command takes the script's read end as its stdin.
+/// The request comes once the writer has opened the pipe, and the script then lets go of its write
+/// end, so the command's stdin ends where the writer's does, never before the writer came. The
+/// folder goes when the script ends.
 ///
 /// When stdin ends, a second process sends the group TERM, waits up to 2 seconds for its
 /// processes to end, sends KILL to those left, waits up to 1 second more, and prints the marker
@@ -84,26 +86,24 @@ use crate::sudo::{self, RunAs};
 const SCRIPT: &str = "m=hatoba-run-$(($1+1)); s=${3:-${SHELL:-sh}}; o=${2:-$HOME}; \
      if command -v setsid >/dev/null 2>&1; then g=setsid; \
      elif command -v perl >/dev/null 2>&1; then g=perl; else g=none; fi; \
-     q=/dev/null; if [ -n \"$4\" ] && e=$(mktemp -d 2>/dev/null); then \
+     exec 6</dev/null; if [ -n \"$4\" ] && e=$(mktemp -d 2>/dev/null); then \
      z() { rm -rf -- \"$e\"; }; trap z EXIT; \
-     if mkfifo -m 600 \"$e/in\" 2>/dev/null; then q=$e/in; \
-     if [ -n \"${SUDO_UID:-}\" ] && [ \"$(id -u)\" = 0 ]; then \
-     chown \"$SUDO_UID\" \"$e\" \"$q\" || q=/dev/null; fi; fi; \
-     case $q in /dev/null) ;; *) exec 7<>\"$q\"; exec 6<\"$q\" 7<&-; echo \"$m-in $q\";; esac; fi; \
+     if mkfifo -m 600 \"$e/in\" 2>/dev/null; then \
+     exec 7<>\"$e/in\" 6<\"$e/in\"; echo \"$m-in $e/in\"; fi; fi; \
      echo \"$m $g\" || exit 1; IFS= read -r n || exit 9; [ \"$n\" -gt 0 ] 2>/dev/null || exit 9; \
      IFS= read -r h || exit 9; \
      c=$(head -n $((n+1)); echo x); c=${c%x}; d=${c%\"$m\"-end?}; [ \"$d\" = \"$c\" ] && exit 9; \
      d=${d%?}; \
      case $h in \"\") ;; \"~\") cd \"$o\" || exit;; \"~/\"*) cd \"$o/${h#??}\" || exit;; \
      /*) cd \"$h\" || exit;; *) cd \"$o/$h\" || exit;; esac; \
-     exec 3<&0; case $g in \
+     exec 3<&0 7>&-; case $g in \
      setsid) if env --default-signal=INT,QUIT true >/dev/null 2>&1; then \
-     setsid env --default-signal=INT,QUIT \"$s\" -c \"$d\" <\"$q\" 3<&- 6<&- & \
-     else setsid \"$s\" -c \"$d\" <\"$q\" 3<&- 6<&- & fi;; \
+     setsid env --default-signal=INT,QUIT \"$s\" -c \"$d\" <&6 3<&- 6<&- & \
+     else setsid \"$s\" -c \"$d\" <&6 3<&- 6<&- & fi;; \
      perl) perl -e \"@SIG{qw(INT QUIT)}=qw(DEFAULT DEFAULT); setpgrp(0,0); exec @ARGV or exit 127\" \
-     \"$s\" -c \"$d\" <\"$q\" 3<&- 6<&- & ;; \
-     *) \"$s\" -c \"$d\" <\"$q\" 3<&- 6<&- & ;; esac; \
-     p=$!; if [ $g = none ]; then t=$p; else t=-$p; fi; \
+     \"$s\" -c \"$d\" <&6 3<&- 6<&- & ;; \
+     *) \"$s\" -c \"$d\" <&6 3<&- 6<&- & ;; esac; \
+     p=$!; exec 6<&-; if [ $g = none ]; then t=$p; else t=-$p; fi; \
      a() { kill -0 $p 2>/dev/null && return 0; \
      case $(LC_ALL=C kill -0 $t 2>&1) in *[Nn]\"o such process\"*) return 1;; esac; }; \
      b() { [ -r /proc/self/stat ] || return 0; for f in /proc/[0-9]*/stat; do \
@@ -120,9 +120,14 @@ const SCRIPT: &str = "m=hatoba-run-$(($1+1)); s=${3:-${SHELL:-sh}}; o=${2:-$HOME
      exit $r";
 
 /// Writes what comes on its stdin after the first line into the named pipe on that line, the one
-/// [`SCRIPT`] made for the command's stdin. `read` takes the line a byte at a time, so the rest is
-/// left for `cat`.
-const INPUT_SCRIPT: &str = "IFS= read -r f || exit 9; exec cat > \"$f\"";
+/// [`SCRIPT`] made for the command's stdin, and prints [`INPUT_OPEN`] once it has the pipe open.
+/// `read` takes the line a byte at a time, so the rest is left for `cat`, as sudo does with the
+/// password line before it.
+const INPUT_SCRIPT: &str = "IFS= read -r f || exit 9; exec 5>\"$f\" || exit 1; \
+     echo hatoba-input-open; exec cat >&5 5>&-";
+
+/// The line [`INPUT_SCRIPT`] prints once the pipe is open.
+const INPUT_OPEN: &str = "hatoba-input-open";
 
 /// How long a stop waits for the script's report after it sent EOF: the script's grace period
 /// and the KILL after it, with time for the round trip. The channel is closed then.
@@ -199,7 +204,8 @@ pub async fn run_streaming(
 ///
 /// With `stdin`, what comes on it is the command's stdin, which ends when its senders are gone:
 /// under the script, it goes through a named pipe on the host that a second exec channel writes
-/// ([`INPUT_SCRIPT`]); on a host that cannot run the script, straight to the command's channel.
+/// as `run_as` ([`INPUT_SCRIPT`]); on a host that cannot run the script, straight to the
+/// command's channel.
 pub async fn run_streaming_as(
     session: &SshSession,
     command: &str,
@@ -327,7 +333,16 @@ async fn wrapped(
     let gives_password = password.is_some();
     let n = nonce();
     let marker = marker(n);
-    let Some((mut reader, writer, _slot)) = open(session, stop.as_mut()).await? else {
+    // Held until the stdin's channel is open beside the command's.
+    let mut turn = None;
+    if stdin.is_some() {
+        tokio::select! {
+            biased;
+            () = &mut stop => return Ok(Some(not_started())),
+            held = session.exec_pair_turn() => turn = Some(held),
+        }
+    }
+    let Some((mut reader, writer, _slot)) = open(session, stop.as_mut(), 0).await? else {
         return Ok(Some(not_started()));
     };
     writer
@@ -382,8 +397,9 @@ async fn wrapped(
     }
 
     out.flush(sink).await;
-    // A second channel writes the command's stdin into the pipe the script made. Dropping the
-    // first one ends the script, which runs nothing and removes the pipe.
+    // A second channel writes the command's stdin into the pipe the script made, as the same user,
+    // so only the command's own stdin reaches a command that runs as root. Dropping the first one
+    // ends the script, which runs nothing and removes the pipe.
     let mut input = match stdin.take() {
         None => None,
         Some(stdin) => {
@@ -393,19 +409,39 @@ async fn wrapped(
                      mktemp and mkfifo",
                 ));
             };
-            let Some((in_reader, in_writer, in_slot)) = open(session, stop.as_mut()).await? else {
+            let opened = open(session, stop.as_mut(), 1).await.map_err(|e| {
+                if session.is_closed() {
+                    e
+                } else {
+                    SshError::other(format!(
+                        "can't pass stdin to the command: the host refused a second session for \
+                         it: {}",
+                        e.message
+                    ))
+                }
+            })?;
+            let Some((mut in_reader, in_writer, in_slot)) = opened else {
                 return Ok(Some(not_started()));
             };
+            drop(turn.take());
             in_writer
                 .half()
-                .exec(true, remote_file::command(INPUT_SCRIPT, None))
+                .exec(true, sudo::root_command(run_as, INPUT_SCRIPT))
                 .await
                 .map_err(SshError::from)?;
+            let mut first = run_as.password_line()?.unwrap_or_default();
+            first.extend_from_slice(format!("{pipe}\n").as_bytes());
             in_writer
                 .half()
-                .data_bytes(Bytes::from(format!("{pipe}\n")))
+                .data_bytes(Bytes::from(first))
                 .await
                 .map_err(SshError::from)?;
+            // The request goes once the pipe has its writer, which the script waits for.
+            tokio::select! {
+                biased;
+                () = &mut stop => return Ok(Some(not_started())),
+                opened = input_opened(session, &mut in_reader) => opened?,
+            }
             Some((in_reader, in_writer, in_slot, stdin))
         }
     };
@@ -490,7 +526,7 @@ async fn plain(
     mut stop: Pin<&mut impl Future<Output = ()>>,
     sink: Option<&mpsc::Sender<Output>>,
 ) -> Result<CommandRun, SshError> {
-    let Some((mut reader, writer, _slot)) = open(session, stop.as_mut()).await? else {
+    let Some((mut reader, writer, _slot)) = open(session, stop.as_mut(), 0).await? else {
         return Ok(not_started());
     };
     writer
@@ -533,6 +569,47 @@ async fn plain(
                     });
                 }
             }
+        }
+    }
+}
+
+/// Waits for [`INPUT_OPEN`] on the channel of [`INPUT_SCRIPT`]; an error with what the host said
+/// when it ends first, as sudo does when it refuses.
+async fn input_opened(session: &SshSession, reader: &mut ChannelReadHalf) -> Result<(), SshError> {
+    let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+    loop {
+        match reader.wait().await {
+            Some(ChannelMsg::Data { data }) => {
+                stdout.extend_from_slice(&data);
+                if String::from_utf8_lossy(&stdout)
+                    .lines()
+                    .any(|line| line == INPUT_OPEN)
+                {
+                    return Ok(());
+                }
+                if stdout.len() > MAX_EXEC_OUTPUT {
+                    return Err(SshError::other(
+                        "the host printed too much before the stdin",
+                    ));
+                }
+            }
+            Some(ChannelMsg::ExtendedData { data, .. }) => {
+                if stderr.len() < MAX_EXEC_OUTPUT {
+                    stderr.extend_from_slice(&data);
+                }
+            }
+            Some(ChannelMsg::Close) | None => {
+                if session.is_closed() {
+                    return Err(session.close_error());
+                }
+                let said = last_line(&stderr);
+                return Err(SshError::other(if said.is_empty() {
+                    "can't pass stdin to the command: the host ended its channel".to_owned()
+                } else {
+                    format!("can't pass stdin to the command: {said}")
+                }));
+            }
+            Some(_) => {}
         }
     }
 }
@@ -717,15 +794,17 @@ fn push(to: &mut Vec<u8>, data: &[u8]) -> Result<(), SshError> {
 }
 
 /// Opens an exec channel, counted among the connection's exec channels while the slot lives, so a
-/// channel the server refuses is opened again once another closes, unless `stop` completes first.
+/// channel the server refuses is opened again once another closes, other than the `held` ones the
+/// caller has open, unless `stop` completes first.
 async fn open(
     session: &SshSession,
     stop: Pin<&mut impl Future<Output = ()>>,
+    held: usize,
 ) -> Result<Option<(ChannelReadHalf, ExecWriter, ExecSlot)>, SshError> {
     tokio::select! {
         biased;
         () = stop => Ok(None),
-        opened = session.open_exec_channel() => opened.map(Some),
+        opened = session.open_exec_channel_beside(held) => opened.map(Some),
     }
 }
 
@@ -1141,11 +1220,19 @@ mod tests {
             let mut input = Command::new("sh")
                 .args(["-c", INPUT_SCRIPT])
                 .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
                 .spawn()
                 .unwrap();
+            // The whole stdin, and its end, before the command starts: it still gets all of it.
             let mut input_stdin = input.stdin.take().unwrap();
             write!(input_stdin, "{pipe}\nfirst\nsecond\n").unwrap();
             drop(input_stdin);
+            let mut opened = String::new();
+            BufReader::new(input.stdout.take().unwrap())
+                .read_line(&mut opened)
+                .unwrap();
+            assert_eq!(opened, format!("{INPUT_OPEN}\n"));
+            assert!(input.wait().unwrap().success());
 
             let command = "cat; echo done";
             let mut stdin = child.stdin.take().unwrap();
@@ -1156,7 +1243,6 @@ mod tests {
             stdout.read_to_string(&mut rest).unwrap();
             assert_eq!(status.code(), Some(0));
             assert_eq!(rest, "first\nsecond\ndone\n");
-            assert!(input.wait().unwrap().success());
             assert!(!std::path::Path::new(&pipe).exists());
         }
 
@@ -1181,7 +1267,7 @@ mod tests {
             let started = |password: &str| {
                 let n = nonce();
                 let mut child = Command::new("sh")
-                    .args(["-c", &command_line(&sudo_with("x"), n)])
+                    .args(["-c", &command_line(&sudo_with("x"), n, false)])
                     .current_dir(&home)
                     .env("HOME", &home)
                     .env("SHELL", "/bin/sh")

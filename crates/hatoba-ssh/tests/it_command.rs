@@ -415,7 +415,7 @@ async fn sudo_runs_the_command_and_the_copy_as_root() {
         as_root(&session, &run_as, "id -u; pwd -P").await,
         format!("0\n{}\n", home.display())
     );
-    // A stdin reaches a command that runs as root, through a pipe the login user can write.
+    // A stdin reaches a command that runs as root, through a pipe only root can open.
     assert_eq!(
         with_stdin(&session, &run_as, "cat; id -u", b"in\n".to_vec()).await,
         (Some(0), b"in\n0\n".to_vec())

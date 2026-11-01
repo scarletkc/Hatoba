@@ -119,9 +119,14 @@ fn exec(app: &App, op: Op) -> i32 {
 }
 
 /// Whether `exec` passes its stdin to the command: a pipe or a file, as a heredoc, `<` and `|`
-/// give it, but not a terminal, nor a device such as `/dev/null` or `NUL`.
-#[cfg(unix)]
+/// give it, but not a terminal, mintty's included, which is a pipe on Windows, nor a device such
+/// as `/dev/null` or `NUL`.
 fn passes_stdin() -> bool {
+    !io::stdin().is_terminal() && pipe_or_file()
+}
+
+#[cfg(unix)]
+fn pipe_or_file() -> bool {
     use std::os::fd::AsFd;
     use std::os::unix::fs::FileTypeExt;
     let Ok(fd) = io::stdin().as_fd().try_clone_to_owned() else {
@@ -134,7 +139,7 @@ fn passes_stdin() -> bool {
 }
 
 #[cfg(windows)]
-fn passes_stdin() -> bool {
+fn pipe_or_file() -> bool {
     use std::os::windows::io::AsRawHandle;
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::Storage::FileSystem::{FILE_TYPE_DISK, FILE_TYPE_PIPE, GetFileType};

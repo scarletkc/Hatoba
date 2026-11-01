@@ -53,7 +53,7 @@ const REMOVE_SCRIPT: &str = "IFS= read -r d || exit 9; rm -rf -- \"$d\"";
 /// As root: copies the file on stdin's second line into the one on its third, or into a folder
 /// there, under the name on its fourth line, as `cp` would: in place, so a file already there keeps
 /// its owner, mode and links, while a new one belongs to root with root's umask. The fifth line is
-/// `-`, or an octal mode the file gets before the content goes in, a new one made empty without
+/// `-`, or an octal mode the file gets once the content is in, a new one made empty without
 /// permissions for others first. Stdin's first line is the marker. Exit statuses: 2 no such
 /// directory, 3 a directory in the file's place, 6 not a regular file, 8 a symbolic link to
 /// nothing, 9 no marker or path; 1 when the copy fails, with the message on stderr.
@@ -63,8 +63,8 @@ const INSTALL_SCRIPT: &str = "IFS= read -r x; [ \"$x\" = hatoba-sudo ] || exit 9
      [ -L \"$f\" ] && { [ -e \"$f\" ] || exit 8; }; \
      if [ -e \"$f\" ]; then [ -d \"$f\" ] && exit 3; [ -f \"$f\" ] || exit 6; \
      else [ -d \"$(dirname -- \"$f\")\" ] || exit 2; fi; \
-     case $m in -) ;; *) [ -e \"$f\" ] || (umask 077 && : > \"$f\") || exit 1; \
-     chmod \"$m\" \"$f\" || exit 1;; esac; cat -- \"$t\" > \"$f\" || exit 1";
+     case $m in -) ;; *) [ -e \"$f\" ] || (umask 077 && : > \"$f\") || exit 1;; esac; \
+     cat -- \"$t\" > \"$f\" || exit 1; case $m in -) ;; *) chmod \"$m\" \"$f\" || exit 1;; esac";
 
 /// As root: prints the marker, then, for the regular file on stdin's second line, its size on a
 /// line of its own, then that many bytes of the file, so a log that grows meanwhile still comes
@@ -439,7 +439,8 @@ fn size_line(stdout: &[u8]) -> Option<(u64, usize)> {
     Some((size, end + 1))
 }
 
-fn root_command(run_as: &RunAs, script: &str) -> String {
+/// `script` as `run_as`: through sudo's options, or as it is.
+pub(crate) fn root_command(run_as: &RunAs, script: &str) -> String {
     format!("{}{}", run_as.prefix(), command(script, None))
 }
 
