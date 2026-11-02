@@ -84,6 +84,10 @@
   padding: 4px 12px 12px;
 }
 
+.list:focus-visible {
+  outline: none;
+}
+
 .row {
   height: var(--row);
   padding: 0 12px;
@@ -97,10 +101,6 @@
 
 .row.rowOn {
   background: var(--rowsel);
-}
-
-.row:focus-visible {
-  outline-offset: -2px;
 }
 
 .cellName {

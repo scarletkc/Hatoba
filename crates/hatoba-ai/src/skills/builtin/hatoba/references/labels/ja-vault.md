@@ -90,7 +90,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Private Key | 秘密鍵 |
 | Used by | 使用中のホスト |
 | Last used | 最終使用 |
-| Copy public key | 公開鍵をコピー |
+| Copy Public Key | 公開鍵をコピー |
 | Copy | コピー |
 | Rename | 名前を変更 |
 | Deploy to Host | ホストに配置 |

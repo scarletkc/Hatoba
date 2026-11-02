@@ -90,7 +90,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Private Key | 私钥 |
 | Used by | 使用中的主机 |
 | Last used | 上次使用 |
-| Copy public key | 复制公钥 |
+| Copy Public Key | 复制公钥 |
 | Copy | 复制 |
 | Rename | 重命名 |
 | Deploy to Host | 部署到主机 |

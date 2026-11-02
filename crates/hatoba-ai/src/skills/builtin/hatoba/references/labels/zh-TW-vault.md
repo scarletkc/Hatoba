@@ -90,7 +90,7 @@ The labels that these files name in English, as the interface shows them in Trad
 | Private Key | 私鑰 |
 | Used by | 使用中的主機 |
 | Last used | 上次使用 |
-| Copy public key | 複製公鑰 |
+| Copy Public Key | 複製公鑰 |
 | Copy | 複製 |
 | Rename | 重新命名 |
 | Deploy to Host | 部署到主機 |

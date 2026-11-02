@@ -36,9 +36,9 @@ Other labels: **Change Master Password**.
 
 ## The Keys page
 
-Open it from the navigation rail (**Keys**). It lists the SSH keys in the vault, searchable (**Search keys**), with the buttons **Import** and **Generate Key**. Columns are Name, Type, Fingerprint, Created and Used By (the first host using the key, plus how many more, or **Unused**). Selecting a key opens a detail panel with its fingerprint, creation date, last use, the public key (**Copy**), the hosts that use it, and the actions **Rename**, **Deploy to Host** and **Delete**.
+Open it from the navigation rail (**Keys**). It lists the SSH keys in the vault, searchable (**Search keys**), with the buttons **Import** and **Generate Key**. Columns are Name, Type, Fingerprint, Created and Used By (the first host using the key, plus how many more, or **Unused**). Selecting a key opens a detail panel with its fingerprint, creation date, last use, the public key (**Copy**), the hosts that use it, and the actions **Rename**, **Deploy to Host** and **Delete**. A key's right-click menu has these actions and **Copy Public Key**. Up and Down select a key, also from the search box, typing in the list starts a search, and Delete (⌘⌫ on macOS) deletes the selected key after asking.
 
-Other labels: **Public Key**, **Used by**, **Last used**, **Copy public key**.
+Other labels: **Public Key**, **Used by**, **Last used**.
 
 - **Import** opens **Import Private Key**. Choose a file (**Choose File**) or **Paste Text**, give the key a name, and enter its passphrase if it has one (the passphrase is saved encrypted with the key). OpenSSH, PEM and PuTTY (.ppk) formats are supported; the algorithms are Ed25519, ECDSA and RSA.
 - **Generate Key** makes an Ed25519 key (recommended) or an RSA 4096 key on this device, with a comment and an optional passphrase. RSA takes a few seconds.

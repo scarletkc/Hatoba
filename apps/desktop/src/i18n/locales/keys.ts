@@ -108,7 +108,7 @@ export default defineMessages({
     "keys.detail.usedHosts": "Used by",
     "keys.detail.noHosts": "No host uses this key.",
     "keys.detail.editHost": "Edit host {name}",
-    "keys.detail.copyPublic": "Copy public key",
+    "keys.detail.copyPublic": "Copy Public Key",
     "keys.action.deploy": "Deploy to Host",
     "keys.action.delete": "Delete",
 
