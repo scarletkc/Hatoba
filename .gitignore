@@ -19,8 +19,9 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
-# Claude Code: preview launch config and session worktrees
-.claude/
+# Claude Code: preview launch config and session worktrees, but not the project's skills
+.claude/*
+!.claude/skills/
 
 # Tauri generated
 apps/desktop/src-tauri/gen/schemas/

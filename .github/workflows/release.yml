@@ -1,7 +1,8 @@
 name: Release
 
 # Publishes the version in Cargo.toml as a GitHub Release of the commit that set it on the selected
-# branch, after approval in the release environment. docs/releasing.md describes the steps.
+# branch, after approval in the release environment. The Start release workflow runs it when a push
+# to main raises the version. docs/releasing.md describes the steps.
 on:
   workflow_dispatch:
 
@@ -16,7 +17,8 @@ jobs:
   preflight:
     name: Preflight
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # The gate waits up to 40 minutes for CI (CI_WAIT_MINUTES in release.mjs).
+    timeout-minutes: 50
     permissions:
       contents: read
       # Reads the CI runs and the release environment.
@@ -219,9 +221,27 @@ jobs:
     # commit.
     environment: packages
     steps:
+      # WinGet Releaser can only update a package that winget-pkgs already has, so until the first
+      # version is merged there, the job leaves winget alone.
+      - name: Check that winget-pkgs has the package
+        id: package
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" \
+            https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/s/ScarletKc/Hatoba)
+          case "$status" in
+            200) echo "exists=true" >> "$GITHUB_OUTPUT" ;;
+            404)
+              echo "::notice::winget-pkgs has no ScarletKc.Hatoba yet, so this release is not submitted to winget."
+              echo "exists=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *) echo "::error::Checking winget-pkgs for ScarletKc.Hatoba failed with HTTP $status."; exit 1 ;;
+          esac
+        env:
+          GH_TOKEN: ${{ github.token }}
       # Opens a pull request in microsoft/winget-pkgs from the owner's fork, with the manifests of
       # the latest version there updated to this release's installer.
-      - uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # v2
+      - if: steps.package.outputs.exists == 'true'
+        uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # v2
         with:
           identifier: ScarletKc.Hatoba
           release-tag: ${{ needs.preflight.outputs.tag }}

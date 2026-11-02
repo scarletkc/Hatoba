@@ -4,6 +4,8 @@
 // Usage: node scripts/release/release.mjs <command> [options]
 //   commit                           Print the release commit, where the release pull request set
 //                                    the version
+//   raised --from SHA                Print the version when it is greater than the one at SHA and
+//                                    has no release tag yet
 //   check                            Check the version files, the release tag, the release note, and
 //                                    the updater's public key
 //   gate                             Require a CI pass, an approval-gated release environment, and a
@@ -215,6 +217,17 @@ export function releaseCommit(version, root = ROOT) {
 }
 
 /**
+ * `version`, the one that HEAD records, when it is greater than the version that the commit `from`
+ * recorded and has no release tag yet, as when a release pull request is merged; otherwise null.
+ */
+export function raisedVersion(version, from, root = ROOT) {
+  const manifest = VERSION_FILES.find((file) => file.path === "Cargo.toml");
+  const previous = manifest.read(git(["show", `${from}:${manifest.path}`], root))[0];
+  if (compareVersions(version, previous) <= 0) return null;
+  return git(["tag", "--list", `v${version}`], root) ? null : version;
+}
+
+/**
  * The release's version, tag, and whether it is a prerelease, as `name=value` lines for
  * $GITHUB_OUTPUT. The package manager jobs in release.yml run only for a stable release.
  */
@@ -397,14 +410,39 @@ async function github(path, { allowMissing = false } = {}) {
   return response.json();
 }
 
+/** How long the gate waits for CI that would cover the release commit. Keep below the Preflight job's timeout. */
+const CI_WAIT_MINUTES = 40;
+
+/**
+ * Of the CI runs `runs`, the one that passed and covers `sha`, or else one that would cover it and
+ * is still going.
+ */
+export function coveringRun(runs, sha, root = ROOT) {
+  const covering = runs.filter((run) => ciCovers(run.head_sha, sha, root));
+  return (
+    covering.find((run) => run.conclusion === "success") ?? covering.find((run) => run.status !== "completed") ?? null
+  );
+}
+
 async function gate(repository, root = ROOT) {
   const sha = git(["rev-parse", "HEAD"], root);
-  // The release commit's own run first, which the latest runs may no longer include.
-  const runs = [
-    ...(await github(`${repository}/actions/workflows/ci.yml/runs?status=success&head_sha=${sha}`)).workflow_runs,
-    ...(await github(`${repository}/actions/workflows/ci.yml/runs?status=success&per_page=100`)).workflow_runs,
-  ];
-  const passed = runs.find((run) => ciCovers(run.head_sha, sha, root));
+  const deadline = Date.now() + CI_WAIT_MINUTES * 60_000;
+  let passed = null;
+  for (;;) {
+    // The release commit's own runs first, which the latest runs on main may no longer include.
+    const run = coveringRun(
+      [
+        ...(await github(`${repository}/actions/workflows/ci.yml/runs?head_sha=${sha}`)).workflow_runs,
+        ...(await github(`${repository}/actions/workflows/ci.yml/runs?branch=main&per_page=100`)).workflow_runs,
+      ],
+      sha,
+      root,
+    );
+    if (run?.conclusion === "success") passed = run;
+    if (run?.conclusion === "success" || run === null || Date.now() > deadline) break;
+    console.log(`Waiting for CI on ${run.head_sha.slice(0, 7)} to finish: ${run.html_url}`);
+    await new Promise((resolve) => setTimeout(resolve, 60_000));
+  }
   if (!passed) {
     throw new Error(
       `CI has not passed on the release commit ${sha.slice(0, 7)}, or on an earlier commit that differs from it only in files CI skips and in the release version. Wait for CI on it to pass, or rerun the failed jobs of its CI run, then rerun this workflow.`,
@@ -630,6 +668,7 @@ async function main() {
       bundle: { type: "string" },
       notes: { type: "string" },
       dist: { type: "string" },
+      from: { type: "string" },
     },
   });
   const option = (name) => {
@@ -644,6 +683,11 @@ async function main() {
     case "commit":
       console.log(releaseCommit(version));
       break;
+    case "raised": {
+      const raised = raisedVersion(version, option("from"));
+      if (raised) console.log(raised);
+      break;
+    }
     case "check": {
       const { tag, sha } = releaseTarget(version);
       composeNotes(version, repository);
@@ -676,7 +720,9 @@ async function main() {
       await publish(version, repository, option("notes"), option("dist"));
       break;
     default:
-      throw new Error(`Unknown command '${command ?? ""}'. Use check, gate, outputs, notes, dist, or publish.`);
+      throw new Error(
+        `Unknown command '${command ?? ""}'. Use commit, raised, check, gate, outputs, notes, dist, or publish.`,
+      );
   }
 }
 
