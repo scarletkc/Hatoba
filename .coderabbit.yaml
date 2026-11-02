@@ -7,7 +7,7 @@ reviews:
   auto_review:
     # A release pull request only raises the version and adds the release note.
     ignore_title_keywords:
-      - "chore(release)"
+      - "chore(release): prepare v"
   path_instructions:
     - path: "**"
       instructions: |
