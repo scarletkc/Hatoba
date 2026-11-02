@@ -1,7 +1,14 @@
 import type { LocalPrefs } from "../types";
 import { PREFS } from "./data";
 
-type ChoicePref = "language" | "appearance" | "density" | "ai_permission_mode" | "hosts_view" | "close_action";
+type ChoicePref =
+  | "language"
+  | "appearance"
+  | "density"
+  | "ai_permission_mode"
+  | "hosts_view"
+  | "hosts_sort"
+  | "close_action";
 
 /** The values this build knows for each pref that is one of a set; the record keys keep them complete. */
 const CHOICES: { [K in ChoicePref]: Record<LocalPrefs[K], true> } = {
@@ -10,6 +17,18 @@ const CHOICES: { [K in ChoicePref]: Record<LocalPrefs[K], true> } = {
   density: { regular: true, compact: true },
   ai_permission_mode: { manual: true, auto: true, bypass: true },
   hosts_view: { list: true, cards: true },
+  hosts_sort: {
+    recent: true,
+    name: true,
+    address: true,
+    custom: true,
+    status: true,
+    cpu: true,
+    memory: true,
+    disk: true,
+    network: true,
+    uptime: true,
+  },
   close_action: { ask: true, tray: true, quit: true },
 };
 

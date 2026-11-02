@@ -42,6 +42,9 @@ import { passedLocale, VISITOR, VISITOR_HOST, visitorPlatform } from "./visitor"
 import { version as appVersion } from "../../../package.json";
 
 /** `?ssh=<kind>`: every connection fails with this SSH error kind and a detail like the real one. */
+/** The room between neighbouring places in the custom order, as `PLACE_STEP` in Rust (HOST-16). */
+const PLACE_STEP = 1 << 16;
+
 const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: number) => string>> &
   Record<"timeout", (address: string, port: number) => string> = {
   timeout: (a, p) => `connect to ${a}:${p}: operation timed out`,
@@ -430,6 +433,24 @@ export function createMockApi(): HatobaApi {
     emit("sync://status", sync);
   }
 
+  /** Numbers the hosts and Telnet hosts in `order` again, in that order (HOST-16). */
+  function arrangeHosts(order: string[]) {
+    const place = new Map(order.map((hid, i) => [hid, (i + 1) * PLACE_STEP]));
+    hosts = hosts.map((h) => (place.has(h.id) ? { ...h, sort: place.get(h.id)! } : h));
+    telnetHosts = telnetHosts.map((h) => (place.has(h.id) ? { ...h, sort: place.get(h.id)! } : h));
+  }
+
+  /** The place of a host being added, as `Vault::place_new_host` gives it: after `after`, or else last. */
+  function placeNewHost(after?: string): number {
+    const placed = [...hosts, ...telnetHosts].filter((h) => h.sort > 0).sort((a, b) => a.sort - b.sort);
+    if (placed.length === 0) return 0;
+    const i = after ? placed.findIndex((h) => h.id === after) : -1;
+    if (i < 0 || i === placed.length - 1) return placed[placed.length - 1].sort + PLACE_STEP;
+    if (placed[i + 1].sort - placed[i].sort >= 2) return Math.floor((placed[i].sort + placed[i + 1].sort) / 2);
+    arrangeHosts(placed.map((h) => h.id));
+    return placeNewHost(after);
+  }
+
   function touch() {
     if (sync.kind === "none") return;
     if (sync.state === "paused") return setSync({ pending: sync.pending + 1 });
@@ -683,6 +704,7 @@ export function createMockApi(): HatobaApi {
         group_id: input.group_id,
         tags: input.tags,
         favorite: input.favorite,
+        sort: existing?.sort ?? placeNewHost(),
         jump_host_id: input.jump_host_id,
         proxy_mode: input.proxy_mode,
         proxy_id: input.proxy_mode === "proxy" ? input.proxy_id : null,
@@ -720,6 +742,7 @@ export function createMockApi(): HatobaApi {
         id: id("h"),
         name: `${h.name}-copy`,
         favorite: false,
+        sort: placeNewHost(hid),
         last_connected_at: null,
         os: null,
         show_stats: false,
@@ -727,6 +750,11 @@ export function createMockApi(): HatobaApi {
       hosts = [...hosts, copy];
       touch();
       return copy;
+    },
+    hosts_arrange: async (order) => {
+      needUnlocked();
+      arrangeHosts(order.filter((hid) => hosts.some((h) => h.id === hid) || telnetHosts.some((h) => h.id === hid)));
+      touch();
     },
     host_set_favorite: async (hid, favorite) => {
       hosts = hosts.map((h) => (h.id === hid ? { ...h, favorite } : h));
@@ -1204,6 +1232,7 @@ export function createMockApi(): HatobaApi {
         group_id: input.group_id,
         tags: input.tags,
         favorite: input.favorite,
+        sort: existing?.sort ?? placeNewHost(),
         proxy_mode: input.proxy_mode,
         proxy_id: input.proxy_mode === "proxy" ? input.proxy_id : null,
         note: input.note,
@@ -1221,7 +1250,14 @@ export function createMockApi(): HatobaApi {
     },
     telnet_host_duplicate: async (hid) => {
       const h = telnetHosts.find((x) => x.id === hid) ?? fail("not_found");
-      const copy = { ...h, id: id("t"), name: `${h.name}-copy`, favorite: false, last_connected_at: null };
+      const copy = {
+        ...h,
+        id: id("t"),
+        name: `${h.name}-copy`,
+        favorite: false,
+        sort: placeNewHost(hid),
+        last_connected_at: null,
+      };
       telnetHosts = [...telnetHosts, copy];
       touch();
       return copy;

@@ -90,6 +90,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             hosts::host_save,
             hosts::host_delete,
             hosts::host_duplicate,
+            hosts::hosts_arrange,
             hosts::host_set_favorite,
             hosts::host_set_show_stats,
             hosts::dashboard_set_shown,

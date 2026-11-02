@@ -56,8 +56,8 @@ function translate(el: HTMLElement, dx: number) {
   el.style.transform = dx ? `translateX(${dx}px)` : "";
 }
 
-/** The click that ends a drag lands on a tab; it must not act. */
-function swallowClick() {
+/** The click that ends a drag lands on what was dragged, or beside it; it must not act. */
+export function swallowClick() {
   const swallow = (e: MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();

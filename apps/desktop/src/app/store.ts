@@ -67,6 +67,7 @@ export const DEFAULT_PREFS: LocalPrefs = {
   lock_disconnects_sessions: false,
   clipboard_clear_secs: 90,
   hosts_view: "list",
+  hosts_sort: "recent",
   hosts_stats: false,
   dashboard_hidden_columns: [],
   dashboard_interval_secs: 3,

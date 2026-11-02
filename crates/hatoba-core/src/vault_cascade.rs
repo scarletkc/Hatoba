@@ -135,7 +135,11 @@ impl Vault {
 
     /// Writes `puts` as [`Vault::put`] does and tombstones `deletes` as [`Vault::delete`] does,
     /// in one transaction, then applies both to the item map.
-    fn commit_cascade(&mut self, mut puts: Vec<(String, Item)>, deletes: &[String]) -> Result<()> {
+    pub(crate) fn commit_cascade(
+        &mut self,
+        mut puts: Vec<(String, Item)>,
+        deletes: &[String],
+    ) -> Result<()> {
         let now = self.clock.now_ms();
         let Self {
             store, unlocked, ..

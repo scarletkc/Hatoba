@@ -78,6 +78,9 @@ pub struct HostView {
     pub group_id: Option<String>,
     pub tags: Vec<String>,
     pub favorite: bool,
+    /// The place in the hosts page's custom order (HOST-16), shared with Telnet hosts: lower comes
+    /// first, and 0 (no place yet) after every place.
+    pub sort: i64,
     pub jump_host_id: Option<String>,
     /// SSH-13. With a jump host, the jump host's choice applies instead.
     pub proxy_mode: ProxyMode,
@@ -148,6 +151,8 @@ pub struct TelnetHostView {
     pub group_id: Option<String>,
     pub tags: Vec<String>,
     pub favorite: bool,
+    /// The place in the hosts page's custom order, as for SSH hosts (HOST-16).
+    pub sort: i64,
     pub proxy_mode: ProxyMode,
     pub proxy_id: Option<String>,
     pub note: String,
@@ -1182,6 +1187,9 @@ pub struct LocalPrefs {
     pub clipboard_clear_secs: u32,
     /// HOST-05: the hosts page lists the hosts or shows them as cards.
     pub hosts_view: HostsView,
+    /// HOST-05, HOST-16: the order of the hosts page. A resource usage order applies while
+    /// resource usage shows (HOST-14); the latest connection comes first otherwise.
+    pub hosts_sort: HostsSort,
     /// HOST-14: the hosts page shows resource usage, which reads the listed hosts in the
     /// background.
     pub hosts_stats: bool,
@@ -1224,6 +1232,7 @@ impl Default for LocalPrefs {
             lock_disconnects_sessions: false,
             clipboard_clear_secs: 90,
             hosts_view: HostsView::List,
+            hosts_sort: HostsSort::Recent,
             hosts_stats: false,
             dashboard_hidden_columns: Vec::new(),
             dashboard_interval_secs: 3,
@@ -1263,6 +1272,23 @@ pub enum CloseAction {
 pub enum HostsView {
     List,
     Cards,
+}
+
+/// The orders of the hosts page: the latest connection, the name, the address, the custom order
+/// (HOST-16), and the resource usage orders (HOST-14).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum HostsSort {
+    Recent,
+    Name,
+    Address,
+    Custom,
+    Status,
+    Cpu,
+    Memory,
+    Disk,
+    Network,
+    Uptime,
 }
 
 impl LocalPrefs {

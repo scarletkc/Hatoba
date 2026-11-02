@@ -316,6 +316,7 @@ fn import_hosts(v: &mut Vault, prepared: Prepared) -> AppResult<ImportResult> {
             auth,
             proxy,
             note: entry.note,
+            sort: v.place_new_host(None)?,
             ..Host::default()
         };
         // As the host editor does while sync is on, a host too large to sync is not saved. Its
@@ -524,6 +525,7 @@ fn gateway_chain(
             Some((id, _)) => id,
             None => {
                 result.hosts_created += 1;
+                let sort = v.place_new_host(None)?;
                 v.put(
                     None,
                     Item::Host(Host {
@@ -533,6 +535,7 @@ fn gateway_chain(
                         username: gateway.username.clone().unwrap_or_else(default_user),
                         auth: HostAuth::Agent,
                         jump_host_id: previous.clone(),
+                        sort,
                         ..Host::default()
                     }),
                 )?

@@ -53,6 +53,7 @@ const host = (id: string, patch: Partial<HostView> = {}): HostView => ({
   group_id: null,
   tags: [],
   favorite: false,
+  sort: 0,
   jump_host_id: null,
   proxy_mode: "device_default",
   proxy_id: null,
