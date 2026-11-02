@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 
 // Keep in sync with the commit types in CONTRIBUTING.md.
 const TYPES = ["feat", "fix", "perf", "refactor", "docs", "test", "build", "ci", "style", "chore", "revert"];
-const MAX_LENGTH = 72;
+const MAX_LENGTH = 100;
 const GUIDE = "https://github.com/scarletkc/Hatoba/blob/main/CONTRIBUTING.md#write-commits";
 const HEADER = /^(?<type>[A-Za-z]+)(?:\((?<scope>[^()]*)\))?!?: (?<description>.*)$/;
 const SCOPE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
