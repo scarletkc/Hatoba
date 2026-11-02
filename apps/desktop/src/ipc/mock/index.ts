@@ -442,7 +442,9 @@ export function createMockApi(): HatobaApi {
 
   /** The place of a host being added, as `Vault::place_new_host` gives it: after `after`, or else last. */
   function placeNewHost(after?: string): number {
-    const placed = [...hosts, ...telnetHosts].filter((h) => h.sort > 0).sort((a, b) => a.sort - b.sort);
+    const all = [...hosts, ...telnetHosts];
+    if (after && all.find((h) => h.id === after)?.sort === 0) return 0;
+    const placed = all.filter((h) => h.sort > 0).sort((a, b) => a.sort - b.sort);
     if (placed.length === 0) return 0;
     const i = after ? placed.findIndex((h) => h.id === after) : -1;
     if (i < 0 || i === placed.length - 1) return placed[placed.length - 1].sort + PLACE_STEP;
@@ -840,6 +842,7 @@ export function createMockApi(): HatobaApi {
           port: c.port,
           username: c.username,
           favorite: false,
+          sort: placeNewHost(),
           tags: [],
           group_id: groupId,
           last_connected_at: null,

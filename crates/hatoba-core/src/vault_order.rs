@@ -122,11 +122,17 @@ impl Vault {
 
     /// The place of a host being added, right after the host `after` or else at the end of the
     /// custom order (HOST-16); other hosts move along where there is no room. 0 while no host has
-    /// a place, as the custom order has not been made yet.
+    /// a place, as the custom order has not been made yet, and after a host without one, so the
+    /// copy stays beside it among the hosts ordered by name.
     ///
     /// # Errors
     /// [`Error::Locked`](crate::error::Error::Locked); storage errors.
     pub fn place_new_host(&mut self, after: Option<&str>) -> Result<i64> {
+        if let Some(after) = after
+            && self.get(after).and_then(place_of) == Some(0)
+        {
+            return Ok(0);
+        }
         let mut placed: Vec<(String, i64)> = self
             .items()
             .filter_map(|(id, item)| place_of(item).map(|place| (id.to_owned(), place)))
@@ -288,8 +294,9 @@ mod tests {
         let (mut vault, _) = vault();
         let a = add(&mut vault, "a", STEP);
         let b = add(&mut vault, "b", STEP + 1);
-        add(&mut vault, "legacy", 0);
+        let legacy = add(&mut vault, "legacy", 0);
         assert_eq!(vault.place_new_host(None).unwrap(), STEP + 1 + STEP);
+        assert_eq!(vault.place_new_host(Some(&legacy)).unwrap(), 0);
         // No room after `a`: every placed host is numbered again, `b` after the copy.
         assert_eq!(vault.place_new_host(Some(&a)).unwrap(), 2 * STEP);
         assert_eq!(place(&vault, &a), STEP);
