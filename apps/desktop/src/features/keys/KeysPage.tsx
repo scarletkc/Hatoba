@@ -1,11 +1,26 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
-import { Button, Chip, EmptyState, Icon, PageHeader, SearchField, confirm, toast } from "@hatoba/ui";
+import { useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import {
+  Button,
+  Chip,
+  EmptyState,
+  Icon,
+  Menu,
+  PageHeader,
+  SearchField,
+  confirm,
+  toast,
+  useMenu,
+  type MenuEntry,
+} from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
+import { useApp } from "@/app/store";
 import { formatDate, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { KeyView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { isMac } from "@/lib/platform";
+import { copyText } from "./clipboard";
 import { DeployKeyDialog, GenerateKeyDialog, ImportKeyDialog, RenameKeyDialog } from "./KeyDialogs";
 import { KeyDetail } from "./KeyDetail";
 import { keyTypeLabel, shortFingerprint } from "./keyUtils";
@@ -17,11 +32,16 @@ type Dialog =
 /** Key vault (KEY-01..07): list + detail panel. Private keys never reach the WebView. */
 export function KeysPage() {
   const t = useT();
+  const platform = useApp((st) => st.info.platform);
   const keys = useVaultData((st) => st.keys);
   const hosts = useVaultData((st) => st.hosts);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
+  const [ctxId, setCtxId] = useState<string | null>(null);
+  const rowMenu = useMenu();
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -78,15 +98,56 @@ export function KeysPage() {
     }
   };
 
-  const onListKey = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-    e.preventDefault();
+  const copyPublic = async (key: KeyView) => {
+    try {
+      await copyText(key.public_key);
+      toast(t("btn.copied"), "success");
+    } catch {
+      toast(t("err.internal"), "error");
+    }
+  };
+
+  const move = (delta: number) => {
     const index = visible.findIndex((k) => k.id === selected?.id);
-    const next = visible[Math.max(0, Math.min(visible.length - 1, index + (e.key === "ArrowDown" ? 1 : -1)))];
+    const next = visible[Math.max(0, Math.min(visible.length - 1, index + delta))];
     if (!next) return;
     setSelectedId(next.id);
-    e.currentTarget.querySelector<HTMLElement>(`[data-key-id="${CSS.escape(next.id)}"]`)?.focus();
+    requestAnimationFrame(() =>
+      listRef.current?.querySelector(`[data-key-id="${CSS.escape(next.id)}"]`)?.scrollIntoView({ block: "nearest" }),
+    );
   };
+
+  // ↑/↓ move the selection, from the list and from the search field. On the list, Delete deletes and typing searches.
+  const onKeyDown = (e: KeyboardEvent) => {
+    const inSearch = e.target === searchRef.current;
+    const onList = e.target === listRef.current;
+    if (!inSearch && !onList) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      move(e.key === "ArrowDown" ? 1 : -1);
+    } else if (onList && selected && (e.key === "Delete" || (isMac(platform) && e.metaKey && e.key === "Backspace"))) {
+      e.preventDefault();
+      void remove(selected);
+    } else if (onList && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && e.key !== " ") {
+      searchRef.current?.focus();
+    }
+  };
+
+  const onContext = (e: MouseEvent, key: KeyView) => {
+    e.preventDefault();
+    setSelectedId(key.id);
+    setCtxId(key.id);
+    rowMenu.openAt({ x: e.clientX, y: e.clientY });
+  };
+  const ctxKey = keys.find((k) => k.id === ctxId);
+
+  const menuEntries = (key: KeyView): MenuEntry[] => [
+    { label: t("btn.rename"), icon: "pencil-simple", onSelect: () => setDialog({ kind: "rename", key }) },
+    { label: t("keys.action.deploy"), icon: "upload-simple", onSelect: () => setDialog({ kind: "deploy", key }) },
+    { label: t("keys.detail.copyPublic"), icon: "clipboard-text", onSelect: () => void copyPublic(key) },
+    { kind: "separator" },
+    { label: t("keys.action.delete"), icon: "trash", danger: true, onSelect: () => void remove(key) },
+  ];
 
   const dialogs = (
     <>
@@ -146,11 +207,13 @@ export function KeysPage() {
   }
 
   return (
-    <div className={s.page}>
+    <div className={s.page} onKeyDown={onKeyDown}>
       <PageHeader
         title={t("sidebar.keys")}
         count={t("keys.count", { n: keys.length })}
-        search={<SearchField value={query} onChange={setQuery} placeholder={t("keys.search")} width={200} />}
+        search={
+          <SearchField ref={searchRef} value={query} onChange={setQuery} placeholder={t("keys.search")} width={200} />
+        }
       >
         {importButton}
         {generateButton}
@@ -164,7 +227,7 @@ export function KeysPage() {
             <span>{t("keys.col.created")}</span>
             <span>{t("keys.col.usedBy")}</span>
           </div>
-          <div className={s.list} role="listbox" aria-label={t("keys.list")} onKeyDown={onListKey}>
+          <div ref={listRef} className={s.list} tabIndex={0} role="listbox" aria-label={t("keys.list")}>
             {visible.length === 0 && <div className={s.noMatch}>{t("keys.noMatch")}</div>}
             {visible.map((k) => {
               const users = k.used_by.map(hostName).filter(Boolean);
@@ -174,10 +237,10 @@ export function KeysPage() {
                   key={k.id}
                   role="option"
                   aria-selected={on}
-                  tabIndex={on ? 0 : -1}
                   data-key-id={k.id}
                   className={cx(s.row, on && s.rowOn)}
                   onClick={() => setSelectedId(k.id)}
+                  onContextMenu={(e) => onContext(e, k)}
                 >
                   <span className={s.cellName}>
                     <Icon name="key" className={s.keyIcon} />
@@ -209,12 +272,16 @@ export function KeysPage() {
           <KeyDetail
             key={selected.id}
             keyView={selected}
+            onCopyPublic={() => void copyPublic(selected)}
             onRename={() => setDialog({ kind: "rename", key: selected })}
             onDeploy={() => setDialog({ kind: "deploy", key: selected })}
             onDelete={() => void remove(selected)}
           />
         )}
       </div>
+      {rowMenu.anchor && ctxKey && (
+        <Menu anchor={rowMenu.anchor} onClose={rowMenu.close} entries={menuEntries(ctxKey)} />
+      )}
       {dialogs}
     </div>
   );

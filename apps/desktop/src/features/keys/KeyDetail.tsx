@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { Button, HintText, Icon, LinkButton, StatusDot, toast } from "@hatoba/ui";
+import { Button, HintText, Icon, LinkButton, StatusDot } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { formatDate, formatRelative, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { HostView, KeyView } from "@/ipc/types";
-import { copyText } from "./clipboard";
 import { keyAlgoName } from "./keyUtils";
 import s from "./KeysPage.module.css";
 
@@ -31,11 +30,13 @@ function useProbe(hosts: HostView[]): Record<string, boolean> {
 
 export function KeyDetail({
   keyView,
+  onCopyPublic,
   onRename,
   onDeploy,
   onDelete,
 }: {
   keyView: KeyView;
+  onCopyPublic: () => void;
   onRename: () => void;
   onDeploy: () => void;
   onDelete: () => void;
@@ -47,15 +48,6 @@ export function KeyDetail({
   const lastUsedHost = hosts
     .filter((h) => h.last_connected_at !== null)
     .sort((a, b) => b.last_connected_at! - a.last_connected_at!)[0];
-
-  const copyPublic = async () => {
-    try {
-      await copyText(keyView.public_key);
-      toast(t("btn.copied"), "success");
-    } catch {
-      toast(t("err.internal"), "error");
-    }
-  };
 
   const editHost = (hostId: string) =>
     useApp.getState().navigate({ kind: "host-edit", hostId, groupId: null, back: null });
@@ -98,7 +90,7 @@ export function KeyDetail({
         <div className={s.block}>
           <div className={s.blockHead}>
             <span className={s.blockTitle}>{t("keys.detail.publicKey")}</span>
-            <LinkButton icon="copy" aria-label={t("keys.detail.copyPublic")} onClick={() => void copyPublic()}>
+            <LinkButton icon="copy" aria-label={t("keys.detail.copyPublic")} onClick={onCopyPublic}>
               {t("btn.copy")}
             </LinkButton>
           </div>
