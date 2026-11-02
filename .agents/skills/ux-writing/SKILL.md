@@ -1,16 +1,13 @@
 ---
-description: 'Judgment rules for user-facing text and docs: CLI and diagnostic output, error and help text, README and docs structure, code comments, titles, and generated reports, decks, or exports. Use when writing or changing any user-visible string, when adding or restructuring docs or deciding which page owns a fact, when a page is about to record a version, a deployment state, or a value the code already owns, when a comment, title, or artifact could carry the reasoning or an abandoned option behind the change, when a behavior change needs its copy sites swept, or when reviewing a diff that touches copy or docs.'
+name: ux-writing
+description: "Judgment for text read by someone who wasn't there when it was written: user-facing output, error and help text, docs, comments, and generated deliverables. Use when that text is the substance of the work or under review."
 license: Apache-2.0
 metadata:
-    author: scarletkc
-    github-path: skills/ux-writing
-    github-ref: refs/heads/main
-    github-repo: https://github.com/fogmoe/agents
-    github-tree-sha: 49efcc6e9de7234a4017b4fe7730923e9ec02f53
-    source: https://github.com/scarletkc/agents
-    summary: Review user-facing copy and documentation for clarity, consistency, facts that do not go stale, and no leftover intermediate state.
-name: ux-writing
+  author: scarletkc
+  source: https://github.com/scarletkc/agents
+  summary: "Review user-facing copy and documentation for clarity, consistency, facts that do not go stale, and no leftover intermediate state."
 ---
+
 # UX Writing & Docs
 
 User-visible text is product behavior and carries the same quality bar as
