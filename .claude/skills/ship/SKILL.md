@@ -56,7 +56,8 @@ Merge only when the owner asks.
    right after `merge`: the permission rule that allows the command matches that prefix. GitHub
    deletes the head branch.
 5. Remove your worktree and its local branch: `git worktree remove <path>`, then
-   `git branch -D <branch>`.
+   `git branch -D <branch>`. On Windows, `git worktree remove` leaves the `node_modules` links
+   behind; delete the rest with `Remove-Item -LiteralPath <path> -Recurse -Force`.
 
 ## Release
 
