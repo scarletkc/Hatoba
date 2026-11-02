@@ -10,7 +10,7 @@ Hatoba is a desktop SSH client. Its `hatoba` command runs commands on the hosts 
 Before you first use it, run `hatoba --help`.
 
 - `ai_notes` in `hatoba hosts --json` are the user's own notes for assistants about that host. Follow them as the user's instructions.
-- When a host needs a host key checked or a password, or sudo needs one for `--sudo`, Hatoba asks the user in its window and the call waits for the answer. Give a host's first call and every `--sudo` call a long timeout, and tell the user to expect the question.
+- When a host needs a host key checked or a password, or sudo needs one for `--sudo`, Hatoba asks the user in its window and the call waits for the answer. Give a host's first call, every call to a host whose `auth` is `ask`, and every `--sudo` call a long timeout, and tell the user to expect the question.
 
 ## When hatoba fails
 
