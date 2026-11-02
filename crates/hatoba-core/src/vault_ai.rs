@@ -64,13 +64,11 @@ impl std::fmt::Debug for StoredEntry {
 impl Vault {
     // ---- typed accessors ----
 
-    /// All AI model providers.
     #[must_use]
     pub fn ai_providers(&self) -> Vec<(String, AiProvider)> {
         self.collect(Item::as_ai_provider)
     }
 
-    /// All search providers.
     #[must_use]
     pub fn search_providers(&self) -> Vec<(String, SearchProvider)> {
         self.collect(Item::as_search_provider)
@@ -82,7 +80,6 @@ impl Vault {
         self.collect(Item::as_ai_conversation)
     }
 
-    /// All skills.
     #[must_use]
     pub fn skills(&self) -> Vec<(String, Skill)> {
         self.collect(Item::as_skill)
@@ -100,7 +97,6 @@ impl Vault {
             .collect()
     }
 
-    /// All MCP servers.
     #[must_use]
     pub fn mcp_servers(&self) -> Vec<(String, McpServer)> {
         self.collect(Item::as_mcp_server)

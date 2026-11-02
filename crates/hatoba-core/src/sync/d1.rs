@@ -464,7 +464,6 @@ impl D1Backend {
 /// Result of checking an API token.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TokenStatus {
-    /// Token id.
     pub id: String,
     /// `active`, `disabled` or `expired`.
     pub status: String,
@@ -485,7 +484,6 @@ impl TokenStatus {
 pub struct D1Database {
     /// Database UUID (what `D1Backend::new` takes as `database_id`).
     pub id: String,
-    /// Database name.
     pub name: String,
     /// Location hint, if the database has one.
     pub region: Option<String>,

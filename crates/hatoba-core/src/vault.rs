@@ -187,7 +187,6 @@ impl std::fmt::Debug for RecoveryChange {
 /// The non-secret vault metadata kept in `meta`, as uploaded on sync setup.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocalMeta {
-    /// Schema version.
     pub schema_version: u32,
     /// Base64 salt.
     pub kdf_salt: String,
@@ -942,7 +941,6 @@ impl Vault {
             .collect()
     }
 
-    /// All hosts.
     #[must_use]
     pub fn hosts(&self) -> Vec<(String, Host)> {
         self.collect(Item::as_host)
@@ -954,19 +952,16 @@ impl Vault {
         self.collect(Item::as_telnet_host)
     }
 
-    /// All keys.
     #[must_use]
     pub fn keys(&self) -> Vec<(String, SshKey)> {
         self.collect(Item::as_key)
     }
 
-    /// All groups.
     #[must_use]
     pub fn groups(&self) -> Vec<(String, Group)> {
         self.collect(Item::as_group)
     }
 
-    /// All known hosts.
     #[must_use]
     pub fn known_hosts(&self) -> Vec<(String, KnownHost)> {
         self.collect(Item::as_known_host)
@@ -978,7 +973,6 @@ impl Vault {
         self.collect(Item::as_proxy)
     }
 
-    /// All port forwards.
     #[must_use]
     pub fn forwards(&self) -> Vec<(String, PortForward)> {
         self.collect(Item::as_forward)

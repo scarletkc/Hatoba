@@ -81,7 +81,6 @@ fn default_ssh_port() -> u16 {
     22
 }
 
-/// An SSH host.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(default)]
 pub struct Host {
@@ -91,15 +90,11 @@ pub struct Host {
     pub address: String,
     /// TCP port, default 22.
     pub port: u16,
-    /// Login user.
     pub username: String,
-    /// Authentication method.
     pub auth: HostAuth,
     /// Containing [`Group`], if any.
     pub group_id: Option<String>,
-    /// Free-form tags.
     pub tags: Vec<String>,
-    /// Favourite flag.
     pub favorite: bool,
     /// Place in the custom order of the hosts page (HOST-16), which Telnet hosts share: lower
     /// comes first. 0 until the host is placed, and then absent.
@@ -111,7 +106,6 @@ pub struct Host {
     /// own choice applies instead. Absent while it is the device's default.
     #[serde(skip_serializing_if = "HostProxy::is_device_default")]
     pub proxy: HostProxy,
-    /// Free-form note.
     pub note: String,
     /// What the AI assistant is told about this host in its system prompt (AI-37), at most
     /// [`MAX_HOST_AI_NOTES_BYTES`] bytes of UTF-8. Absent while empty.
@@ -167,7 +161,6 @@ pub enum EnvVarError {
     /// More than [`MAX_HOST_ENV_VARS`].
     #[error("a host can have at most {MAX_HOST_ENV_VARS} environment variables")]
     TooMany,
-    /// The name is empty.
     #[error("an environment variable needs a name")]
     NameMissing,
     /// The name has a character other than ASCII letters, digits and `_`, or starts with a digit.
@@ -288,9 +281,7 @@ pub struct TelnetHost {
     pub password: Zeroizing<String>,
     /// Containing [`Group`], if any.
     pub group_id: Option<String>,
-    /// Free-form tags.
     pub tags: Vec<String>,
-    /// Favourite flag.
     pub favorite: bool,
     /// Place in the custom order of the hosts page, as for SSH hosts (HOST-16).
     #[serde(skip_serializing_if = "is_zero")]
@@ -299,7 +290,6 @@ pub struct TelnetHost {
     /// the device's default.
     #[serde(skip_serializing_if = "HostProxy::is_device_default")]
     pub proxy: HostProxy,
-    /// Free-form note.
     pub note: String,
     /// What the AI assistant is told about this host (AI-37), at most
     /// [`MAX_HOST_AI_NOTES_BYTES`] bytes of UTF-8. Absent while empty.
@@ -309,7 +299,6 @@ pub struct TelnetHost {
     pub updated_at: i64,
 }
 
-/// The Telnet port.
 pub const TELNET_PORT: u16 = 23;
 
 fn zeroizing_is_empty(s: &Zeroizing<String>) -> bool {
@@ -369,7 +358,6 @@ pub enum HostProxy {
     DeviceDefault,
     /// No proxy, whatever the device default is.
     Direct,
-    /// A saved [`Proxy`].
     Proxy {
         /// Id of the [`Proxy`] item.
         proxy_id: String,
@@ -422,7 +410,6 @@ impl ProxyKind {
 pub struct Proxy {
     /// Display name, e.g. `Office SOCKS`.
     pub name: String,
-    /// Protocol.
     #[zeroize(skip)]
     pub kind: ProxyKind,
     /// Domain name or IP address of the proxy.
@@ -469,11 +456,8 @@ impl fmt::Debug for Proxy {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(default)]
 pub struct Group {
-    /// Display name.
     pub name: String,
-    /// Parent group.
     pub parent_id: Option<String>,
-    /// Sort position.
     pub sort: i64,
     /// Last modification, Unix ms.
     pub updated_at: i64,
@@ -483,12 +467,9 @@ pub struct Group {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum KeyAlgorithm {
-    /// Ed25519.
     #[default]
     Ed25519,
-    /// ECDSA.
     Ecdsa,
-    /// RSA.
     Rsa,
 }
 
@@ -496,9 +477,7 @@ pub enum KeyAlgorithm {
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(default)]
 pub struct SshKey {
-    /// Display name.
     pub name: String,
-    /// Key algorithm.
     #[zeroize(skip)]
     pub algorithm: KeyAlgorithm,
     /// Private key in OpenSSH format (secret).
@@ -509,7 +488,6 @@ pub struct SshKey {
     pub public_key: String,
     /// `SHA256:...` fingerprint.
     pub fingerprint: String,
-    /// Key comment.
     pub comment: String,
     /// Creation time, Unix ms.
     pub created_at: i64,
@@ -555,11 +533,9 @@ impl fmt::Debug for SshKey {
 pub struct KnownHost {
     /// Host name or address the key was seen on.
     pub host: String,
-    /// Port.
     pub port: u16,
     /// Key type, e.g. `ssh-ed25519`.
     pub key_type: String,
-    /// Public key.
     pub public_key: String,
     /// `SHA256:...` fingerprint.
     pub fingerprint: String,
@@ -590,12 +566,9 @@ pub struct PortForward {
     pub host_id: String,
     /// What the forward is for; empty when it has none, and it is named by its rule.
     pub name: String,
-    /// Direction.
     #[zeroize(skip)]
     pub kind: ForwardKind,
-    /// Address to bind.
     pub bind_address: String,
-    /// Port to bind.
     pub bind_port: u16,
     /// Destination host (`None` for dynamic).
     pub dest_host: Option<String>,
@@ -611,11 +584,8 @@ pub struct PortForward {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(default)]
 pub struct Snippet {
-    /// Display name.
     pub name: String,
-    /// The command text.
     pub command: String,
-    /// Tags.
     pub tags: Vec<String>,
     /// Last modification, Unix ms.
     pub updated_at: i64,
@@ -757,7 +727,6 @@ mod effort_serde {
 pub struct AiModel {
     /// Model id sent in requests.
     pub id: String,
-    /// Display name.
     pub name: String,
     /// Context window in tokens, `None` when unknown.
     pub context_window: Option<u64>,
@@ -782,9 +751,7 @@ pub struct AiModel {
 #[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(default)]
 pub struct AiProvider {
-    /// Display name.
     pub name: String,
-    /// Wire protocol.
     #[zeroize(skip)]
     pub protocol: AiProtocol,
     /// Base URL, e.g. `https://api.openai.com/v1` or `https://api.anthropic.com`.
@@ -851,7 +818,6 @@ pub enum SearchKind {
     /// Brave Search API.
     #[default]
     Brave,
-    /// Tavily.
     Tavily,
     /// A SearXNG instance.
     Searxng,
@@ -874,7 +840,6 @@ impl SearchKind {
 #[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(default)]
 pub struct SearchProvider {
-    /// Search service.
     #[zeroize(skip)]
     pub kind: SearchKind,
     /// The instance URL for SearXNG, `None` otherwise.
@@ -948,7 +913,6 @@ pub struct AiQuickTarget {
     pub username: String,
     /// DNS name or IP address, in lowercase, IPv6 without brackets.
     pub address: String,
-    /// The SSH port.
     pub port: u16,
 }
 
@@ -1078,7 +1042,6 @@ pub enum McpTransport {
         /// Executable, looked up on `PATH`.
         #[serde(default)]
         command: String,
-        /// Arguments.
         #[serde(default)]
         args: Vec<String>,
         /// Environment variables (values are secrets).
@@ -1087,7 +1050,6 @@ pub enum McpTransport {
     },
     /// A Streamable HTTP endpoint.
     Http {
-        /// Endpoint URL.
         #[serde(default)]
         url: String,
         /// Request headers (values are secrets).
@@ -1169,7 +1131,6 @@ impl fmt::Debug for McpTransport {
 pub struct McpServer {
     /// Display name; used in tool names.
     pub name: String,
-    /// How to reach it.
     pub transport: McpTransport,
     /// Ask before every call, even in bypass mode (AI-31).
     pub always_ask: bool,
@@ -1181,9 +1142,7 @@ pub struct McpServer {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ThemeMode {
-    /// Light.
     Light,
-    /// Dark.
     Dark,
     /// Follow the OS. Also what an unknown future value decodes to (`serde(other)` must be last).
     #[default]
@@ -1197,7 +1156,6 @@ pub enum ThemeMode {
 pub enum CursorStyle {
     /// Vertical bar.
     Bar,
-    /// Underline.
     Underline,
     /// Filled block. Also what an unknown future value decodes to.
     #[default]
@@ -1238,11 +1196,9 @@ impl RightClick {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(default)]
 pub struct TerminalSettings {
-    /// Font family.
     pub font_family: String,
     /// Font size in points.
     pub font_size: u16,
-    /// Colour theme.
     #[zeroize(skip)]
     pub theme: ThemeMode,
     /// Id of the colour scheme used while the terminal is dark. `None` until one is picked,
@@ -1253,7 +1209,6 @@ pub struct TerminalSettings {
     /// Id of the colour scheme used while the terminal is light, like [`Self::dark_scheme`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub light_scheme: Option<String>,
-    /// Cursor shape.
     #[zeroize(skip)]
     pub cursor_style: CursorStyle,
     /// Scrollback lines.
@@ -1414,9 +1369,7 @@ impl Default for AiSettings {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(default)]
 pub struct Settings {
-    /// Terminal appearance.
     pub terminal: TerminalSettings,
-    /// AI assistant settings.
     pub ai: AiSettings,
     /// Last modification, Unix ms.
     pub updated_at: i64,
@@ -1429,35 +1382,25 @@ pub struct Settings {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Item {
-    /// An SSH host.
     Host(Host),
-    /// A Telnet host.
     TelnetHost(TelnetHost),
-    /// A host group.
     Group(Group),
     /// A private key.
     Key(SshKey),
     /// A trusted host key.
     KnownHost(KnownHost),
-    /// A saved port forward.
     Forward(PortForward),
-    /// A command snippet.
     Snippet(Snippet),
     /// A SOCKS5 or HTTP proxy.
     Proxy(Proxy),
-    /// An AI model provider.
     AiProvider(AiProvider),
-    /// The web search backend.
     SearchProvider(SearchProvider),
-    /// An AI conversation.
     AiConversation(AiConversation),
     /// One part of a conversation entry.
     AiMessage(AiMessage),
-    /// An assistant skill.
     Skill(Skill),
     /// A text file of a skill.
     SkillFile(SkillFile),
-    /// An MCP server.
     McpServer(McpServer),
     /// A memory of the AI assistant.
     AiMemory(AiMemory),

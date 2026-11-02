@@ -23,7 +23,6 @@ pub const MAX_ENVELOPE_BYTES: usize = 64 * 1024;
 pub struct ServerInfo {
     /// Service name (`hatoba-sync`).
     pub service: String,
-    /// Service version.
     pub version: String,
     /// Wire API version.
     pub api: u32,
@@ -43,7 +42,6 @@ pub struct KdfInfo {
 /// Everything the server stores at setup. The raw `auth_key` / `recovery_auth` are sent; the
 /// server keeps only their SHA-256.
 pub struct VaultInit {
-    /// Schema version.
     pub schema_version: u32,
     /// Base64 salt.
     pub kdf_salt: String,
@@ -89,7 +87,6 @@ impl std::fmt::Debug for Session {
 /// the vault key under AAD `hatoba/device/v1/{device_id}`; the server cannot read it.
 #[derive(Clone, Debug)]
 pub struct DeviceLogin {
-    /// This device's id.
     pub device_id: String,
     /// Sealed `{"name":…,"platform":…}`.
     pub sealed_name: String,
@@ -98,7 +95,6 @@ pub struct DeviceLogin {
 /// The vault metadata held by the server (`GET /v1/vault`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VaultMeta {
-    /// Schema version.
     pub schema_version: u32,
     /// Base64 salt.
     pub kdf_salt: String,
@@ -115,7 +111,6 @@ pub struct VaultMeta {
 /// One item as the server stores it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemoteItem {
-    /// Item id.
     pub id: String,
     /// Envelope JSON; `None` for tombstones.
     pub envelope: Option<String>,
@@ -136,14 +131,12 @@ pub struct PullPage {
     pub items: Vec<RemoteItem>,
     /// Cursor to continue from.
     pub next_since: u64,
-    /// Whether more pages follow.
     pub has_more: bool,
 }
 
 /// A local change to push.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Change {
-    /// Item id.
     pub id: String,
     /// The server revision this edit is based on; 0 for an item the server has never seen.
     pub base_revision: u64,
@@ -160,7 +153,6 @@ pub struct Change {
 pub enum PushResult {
     /// Accepted.
     Ok {
-        /// Item id.
         id: String,
         /// New server revision.
         revision: u64,
@@ -169,14 +161,12 @@ pub enum PushResult {
     },
     /// The server's revision differs from `base_revision`; here is its version.
     Conflict {
-        /// Item id.
         id: String,
         /// The current server row.
         server: RemoteItem,
     },
     /// Rejected for this item only (`too_large`, `not_found`, …).
     Error {
-        /// Item id.
         id: String,
         /// Short error code.
         error: String,
@@ -235,7 +225,6 @@ pub struct Recovered {
 /// One entry of the device list.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemoteDevice {
-    /// Device id.
     pub device_id: String,
     /// Sealed device name (envelope JSON); open with the vault key.
     pub device_name: String,

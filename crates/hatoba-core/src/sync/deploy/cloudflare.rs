@@ -92,9 +92,7 @@ enum Body {
 /// An account the token reaches.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct Account {
-    /// Account ID.
     pub id: String,
-    /// Account name.
     #[serde(default)]
     pub name: String,
 }

@@ -81,13 +81,11 @@ pub enum Error {
     Random,
 
     // ---- local persistence -----------------------------------------------------------------
-    /// SQLite error.
     #[error("database error: {0}")]
     Store(#[from] rusqlite::Error),
     /// JSON (de)serialisation error. Never includes the offending value.
     #[error("serialization error: {0}")]
     Json(#[from] serde_json::Error),
-    /// Filesystem error.
     #[error("i/o error: {0}")]
     Io(#[from] std::io::Error),
     /// The shared vault mutex was poisoned by a panic on another thread.
@@ -153,7 +151,6 @@ pub enum Error {
     /// Any other failed Cloudflare API call, with Cloudflare's first numeric error code.
     #[error("Cloudflare API error: HTTP {status}{}", code.map(|c| format!(", code {c}")).unwrap_or_default())]
     Cloudflare {
-        /// HTTP status.
         status: u16,
         /// Cloudflare's numeric error code, if the response had one.
         code: Option<u32>,

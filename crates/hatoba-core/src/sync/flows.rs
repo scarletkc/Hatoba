@@ -531,7 +531,6 @@ pub async fn recover_remote(
 /// A device as shown in "Settings → Cloud sync → Devices".
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeviceEntry {
-    /// Device id.
     pub device_id: String,
     /// Decrypted device name, if it could be read (a device that has not finished signing in
     /// shows `None`).
