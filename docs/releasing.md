@@ -64,7 +64,7 @@ Commit the changes, open a pull request titled `chore(release): prepare vX.Y.Z`,
    - the version files agree, and `vX.Y.Z` does not point to another commit
    - the release note is valid, or an earlier release exists to list changes from
    - `plugins.updater.pubkey` in `tauri.conf.json` is a public key
-   - CI passed on the commit, or on an earlier commit that differs from it only in files CI skips: Markdown files and `docs/`
+   - CI passed on the commit, or on an earlier commit that differs from it only in files CI skips (Markdown files and `docs/`) and in the release version. CI on the commit before the release pull request on `main` therefore covers it, unless `bump.mjs` also refreshed the models.dev snapshot
    - the `release` environment requires a reviewer, and the `release-signing` environment allows deployments only from `main`
 
    It then writes the release notes to the run summary.

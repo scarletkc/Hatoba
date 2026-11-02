@@ -81,8 +81,9 @@ jobs:
       # Includes checks that the app's version files agree, and that the Worker's do.
       - run: node --test "scripts/**/*.test.mjs"
 
-  # Pull requests that change nothing the Rust jobs build or check skip them. A job skipped by its
-  # `if` passes as a required check. Pushes and manual runs run them all.
+  # Pull requests that change nothing the Rust jobs build or check, apart from the release version,
+  # skip them. A job skipped by its `if` passes as a required check. Pushes and manual runs run them
+  # all.
   changes:
     name: Changes
     if: github.event_name == 'pull_request'

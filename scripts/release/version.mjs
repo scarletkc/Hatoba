@@ -1,4 +1,5 @@
 // Release versions: their format and order, and the files that record them.
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -199,4 +200,35 @@ export function planBump(root, to, files = VERSION_FILES) {
     changes.set(file.path, updated);
   }
   return changes;
+}
+
+/**
+ * Whether `after` differs from `before` only in the release version: what a bump writes into the
+ * version file at `path`.
+ */
+export function changesOnlyVersion(path, before, after) {
+  const file = VERSION_FILES.find((f) => f.path === path);
+  if (file === undefined) return false;
+  try {
+    const [version, ...others] = new Set(file.read(after));
+    return others.length === 0 && version !== undefined && file.write(before, version) === after;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether the file at `path` differs between the commits `from` and `to` only in the release version. */
+export function onlyVersionChanged(path, from, to, root = ROOT) {
+  const show = (rev) =>
+    execFileSync("git", ["show", `${rev}:${path}`], {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  try {
+    return changesOnlyVersion(path, show(from), show(to));
+  } catch {
+    // The file does not exist in one of the commits.
+    return false;
+  }
 }

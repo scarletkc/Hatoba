@@ -22,7 +22,16 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFi
 import { basename, dirname, extname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { NOTES_DIR, ROOT, VERSION, VERSION_FILES, compareVersions, isPrerelease, readVersion } from "./version.mjs";
+import {
+  NOTES_DIR,
+  ROOT,
+  VERSION,
+  VERSION_FILES,
+  compareVersions,
+  isPrerelease,
+  onlyVersionChanged,
+  readVersion,
+} from "./version.mjs";
 
 /** Keep in sync with the environment of the publish job in release.yml. */
 export const ENVIRONMENT = "release";
@@ -353,7 +362,11 @@ export function composeNotes(version, repository, root = ROOT) {
 // these files.
 export const skippedByCi = (path) => path.endsWith(".md") || path.startsWith("docs/");
 
-/** Whether a CI pass on `tested` covers `sha`: the same commit, or an ancestor that differs only in files CI skips. */
+/**
+ * Whether a CI pass on `tested` covers `sha`: the same commit, or an ancestor that differs from it
+ * only in files CI skips and in the release version. The CI run before a release pull request then
+ * covers its commit, so a release need not wait for CI on main.
+ */
 export function ciCovers(tested, sha, root = ROOT) {
   if (tested === sha) return true;
   try {
@@ -361,7 +374,10 @@ export function ciCovers(tested, sha, root = ROOT) {
   } catch {
     return false;
   }
-  return git(["diff", "--name-only", "--no-renames", tested, sha], root).split("\n").filter(Boolean).every(skippedByCi);
+  return git(["diff", "--name-only", "--no-renames", tested, sha], root)
+    .split("\n")
+    .filter(Boolean)
+    .every((path) => skippedByCi(path) || onlyVersionChanged(path, tested, sha, root));
 }
 
 async function github(path, { allowMissing = false } = {}) {
@@ -391,7 +407,7 @@ async function gate(repository, root = ROOT) {
   const passed = runs.find((run) => ciCovers(run.head_sha, sha, root));
   if (!passed) {
     throw new Error(
-      `CI has not passed on the release commit ${sha.slice(0, 7)}, or on an earlier commit that differs from it only in files CI skips. Wait for CI on it to pass, or rerun the failed jobs of its CI run, then rerun this workflow.`,
+      `CI has not passed on the release commit ${sha.slice(0, 7)}, or on an earlier commit that differs from it only in files CI skips and in the release version. Wait for CI on it to pass, or rerun the failed jobs of its CI run, then rerun this workflow.`,
     );
   }
   console.log(`CI passed on ${passed.head_sha.slice(0, 7)}: ${passed.html_url}`);

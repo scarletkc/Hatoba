@@ -7,6 +7,7 @@ import { planNote } from "./bump.mjs";
 import {
   ROOT,
   WORKER_VERSION_FILES,
+  changesOnlyVersion,
   compareVersions,
   nextVersion,
   parseVersion,
@@ -101,6 +102,20 @@ test("a bump changes only the release version in every app file", (t) => {
     FIXTURE["Cargo.lock"].replace('"hatoba-core"\nversion = "0.1.0"', '"hatoba-core"\nversion = "0.2.0"'),
   );
   assert.match(read("apps/desktop/package.json"), /"react": "\^0\.1\.0"/);
+});
+
+test("tells a bump apart from other changes to the app's version files", (t) => {
+  const root = fixture(t);
+  for (const [path, bumped] of planBump(root, "0.2.0")) {
+    assert.ok(changesOnlyVersion(path, FIXTURE[path], bumped), path);
+    assert.ok(!changesOnlyVersion(path, FIXTURE[path], `${bumped}\n`), path);
+  }
+  const lock = FIXTURE["Cargo.lock"];
+  assert.ok(
+    !changesOnlyVersion("Cargo.lock", lock, lock.replace('"serde"\nversion = "0.1.0"', '"serde"\nversion = "0.2.0"')),
+  );
+  const worker = FIXTURE["workers/sync/package.json"];
+  assert.ok(!changesOnlyVersion("workers/sync/package.json", worker, worker.replace('"0.5.0"', '"0.5.1"')));
 });
 
 test("a Worker bump changes only the Worker version", (t) => {
