@@ -11,7 +11,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Lock | ロック |
 | Settings | 設定 |
 | Hosts | ホスト |
-| Forwards | ポートフォワーディング |
+| Forwards | ポート転送 |
 | Port Forwarding | ポートフォワーディング |
 | Keys | 鍵 |
 | Sync | 同期 |

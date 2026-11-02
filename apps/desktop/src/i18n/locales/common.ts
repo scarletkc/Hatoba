@@ -405,7 +405,7 @@ export default defineMessages({
     "sidebar.keys": "鍵",
     "sidebar.sync": "クラウド同期",
     "sidebar.forwards": "ポートフォワーディング",
-    "rail.forwards": "ポートフォワーディング",
+    "rail.forwards": "ポート転送",
     "rail.sync": "同期",
     "sidebar.newGroup": "新規グループ",
     "sidebar.groupName": "グループ名",
