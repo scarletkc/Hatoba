@@ -107,7 +107,7 @@ user or the model reads in an owner pull request, with `Co-authored-by: <contrib
 - The pull request body is a few sentences on what changed and why, because it becomes the squash
   commit's body word for word. Skip the pull request template and its checklist.
 - A squash merge copies `Co-authored-by` trailers from the branch's commits into the commit on
-  `main`, so commits carry none.
+  `main`, so branch commits carry no AI co-author trailer.
 
 ### Review bots
 
