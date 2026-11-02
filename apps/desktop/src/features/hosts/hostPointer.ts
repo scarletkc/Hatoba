@@ -131,6 +131,24 @@ function contentPoint(list: HTMLElement, x: number, y: number): { x: number; y: 
   return { x: x - r.left - list.clientLeft + list.scrollLeft, y: y - r.top - list.clientTop + list.scrollTop };
 }
 
+/**
+ * The click that the release of a press ended with Escape makes must not act either: beside the hosts it would select
+ * none. A press that begins first means the release was missed, outside the window.
+ */
+function swallowRelease(pointerId: number) {
+  const done = () => {
+    window.removeEventListener("pointerup", up, true);
+    window.removeEventListener("pointerdown", done, true);
+  };
+  const up = (e: PointerEvent) => {
+    if (e.pointerId !== pointerId) return;
+    done();
+    swallowClick();
+  };
+  window.addEventListener("pointerup", up, true);
+  window.addEventListener("pointerdown", done, true);
+}
+
 function place(el: HTMLElement, box: Box) {
   el.style.left = `${box.left}px`;
   el.style.top = `${box.top}px`;
@@ -369,10 +387,12 @@ export class HostPointer {
   };
 
   private key = (e: KeyboardEvent) => {
-    if (e.key !== "Escape" || !this.press?.started) return;
+    const p = this.press;
+    if (e.key !== "Escape" || !p?.started) return;
     e.preventDefault();
     e.stopPropagation();
     this.cancel();
+    swallowRelease(p.pointerId);
   };
 
   /** Ends the press without a change: a box gives back the selection it began with. */
