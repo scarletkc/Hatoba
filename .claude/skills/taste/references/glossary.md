@@ -11,7 +11,7 @@ the word the tables already use most, and add it here.
 | private key / public key | 私钥 / 公钥 | 私鑰 / 公鑰 | 秘密鍵 / 公開鍵 |
 | passphrase | 口令 | 密碼短語 | パスフレーズ |
 | fingerprint | 指纹 | 指紋 | フィンガープリント |
-| host key | 主机指纹 | 主機指紋 | ホスト鍵 |
+| host key (not its fingerprint) | 主机密钥 | 主機金鑰 | ホスト鍵 |
 | vault | 保险库 | 保險庫 | 保管庫 |
 | master password | 主密码 | 主密碼 | マスターパスワード |
 | recovery code | 恢复码 | 復原碼 | リカバリーコード |
