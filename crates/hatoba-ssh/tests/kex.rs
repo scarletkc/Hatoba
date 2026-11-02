@@ -61,9 +61,17 @@ async fn connects_to_a_server_with_only_nist_ecdh_and_sha1_exchanges() {
 }
 
 #[tokio::test]
-async fn connects_with_nist_p521_ecdh() {
-    let port = start_server(&[kex::ECDH_SHA2_NISTP521]).await;
-    let cfg = ConnectConfig::new("127.0.0.1", port, "demo", AuthMethod::None);
-    let session = connect(cfg, Verifier::accepting()).await.unwrap();
-    session.disconnect().await;
+async fn connects_with_each_nist_curve_alone() {
+    for curve in [
+        &[kex::ECDH_SHA2_NISTP256],
+        &[kex::ECDH_SHA2_NISTP384],
+        &[kex::ECDH_SHA2_NISTP521],
+    ] {
+        let port = start_server(curve).await;
+        let cfg = ConnectConfig::new("127.0.0.1", port, "demo", AuthMethod::None);
+        let session = connect(cfg, Verifier::accepting())
+            .await
+            .unwrap_or_else(|e| panic!("{curve:?}: {e:?}"));
+        session.disconnect().await;
+    }
 }
