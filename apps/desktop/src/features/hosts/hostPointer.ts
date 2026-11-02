@@ -1,4 +1,4 @@
-import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { swallowClick } from "@/app/tabDrag";
 
 /** How far the pointer moves before a press becomes a drag or a selection box, in CSS pixels. */
@@ -147,7 +147,12 @@ function place(el: HTMLElement, box: Box) {
 export class HostPointer {
   private press: Press | null = null;
 
-  constructor(private readonly site: PointerSite) {}
+  constructor(private site: PointerSite) {}
+
+  /** After each render of the page, which the next press and move read. */
+  rendered(site: PointerSite) {
+    this.site = site;
+  }
 
   /** `pointerdown` in the list. */
   down = (e: ReactPointerEvent<HTMLElement>) => {
@@ -401,6 +406,7 @@ export class HostPointer {
 /** The hosts page's box selection and moves; pass its `down` to the list's `onPointerDown`. */
 export function useHostPointer(site: PointerSite): HostPointer {
   const [pointer] = useState(() => new HostPointer(site));
+  useLayoutEffect(() => pointer.rendered(site));
   useEffect(() => () => pointer.cancel(), [pointer]);
   return pointer;
 }
