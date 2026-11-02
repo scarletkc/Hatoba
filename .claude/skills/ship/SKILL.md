@@ -29,11 +29,9 @@ CodeRabbit, Devin Review and Codex review each pull request. CI decides the merg
 
 1. Wait for CI. A pull request that changes only Markdown can merge right away.
 2. Read the pull request's comments (`gh pr view <n> --comments`): the owner posts reviews there.
-3. Re-read the body right before merging. Remove the blocks that Devin Review and CodeRabbit
-   append, and anything else that does not belong in the commit message.
-4. Run `gh pr merge --repo scarletkc/Hatoba <n> --squash --admin`. The ruleset requires an approval
+3. Run `gh pr merge --repo scarletkc/Hatoba <n> --squash --admin`. The ruleset requires an approval
    that the owner's own pull requests never get, so auto-merge would wait forever.
-5. If you worked in a worktree, remove it with `git worktree remove <path>`. On Windows it leaves
+4. If you worked in a worktree, remove it with `git worktree remove <path>`. On Windows it leaves
    the `node_modules` links behind, so delete the rest with
    `Remove-Item -LiteralPath <path> -Recurse -Force` and run `git worktree prune`. Then delete the
    local branch with `git branch -D <branch>`.
