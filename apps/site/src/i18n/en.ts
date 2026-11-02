@@ -140,8 +140,7 @@ export const en = {
     checksums: "lists the checksum of every file in the release.",
     allReleases: "All releases",
     source: "Build from source",
-    testing:
-      "Hatoba is developed on Windows, so the Linux and macOS builds get less testing. If something doesn't work, please open an issue.",
+    problem: "Something not working?",
     issue: "Open an issue",
   },
   notFound: {

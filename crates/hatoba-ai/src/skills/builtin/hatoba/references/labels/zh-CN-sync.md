@@ -73,7 +73,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Database | 数据库 |
 | Sync automatically | 自动同步 |
 | Devices | 设备 |
-| This PC | 本机 |
+| This Device | 此设备 |
 | Not seen in 14+ days | 超过 14 天未同步 |
 | Remove | 移除 |
 | Sign In Again | 重新登录 |
@@ -227,7 +227,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Edit Host | 编辑主机 |
 | Open Settings → AI | 打开设置 → AI |
 | Custom Instructions | 自定义指令 |
-| Host “{name}” is too large to sync. Shorten its notes, AI notes, or environment variables. | 主机“{name}”的数据太大，无法同步。请缩短它的备注、AI 备注或环境变量。 |
+| Host “{name}” is too large to sync. Shorten its notes, AI notes or environment variables. | 主机“{name}”的数据太大，无法同步。请缩短它的备注、AI 备注或环境变量。 |
 
 ### Cloudflare and deployment errors
 
@@ -241,7 +241,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | This account has no Hatoba Worker with this name, or it holds no vault. Check the account and the Worker name. | 这个账户中找不到这个名称的 Hatoba Worker，或者它没有保存保险库。请检查账户和 Worker 名称。 |
 | This Worker is newer than the one in this version of Hatoba, and Hatoba won’t replace it with an older one. | 这个 Worker 比这个版本的 Hatoba 内置的更新，Hatoba 不会用旧版本替换它。 |
 | This build of Hatoba doesn’t include the sync Worker, so it can’t deploy it. Use another way to deploy. | 这个版本的 Hatoba 没有内置同步 Worker，无法一键部署。请改用其他部署方式。 |
-| This token can’t edit D1. Add “Account · D1 · Edit” to it in Cloudflare. | 这个 Token 没有 D1 编辑权限。请在 Cloudflare 中为它添加「Account · D1 · Edit」。 |
+| This token can’t edit D1. Add “Account · D1 · Edit” to it in Cloudflare. | 这个 Token 没有 D1 编辑权限。请在 Cloudflare 中为它添加“Account · D1 · Edit”。 |
 | Can’t reach Cloudflare. Check your network and try again. | 无法连接到 Cloudflare，请检查网络后重试。 |
 | Cloud Sync | 云同步 |
 | Restore from Cloud | 从云端恢复 |

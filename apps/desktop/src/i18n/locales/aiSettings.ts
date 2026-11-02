@@ -28,19 +28,19 @@ export default defineMessages({
     "aiSettings.chatgpt.continue": "使用 ChatGPT 继续",
     "aiSettings.chatgpt.kind": "ChatGPT 账户",
     "aiSettings.chatgpt.account": "账户",
-    "aiSettings.chatgpt.status.signed_in": "已在此设备登录",
-    "aiSettings.chatgpt.status.signed_out": "未在此设备登录。在其他设备登录过的账户，也要在这台设备登录一次。",
+    "aiSettings.chatgpt.status.signed_in": "已在这台设备登录",
+    "aiSettings.chatgpt.status.signed_out": "未在这台设备登录。在其他设备登录过的账户，也要在这台设备登录一次。",
     "aiSettings.chatgpt.status.ended": "登录已失效，请重新登录。",
     "aiSettings.chatgpt.status.plan_disabled":
       "已登录，但没有允许 Hatoba 使用你的 ChatGPT 套餐。重新登录并允许后才能使用。",
-    "aiSettings.chatgpt.row.signed_out": "需要在此设备登录",
+    "aiSettings.chatgpt.row.signed_out": "需要在这台设备登录",
     "aiSettings.chatgpt.row.ended": "登录已失效",
     "aiSettings.chatgpt.row.plan_disabled": "未允许使用套餐",
     "aiSettings.chatgpt.signOut": "退出登录",
     "aiSettings.chatgpt.signedIn": "已登录 ChatGPT",
-    "aiSettings.chatgpt.signedOut": "已在此设备退出 ChatGPT",
+    "aiSettings.chatgpt.signedOut": "已在这台设备退出 ChatGPT",
     "aiSettings.chatgpt.signedOutUnconfirmed":
-      "已在此设备退出，但 ChatGPT 没有确认结束会话。你可以在 ChatGPT 的设置里断开 Hatoba。",
+      "已在这台设备退出，但 ChatGPT 没有确认结束会话。你可以在 ChatGPT 的设置里断开 Hatoba。",
     "aiSettings.chatgpt.manageUsage": "管理用量",
     "aiSettings.chatgpt.waiting.title": "在浏览器中继续",
     "aiSettings.chatgpt.waiting.body": "请在打开的浏览器窗口中登录 ChatGPT，完成后回到 Hatoba。",
@@ -217,7 +217,7 @@ export default defineMessages({
     "aiSettings.judge.sample.restart_requested_zh": "用户用中文要求后重启 nginx",
     "aiSettings.judge.sample.delete_unrequested_ja": "删除没人要求删除的日志（日语对话）",
     "aiSettings.judge.sample.docs_page": "获取文档页面",
-    "aiSettings.judge.sample.token_in_url": "获取带有令牌的网址",
+    "aiSettings.judge.sample.token_in_url": "获取带有 Token 的网址",
     "aiSettings.judge.sample.input_read": "在终端的 shell 提示符下运行 ls -a",
     "aiSettings.judge.sample.answer_unrequested": "替用户回答没人让回答的升级确认",
 
@@ -351,7 +351,7 @@ export default defineMessages({
     "aiSettings.mcp.state.running": "运行中",
     "aiSettings.mcp.state.runningN": "运行中 · {n} 个工具",
     "aiSettings.mcp.state.failed": "失败",
-    "aiSettings.mcp.state.off": "此设备上已关闭",
+    "aiSettings.mcp.state.off": "这台设备上已关闭",
     "aiSettings.mcp.kind.stdio": "stdio",
     "aiSettings.mcp.kind.http": "HTTP",
     "aiSettings.mcp.alwaysAsk": "始终询问",
@@ -424,10 +424,10 @@ export default defineMessages({
     "aiSettings.mcp.f.alwaysAsk": "始终询问",
     "aiSettings.mcp.f.alwaysAskHint": "即使在绕过模式下，这个服务器的每次工具调用也都会先询问你。",
     "aiSettings.mcp.templates": "从模板添加",
-    "aiSettings.mcp.tpl.github.token": "创建细粒度令牌",
+    "aiSettings.mcp.tpl.github.token": "创建细粒度 Token",
     "aiSettings.mcp.tpl.linear.token": "创建 API 密钥",
     "aiSettings.mcp.tpl.context7.token": "获取 API 密钥",
-    "aiSettings.mcp.tpl.cloudflare.token": "创建 API 令牌",
+    "aiSettings.mcp.tpl.cloudflare.token": "创建 API Token",
     "aiSettings.mcp.err.nameRequired": "请输入名称。",
     "aiSettings.mcp.err.nameTaken": "已有同名的服务器。",
     "aiSettings.mcp.err.commandRequired": "请输入命令。",
@@ -458,7 +458,7 @@ export default defineMessages({
     "aiSettings.mcp.imp.none": "这段 JSON 里没有可以导入的服务器。",
     "aiSettings.mcp.imp.submit": "导入 {n} 个服务器",
     "aiSettings.mcp.imp.done": "已导入 {n} 个服务器",
-    "aiSettings.mcp.exported": "已导出。环境变量和请求头的值已换成占位符。",
+    "aiSettings.mcp.exported": "已导出，环境变量和请求头的值已换成占位符",
   },
   en: {
     "aiSettings.tab": "AI",
@@ -467,7 +467,7 @@ export default defineMessages({
 
     "aiSettings.providers": "Providers",
     "aiSettings.providers.add": "Add Provider",
-    "aiSettings.providers.empty.title": "No Providers Yet",
+    "aiSettings.providers.empty.title": "No providers yet",
     "aiSettings.providers.empty.body":
       "Add an OpenAI Chat Completions, OpenAI Responses or Anthropic Messages provider, or continue with ChatGPT to use your ChatGPT plan. Local servers such as Ollama and LM Studio work too.",
     "aiSettings.provider.models": "{n} models",
@@ -544,7 +544,7 @@ export default defineMessages({
     "aiSettings.err.nameRequired": "Enter a name.",
     "aiSettings.err.urlRequired": "Enter the base URL.",
     "aiSettings.err.urlInvalid": "Enter a full address that starts with https:// or http://.",
-    "aiSettings.err.urlRejected": "The base URL can’t contain a user name or password.",
+    "aiSettings.err.urlRejected": "The base URL can’t contain a username or password.",
     "aiSettings.err.keyRequired": "Enter an API key.",
     "aiSettings.err.provider": "The provider returned an error.",
     "aiSettings.err.status": "HTTP {status}",
@@ -584,8 +584,7 @@ export default defineMessages({
       "The provider rejected the API key. Check the key, and for the Anthropic protocol the auth header.",
     "aiSettings.test.fail.network": "Couldn’t reach the server. Check the base URL and your network.",
     "aiSettings.test.fail.unknown_model": "The provider doesn’t know the model {model}. Check the model ID.",
-    "aiSettings.test.fail.invalid_url":
-      "The base URL can’t be used. Check it, and leave out any user name or password.",
+    "aiSettings.test.fail.invalid_url": "The base URL can’t be used. Check it, and leave out any username or password.",
     "aiSettings.test.fail.other": "The provider returned an error.",
 
     "aiSettings.default": "Default Model",
@@ -597,7 +596,7 @@ export default defineMessages({
     "aiSettings.instructions": "Custom Instructions",
     "aiSettings.instructions.hint": "Sent with every request: answer language, tone, the systems you use.",
     "aiSettings.instructions.placeholder":
-      "For example: Answer in English. I use Debian and zsh, and manage services with systemctl.",
+      "e.g. Answer in English. I use Debian and zsh, and manage services with systemctl.",
     "aiSettings.screen": "Terminal Screen",
     "aiSettings.screen.row": "Send with Each Message by Default",
     "aiSettings.screen.hint":
@@ -615,7 +614,7 @@ export default defineMessages({
     "aiSettings.memory.deletedAll": "Deleted all memories",
     "aiSettings.memory.edit": "Edit {name}",
     "aiSettings.memory.delete": "Delete {name}",
-    "aiSettings.memory.empty.title": "No Memories Yet",
+    "aiSettings.memory.empty.title": "No memories yet",
     "aiSettings.memory.empty.body": "Ask the assistant to remember something, or add a memory here.",
     "aiSettings.memory.loadFailed": "Couldn’t load the memories.",
     "aiSettings.memory.size": "{n} of {max} bytes used",
@@ -687,7 +686,7 @@ export default defineMessages({
     "aiSettings.judge.sample.delete_unrequested_ja": "Delete logs nobody asked to delete, in Japanese",
     "aiSettings.judge.sample.docs_page": "Fetch a documentation page",
     "aiSettings.judge.sample.token_in_url": "Fetch a URL that carries a token",
-    "aiSettings.judge.sample.input_read": "Type ls -a at the terminal's shell prompt",
+    "aiSettings.judge.sample.input_read": "Type ls -a at the terminal’s shell prompt",
     "aiSettings.judge.sample.answer_unrequested": "Answer an upgrade prompt nobody asked to answer",
 
     "aiSettings.device": "This Device",
@@ -701,7 +700,7 @@ export default defineMessages({
     "aiSettings.allowances.empty": "Always Allow on an approval card adds one here.",
     "aiSettings.allowances.command": "Commands starting with “{prefix}”",
     "aiSettings.allowances.domain": "Pages on {domain}",
-    "aiSettings.bypass.title": "Turn On Bypass Mode?",
+    "aiSettings.bypass.title": "Turn on Bypass mode?",
     "aiSettings.bypass.confirm": "Turn On Bypass",
 
     "aiSettings.skills": "Skills",
@@ -710,7 +709,7 @@ export default defineMessages({
     "aiSettings.skills.import.folder": "Import Folder",
     "aiSettings.skills.import.zip": "Import .zip",
     "aiSettings.skills.hint": "Instructions in the Agent Skills format. The assistant reads one when it needs it.",
-    "aiSettings.skills.empty.title": "No Skills of Your Own Yet",
+    "aiSettings.skills.empty.title": "No skills of your own yet",
     "aiSettings.skills.empty.body":
       "Add a skill to tell the assistant how to handle a kind of task, such as how you deploy or what to check on a web server. Write one here, or import a folder or .zip that has a SKILL.md.",
     "aiSettings.skills.fileCount": "{n} files",
@@ -739,14 +738,14 @@ export default defineMessages({
     "aiSettings.skills.dlg.loading": "Loading the skill…",
     "aiSettings.skills.f.name": "Name",
     "aiSettings.skills.f.namePlaceholder": "e.g. nginx-ops",
-    "aiSettings.skills.f.nameHint": "1 to 64 lowercase letters, digits, or hyphens.",
+    "aiSettings.skills.f.nameHint": "1 to 64 lowercase letters, digits or hyphens.",
     "aiSettings.skills.f.description": "Description",
     "aiSettings.skills.f.descriptionPlaceholder": "What the skill does and when the assistant should use it",
     "aiSettings.skills.f.body": "Instructions",
     "aiSettings.skills.f.bodyHint": "The body of SKILL.md, in Markdown.",
     "aiSettings.skills.f.bodyPlaceholder": "# Steps",
     "aiSettings.skills.err.nameRequired": "Enter a name.",
-    "aiSettings.skills.err.nameInvalid": "Use only lowercase letters, digits, and hyphens, up to 64 characters.",
+    "aiSettings.skills.err.nameInvalid": "Use only lowercase letters, digits and hyphens, up to 64 characters.",
     "aiSettings.skills.err.nameTaken": "Another skill already has this name.",
     "aiSettings.skills.err.nameReserved": "hatoba is the built-in skill’s name. Choose another.",
     "aiSettings.skills.err.descRequired": "Enter a description.",
@@ -792,7 +791,7 @@ export default defineMessages({
     "aiSettings.skills.imp.reservedTitle": "“{name}” is the built-in skill’s name. Import it under another name.",
     "aiSettings.skills.imp.replace": "Replace it",
     "aiSettings.skills.imp.replaceHint":
-      "Overwrites the saved skill’s description, instructions, and files with the imported ones.",
+      "Overwrites the saved skill’s description, instructions and files with the imported ones.",
     "aiSettings.skills.imp.rename": "Import under a new name",
     "aiSettings.skills.imp.newName": "New name",
     "aiSettings.skills.imp.submit": "Import",
@@ -802,12 +801,12 @@ export default defineMessages({
     "aiSettings.skills.issue.missing_skill_md": "There is no SKILL.md at the top of the folder or .zip.",
     "aiSettings.skills.issue.invalid_frontmatter": "The frontmatter of SKILL.md is not valid: {detail}",
     "aiSettings.skills.issue.invalid_name":
-      "The name “{name}” is not valid. Use 1 to 64 lowercase letters, digits, and hyphens.",
+      "The name “{name}” is not valid. Use 1 to 64 lowercase letters, digits and hyphens.",
     "aiSettings.skills.issue.missing_description": "SKILL.md has no description.",
     "aiSettings.skills.issue.description_too_long": "The description has {chars} characters. The limit is {max}.",
     "aiSettings.skills.issue.file_too_large": "{path} is {size}. The limit is {max}.",
     "aiSettings.skills.issue.unsafe_path":
-      "The path “{path}” can’t be used: it leaves the skill folder, is repeated, or is too long.",
+      "The path “{path}” can’t be used: it leaves the skill folder, is repeated or is too long.",
     "aiSettings.skills.issue.too_many_files": "The skill has {count} files. The limit is {max}.",
     "aiSettings.skills.issue.too_large": "The skill is {bytes} in total. The limit is {max}.",
 
@@ -816,9 +815,9 @@ export default defineMessages({
     "aiSettings.mcp.import": "Import",
     "aiSettings.mcp.export": "Export",
     "aiSettings.mcp.hint": "MCP servers add tools to the assistant. Add only servers you trust.",
-    "aiSettings.mcp.empty.title": "No MCP Servers",
+    "aiSettings.mcp.empty.title": "No MCP servers yet",
     "aiSettings.mcp.empty.body":
-      "Add a server to give the assistant more tools, or import the servers you already use in Claude Desktop, Claude Code, Cursor, or VS Code.",
+      "Add a server to give the assistant more tools, or import the servers you already use in Claude Desktop, Claude Code, Cursor or VS Code.",
     "aiSettings.mcp.loadFailed": "Couldn’t load the MCP servers.",
     "aiSettings.mcp.state.stopped": "Stopped",
     "aiSettings.mcp.state.starting": "Starting…",
@@ -900,7 +899,7 @@ export default defineMessages({
     "aiSettings.mcp.f.rowRemove": "Remove {key}",
     "aiSettings.mcp.f.rowRemoveBlank": "Remove this row",
     "aiSettings.mcp.f.alwaysAsk": "Always ask",
-    "aiSettings.mcp.f.alwaysAskHint": "Ask before every call of this server’s tools, even in bypass mode.",
+    "aiSettings.mcp.f.alwaysAskHint": "Ask before every call of this server’s tools, even in Bypass mode.",
     "aiSettings.mcp.templates": "Add from Template",
     "aiSettings.mcp.tpl.github.token": "Create a Fine-Grained Token",
     "aiSettings.mcp.tpl.linear.token": "Create an API Key",
@@ -911,17 +910,17 @@ export default defineMessages({
     "aiSettings.mcp.err.commandRequired": "Enter the command.",
     "aiSettings.mcp.err.urlRequired": "Enter the server URL.",
     "aiSettings.mcp.err.urlInvalid": "Enter a full address that starts with https:// or http://.",
-    "aiSettings.mcp.err.urlRejected": "The URL can’t contain a user name or password.",
+    "aiSettings.mcp.err.urlRejected": "The URL can’t contain a username or password.",
     "aiSettings.mcp.err.keyRequired": "Enter a name.",
     "aiSettings.mcp.err.envKeyInvalid": "A variable name can’t contain spaces or =.",
-    "aiSettings.mcp.err.headerKeyInvalid": "A header name can’t contain spaces, colons, or other special characters.",
+    "aiSettings.mcp.err.headerKeyInvalid": "A header name can’t contain spaces, colons or other special characters.",
     "aiSettings.mcp.err.keyDuplicate": "This name is used twice.",
     "aiSettings.mcp.err.valueRequired": "Enter a value, or remove this row.",
     "aiSettings.mcp.err.rejected": "The server settings were rejected:",
 
     "aiSettings.mcp.imp.title": "Import MCP Servers",
     "aiSettings.mcp.imp.subtitle":
-      "Paste the JSON from Claude Desktop, Claude Code, Cursor, or VS Code, or choose the file.",
+      "Paste the JSON from Claude Desktop, Claude Code, Cursor or VS Code, or choose the file.",
     "aiSettings.mcp.imp.placeholder": '{ "mcpServers": { … } }',
     "aiSettings.mcp.imp.paste": "JSON",
     "aiSettings.mcp.imp.file": "Choose File",
@@ -940,7 +939,7 @@ export default defineMessages({
     "aiSettings.mcp.imp.submit_one": "Import 1 server",
     "aiSettings.mcp.imp.done": "Imported {n} servers",
     "aiSettings.mcp.imp.done_one": "Imported 1 server",
-    "aiSettings.mcp.exported": "Exported. Environment variable and header values are replaced with placeholders.",
+    "aiSettings.mcp.exported": "Exported with environment variable and header values replaced by placeholders",
   },
   ja: {
     "aiSettings.tab": "AI",
@@ -949,7 +948,7 @@ export default defineMessages({
 
     "aiSettings.providers": "プロバイダー",
     "aiSettings.providers.add": "プロバイダーを追加",
-    "aiSettings.providers.empty.title": "プロバイダーがありません",
+    "aiSettings.providers.empty.title": "プロバイダーはまだありません",
     "aiSettings.providers.empty.body":
       "OpenAI Chat Completions、OpenAI Responses、Anthropic Messages のいずれかのプロバイダーを追加するか、ChatGPT で続行して ChatGPT プランを使うと、アシスタントを使えます。Ollama や LM Studio などのローカルサーバーも使えます。",
     "aiSettings.provider.models": "{n} 個のモデル",
@@ -983,10 +982,10 @@ export default defineMessages({
     "aiSettings.chatgpt.signedOutUnconfirmed":
       "このデバイスではサインアウトしましたが、ChatGPT はセッションの終了を確認できませんでした。ChatGPT の設定で Hatoba の接続を解除できます。",
     "aiSettings.chatgpt.manageUsage": "使用量を管理",
-    "aiSettings.chatgpt.waiting.title": "ブラウザで続行",
+    "aiSettings.chatgpt.waiting.title": "ブラウザーで続行",
     "aiSettings.chatgpt.waiting.body":
-      "開いたブラウザのウィンドウで ChatGPT にサインインしてから、Hatoba に戻ってください。",
-    "aiSettings.chatgpt.waiting.inline": "ブラウザでのサインインを待っています…",
+      "開いたブラウザーのウィンドウで ChatGPT にサインインしてから、Hatoba に戻ってください。",
+    "aiSettings.chatgpt.waiting.inline": "ブラウザーでのサインインを待っています…",
     "aiSettings.chatgpt.failed.title": "ChatGPT にサインインできませんでした",
     "aiSettings.chatgpt.welcome.title": "ChatGPT プランを使用しています",
     "aiSettings.chatgpt.welcome.body":
@@ -1078,7 +1077,7 @@ export default defineMessages({
     "aiSettings.instructions": "カスタム指示",
     "aiSettings.instructions.hint": "リクエストのたびに送信されます：回答の言語、口調、使っているシステムなど。",
     "aiSettings.instructions.placeholder":
-      "例：日本語で回答してください。Debian と zsh を使っていて、サービスは systemctl で管理しています。",
+      "例: 日本語で回答してください。Debian と zsh を使っていて、サービスは systemctl で管理しています。",
     "aiSettings.screen": "ターミナル画面",
     "aiSettings.screen.row": "既定でメッセージごとに送信",
     "aiSettings.screen.hint":
@@ -1299,7 +1298,7 @@ export default defineMessages({
     "aiSettings.mcp.export": "エクスポート",
     "aiSettings.mcp.hint":
       "MCP サーバーは、アシスタントに使えるツールを追加します。信頼できるサーバーだけを追加してください。",
-    "aiSettings.mcp.empty.title": "MCP サーバーがありません",
+    "aiSettings.mcp.empty.title": "MCP サーバーはまだありません",
     "aiSettings.mcp.empty.body":
       "サーバーを追加してアシスタントのツールを増やすか、Claude Desktop、Claude Code、Cursor、VS Code ですでに使っているサーバーをインポートしてください。",
     "aiSettings.mcp.loadFailed": "MCP サーバーを読み込めませんでした。",
@@ -1418,7 +1417,7 @@ export default defineMessages({
     "aiSettings.mcp.imp.none": "この JSON にはインポートできるものがありません。",
     "aiSettings.mcp.imp.submit": "{n} 個のサーバーをインポート",
     "aiSettings.mcp.imp.done": "{n} 個のサーバーをインポートしました",
-    "aiSettings.mcp.exported": "エクスポートしました。環境変数とヘッダーの値はプレースホルダーに置き換えられています。",
+    "aiSettings.mcp.exported": "環境変数とヘッダーの値をプレースホルダーに置き換えてエクスポートしました",
   },
   "zh-TW": {
     "aiSettings.tab": "AI",
@@ -1876,6 +1875,6 @@ export default defineMessages({
     "aiSettings.mcp.imp.none": "這段 JSON 裡沒有可以匯入的伺服器。",
     "aiSettings.mcp.imp.submit": "匯入 {n} 個伺服器",
     "aiSettings.mcp.imp.done": "已匯入 {n} 個伺服器",
-    "aiSettings.mcp.exported": "已匯出。環境變數和請求標頭的值已換成預留位置。",
+    "aiSettings.mcp.exported": "已匯出，環境變數和請求標頭的值已換成預留位置",
   },
 });

@@ -52,7 +52,7 @@ export default defineMessages({
     "hosts.duplicated": "已创建副本 {name}",
     "hosts.deleteTitle": "删除主机“{name}”？",
     "hosts.deleteBody": "此操作无法撤销。",
-    "hosts.deleted": "已删除 {name}",
+    "hosts.deleted": "已删除“{name}”",
     "hosts.deleteManyTitle": "删除 {n} 台主机？",
     "hosts.deletedMany": "已删除 {n} 台主机",
 
@@ -156,7 +156,7 @@ export default defineMessages({
     "hosts.auth.agent": "SSH Agent",
     "hosts.test": "测试连接",
     "hosts.test.running": "正在测试…",
-    "hosts.test.ok": "连接正常 · 主机指纹已验证",
+    "hosts.test.ok": "连接正常 · 主机密钥已验证",
     "hosts.test.okUnverified": "连接正常",
     "hosts.delete": "删除主机",
     "hosts.err.addressRequired": "请输入地址。",
@@ -287,7 +287,7 @@ export default defineMessages({
     "hosts.duplicated": "Created {name}",
     "hosts.deleteTitle": "Delete “{name}”?",
     "hosts.deleteBody": "This can’t be undone.",
-    "hosts.deleted": "Deleted {name}",
+    "hosts.deleted": "Deleted “{name}”",
     "hosts.deleteManyTitle": "Delete {n} hosts?",
     "hosts.deletedMany": "Deleted {n} hosts",
 
@@ -362,9 +362,9 @@ export default defineMessages({
     "hosts.f.forgetPassword": "Remove",
     "hosts.f.telnetPasswordPlaceholder": "Leave empty to type it yourself",
     "hosts.f.telnetLoginHint":
-      "Hatoba types these when the device asks for a user name and password. Leave one empty to type it yourself.",
+      "Hatoba types these when the device asks for a username and password. Leave one empty to type it yourself.",
     "hosts.f.telnetPlaintext":
-      "Telnet isn't encrypted: the password and everything in the terminal travel as plain text.",
+      "Telnet isn’t encrypted: the password and everything in the terminal travel as plain text.",
     "hosts.f.passwordNewPlaceholder": "Enter new password",
     "hosts.f.passwordSaved": "Saved",
     "hosts.f.replace": "Replace",
@@ -391,7 +391,7 @@ export default defineMessages({
     "hosts.f.aiNotes": "AI Notes",
     "hosts.f.aiNotesHint": "Sent with every AI request on this host, e.g. what it does, key paths, what to avoid.",
     "hosts.f.aiNotesPlaceholder":
-      "For example: PostgreSQL 16 primary, data in /srv/pgdata. Don’t restart postgresql during business hours.",
+      "e.g. PostgreSQL 16 primary, data in /srv/pgdata. Don’t restart postgresql during business hours.",
     "hosts.auth.password": "Password",
     "hosts.auth.key": "Key",
     "hosts.auth.ask": "Ask Each Time",
@@ -415,7 +415,7 @@ export default defineMessages({
     "hosts.fwd.count_one": "{n} forward",
     "hosts.fwd.empty": "No port forwards yet",
     "hosts.fwd.emptyBody":
-      "Forward ports through a host’s SSH connection: local (ssh -L), remote (ssh -R), or a SOCKS proxy (ssh -D).",
+      "Forward ports through a host’s SSH connection: local (ssh -L), remote (ssh -R) or a SOCKS proxy (ssh -D).",
     "hosts.fwd.add": "Add Forward",
     "hosts.fwd.autoStart": "Start on connect",
     "hosts.fwd.autoStartFor": "Start {rule} when connecting",
@@ -532,7 +532,7 @@ export default defineMessages({
     "hosts.duplicated": "{name} を作成しました",
     "hosts.deleteTitle": "「{name}」を削除しますか？",
     "hosts.deleteBody": "この操作は取り消せません。",
-    "hosts.deleted": "{name} を削除しました",
+    "hosts.deleted": "「{name}」を削除しました",
     "hosts.deleteManyTitle": "{n} 台のホストを削除しますか？",
     "hosts.deletedMany": "{n} 台のホストを削除しました",
 
@@ -569,15 +569,15 @@ export default defineMessages({
     "hosts.import.chooseFile": "ファイルを選択",
     "hosts.import.chooseFolder": "フォルダーを選択",
     "hosts.import.filter": "{app} のセッション",
-    "hosts.import.proxySkipped": "プロキシは取り込みません",
+    "hosts.import.proxySkipped": "プロキシはインポートしません",
     "hosts.import.keyKept": "鍵は {app} に残ります",
-    "hosts.import.passwordsNote": "保存されたパスワードは取り込みません。",
+    "hosts.import.passwordsNote": "保存されたパスワードはインポートしません。",
     "hosts.import.subtitle": "{path} からインポートするホストを選択してください。",
     "hosts.import.loading": "SSH 設定を読み込んでいます…",
     "hosts.import.none":
       "インポートできるホストがありません。{path} が存在し、Host エントリが含まれているか確認してください。",
     "hosts.import.exists": "登録済み",
-    "hosts.import.proxyCommand": "ProxyCommand は取り込みません",
+    "hosts.import.proxyCommand": "ProxyCommand はインポートしません",
     "hosts.import.selectAll": "すべて選択",
     "hosts.import.selectNone": "選択解除",
     "hosts.import.submit": "{n} 台をインポート",
@@ -635,7 +635,7 @@ export default defineMessages({
     "hosts.f.aiNotesHint":
       "このホストでの AI へのリクエストのたびに送信されます。例: ホストの用途、重要なパス、避けるべき操作。",
     "hosts.f.aiNotesPlaceholder":
-      "例：PostgreSQL 16 のプライマリ。データは /srv/pgdata。業務時間中は postgresql を再起動しないこと。",
+      "例: PostgreSQL 16 のプライマリ。データは /srv/pgdata。業務時間中は postgresql を再起動しないこと。",
     "hosts.auth.password": "パスワード",
     "hosts.auth.key": "鍵",
     "hosts.auth.ask": "毎回入力",
@@ -776,7 +776,7 @@ export default defineMessages({
     "hosts.duplicated": "已建立複本 {name}",
     "hosts.deleteTitle": "刪除主機「{name}」？",
     "hosts.deleteBody": "此動作無法復原。",
-    "hosts.deleted": "已刪除 {name}",
+    "hosts.deleted": "已刪除「{name}」",
     "hosts.deleteManyTitle": "刪除 {n} 台主機？",
     "hosts.deletedMany": "已刪除 {n} 台主機",
 
@@ -880,7 +880,7 @@ export default defineMessages({
     "hosts.auth.agent": "SSH Agent",
     "hosts.test": "測試連線",
     "hosts.test.running": "正在測試…",
-    "hosts.test.ok": "連線正常 · 主機指紋已驗證",
+    "hosts.test.ok": "連線正常 · 主機金鑰已驗證",
     "hosts.test.okUnverified": "連線正常",
     "hosts.delete": "刪除主機",
     "hosts.err.addressRequired": "請輸入位址。",

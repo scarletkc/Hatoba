@@ -26,7 +26,7 @@ Other labels: **Preview the selection**, **Don’t Attach the Selection**.
 
 When a connection fails, the card over the terminal has **Copy Diagnostics**, **Ask AI**, **Edit Host** and **Retry**. **Ask AI** opens the AI panel on that tab and does three things:
 
-- It attaches the connection diagnostics as a chip titled "Connection diagnostics · <host>". They hold the host's name, address and port, user name, authentication kind, jump host, proxy, error kind and detail, the number of attempts and the time, and never a password, key or passphrase. Like a selection, a very long text is cut.
+- It attaches the connection diagnostics as a chip titled "Connection diagnostics · <host>". They hold the host's name, address and port, username, authentication kind, jump host, proxy, error kind and detail, the number of attempts and the time, and never a password, key or passphrase. Like a selection, a very long text is cut.
 - It puts a suggested question in the input, selected, so typing replaces it. This happens only when the input was empty; a draft you already wrote stays.
 - It sends nothing. Hover or click the chip to preview exactly what will be sent; × (**Don’t Attach the Diagnostics**) leaves it out. They stay on the tab until they are sent or removed.
 
@@ -55,7 +55,7 @@ Other labels: **Preview the pasted text**.
 
 - Only UTF-8 text files are accepted: source code, configs, logs, Markdown, JSON. A file with NUL bytes or invalid UTF-8 is refused as not a text file. Images (PNG, JPEG, GIF, WebP, SVG and so on) are not supported yet. Documents such as PDF or Word files are binary and are refused too.
 - A file over 256 KB is refused. All attachments of one message together (diagnostics, selection, pastes and files) may not pass 512 KB; the one that would pass it is refused. Each refusal shows a message naming the file, for example "<name> is larger than 256 KB, so it can’t be attached." or "A message’s attachments can’t exceed 512 KB in total."
-- Only the file's base name is sent, never its folder path, which could reveal a local user name. The text is kept whole, never cut.
+- Only the file's base name is sent, never its folder path, which could reveal a local username. The text is kept whole, never cut.
 
 Other labels: **Preview the file**.
 

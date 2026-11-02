@@ -112,7 +112,7 @@ The labels that these files name in English, as the interface shows them in Trad
 | SFTP | SFTP |
 | Editor | 編輯器 |
 | System Default | 系統預設 |
-| Choose a Program… | 選擇程式… |
+| Choose a Program | 選擇程式 |
 | General | 一般 |
 | Appearance | 外觀 |
 
@@ -168,7 +168,7 @@ The labels that these files name in English, as the interface shows them in Trad
 | SFTP | SFTP |
 | Editor | 編輯器 |
 | System Default | 系統預設 |
-| Choose a Program… | 選擇程式… |
+| Choose a Program | 選擇程式 |
 | Editing | 正在編輯 |
 | Saved | 已儲存 |
 | Waiting to upload | 等待上傳 |
@@ -274,7 +274,7 @@ The labels that these files name in English, as the interface shows them in Trad
 | en | zh-TW |
 |---|---|
 | Authentication failed: the server didn’t accept the username, password or key. | 驗證失敗：使用者名稱、密碼或金鑰不被伺服器接受。 |
-| The host key was rejected, so the connection was stopped. | 已拒絕主機指紋，連線已中止。 |
+| The host key was rejected, so the connection was stopped. | 已拒絕主機金鑰，連線已中止。 |
 | The private key can’t be read. Check its passphrase or format. | 無法讀取私鑰，請檢查密碼短語或金鑰格式。 |
 | The connection was closed. | 連線已中斷。 |
 | SSH protocol error. | SSH 通訊協定錯誤。 |
@@ -286,7 +286,7 @@ The labels that these files name in English, as the interface shows them in Trad
 | Can’t reach the proxy. Check that it’s running and that its address and port are right. | 無法連線到代理。請確認代理正在執行，並且位址和連接埠正確。 |
 | The proxy asks for a username and password, or didn’t accept the saved ones. | 代理要求使用者名稱和密碼，或者不接受已儲存的使用者名稱和密碼。 |
 | The proxy this connection uses was deleted. Choose another one in the host’s settings or in Settings → Proxies. | 這個連線使用的代理已被刪除。請在主機設定或「設定 → 代理」中另選一個。 |
-| Please check your input. | 請檢查輸入內容。 |
+| The input isn’t valid. Check it and try again. | 輸入的內容無效。請檢查後再試一次。 |
 | The vault is locked. | 保險庫已鎖定。 |
 | Address | 位址 |
 | Port | 連接埠 |
@@ -314,7 +314,7 @@ The labels that these files name in English, as the interface shows them in Trad
 |---|---|
 | Trust and Connect | 信任並連線 |
 | Cancel | 取消 |
-| Host key has changed | 主機指紋已變更 |
+| Host key has changed | 主機金鑰已變更 |
 | Disconnect | 中斷連線 |
 | Update Fingerprint and Connect | 更新指紋並連線 |
 | New host key for {host}:{port} | {host}:{port} 提供了新的主機金鑰 |

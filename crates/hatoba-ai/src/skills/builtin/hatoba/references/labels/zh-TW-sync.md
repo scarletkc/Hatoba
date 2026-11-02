@@ -73,7 +73,7 @@ The labels that these files name in English, as the interface shows them in Trad
 | Database | 資料庫 |
 | Sync automatically | 自動同步 |
 | Devices | 裝置 |
-| This PC | 本機 |
+| This Device | 此裝置 |
 | Not seen in 14+ days | 超過 14 天未同步 |
 | Remove | 移除 |
 | Sign In Again | 重新登入 |
@@ -227,7 +227,7 @@ The labels that these files name in English, as the interface shows them in Trad
 | Edit Host | 編輯主機 |
 | Open Settings → AI | 開啟設定 → AI |
 | Custom Instructions | 自訂指令 |
-| Host “{name}” is too large to sync. Shorten its notes, AI notes, or environment variables. | 主機「{name}」的資料太大，無法同步。請縮短它的備註、AI 備註或環境變數。 |
+| Host “{name}” is too large to sync. Shorten its notes, AI notes or environment variables. | 主機「{name}」的資料太大，無法同步。請縮短它的備註、AI 備註或環境變數。 |
 
 ### Cloudflare and deployment errors
 

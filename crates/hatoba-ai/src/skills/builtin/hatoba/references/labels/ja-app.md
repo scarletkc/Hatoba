@@ -114,8 +114,8 @@ The labels that these files name in English, as the interface shows them in Japa
 | Select All | すべて選択 |
 | Select None | 選択解除 |
 | Already exists | 登録済み |
-| ProxyCommand not imported | ProxyCommand は取り込みません |
-| Proxy not imported | プロキシは取り込みません |
+| ProxyCommand not imported | ProxyCommand はインポートしません |
+| Proxy not imported | プロキシはインポートしません |
 | Key stays in {app} | 鍵は {app} に残ります |
 | Choose File | ファイルを選択 |
 | Choose Folder | フォルダーを選択 |
@@ -180,7 +180,7 @@ The labels that these files name in English, as the interface shows them in Japa
 |---|---|
 | Fingerprint | フィンガープリント |
 | Trust and Connect | 信頼して接続 |
-| Host key has changed | ホストキーが変更されました |
+| Host key has changed | ホスト鍵が変更されました |
 | Trusted fingerprint | 信頼済みのフィンガープリント |
 | Fingerprint received now | 今回受信したフィンガープリント |
 | Disconnect | 切断 |
@@ -189,7 +189,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Verify | 認証 |
 | Enter the key passphrase | 秘密鍵のパスフレーズを入力 |
 | Key passphrase | 鍵のパスフレーズ |
-| New host key for {host}:{port} | {host}:{port} の新しいホストキー |
+| New host key for {host}:{port} | {host}:{port} の新しいホスト鍵 |
 
 ### When a connection fails or ends
 

@@ -50,7 +50,7 @@ The labels that these files name in English, as the interface shows them in Trad
 |---|---|
 | Commands | 命令 |
 | Add context | 新增上下文 |
-| Text Files from This Computer | 這台電腦上的文字檔案 |
+| Text Files from This Computer | 本機上的文字檔案 |
 
 ### MCP servers: **MCP Tools** and `/mcp`
 

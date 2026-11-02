@@ -50,7 +50,7 @@ The labels that these files name in English, as the interface shows them in Simp
 |---|---|
 | Commands | 命令 |
 | Add context | 添加上下文 |
-| Text Files from This Computer | 这台电脑上的文本文件 |
+| Text Files from This Computer | 本机上的文本文件 |
 
 ### MCP servers: **MCP Tools** and `/mcp`
 

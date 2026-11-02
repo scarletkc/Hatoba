@@ -180,7 +180,7 @@ The labels that these files name in English, as the interface shows them in Trad
 |---|---|
 | Fingerprint | 指紋 |
 | Trust and Connect | 信任並連線 |
-| Host key has changed | 主機指紋已變更 |
+| Host key has changed | 主機金鑰已變更 |
 | Trusted fingerprint | 已信任的指紋 |
 | Fingerprint received now | 現在收到的指紋 |
 | Disconnect | 中斷連線 |
@@ -245,8 +245,8 @@ The labels that these files name in English, as the interface shows them in Trad
 | Asks for a password on every connection | 每次連線都詢問密碼 |
 | The key’s passphrase isn’t saved | 金鑰密碼短語未儲存 |
 | Asks for a password or verification code | 需要輸入密碼或驗證碼 |
-| Host key not confirmed yet | 主機指紋尚未確認 |
-| Host key changed | 主機指紋已變更 |
+| Host key not confirmed yet | 主機金鑰尚未確認 |
+| Host key changed | 主機金鑰已變更 |
 | Sign-in failed | 登入失敗 |
 | Connect | 連線 |
 | Retry | 重試 |

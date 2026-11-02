@@ -131,7 +131,7 @@ export const zhTW: Messages = {
     checksums: "列出了這個版本中每個檔案的檢查碼。",
     allReleases: "所有版本",
     source: "從原始碼建置",
-    testing: "Hatoba 主要在 Windows 上開發，Linux 和 macOS 版本的測試較少。如果遇到問題，歡迎提交 issue。",
+    problem: "遇到問題？",
     issue: "提交 issue",
   },
   notFound: {

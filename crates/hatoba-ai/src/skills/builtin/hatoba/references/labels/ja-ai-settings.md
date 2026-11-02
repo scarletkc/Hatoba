@@ -145,7 +145,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Account | アカウント |
 | Sign Out | サインアウト |
 | Manage Usage | 使用量を管理 |
-| Continue in Your Browser | ブラウザで続行 |
+| Continue in Your Browser | ブラウザーで続行 |
 | You’re Using Your ChatGPT Plan | ChatGPT プランを使用しています |
 | Signed in on this device | このデバイスでサインイン済み |
 | Sign in on this device | このデバイスでサインインが必要 |
@@ -241,10 +241,10 @@ The labels that these files name in English, as the interface shows them in Japa
 | Test Connection | 接続をテスト |
 | The provider rejected the API key. Check the key, and for the Anthropic protocol the auth header. | プロバイダーが API キーを拒否しました。キーを確認してください。Anthropic プロトコルでは認証ヘッダーも確認してください。 |
 | Couldn’t reach the server. Check the base URL and your network. | サーバーに接続できません。ベース URL とネットワークを確認してください。 |
-| The base URL can’t be used. Check it, and leave out any user name or password. | ベース URL は使えません。URL を確認し、ユーザー名やパスワードを含めないでください。 |
+| The base URL can’t be used. Check it, and leave out any username or password. | ベース URL は使えません。URL を確認し、ユーザー名やパスワードを含めないでください。 |
 | The provider returned an error. | プロバイダーがエラーを返しました。 |
 | Enter a full address that starts with https:// or http://. | https:// または http:// で始まる完全なアドレスを入力してください。 |
-| The base URL can’t contain a user name or password. | ベース URL にユーザー名やパスワードは含められません。 |
+| The base URL can’t contain a username or password. | ベース URL にユーザー名やパスワードは含められません。 |
 | Enter an API key. | API キーを入力してください。 |
 | Couldn’t load the model list. You can still type model IDs. | モデル一覧を取得できませんでした。モデル ID は手動で入力できます。 |
 | Enter a number of tokens, such as 200000 or 200K. | トークン数を入力してください。例: 200000 または 200K |
@@ -266,7 +266,7 @@ The labels that these files name in English, as the interface shows them in Japa
 
 | en | ja |
 |---|---|
-| Use only lowercase letters, digits, and hyphens, up to 64 characters. | 小文字の英字、数字、ハイフンだけを使い、64 文字以内にしてください。 |
+| Use only lowercase letters, digits and hyphens, up to 64 characters. | 小文字の英字、数字、ハイフンだけを使い、64 文字以内にしてください。 |
 | hatoba is the built-in skill’s name. Choose another. | hatoba は組み込みスキルの名前です。別の名前にしてください。 |
 | This name now belongs to the built-in skill, so the assistant doesn’t use this skill. Rename it to use it. | この名前は組み込みスキルのものになったため、アシスタントはこのスキルを使いません。名前を変更すると使えるようになります。 |
 | Built-in | 組み込み |
@@ -287,7 +287,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Failed | 失敗 |
 | Last lines of stderr | stderr の最後の行 |
 | Enter the command. | コマンドを入力してください。 |
-| The URL can’t contain a user name or password. | URL にユーザー名やパスワードは含められません。 |
+| The URL can’t contain a username or password. | URL にユーザー名やパスワードは含められません。 |
 | This looks like a whole command line. Put only the program here, and each argument on its own row. | コマンドライン全体のようです。ここにはプログラムだけを入力し、引数は 1 行ずつ分けてください。 |
 | Split Into Arguments | 引数に分割 |
 | A quote isn’t closed. Check the command. | 閉じられていない引用符があります。コマンドを確認してください。 |

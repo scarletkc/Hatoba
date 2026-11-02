@@ -112,7 +112,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | SFTP | SFTP |
 | Editor | 编辑器 |
 | System Default | 系统默认 |
-| Choose a Program… | 选择程序… |
+| Choose a Program | 选择程序 |
 | General | 通用 |
 | Appearance | 外观 |
 
@@ -168,7 +168,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | SFTP | SFTP |
 | Editor | 编辑器 |
 | System Default | 系统默认 |
-| Choose a Program… | 选择程序… |
+| Choose a Program | 选择程序 |
 | Editing | 正在编辑 |
 | Saved | 已保存 |
 | Waiting to upload | 等待上传 |
@@ -274,7 +274,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | en | zh-CN |
 |---|---|
 | Authentication failed: the server didn’t accept the username, password or key. | 认证失败：用户名、密码或密钥不被服务器接受。 |
-| The host key was rejected, so the connection was stopped. | 已拒绝主机指纹，连接已中止。 |
+| The host key was rejected, so the connection was stopped. | 已拒绝主机密钥，连接已中止。 |
 | The private key can’t be read. Check its passphrase or format. | 无法读取私钥，请检查口令或密钥格式。 |
 | The connection was closed. | 连接已断开。 |
 | SSH protocol error. | SSH 协议错误。 |
@@ -286,7 +286,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Can’t reach the proxy. Check that it’s running and that its address and port are right. | 无法连接到代理。请确认代理正在运行，并且地址和端口正确。 |
 | The proxy asks for a username and password, or didn’t accept the saved ones. | 代理要求用户名和密码，或者不接受已保存的用户名和密码。 |
 | The proxy this connection uses was deleted. Choose another one in the host’s settings or in Settings → Proxies. | 这个连接使用的代理已被删除。请在主机设置或“设置 → 代理”中另选一个。 |
-| Please check your input. | 请检查输入内容。 |
+| The input isn’t valid. Check it and try again. | 输入的内容无效。请检查后重试。 |
 | The vault is locked. | 保险库已锁定。 |
 | Address | 地址 |
 | Port | 端口 |
@@ -314,7 +314,7 @@ The labels that these files name in English, as the interface shows them in Simp
 |---|---|
 | Trust and Connect | 信任并连接 |
 | Cancel | 取消 |
-| Host key has changed | 主机指纹已改变 |
+| Host key has changed | 主机密钥已变更 |
 | Disconnect | 断开连接 |
 | Update Fingerprint and Connect | 更新指纹并连接 |
 | New host key for {host}:{port} | {host}:{port} 提供了新的主机密钥 |

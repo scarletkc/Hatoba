@@ -50,7 +50,7 @@ Other labels: **Can’t read this folder**.
 - "This item no longer exists." usually means it was deleted on another device; refresh the list or recreate it.
 - "Something went wrong." is a generic failure. Retry once, then use the feedback path below.
 - Port forwarding failures show in the **Port Forwarding** popover; a local port that is already in use is the usual cause (edit the rule, or use local port 0). For a remote rule, the server may refuse to listen: its port is in use there, a port below 1024 needs root, or `AllowTcpForwarding` does not allow remote forwarding; another address than loopback also needs `GatewayPorts`. See `references/port-forwarding.md`.
-- On Windows the logs are in `%LOCALAPPDATA%\app.hatoba.desktop\logs`. They record each SSH connection attempt with its host, port, user name, authentication method and kind of error, and never passwords, keys or terminal content.
+- On Windows the logs are in `%LOCALAPPDATA%\app.hatoba.desktop\logs`. They record each SSH connection attempt with its host, port, username, authentication method and kind of error, and never passwords, keys or terminal content.
 
 ## Updates
 

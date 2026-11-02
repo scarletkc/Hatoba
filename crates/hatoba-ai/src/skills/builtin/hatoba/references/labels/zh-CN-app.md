@@ -18,8 +18,8 @@ The labels that these files name in English, as the interface shows them in Simp
 | Cloud Sync | 云同步 |
 | New Local Terminal | 新建本地终端 |
 | This Computer | 本机 |
-| New Tab | 新建标签 |
-| Close Tab | 关闭标签 |
+| New Tab | 新建标签页 |
+| Close Tab | 关闭标签页 |
 | Show AI Panel | 显示 AI 面板 |
 | Hide AI Panel | 隐藏 AI 面板 |
 | Minimize | 最小化 |
@@ -180,7 +180,7 @@ The labels that these files name in English, as the interface shows them in Simp
 |---|---|
 | Fingerprint | 指纹 |
 | Trust and Connect | 信任并连接 |
-| Host key has changed | 主机指纹已改变 |
+| Host key has changed | 主机密钥已变更 |
 | Trusted fingerprint | 已信任的指纹 |
 | Fingerprint received now | 现在收到的指纹 |
 | Disconnect | 断开连接 |
@@ -245,8 +245,8 @@ The labels that these files name in English, as the interface shows them in Simp
 | Asks for a password on every connection | 每次连接都询问密码 |
 | The key’s passphrase isn’t saved | 密钥口令未保存 |
 | Asks for a password or verification code | 需要输入密码或验证码 |
-| Host key not confirmed yet | 主机指纹尚未确认 |
-| Host key changed | 主机指纹已变更 |
+| Host key not confirmed yet | 主机密钥尚未确认 |
+| Host key changed | 主机密钥已变更 |
 | Sign-in failed | 登录失败 |
 | Connect | 连接 |
 | Retry | 重试 |
@@ -285,8 +285,8 @@ The labels that these files name in English, as the interface shows them in Simp
 
 | en | zh-CN |
 |---|---|
-| New Tab | 新建标签 |
-| Close Tab | 关闭标签 |
+| New Tab | 新建标签页 |
+| Close Tab | 关闭标签页 |
 | Lock | 锁定 |
 | Settings | 设置 |
 | Show AI Panel | 显示 AI 面板 |

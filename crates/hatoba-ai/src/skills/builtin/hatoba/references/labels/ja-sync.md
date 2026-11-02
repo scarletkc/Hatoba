@@ -73,7 +73,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Database | データベース |
 | Sync automatically | 自動同期 |
 | Devices | デバイス |
-| This PC | このPC |
+| This Device | このデバイス |
 | Not seen in 14+ days | 14 日以上同期されていません |
 | Remove | 削除 |
 | Sign In Again | 再ログイン |
@@ -227,7 +227,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Edit Host | ホストを編集 |
 | Open Settings → AI | 設定 → AI を開く |
 | Custom Instructions | カスタム指示 |
-| Host “{name}” is too large to sync. Shorten its notes, AI notes, or environment variables. | ホスト「{name}」はデータが大きすぎて同期できません。メモや AI 向けメモ、環境変数を短くしてください。 |
+| Host “{name}” is too large to sync. Shorten its notes, AI notes or environment variables. | ホスト「{name}」はデータが大きすぎて同期できません。メモや AI 向けメモ、環境変数を短くしてください。 |
 
 ### Cloudflare and deployment errors
 

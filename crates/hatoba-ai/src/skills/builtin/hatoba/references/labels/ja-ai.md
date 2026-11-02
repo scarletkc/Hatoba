@@ -122,8 +122,8 @@ The labels that these files name in English, as the interface shows them in Japa
 | en | ja |
 |---|---|
 | Needs approval | 承認待ち |
-| Folder | フォルダ |
-| Home folder | ホームフォルダ |
+| Folder | フォルダー |
+| Home folder | ホームフォルダー |
 | Run | 実行 |
 | Edit | 編集 |
 | Reject | 拒否 |
