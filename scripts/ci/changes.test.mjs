@@ -13,6 +13,7 @@ test("Rust sources, manifests and the files they read need the Rust jobs", () =>
     "apps/desktop/src/ipc/bindings.ts",
     "workers/sync/migrations/0001_init.sql",
     "scripts/ci/comment-width.mjs",
+    "scripts/ci/changes.mjs",
     ".github/workflows/ci.yml",
   ]) {
     assert.ok(affectsRust(path), path);
@@ -29,6 +30,9 @@ test("the frontend, the Worker's code, docs and other workflows do not", () => {
     "docs/releasing.md",
     "README.md",
     "scripts/release/release.mjs",
+    "scripts/ci/pr-title.mjs",
+    "scripts/ci/pr-policy.mjs",
+    "scripts/ci/worker-version.mjs",
     ".github/workflows/codeql.yml",
   ]) {
     assert.ok(!affectsRust(path), path);
