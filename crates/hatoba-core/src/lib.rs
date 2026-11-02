@@ -51,6 +51,7 @@ pub mod sync;
 pub mod vault;
 mod vault_ai;
 mod vault_cascade;
+pub mod vault_order;
 mod vault_pin;
 mod vault_snapshots;
 pub mod version;

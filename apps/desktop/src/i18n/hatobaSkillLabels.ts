@@ -90,6 +90,7 @@ export const AREAS: Area[] = [
           "hosts.sort.recent",
           "hosts.sort.name",
           "hosts.sort.address",
+          "hosts.sort.custom",
           "hosts.col.tags",
           "hosts.col.last",
           "hosts.connect",

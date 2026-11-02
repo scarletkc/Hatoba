@@ -34,9 +34,83 @@
 }
 
 .scroll {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* HOST-16: the box drawn from beside the hosts, and the line where moved hosts go; both scroll with the hosts and
+ * pass under the list's sticky head. */
+.marquee,
+.dropLine {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.marquee {
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-mark);
+  background: var(--accenttint);
+}
+
+.dropLine {
+  border-radius: var(--radius-hair);
+  background: var(--accent);
+}
+
+.scroll [data-dragging] {
+  opacity: 0.4;
+}
+
+/* The hosts that follow the pointer while they move, with their number when there are several: rows one under
+ * another, cards stacked. */
+.dragGhost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  opacity: 0.92;
+  pointer-events: none;
+}
+
+.dragGhost[data-stack="rows"] {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-md);
+  background: var(--win);
+  box-shadow: var(--shadow-popover);
+}
+
+.dragGhost[data-stack="grid"] > :not(.dragCount) {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background-color: var(--win);
+  box-shadow: var(--shadow-popover);
+}
+
+/* The copies show the hosts, not what can be done with them: Connect and Retry stay in the list. */
+.dragGhost button {
+  visibility: hidden;
+}
+
+.dragCount {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: #ffffff;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .cards {

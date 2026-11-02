@@ -88,7 +88,8 @@ import {
 import { useRecentTargets } from "@/session/recent";
 import { GroupDialog, deleteGroup } from "./GroupDialog";
 import { IMPORT_APPS, ImportDialog } from "./ImportDialog";
-import { applyFilter, sortHosts } from "./order";
+import { useHostPointer } from "./hostPointer";
+import { applyFilter, moveHosts, orderHosts } from "./order";
 import { buildHostIndex, searchHosts } from "./search";
 import { ALONE, pickHost, type PickKeys } from "./selection";
 import { LIST_SORTS, STATS_SORTS, isListSort, useHostsUi, type HostSort, type ListSort } from "./ui";
@@ -138,18 +139,10 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   const tagList = useVaultData((st) => st.tags);
   const tabs = useTabs((st) => st.tabs);
   const recents = useRecentTargets((st) => st.targets);
-  const {
-    selection,
-    sort,
-    favorites,
-    tags: pickedTags,
-    select,
-    setSort,
-    setFavorites,
-    setTags,
-    clearFilters,
-  } = useHostsUi();
+  const { selection, favorites, tags: pickedTags, select, setFavorites, setTags, clearFilters } = useHostsUi();
   const view = prefs.hosts_view;
+  const sort = prefs.hosts_sort;
+  const setSort = (hosts_sort: HostSort) => savePrefs({ hosts_sort });
   const stats = prefs.hosts_stats;
   const readouts = useReadoutMap();
 
@@ -168,6 +161,8 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   const [suggestAt, setSuggestAt] = useState(-1);
   /** The query at which the user last picked a row; until then the typed target stays selected. */
   const [pickedFor, setPickedFor] = useState<string | null>(null);
+  /** A custom order just made (HOST-16), shown until the hosts it was made from reload with their new places. */
+  const [arranged, setArranged] = useState<{ hosts: AnyHostView[]; order: string[] } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const cardsRef = useRef<HTMLDivElement>(null);
@@ -202,7 +197,11 @@ export function HostsPage({ group: requested }: { group: string | null }) {
     [allHosts, group, favorites, activeTags],
   );
   const listSort: ListSort = isListSort(sort) ? sort : "recent";
-  const base = useMemo(() => sortHosts(filtered, listSort, t.locale), [filtered, listSort, t.locale]);
+  const pending = arranged?.hosts === allHosts ? arranged.order : null;
+  const base = useMemo(
+    () => orderHosts(filtered, listSort, t.locale, pending),
+    [filtered, listSort, t.locale, pending],
+  );
   const index = useMemo(() => buildHostIndex(base), [base]);
   // HOST-12: `user@host` and `ssh …` input is also a target to connect to, and TELNET-05:
   // `telnet host [port]`. The list is then filtered by its destination, without the syntax around it.
@@ -536,6 +535,49 @@ export function HostsPage({ group: requested }: { group: string | null }) {
 
   const fail = (e: unknown) => toast(errorMessage(t, e), "error");
 
+  /**
+   * HOST-16: moves `moving` before the host `before`, or after the last listed host, and keeps the order this makes
+   * as the custom order, which the page then shows. Every host has its place in it, the ones this page does not list
+   * too: from any other order, the custom order starts from the one the page shows.
+   */
+  const moveTo = (moving: string[], before: string | null) => {
+    const all = orderHosts(allHosts, listSort, t.locale, pending);
+    const shown = statsSort ? sortForDashboard(all, statsSort, readouts, t.locale) : all;
+    const ids = shown.map((h) => h.id);
+    const order = moveHosts(ids, hostIds, moving, before);
+    if (order.every((id, i) => id === ids[i])) return;
+    setArranged({ hosts: allHosts, order });
+    if (sort !== "custom") setSort("custom");
+    api
+      .hosts_arrange(order)
+      .then(() => useVaultData.getState().reload())
+      .catch((e: unknown) => {
+        setArranged(null);
+        fail(e);
+      });
+  };
+
+  // The pointer reads the page at each press and move.
+  const live = useRef({ view, searching, moveTo });
+  useLayoutEffect(() => {
+    live.current = { view, searching, moveTo };
+  });
+  const pointer = useHostPointer({
+    list: () => listRef.current,
+    layout: () => (live.current.view === "cards" ? "grid" : "rows"),
+    hostIds: () => latest.current.hostIds,
+    selected: () => latest.current.selected,
+    canMove: () => !live.current.searching,
+    mac: () => isMac(platform),
+    boxSelect: (ids) => {
+      anchor.current = ids[ids.length - 1] ?? null;
+      pickRows(ids);
+    },
+    pick,
+    drop: (moving, before) => live.current.moveTo(moving, before),
+    classes: { box: s.marquee, line: s.dropLine, ghost: s.dragGhost, count: s.dragCount },
+  });
+
   const markFavorite = async (list: AnyHostView[], favorite: boolean) => {
     try {
       for (const host of list)
@@ -742,7 +784,28 @@ export function HostsPage({ group: requested }: { group: string | null }) {
     const amongCards = view === "cards" && !quickRows.some((r) => r.id === focusId);
     const mod = isMac(platform) ? e.metaKey : e.ctrlKey;
     const selectedHosts = () => visible.filter((h) => selectedSet.has(h.id));
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    if (onList && e.altKey && !mod && !e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      // HOST-16: Alt+↑/↓ (⌥↑/↓) moves the selected hosts a place, as dragging them there would.
+      e.preventDefault();
+      if (searching) return;
+      const moving = hostIds.filter((id) => selectedSet.has(id));
+      const staying = hostIds.filter((id) => !selectedSet.has(id));
+      if (moving.length === 0 || staying.length === 0) return;
+      const first = hostIds.indexOf(moving[0]);
+      const last = hostIds.indexOf(moving[moving.length - 1]);
+      if (e.key === "ArrowUp") {
+        const above = staying.filter((id) => hostIds.indexOf(id) < first);
+        moveTo(moving, above.length > 0 ? above[above.length - 1] : staying[0]);
+      } else {
+        const below = staying.filter((id) => hostIds.indexOf(id) > last);
+        moveTo(moving, below.length > 1 ? below[1] : null);
+      }
+      requestAnimationFrame(() =>
+        listRef.current
+          ?.querySelector(`[data-id="${CSS.escape(focusId ?? moving[0])}"]`)
+          ?.scrollIntoView({ block: "nearest" }),
+      );
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       const step = amongCards ? cardsPerRow() : 1;
       move(e.key === "ArrowDown" ? step : -step, e.shiftKey);
@@ -1103,9 +1166,10 @@ export function HostsPage({ group: requested }: { group: string | null }) {
         aria-label={title}
         aria-multiselectable
         data-several={several || undefined}
+        onPointerDown={pointer.down}
         onMouseDown={(e) => {
-          // Shift+click picks hosts rather than selecting their text.
-          if (!e.shiftKey) return;
+          // A press picks, moves or boxes hosts (HOST-16) rather than selecting their text.
+          if (e.button !== 0 || (e.target as Element).closest("button, a, input, textarea, select")) return;
           e.preventDefault();
           listRef.current?.focus({ preventScroll: true });
         }}

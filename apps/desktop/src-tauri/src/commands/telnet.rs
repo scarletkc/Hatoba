@@ -100,6 +100,7 @@ pub fn telnet_host_from_input(
         group_id: input.group_id.clone(),
         tags: tags_from_input(&input.tags),
         favorite: input.favorite,
+        sort: existing.map_or(0, |h| h.sort),
         proxy,
         note: input.note.clone(),
         ai_notes: input.ai_notes.clone(),
@@ -133,7 +134,11 @@ pub fn telnet_host_save(
             Some(id) => Some(find(v, id)?),
             None => None,
         };
-        let item = Item::TelnetHost(telnet_host_from_input(&input, existing.as_ref(), v)?);
+        let mut host = telnet_host_from_input(&input, existing.as_ref(), v)?;
+        if existing.is_none() {
+            host.sort = v.place_new_host(None)?;
+        }
+        let item = Item::TelnetHost(host);
         check_item_size(v, &item)?;
         let id = v.put(input.id.as_deref(), item)?;
         Ok(telnet_host_view(&id, &find(v, &id)?, v))
@@ -178,6 +183,7 @@ pub fn telnet_host_duplicate(
             .find(|n| !names.contains(n))
             .unwrap_or(base);
         host.favorite = false;
+        host.sort = v.place_new_host(Some(&id))?;
         let new_id = v.put(None, Item::TelnetHost(host))?;
         Ok(telnet_host_view(&new_id, &find(v, &new_id)?, v))
     })?;

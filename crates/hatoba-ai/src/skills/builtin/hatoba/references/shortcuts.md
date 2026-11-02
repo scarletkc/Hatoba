@@ -44,7 +44,7 @@ The default sizes are 100% for the window and 13 px for the terminal and the AI 
 
 | Where | Keys |
 |---|---|
-| Host list | Up / Down select, Enter connects, typing starts a search |
+| Host list | Up / Down select, Enter connects, Alt+Up / Down (⌥↑ / ⌥↓) move the selected hosts, typing starts a search |
 | Key list | Up / Down select, also from the search box; typing starts a search; Delete (⌘⌫) deletes |
 | Host editor | Ctrl+S (⌘S) saves, Enter in a text field saves, Esc leaves a form that has no changes |
 | SFTP panel | Up / Down select, Enter opens a folder or downloads a file, F2 renames, Delete deletes, Backspace goes to the parent folder |

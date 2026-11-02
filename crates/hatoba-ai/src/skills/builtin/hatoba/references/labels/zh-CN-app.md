@@ -75,6 +75,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Recent | 最近连接 |
 | Name | 名称 |
 | Address | 地址 |
+| Custom | 自定义 |
 | Tags | 标签 |
 | Last Connected | 最近连接 |
 | Connect | 连接 |

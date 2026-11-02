@@ -116,6 +116,12 @@ export const commands = {
 	hostSave: (input: HostInput) => __TAURI_INVOKE<HostView>("host_save", { input }),
 	hostDelete: (id: string) => __TAURI_INVOKE<null>("host_delete", { id }),
 	hostDuplicate: (id: string) => __TAURI_INVOKE<HostView>("host_duplicate", { id }),
+	/**
+	 *  Puts the hosts and Telnet hosts in this order on the hosts page (HOST-16): every host, in the
+	 *  custom order the user made. Writes only the hosts whose places change; ids that name no host
+	 *  are skipped.
+	 */
+	hostsArrange: (order: string[]) => __TAURI_INVOKE<null>("hosts_arrange", { order }),
 	hostSetFavorite: (id: string, favorite: boolean) => __TAURI_INVOKE<null>("host_set_favorite", { id, favorite }),
 	/**  Turns the resource usage in a host's terminals on or off on this device (TERM-12). */
 	hostSetShowStats: (id: string, on: boolean) => __TAURI_INVOKE<null>("host_set_show_stats", { id, on }),
@@ -1948,6 +1954,11 @@ export type HostView = {
 	group_id: string | null,
 	tags: string[],
 	favorite: boolean,
+	/**
+	 *  The place in the hosts page's custom order (HOST-16), shared with Telnet hosts: lower comes
+	 *  first, and 0 (no place yet) after every place.
+	 */
+	sort: number,
 	jump_host_id: string | null,
 	/**  SSH-13. With a jump host, the jump host's choice applies instead. */
 	proxy_mode: ProxyMode,
@@ -1977,6 +1988,12 @@ export type HostView = {
 	/**  Environment variables the terminal asks the server to set (SSH-14). */
 	env: HostEnvVar[],
 };
+
+/**
+ *  The orders of the hosts page: the latest connection, the name, the address, the custom order
+ *  (HOST-16), and the resource usage orders (HOST-14).
+ */
+export type HostsSort = "recent" | "name" | "address" | "custom" | "status" | "cpu" | "memory" | "disk" | "network" | "uptime";
 
 export type HostsView = "list" | "cards";
 
@@ -2124,6 +2141,11 @@ export type LocalPrefs = {
 	clipboard_clear_secs: number,
 	/**  HOST-05: the hosts page lists the hosts or shows them as cards. */
 	hosts_view: HostsView,
+	/**
+	 *  HOST-05, HOST-16: the order of the hosts page. A resource usage order applies while
+	 *  resource usage shows (HOST-14); the latest connection comes first otherwise.
+	 */
+	hosts_sort: HostsSort,
 	/**
 	 *  HOST-14: the hosts page shows resource usage, which reads the listed hosts in the
 	 *  background.
@@ -2740,6 +2762,8 @@ export type TelnetHostView = {
 	group_id: string | null,
 	tags: string[],
 	favorite: boolean,
+	/**  The place in the hosts page's custom order, as for SSH hosts (HOST-16). */
+	sort: number,
 	proxy_mode: ProxyMode,
 	proxy_id: string | null,
 	note: string,

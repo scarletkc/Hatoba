@@ -75,6 +75,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Recent | 最近の接続 |
 | Name | 名前 |
 | Address | アドレス |
+| Custom | カスタム |
 | Tags | タグ |
 | Last Connected | 最終接続 |
 | Connect | 接続 |

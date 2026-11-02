@@ -161,6 +161,7 @@ pub fn host_from_input(
         group_id: input.group_id.clone(),
         tags,
         favorite: input.favorite,
+        sort: existing.map_or(0, |h| h.sort),
         jump_host_id: input.jump_host_id.clone(),
         proxy,
         note: input.note.clone(),
@@ -202,13 +203,32 @@ pub fn host_save(
             Some(id) => Some(find_host(v, id)?),
             None => None,
         };
-        let item = Item::Host(host_from_input(&input, existing.as_ref(), v)?);
+        let mut host = host_from_input(&input, existing.as_ref(), v)?;
+        if existing.is_none() {
+            host.sort = v.place_new_host(None)?;
+        }
+        let item = Item::Host(host);
         check_item_size(v, &item)?;
         let id = v.put(input.id.as_deref(), item)?;
         Ok(host_view(&id, &find_host(v, &id)?, v))
     })?;
     sync::local_change(&app);
     Ok(view)
+}
+
+/// Puts the hosts and Telnet hosts in this order on the hosts page (HOST-16): every host, in the
+/// custom order the user made. Writes only the hosts whose places change; ids that name no host
+/// are skipped.
+#[tauri::command]
+#[specta::specta]
+pub fn hosts_arrange(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    order: Vec<String>,
+) -> AppResult<()> {
+    state.with_unlocked(|v| Ok(v.arrange_hosts(&order)?))?;
+    sync::local_change(&app);
+    Ok(())
 }
 
 /// With sync on, refuses a host too large to sync: the Worker and D1 would reject its envelope on
@@ -265,6 +285,7 @@ pub fn host_duplicate(
             .find(|n| !names.contains(n))
             .unwrap_or(base);
         host.favorite = false;
+        host.sort = v.place_new_host(Some(&id))?;
         let new_id = v.put(None, Item::Host(host))?;
         Ok(host_view(&new_id, &find_host(v, &new_id)?, v))
     })?;

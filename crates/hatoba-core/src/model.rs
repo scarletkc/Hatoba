@@ -101,6 +101,10 @@ pub struct Host {
     pub tags: Vec<String>,
     /// Favourite flag.
     pub favorite: bool,
+    /// Place in the custom order of the hosts page (HOST-16), which Telnet hosts share: lower
+    /// comes first. 0 until the host is placed, and then absent.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub sort: i64,
     /// ProxyJump host (P1).
     pub jump_host_id: Option<String>,
     /// SOCKS5 or HTTP proxy for the TCP connection (SSH-13). With a jump host, the jump host's
@@ -252,6 +256,7 @@ impl Default for Host {
             group_id: None,
             tags: Vec::new(),
             favorite: false,
+            sort: 0,
             jump_host_id: None,
             proxy: HostProxy::DeviceDefault,
             note: String::new(),
@@ -287,6 +292,9 @@ pub struct TelnetHost {
     pub tags: Vec<String>,
     /// Favourite flag.
     pub favorite: bool,
+    /// Place in the custom order of the hosts page, as for SSH hosts (HOST-16).
+    #[serde(skip_serializing_if = "is_zero")]
+    pub sort: i64,
     /// SOCKS5 or HTTP proxy for the TCP connection, as for SSH hosts (SSH-13). Absent while it is
     /// the device's default.
     #[serde(skip_serializing_if = "HostProxy::is_device_default")]
@@ -308,6 +316,10 @@ fn zeroizing_is_empty(s: &Zeroizing<String>) -> bool {
     s.is_empty()
 }
 
+fn is_zero(n: &i64) -> bool {
+    *n == 0
+}
+
 impl Default for TelnetHost {
     fn default() -> Self {
         Self {
@@ -319,6 +331,7 @@ impl Default for TelnetHost {
             group_id: None,
             tags: Vec::new(),
             favorite: false,
+            sort: 0,
             proxy: HostProxy::DeviceDefault,
             note: String::new(),
             ai_notes: String::new(),
