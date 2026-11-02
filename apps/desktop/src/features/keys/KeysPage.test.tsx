@@ -65,10 +65,13 @@ function click(el: Element) {
 }
 
 describe("KeysPage list", () => {
-  it("takes the focus as one list, not row by row", () => {
+  it("takes the focus as one list, not row by row, and names the selected key as its active option", () => {
     expect(rows().length).toBeGreaterThan(2);
     expect(list().tabIndex).toBe(0);
     expect(rows().every((r) => !r.hasAttribute("tabindex"))).toBe(true);
+    act(() => list().focus());
+    press(list(), "ArrowDown");
+    expect(document.getElementById(list().getAttribute("aria-activedescendant")!)).toBe(rows()[1]);
   });
 
   it("moves the selection with ↑/↓ from the list and from the search field", () => {
@@ -82,6 +85,12 @@ describe("KeysPage list", () => {
     expect(selected()).toBe(all[2]);
     press(search(), "ArrowUp");
     expect(selected()).toBe(all[1]);
+  });
+
+  it("starts a search when a letter is typed on the list", () => {
+    act(() => list().focus());
+    press(list(), "d");
+    expect(document.activeElement).toBe(search());
   });
 
   it("selects a key on right-click and offers its actions", () => {

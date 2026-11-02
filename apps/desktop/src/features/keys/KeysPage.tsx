@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import {
   Button,
   Chip,
@@ -42,6 +42,7 @@ export function KeysPage() {
   const rowMenu = useMenu();
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const optionId = `${useId()}-key-`;
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -227,7 +228,15 @@ export function KeysPage() {
             <span>{t("keys.col.created")}</span>
             <span>{t("keys.col.usedBy")}</span>
           </div>
-          <div ref={listRef} className={s.list} tabIndex={0} role="listbox" aria-label={t("keys.list")}>
+          {/* The focus stays on the list; the active option tells a screen reader which key is selected. */}
+          <div
+            ref={listRef}
+            className={s.list}
+            tabIndex={0}
+            role="listbox"
+            aria-label={t("keys.list")}
+            aria-activedescendant={selected ? optionId + selected.id : undefined}
+          >
             {visible.length === 0 && <div className={s.noMatch}>{t("keys.noMatch")}</div>}
             {visible.map((k) => {
               const users = k.used_by.map(hostName).filter(Boolean);
@@ -235,6 +244,7 @@ export function KeysPage() {
               return (
                 <div
                   key={k.id}
+                  id={optionId + k.id}
                   role="option"
                   aria-selected={on}
                   data-key-id={k.id}
