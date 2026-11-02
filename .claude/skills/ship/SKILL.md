@@ -55,9 +55,9 @@ Merge only when the owner asks.
    that the owner's own pull requests never get, so auto-merge would wait forever. Keep `--repo`
    right after `merge`: the permission rule that allows the command matches that prefix. GitHub
    deletes the head branch.
-5. Remove your worktree and its local branch: `git worktree remove <path>`, then
-   `git branch -D <branch>`. On Windows, `git worktree remove` leaves the `node_modules` links
-   behind; delete the rest with `Remove-Item -LiteralPath <path> -Recurse -Force`.
+5. Remove your worktree: `git worktree remove <path>`. On Windows it leaves the `node_modules`
+   links behind, so delete the rest with `Remove-Item -LiteralPath <path> -Recurse -Force` and run
+   `git worktree prune`. Then delete the local branch with `git branch -D <branch>`.
 
 ## Release
 
