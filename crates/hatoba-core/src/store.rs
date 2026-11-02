@@ -73,7 +73,6 @@ pub mod meta {
 /// One row of the `items` table.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ItemRow {
-    /// Item id.
     pub id: String,
     /// Envelope JSON; `None` for a tombstone.
     pub envelope: Option<String>,
@@ -104,9 +103,7 @@ pub struct ConflictRow {
     pub local_deleted: bool,
     /// Whether the remote side was a deletion.
     pub remote_deleted: bool,
-    /// Local `updated_at`.
     pub local_updated_at: Option<i64>,
-    /// Remote `updated_at`.
     pub remote_updated_at: Option<i64>,
     /// When the conflict was resolved, Unix ms.
     pub created_at: i64,
@@ -119,19 +116,14 @@ pub struct ConflictRow {
 pub struct NewConflict {
     /// The item the conflict was about.
     pub item_id: String,
-    /// Resolution name.
     pub resolution: String,
     /// Local envelope (encrypted).
     pub local_envelope: Option<String>,
     /// Remote envelope (encrypted).
     pub remote_envelope: Option<String>,
-    /// Local side deleted.
     pub local_deleted: bool,
-    /// Remote side deleted.
     pub remote_deleted: bool,
-    /// Local `updated_at`.
     pub local_updated_at: Option<i64>,
-    /// Remote `updated_at`.
     pub remote_updated_at: Option<i64>,
     /// Resolution time, Unix ms.
     pub created_at: i64,
@@ -256,7 +248,6 @@ pub struct SnapshotRow {
     pub conversation_id: String,
     /// The entry id of the response that made the call.
     pub response_id: String,
-    /// The call's id.
     pub tool_call_id: String,
     /// Envelope JSON of the snapshot's description.
     pub meta: String,
@@ -333,10 +324,8 @@ fn row_to_conflict(row: &rusqlite::Row<'_>) -> rusqlite::Result<ConflictRow> {
 
 /// Row-level operations, shared by [`Store`] and [`StoreTx`].
 pub trait StoreOps {
-    /// The underlying connection.
     fn conn(&self) -> &Connection;
 
-    /// Reads a `meta` value.
     fn get_meta(&self, key: &str) -> Result<Option<String>> {
         Ok(self
             .conn()
@@ -344,7 +333,6 @@ pub trait StoreOps {
             .optional()?)
     }
 
-    /// Writes a `meta` value.
     fn set_meta(&self, key: &str, value: &str) -> Result<()> {
         self.conn().execute(
             "INSERT INTO meta (key, value) VALUES (?1, ?2) \
@@ -354,7 +342,6 @@ pub trait StoreOps {
         Ok(())
     }
 
-    /// Removes a `meta` value.
     fn delete_meta(&self, key: &str) -> Result<()> {
         self.conn()
             .execute("DELETE FROM meta WHERE key = ?1", [key])?;
@@ -366,7 +353,6 @@ pub trait StoreOps {
         Ok(self.get_meta(key)?.and_then(|v| v.parse().ok()))
     }
 
-    /// One item row.
     fn item_row(&self, id: &str) -> Result<Option<ItemRow>> {
         Ok(self
             .conn()
@@ -465,7 +451,6 @@ pub trait StoreOps {
         Ok(())
     }
 
-    /// Empties the conflict log.
     fn clear_conflicts(&self) -> Result<()> {
         self.conn().execute("DELETE FROM conflict_log", [])?;
         Ok(())
@@ -514,7 +499,6 @@ pub trait StoreOps {
         Ok(rows)
     }
 
-    /// One conflict log entry.
     fn conflict(&self, id: i64) -> Result<Option<ConflictRow>> {
         Ok(self
             .conn()
@@ -660,7 +644,6 @@ pub trait StoreOps {
         Ok(())
     }
 
-    /// One file snapshot.
     fn snapshot(
         &self,
         conversation_id: &str,
@@ -728,7 +711,6 @@ pub trait StoreOps {
         )? > 0)
     }
 
-    /// Deletes one file snapshot.
     fn delete_snapshot(
         &self,
         conversation_id: &str,

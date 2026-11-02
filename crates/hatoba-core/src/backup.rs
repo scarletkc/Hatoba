@@ -28,7 +28,6 @@ pub const BACKUP_FORMAT: &str = "hatoba-backup";
 /// The only backup version this build reads and writes.
 pub const BACKUP_VERSION: u32 = 1;
 
-/// The backup document.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BackupFile {
     /// Always [`BACKUP_FORMAT`].
@@ -52,7 +51,6 @@ pub struct BackupFile {
 /// One item of a backup.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BackupItem {
-    /// Item id.
     pub id: String,
     /// Envelope JSON; absent for tombstones.
     pub envelope: Option<String>,

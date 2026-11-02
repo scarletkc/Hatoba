@@ -36,32 +36,25 @@ pub struct WorkerBundle {
 pub struct Module {
     /// File name, which is also the upload's part name.
     pub name: String,
-    /// Source.
     pub content: String,
 }
 
 /// A D1 migration. Its file name is its name in `d1_migrations`.
 #[derive(Clone, Debug, Deserialize)]
 pub struct Migration {
-    /// File name.
     pub name: String,
-    /// SQL.
     pub sql: String,
 }
 
-/// The D1 binding.
 #[derive(Clone, Debug, Deserialize)]
 pub struct D1Binding {
-    /// Binding name.
     pub binding: String,
     /// The default database name.
     pub database_name: String,
 }
 
-/// The rate limit binding.
 #[derive(Clone, Debug, Deserialize)]
 pub struct RateLimitBinding {
-    /// Binding name.
     pub name: String,
     /// Namespace, unique within the account.
     pub namespace_id: String,

@@ -30,7 +30,6 @@ pub enum WorkerCompat {
 }
 
 impl WorkerCompat {
-    /// Whether sync pauses.
     #[must_use]
     pub fn pauses_sync(self) -> bool {
         matches!(self, Self::UpdateRequired | Self::AppUpdateRequired)

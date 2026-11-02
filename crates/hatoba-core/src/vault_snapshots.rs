@@ -27,11 +27,9 @@ pub const AI_SNAPSHOTS_MAX_BYTES: u64 = 32 * 1024 * 1024;
 /// Which call a snapshot belongs to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SnapshotKey<'a> {
-    /// The conversation.
     pub conversation_id: &'a str,
     /// The entry id of the response that made the call.
     pub response_id: &'a str,
-    /// The call's id.
     pub tool_call_id: &'a str,
 }
 
@@ -40,7 +38,6 @@ pub struct SnapshotKey<'a> {
 pub struct FileSnapshot {
     /// The entry id of the response that made the call.
     pub response_id: String,
-    /// The call's id.
     pub tool_call_id: String,
     /// The description the caller stored, opened.
     pub meta: Zeroizing<String>,

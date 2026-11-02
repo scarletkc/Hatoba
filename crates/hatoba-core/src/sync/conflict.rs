@@ -172,7 +172,6 @@ pub struct ConflictEntry {
     pub id: i64,
     /// The item the conflict was about.
     pub item_id: String,
-    /// How it was resolved.
     pub resolution: Resolution,
     /// The local version at the time, if it was a live item that can still be decrypted.
     pub local: Option<Item>,
@@ -182,9 +181,7 @@ pub struct ConflictEntry {
     pub local_deleted: bool,
     /// Whether the remote side was a deletion.
     pub remote_deleted: bool,
-    /// Local `updated_at`.
     pub local_updated_at: Option<i64>,
-    /// Remote `updated_at`.
     pub remote_updated_at: Option<i64>,
     /// When it was resolved, Unix ms.
     pub created_at: i64,
