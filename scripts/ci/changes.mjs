@@ -1,12 +1,13 @@
 // Says whether a pull request changes anything that the Rust jobs in ci.yml build or check, so that
-// CI can skip those jobs when it does not.
+// CI can skip those jobs when it does not. A change to Cargo.toml or Cargo.lock that only raises the
+// release version, as a release pull request does, does not count.
 // Usage: node scripts/ci/changes.mjs BASE
 // Compares HEAD with BASE, prints rust=true or rust=false, and in GitHub Actions also appends it to
 // $GITHUB_OUTPUT.
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { ROOT } from "../release/version.mjs";
+import { ROOT, onlyVersionChanged } from "../release/version.mjs";
 
 /** The files that the Rust jobs compile, read, or check. A path ending in / covers a directory. */
 const RUST_INPUTS = [
@@ -39,7 +40,10 @@ function main(argv) {
   })
     .split("\0")
     .filter(Boolean);
-  const rust = changed.filter(affectsRust);
+  const inputs = changed.filter(affectsRust);
+  const bumped = inputs.filter((path) => onlyVersionChanged(path, argv[0], "HEAD"));
+  const rust = inputs.filter((path) => !bumped.includes(path));
+  if (bumped.length > 0) console.log(`Only the release version changed in ${bumped.join(", ")}.`);
   console.log(
     rust.length > 0 ? `Rust inputs changed:\n${rust.map((path) => `  ${path}`).join("\n")}` : "No Rust inputs changed.",
   );
