@@ -1,6 +1,6 @@
 ---
 name: house-rules
-description: The owner's calls for scarletkc/Hatoba that the repository doesn't spell out. Covers what people and the assistant read (UI copy, translations, docs, the assistant's prompt and tool descriptions), how the interface looks and behaves, which calls still go to the owner, and how a change gets from a branch to main. Use when writing, translating or reviewing any of that text, when designing or changing UI, and when committing, opening a pull request, answering review bots, or merging.
+description: The owner's calls for scarletkc/Hatoba that the repository doesn't spell out, on UI copy, translations, docs, the assistant's prompts and UI, plus the commit, pull request and merge flow. Use before writing or reviewing any of these, or shipping a change.
 ---
 
 # House rules
