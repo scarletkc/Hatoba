@@ -5,7 +5,7 @@
 //! writes only those and adding a host writes only it; where two neighbours leave no room, every
 //! host is numbered again.
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::model::Item;
 use crate::vault::Vault;
 
@@ -104,9 +104,11 @@ impl Vault {
     /// leaves out keep their places.
     ///
     /// # Errors
-    /// [`Error::Locked`](crate::error::Error::Locked); storage errors, after which nothing has
-    /// changed.
+    /// [`Error::Locked`]; storage errors, after which nothing has changed.
     pub fn arrange_hosts(&mut self, order: &[String]) -> Result<()> {
+        if !self.is_unlocked() {
+            return Err(Error::Locked);
+        }
         let mut ids: Vec<String> = Vec::new();
         let mut places = Vec::new();
         for id in order {
@@ -126,8 +128,11 @@ impl Vault {
     /// copy stays beside it among the hosts ordered by name.
     ///
     /// # Errors
-    /// [`Error::Locked`](crate::error::Error::Locked); storage errors.
+    /// [`Error::Locked`]; storage errors.
     pub fn place_new_host(&mut self, after: Option<&str>) -> Result<i64> {
+        if !self.is_unlocked() {
+            return Err(Error::Locked);
+        }
         if let Some(after) = after
             && self.get(after).and_then(place_of) == Some(0)
         {
@@ -280,6 +285,14 @@ mod tests {
         assert_eq!(place(&vault, &a), STEP);
         assert_eq!(written(&vault, &a), before);
         assert!(written(&vault, &t) > before);
+    }
+
+    #[test]
+    fn a_locked_vault_has_no_order_to_change() {
+        let (mut vault, _) = vault();
+        vault.lock();
+        assert!(matches!(vault.arrange_hosts(&[]), Err(Error::Locked)));
+        assert!(matches!(vault.place_new_host(None), Err(Error::Locked)));
     }
 
     #[test]
