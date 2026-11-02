@@ -147,8 +147,8 @@ The labels that these files name in English, as the interface shows them in Simp
 | Manage Usage | 管理用量 |
 | Continue in Your Browser | 在浏览器中继续 |
 | You’re Using Your ChatGPT Plan | 你正在使用 ChatGPT 套餐 |
-| Signed in on this device | 已在此设备登录 |
-| Sign in on this device | 需要在此设备登录 |
+| Signed in on this device | 已在这台设备登录 |
+| Sign in on this device | 需要在这台设备登录 |
 | Sign-in ended | 登录已失效 |
 | Plan use not allowed | 未允许使用套餐 |
 
@@ -158,7 +158,7 @@ The labels that these files name in English, as the interface shows them in Simp
 |---|---|
 | Couldn’t Sign In to ChatGPT | 无法登录 ChatGPT |
 | ChatGPT didn’t accept the sign-in. Sign in again. | ChatGPT 没有接受这次登录。请重新登录。 |
-| Signed out on this device, but ChatGPT didn’t confirm ending the session. You can disconnect Hatoba in ChatGPT’s settings. | 已在此设备退出，但 ChatGPT 没有确认结束会话。你可以在 ChatGPT 的设置里断开 Hatoba。 |
+| Signed out on this device, but ChatGPT didn’t confirm ending the session. You can disconnect Hatoba in ChatGPT’s settings. | 已在这台设备退出，但 ChatGPT 没有确认结束会话。你可以在 ChatGPT 的设置里断开 Hatoba。 |
 | Signed in, but Hatoba isn’t allowed to use your ChatGPT plan. Sign in again and allow it. | 已登录，但没有允许 Hatoba 使用你的 ChatGPT 套餐。重新登录并允许后才能使用。 |
 
 ## `references/ai-mcp.md`
@@ -184,7 +184,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Starting… | 正在启动… |
 | Running | 运行中 |
 | Failed | 失败 |
-| Off on this device | 此设备上已关闭 |
+| Off on this device | 这台设备上已关闭 |
 | Start | 启动 |
 | Restart | 重新启动 |
 | Stop | 停止 |
@@ -241,10 +241,10 @@ The labels that these files name in English, as the interface shows them in Simp
 | Test Connection | 测试连接 |
 | The provider rejected the API key. Check the key, and for the Anthropic protocol the auth header. | 服务商拒绝了 API 密钥。请检查密钥，Anthropic 协议还要检查认证头。 |
 | Couldn’t reach the server. Check the base URL and your network. | 连不上服务器。请检查基础 URL 和网络。 |
-| The base URL can’t be used. Check it, and leave out any user name or password. | 基础 URL 不可用。请检查它，并去掉其中的用户名或密码。 |
+| The base URL can’t be used. Check it, and leave out any username or password. | 基础 URL 不可用。请检查它，并去掉其中的用户名或密码。 |
 | The provider returned an error. | 服务商返回了错误。 |
 | Enter a full address that starts with https:// or http://. | 请输入以 https:// 或 http:// 开头的完整地址。 |
-| The base URL can’t contain a user name or password. | 基础 URL 不能包含用户名或密码。 |
+| The base URL can’t contain a username or password. | 基础 URL 不能包含用户名或密码。 |
 | Enter an API key. | 请输入 API 密钥。 |
 | Couldn’t load the model list. You can still type model IDs. | 无法获取模型列表。你仍然可以手动输入模型 ID。 |
 | Enter a number of tokens, such as 200000 or 200K. | 请输入 token 数，例如 200000 或 200K。 |
@@ -266,7 +266,7 @@ The labels that these files name in English, as the interface shows them in Simp
 
 | en | zh-CN |
 |---|---|
-| Use only lowercase letters, digits, and hyphens, up to 64 characters. | 名称只能用小写字母、数字和连字符，最多 64 个字符。 |
+| Use only lowercase letters, digits and hyphens, up to 64 characters. | 名称只能用小写字母、数字和连字符，最多 64 个字符。 |
 | hatoba is the built-in skill’s name. Choose another. | hatoba 是内置技能的名称，请换一个。 |
 | This name now belongs to the built-in skill, so the assistant doesn’t use this skill. Rename it to use it. | 这个名称现在属于内置技能，助手不会使用这个技能。重命名后即可使用。 |
 | Built-in | 内置 |
@@ -287,7 +287,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Failed | 失败 |
 | Last lines of stderr | stderr 的最后几行 |
 | Enter the command. | 请输入命令。 |
-| The URL can’t contain a user name or password. | URL 不能包含用户名或密码。 |
+| The URL can’t contain a username or password. | URL 不能包含用户名或密码。 |
 | This looks like a whole command line. Put only the program here, and each argument on its own row. | 这像是一整行命令。请在这里只填程序，每个参数单独占一行。 |
 | Split Into Arguments | 拆成参数 |
 | A quote isn’t closed. Check the command. | 有引号没有闭合，请检查。 |

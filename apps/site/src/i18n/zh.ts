@@ -131,7 +131,7 @@ export const zh: Messages = {
     checksums: "列出了这个版本中每个文件的校验和。",
     allReleases: "所有版本",
     source: "从源码构建",
-    testing: "Hatoba 主要在 Windows 上开发，Linux 和 macOS 版本的测试较少。如果遇到问题，欢迎提交 issue。",
+    problem: "遇到问题？",
     issue: "提交 issue",
   },
   notFound: {

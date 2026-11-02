@@ -32,7 +32,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | en | ja |
 |---|---|
 | Auto-Lock | 自動ロック |
-| Lock when the computer sleeps | コンピュータのスリープ時にロック |
+| Lock when the computer sleeps | コンピューターのスリープ時にロック |
 | Disconnect all sessions when locked | ロック時にすべてのセッションを切断 |
 | Lock Now | 今すぐロック |
 | Lock | ロック |
@@ -78,7 +78,7 @@ The labels that these files name in English, as the interface shows them in Japa
 |---|---|
 | Keys | 鍵 |
 | Search keys | 鍵を検索 |
-| Import | 読み込み |
+| Import | インポート |
 | Generate Key | 新しい鍵を生成 |
 | Name | 名前 |
 | Type | 種類 |
@@ -95,7 +95,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Rename | 名前を変更 |
 | Deploy to Host | ホストに配置 |
 | Delete | 削除 |
-| Import Private Key | 秘密鍵を読み込む |
+| Import Private Key | 秘密鍵をインポート |
 | Choose File | ファイルを選択 |
 | Paste Text | テキストを貼り付け |
 | Choose File | ファイルを選択 |
@@ -109,7 +109,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Host | ホスト |
 | Deploy | 配置 |
 | Delete Key | 鍵を削除 |
-| Import | 読み込む |
+| Import | インポート |
 | Generate | 生成 |
 
 ## `references/settings.md`
@@ -188,7 +188,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Unlock | ロック解除 |
 | Password and Recovery | パスワードとリカバリー |
 | Auto-Lock | 自動ロック |
-| Lock when the computer sleeps | コンピュータのスリープ時にロック |
+| Lock when the computer sleeps | コンピューターのスリープ時にロック |
 | Disconnect all sessions when locked | ロック時にすべてのセッションを切断 |
 | Clear Clipboard | クリップボードの消去 |
 | Unlock with Windows Hello | Windows Hello でロック解除 |
@@ -268,7 +268,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | This item no longer exists. It may have been deleted on another device. | この項目は存在しません。別のデバイスで削除された可能性があります。 |
 | Cancelled. | キャンセルしました。 |
 | Can’t access the clipboard. | クリップボードにアクセスできません。 |
-| Can’t read this folder | このフォルダを読み取れません |
+| Can’t read this folder | このフォルダーを読み取れません |
 | The name can’t be empty or contain /. | 名前を空にしたり、/ を含めたりすることはできません。 |
 | Port Forwarding | ポートフォワーディング |
 

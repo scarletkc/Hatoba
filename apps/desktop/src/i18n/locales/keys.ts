@@ -41,14 +41,14 @@ export default defineMessages({
 
     "keys.rename.title": "重命名密钥",
 
-    "keys.delete.title": "删除密钥「{name}」？",
+    "keys.delete.title": "删除密钥“{name}”？",
     "keys.delete.body": "这把密钥会从保险库中永久删除，无法恢复。",
     "keys.delete.used": "以下 {n} 台主机正在使用它，删除后它们会改为“每次询问”认证：",
     "keys.delete.confirm": "删除密钥",
-    "keys.delete.done": "已删除密钥「{name}」",
+    "keys.delete.done": "已删除密钥“{name}”",
 
     "keys.deploy.title": "部署公钥到主机",
-    "keys.deploy.body": "把「{name}」的公钥追加到主机的 ~/.ssh/authorized_keys。",
+    "keys.deploy.body": "把“{name}”的公钥追加到主机的 ~/.ssh/authorized_keys。",
     "keys.deploy.host": "主机",
     "keys.deploy.choose": "选择主机",
     "keys.deploy.noHosts": "还没有主机。请先添加一台主机。",
@@ -65,7 +65,7 @@ export default defineMessages({
     "keys.import.pastePlaceholder": "-----BEGIN OPENSSH PRIVATE KEY-----",
     "keys.import.sourceRequired": "请选择私钥文件，或粘贴私钥内容。",
     "keys.import.action": "导入",
-    "keys.import.done": "已导入密钥「{name}」",
+    "keys.import.done": "已导入密钥“{name}”",
 
     "keys.generate.title": "生成新密钥",
     "keys.generate.type": "类型",
@@ -77,7 +77,7 @@ export default defineMessages({
     "keys.generate.confirmPassphrase": "确认口令",
     "keys.generate.mismatch": "两次输入的口令不一致。",
     "keys.generate.action": "生成",
-    "keys.generate.done": "已生成密钥「{name}」",
+    "keys.generate.done": "已生成密钥“{name}”",
   },
   en: {
     "keys.count": "{n} keys",
@@ -121,8 +121,8 @@ export default defineMessages({
 
     "keys.delete.title": "Delete the key “{name}”?",
     "keys.delete.body": "The key is permanently removed from the vault and can’t be recovered.",
-    "keys.delete.used": "These {n} hosts use it and will fall back to “Ask Each Time” authentication:",
-    "keys.delete.used_one": "This host uses it and will fall back to “Ask Each Time” authentication:",
+    "keys.delete.used": "These {n} hosts use it and will fall back to Ask Each Time authentication:",
+    "keys.delete.used_one": "This host uses it and will fall back to Ask Each Time authentication:",
     "keys.delete.confirm": "Delete Key",
     "keys.delete.done": "Deleted the key “{name}”",
 
@@ -161,7 +161,7 @@ export default defineMessages({
   ja: {
     "keys.count": "{n} 本",
     "keys.search": "鍵を検索",
-    "keys.import": "読み込み",
+    "keys.import": "インポート",
     "keys.generate": "新しい鍵を生成",
     "keys.list": "鍵の一覧",
     "keys.col.name": "名前",
@@ -174,7 +174,7 @@ export default defineMessages({
     "keys.fingerprintFull": "フィンガープリント全体：{fp}",
 
     "keys.empty.title": "鍵がまだありません",
-    "keys.empty.body": "新しい鍵を生成するか、既存の鍵を読み込みます。",
+    "keys.empty.body": "新しい鍵を生成するか、既存の鍵をインポートします。",
 
     "keys.meta.protected": "{algo} · {bits} ビット · パスフレーズ保護",
     "keys.meta.plain": "{algo} · {bits} ビット · パスフレーズなし",
@@ -191,7 +191,7 @@ export default defineMessages({
     "keys.action.delete": "削除",
 
     "keys.field.name": "名前",
-    "keys.field.namePlaceholder": "例：deploy-ed25519",
+    "keys.field.namePlaceholder": "例: deploy-ed25519",
     "keys.field.passphraseOpt": "パスフレーズ（任意）",
     "keys.field.nameRequired": "名前を入力してください。",
 
@@ -212,7 +212,7 @@ export default defineMessages({
     "keys.deploy.action": "配置",
     "keys.deploy.done": "{host} に公開鍵を配置しました",
 
-    "keys.import.title": "秘密鍵を読み込む",
+    "keys.import.title": "秘密鍵をインポート",
     "keys.import.body": "OpenSSH、PEM、PuTTY (.ppk) 形式に対応しています。",
     "keys.import.source": "入力元",
     "keys.import.file": "ファイルを選択",
@@ -221,8 +221,8 @@ export default defineMessages({
     "keys.import.noFile": "ファイルが選択されていません",
     "keys.import.pastePlaceholder": "-----BEGIN OPENSSH PRIVATE KEY-----",
     "keys.import.sourceRequired": "秘密鍵のファイルを選ぶか、鍵の内容を貼り付けてください。",
-    "keys.import.action": "読み込む",
-    "keys.import.done": "鍵「{name}」を読み込みました",
+    "keys.import.action": "インポート",
+    "keys.import.done": "鍵「{name}」をインポートしました",
 
     "keys.generate.title": "新しい鍵を生成",
     "keys.generate.type": "種類",

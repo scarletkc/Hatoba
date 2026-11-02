@@ -32,7 +32,7 @@ Messages that contain the host, port or seconds are paraphrased. "Edit" means **
 | `dns` (ENOTFOUND) | "Can’t find the host …". Detail: `cannot resolve <host>: …` | A typo in **Address**; a name that only resolves on a VPN or company DNS; DNS down. Edit the address, try the IP, connect the VPN. For a host behind a jump host the jump host resolves the name, so DNS problems there show as `channel`; through a proxy the proxy resolves it |
 | `refused` (ECONNREFUSED) | "<host>:<port> refused the connection". Detail: `connect to <ip:port>: …refused` | sshd is not running, or **Port** is wrong (default 22; a server may listen on another port), or a firewall rejects it. Edit the port; start sshd |
 | `timeout` (ETIMEDOUT) | "<host>:<port> didn’t respond within 15 seconds". Detail: `timed out after 15 s while <phase>` where the phase is resolving the host name, establishing the TCP connection, the SSH handshake, authentication, or opening the tunnel channel | TCP phase: host down, wrong IP, or a firewall or cloud security group drops the port; try another network. Handshake: something other than sshd answers, or the server is overloaded. Authentication: very slow login (PAM, reverse DNS on the server). The limit applies to each hop; time spent in host key or verification-code dialogs does not count |
-| `unreachable` (ENETUNREACH) | "The network can’t reach <host>". Detail ends with `Network is unreachable` or `No route to host` | This PC has no route: network off, VPN down, an IPv6-only address without IPv6, or a private address from outside its network |
+| `unreachable` (ENETUNREACH) | "The network can’t reach <host>". Detail ends with `Network is unreachable` or `No route to host` | This computer has no route: network off, VPN down, an IPv6-only address without IPv6, or a private address from outside its network |
 | `auth_failed` (EAUTH) | See the messages below. Detail: `the server rejected the password`, `the server rejected the private key`, `ssh-agent holds no identities`, `none of the N ssh-agent identities was accepted by the server`, or `no usable authentication method`, often followed by `(server accepts: publickey, password, …)` | The `server accepts` list names the methods the server allows: if the chosen **Method** is not in it, switch (many servers disable passwords). Check **Username** and the password (**Replace** it). Key: the public key must be in `~/.ssh/authorized_keys` (**Deploy to Host** on the Keys page). Agent: start the agent and add keys |
 | `host_key_rejected` (EHOSTKEY) | See the messages below. Detail: `server host key was not accepted` | The host key dialog was declined (**Cancel** or **Disconnect**), or the key changed. See the host key section |
 | `key_parse` (EKEY) | See the messages below. Method **Key** only | The key's format or passphrase. See `references/troubleshooting.md` |
@@ -64,7 +64,7 @@ The messages for these kinds:
 - "The proxy asks for a username and password, or didn’t accept the saved ones."
 - "The proxy this connection uses was deleted. Choose another one in the host’s settings or in Settings → Proxies."
 
-Non-SSH reasons on the card: **Please check your input.** with code INVALID_INPUT means the host settings are unusable (the Detail says which, for example a deleted key or a missing password); "The vault is locked." means unlock first.
+Non-SSH reasons on the card: **The input isn’t valid. Check it and try again.** with code INVALID_INPUT means the host settings are unusable (the Detail says which, for example a deleted key or a missing password); "The vault is locked." means unlock first.
 
 ## Jump hosts (ProxyJump)
 
@@ -74,7 +74,7 @@ Set it in the host editor: **Organization & Network** → **Jump Host**, then pi
 - "The jump host chain can’t loop back on itself."
 
 - Each hop connects and authenticates with its own saved settings (address, port, user, method). A jump host must use a saved password, a key with its passphrase saved, or **SSH Agent**. **Ask Each Time** and an unsaved key passphrase cannot be answered for a hop, so the connection fails with code INVALID_INPUT and the Detail "jump host <name> needs a saved password or key". Fix it in the jump host's own editor.
-- Hatoba opens the next hop through a tunnel of the previous one. The destination's name is resolved and reached from the jump host, not from this PC. If the jump host cannot reach it, you get a `channel` failure: `jump host could not open a tunnel to <host>:<port>`.
+- Hatoba opens the next hop through a tunnel of the previous one. The destination's name is resolved and reached from the jump host, not from this computer. If the jump host cannot reach it, you get a `channel` failure: `jump host could not open a tunnel to <host>:<port>`.
 - A chain's Detail starts with `hop i/N (host:port)`, counting from the first jump host; hop N is the final host. Hop 1 refused, timed out or failed authentication means the jump host itself. The 15-second limit is per hop.
 - Each hop has its own host key prompts (below) and may ask for a verification code.
 - If a jump host's connection dies later, the disconnect reason reads "the connection through jump host … was lost". The status bar shows "via" and the jump host's name.

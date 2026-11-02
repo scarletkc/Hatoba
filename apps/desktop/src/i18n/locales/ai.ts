@@ -352,7 +352,7 @@ export default defineMessages({
     "ai.search.failed": "搜索失败。",
 
     // Markdown export (AI-25)
-    "ai.export.done": "对话已导出。",
+    "ai.export.done": "已导出对话",
     "ai.export.fileName": "对话",
     "ai.export.you": "你",
     "ai.export.assistant": "助手",
@@ -433,7 +433,7 @@ export default defineMessages({
     "ai.mention.folder": "附加这个文件夹的 {n} 个条目",
     "ai.mention.folderChip": "{name} · {n} 个条目",
     "ai.mention.cut": "还有条目没有列出，请多输入几个字。",
-    "ai.mention.local": "这台电脑上的文本文件",
+    "ai.mention.local": "本机上的文本文件",
     "ai.mention.none": "没有匹配项。",
     "ai.mention.noTerminal": "没有匹配项。主机上的文件需要连接的终端。",
     "ai.mention.from": "{host}：{path}",
@@ -877,7 +877,7 @@ export default defineMessages({
     "ai.search.none": "No conversations match “{q}”.",
     "ai.search.failed": "The search failed.",
 
-    "ai.export.done": "Conversation exported.",
+    "ai.export.done": "Exported the conversation",
     "ai.export.fileName": "conversation",
     "ai.export.you": "You",
     "ai.export.assistant": "Assistant",
@@ -1319,8 +1319,8 @@ export default defineMessages({
     "ai.approval.command": "コマンド",
     "ai.approval.text": "入力する文字",
     "ai.approval.url": "URL",
-    "ai.approval.workdir": "フォルダ",
-    "ai.approval.homeDir": "ホームフォルダ",
+    "ai.approval.workdir": "フォルダー",
+    "ai.approval.homeDir": "ホームフォルダー",
     "ai.approval.timeout": "タイムアウト",
     "ai.approval.seconds": "秒",
     "ai.approval.timeoutValue": "タイムアウト {s} 秒",
@@ -1406,7 +1406,7 @@ export default defineMessages({
     "ai.search.none": "「{q}」に一致する会話はありません。",
     "ai.search.failed": "検索に失敗しました。",
 
-    "ai.export.done": "会話を書き出しました。",
+    "ai.export.done": "会話をエクスポートしました",
     "ai.export.fileName": "会話",
     "ai.export.you": "あなた",
     "ai.export.assistant": "アシスタント",
@@ -1944,7 +1944,7 @@ export default defineMessages({
     "ai.search.failed": "搜尋失敗。",
 
     // Markdown export (AI-25)
-    "ai.export.done": "對話已匯出。",
+    "ai.export.done": "已匯出對話",
     "ai.export.fileName": "對話",
     "ai.export.you": "你",
     "ai.export.assistant": "助理",
@@ -2025,7 +2025,7 @@ export default defineMessages({
     "ai.mention.folder": "附加這個資料夾的 {n} 個項目",
     "ai.mention.folderChip": "{name} · {n} 個項目",
     "ai.mention.cut": "還有項目沒有列出，請多輸入幾個字。",
-    "ai.mention.local": "這台電腦上的文字檔案",
+    "ai.mention.local": "本機上的文字檔案",
     "ai.mention.none": "沒有符合的項目。",
     "ai.mention.noTerminal": "沒有符合的項目。主機上的檔案需要已連線的終端機。",
     "ai.mention.from": "{host}：{path}",

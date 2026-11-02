@@ -94,8 +94,7 @@ an AUR helper such as yay:
 yay -S hatoba-bin
 ```
 
-The maintainer uses Windows, so the Linux and macOS builds get little testing on
-real machines. If something doesn't work on them, please
+If something doesn't work,
 [open an issue](https://github.com/scarletkc/Hatoba/issues). To build Hatoba
 yourself, follow the [development guide](docs/development.md#build).
 

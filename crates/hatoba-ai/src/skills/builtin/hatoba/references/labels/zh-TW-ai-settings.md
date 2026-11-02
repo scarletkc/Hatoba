@@ -241,10 +241,10 @@ The labels that these files name in English, as the interface shows them in Trad
 | Test Connection | 測試連線 |
 | The provider rejected the API key. Check the key, and for the Anthropic protocol the auth header. | 供應商拒絕了 API 金鑰。請檢查金鑰，Anthropic 協定還要檢查驗證標頭。 |
 | Couldn’t reach the server. Check the base URL and your network. | 連不上伺服器。請檢查基礎 URL 和網路。 |
-| The base URL can’t be used. Check it, and leave out any user name or password. | 基礎 URL 不可用。請檢查它，並去掉其中的使用者名稱或密碼。 |
+| The base URL can’t be used. Check it, and leave out any username or password. | 基礎 URL 不可用。請檢查它，並去掉其中的使用者名稱或密碼。 |
 | The provider returned an error. | 供應商傳回了錯誤。 |
 | Enter a full address that starts with https:// or http://. | 請輸入以 https:// 或 http:// 開頭的完整網址。 |
-| The base URL can’t contain a user name or password. | 基礎 URL 不能包含使用者名稱或密碼。 |
+| The base URL can’t contain a username or password. | 基礎 URL 不能包含使用者名稱或密碼。 |
 | Enter an API key. | 請輸入 API 金鑰。 |
 | Couldn’t load the model list. You can still type model IDs. | 無法取得模型清單。你仍然可以手動輸入模型 ID。 |
 | Enter a number of tokens, such as 200000 or 200K. | 請輸入 token 數，例如 200000 或 200K。 |
@@ -266,7 +266,7 @@ The labels that these files name in English, as the interface shows them in Trad
 
 | en | zh-TW |
 |---|---|
-| Use only lowercase letters, digits, and hyphens, up to 64 characters. | 名稱只能用小寫字母、數字和連字元，最多 64 個字元。 |
+| Use only lowercase letters, digits and hyphens, up to 64 characters. | 名稱只能用小寫字母、數字和連字元，最多 64 個字元。 |
 | hatoba is the built-in skill’s name. Choose another. | hatoba 是內建技能的名稱，請換一個。 |
 | This name now belongs to the built-in skill, so the assistant doesn’t use this skill. Rename it to use it. | 這個名稱現在屬於內建技能，助理不會使用這個技能。重新命名後即可使用。 |
 | Built-in | 內建 |
@@ -287,7 +287,7 @@ The labels that these files name in English, as the interface shows them in Trad
 | Failed | 失敗 |
 | Last lines of stderr | stderr 的最後幾行 |
 | Enter the command. | 請輸入命令。 |
-| The URL can’t contain a user name or password. | URL 不能包含使用者名稱或密碼。 |
+| The URL can’t contain a username or password. | URL 不能包含使用者名稱或密碼。 |
 | This looks like a whole command line. Put only the program here, and each argument on its own row. | 這像是一整行命令。請在這裡只填入程式，每個參數單獨佔一列。 |
 | Split Into Arguments | 拆成參數 |
 | A quote isn’t closed. Check the command. | 有引號沒有閉合，請檢查。 |

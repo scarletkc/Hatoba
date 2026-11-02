@@ -46,10 +46,10 @@ Errors of a provider that signs in with a ChatGPT account (usage limits, an ende
 
 - "The provider rejected the API key. Check the key, and for the Anthropic protocol the auth header."
 - "Couldn’t reach the server. Check the base URL and your network."
-- "The base URL can’t be used. Check it, and leave out any user name or password."
+- "The base URL can’t be used. Check it, and leave out any username or password."
 - "The provider returned an error."
 - "Enter a full address that starts with https:// or http://."
-- "The base URL can’t contain a user name or password."
+- "The base URL can’t contain a username or password."
 - "Enter an API key."
 - "Couldn’t load the model list. You can still type model IDs."
 - "Enter a number of tokens, such as 200000 or 200K."
@@ -74,7 +74,7 @@ With **Native Search**, the current model searches with its provider's own searc
 
 ## Skills
 
-- "Use only lowercase letters, digits, and hyphens, up to 64 characters."
+- "Use only lowercase letters, digits and hyphens, up to 64 characters."
 - "hatoba is the built-in skill’s name. Choose another."
 - "This name now belongs to the built-in skill, so the assistant doesn’t use this skill. Rename it to use it."
 - "Another skill already has this name."
@@ -96,7 +96,7 @@ Other labels: **This skill can’t be imported**, **Skipped Files**.
 
 - "It failed to start or to answer."
 - "Enter the command."
-- "The URL can’t contain a user name or password."
+- "The URL can’t contain a username or password."
 - "This looks like a whole command line. Put only the program here, and each argument on its own row."
 - "A quote isn’t closed. Check the command."
 - "Nothing in this JSON can be imported."

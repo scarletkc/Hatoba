@@ -47,7 +47,7 @@ The header shows the state ("Synced", "Syncing…", "Offline", "Signed out", "Sy
 - **Signed out**: the session expired or was revoked. A master password field with **Sign In Again** appears on the page.
 - A paused state (**Worker update required** or **Hatoba update required**) means the Worker and the app versions no longer match; see `references/sync-worker.md`.
 - A notice that a host or the settings are too large to sync means that item can't upload until it is shortened; see `references/troubleshooting-sync.md`.
-- **Devices** lists the signed-in devices (**This PC** marks this one) with the platform and the last seen time. A device not seen for 14 days or more is flagged "Not seen in 14+ days". **Remove** next to another device (then **Remove Device**) revokes its sign-in. It needs the master password again to sync, and no data is deleted.
+- **Devices** lists the signed-in devices (**This Device** marks this one) with the platform and the last seen time. A device not seen for 14 days or more is flagged "Not seen in 14+ days". **Remove** next to another device (then **Remove Device**) revokes its sign-in. It needs the master password again to sync, and no data is deleted.
 
 ## Conflicts
 
@@ -58,7 +58,7 @@ Other messages:
 - "Kept both versions; one is marked “(conflict copy)”"
 - "No conflicts to review."
 
-The review page lists each item with **This PC** and **Cloud** versions. **Keep Current Result** accepts what Hatoba chose; **Restore Other Version** switches to the other side.
+The review page lists each item with **This Device** and **Cloud** versions. **Keep Current Result** accepts what Hatoba chose; **Restore Other Version** switches to the other side.
 
 ## Security actions and disconnecting
 

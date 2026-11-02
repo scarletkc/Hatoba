@@ -136,8 +136,7 @@ export const ja: Messages = {
     checksums: "に、このリリースのすべてのファイルのチェックサムがあります。",
     allReleases: "すべてのリリース",
     source: "ソースからビルド",
-    testing:
-      "Hatoba は主に Windows で開発しているため、Linux 版と macOS 版はテストが十分ではありません。うまく動かない場合は Issue でお知らせください。",
+    problem: "うまく動きませんか？",
     issue: "Issue を作成",
   },
   notFound: {
