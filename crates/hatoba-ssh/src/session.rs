@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use russh::client::{self, Handle, Msg};
-use russh::{Channel, ChannelMsg, ChannelReadHalf, ChannelWriteHalf, Disconnect};
+use russh::{Channel, ChannelMsg, ChannelReadHalf, ChannelWriteHalf, Disconnect, kex};
 use tokio::sync::{Notify, mpsc, oneshot};
 use tokio::time::Instant;
 use zeroize::Zeroizing;
@@ -175,8 +175,24 @@ impl fmt::Debug for ConnectConfig {
     }
 }
 
+/// NIST-curve ECDH exchanges, which OpenSSH offers by default but russh does not. Many
+/// older network switches have nothing newer.
+const ECDH_KEX: [kex::Name; 3] = [
+    kex::ECDH_SHA2_NISTP256,
+    kex::ECDH_SHA2_NISTP384,
+    kex::ECDH_SHA2_NISTP521,
+];
+
 fn russh_config(cfg: &ConnectConfig, known_key_types: &[String]) -> Arc<client::Config> {
     let mut preferred = russh::Preferred::default();
+    // Where OpenSSH lists them: after curve25519, before Diffie-Hellman.
+    let exchanges = preferred.kex.to_mut();
+    exchanges.retain(|name| !ECDH_KEX.contains(name));
+    let at = exchanges
+        .iter()
+        .position(|name| *name == kex::DH_GEX_SHA256)
+        .unwrap_or(exchanges.len());
+    exchanges.splice(at..at, ECDH_KEX);
     preferred.key.to_mut().sort_by_key(|algorithm| {
         let key_type = if matches!(algorithm, russh::keys::Algorithm::Rsa { .. }) {
             "ssh-rsa"
@@ -1065,7 +1081,25 @@ mod tests {
         let defaults = russh::Preferred::default();
         assert_eq!(&keys[3..], &defaults.key[..4]);
         assert_eq!(keys.len(), defaults.key.len());
-        assert_eq!(cfg.preferred.kex, defaults.kex);
+        assert_eq!(
+            cfg.preferred.kex,
+            russh_config(&config(), &[]).preferred.kex
+        );
+    }
+
+    #[test]
+    fn nist_ecdh_sits_between_curve25519_and_diffie_hellman() {
+        let cfg = russh_config(&config(), &[]);
+        let exchanges = &cfg.preferred.kex;
+        let defaults = russh::Preferred::default().kex;
+        let at = defaults
+            .iter()
+            .position(|name| *name == kex::DH_GEX_SHA256)
+            .unwrap();
+        assert_eq!(exchanges[at - 1], kex::CURVE25519_PRE_RFC_8731);
+        assert_eq!(exchanges[..at], defaults[..at]);
+        assert_eq!(exchanges[at..at + 3], ECDH_KEX);
+        assert_eq!(exchanges[at + 3..], defaults[at..]);
     }
 
     #[test]
