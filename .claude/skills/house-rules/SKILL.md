@@ -1,6 +1,6 @@
 ---
 name: house-rules
-description: The owner's calls for scarletkc/Hatoba that the repository doesn't spell out. Covers what people and the assistant read (UI copy, translations, docs, the assistant's prompt and tool descriptions), how the interface looks and behaves, which calls still go to the owner, and how a change gets from a branch to main. Use when writing, translating or reviewing any of that text, when designing or changing UI, and when committing, opening a pull request, answering review bots, or merging.
+description: The owner's calls for scarletkc/Hatoba that the repository doesn't spell out. Covers what people and the assistant read (UI copy, translations, docs, the assistant's prompt and tool descriptions), code comments, how the interface looks and behaves, which calls still go to the owner, and how a change gets from a branch to main. Use when writing, translating or reviewing any of that text, when writing code comments, when designing or changing UI, and when committing, opening a pull request, answering review bots, or merging.
 ---
 
 # House rules
@@ -98,6 +98,14 @@ External contributors get no work on copy, translations, docs, prompts or how th
 their pull request still gets these wrong after a review, keep their logic and rewrite everything a
 user or the model reads in an owner pull request, with `Co-authored-by: <contributor>` in its body
 (#234 became #242).
+
+## Code comments
+
+A comment says only what the code can't: why it is written this way, such as an upstream bug it
+works around, a platform quirk, or an order that must not change. Don't write a comment that
+restates what the code does. The next agent to open the file sees the code and its comments, not
+the conversation or the pull request that explained them, so a reason that matters goes in a
+comment.
 
 ## Shipping
 
