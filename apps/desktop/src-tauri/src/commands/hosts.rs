@@ -221,7 +221,11 @@ pub fn host_save(
 /// are skipped.
 #[tauri::command]
 #[specta::specta]
-pub fn hosts_arrange(app: AppHandle, state: State<'_, AppState>, order: Vec<String>) -> AppResult<()> {
+pub fn hosts_arrange(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    order: Vec<String>,
+) -> AppResult<()> {
     state.with_unlocked(|v| Ok(v.arrange_hosts(&order)?))?;
     sync::local_change(&app);
     Ok(())

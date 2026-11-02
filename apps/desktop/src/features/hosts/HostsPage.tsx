@@ -198,7 +198,10 @@ export function HostsPage({ group: requested }: { group: string | null }) {
   );
   const listSort: ListSort = isListSort(sort) ? sort : "recent";
   const pending = arranged?.hosts === allHosts ? arranged.order : null;
-  const base = useMemo(() => orderHosts(filtered, listSort, t.locale, pending), [filtered, listSort, t.locale, pending]);
+  const base = useMemo(
+    () => orderHosts(filtered, listSort, t.locale, pending),
+    [filtered, listSort, t.locale, pending],
+  );
   const index = useMemo(() => buildHostIndex(base), [base]);
   // HOST-12: `user@host` and `ssh …` input is also a target to connect to, and TELNET-05:
   // `telnet host [port]`. The list is then filtered by its destination, without the syntax around it.

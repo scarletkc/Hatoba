@@ -64,22 +64,31 @@
   opacity: 0.4;
 }
 
-/* The host that follows the pointer while hosts move, with their number when there are several. */
+/* The hosts that follow the pointer while they move, with their number when there are several: rows one under
+ * another, cards stacked. */
 .dragGhost {
   position: fixed;
   top: 0;
   left: 0;
   z-index: 1000;
-  border-radius: var(--radius-md);
-  background: var(--win);
-  box-shadow: var(--shadow-popover);
   opacity: 0.92;
   pointer-events: none;
 }
 
-.dragGhost > :first-child {
-  width: 100%;
-  height: 100%;
+.dragGhost[data-stack="rows"] {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-md);
+  background: var(--win);
+  box-shadow: var(--shadow-popover);
+}
+
+.dragGhost[data-stack="grid"] > :not(.dragCount) {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background-color: var(--win);
+  box-shadow: var(--shadow-popover);
 }
 
 .dragCount {

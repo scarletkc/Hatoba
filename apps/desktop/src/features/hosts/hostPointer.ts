@@ -6,6 +6,11 @@ const DRAG_THRESHOLD = 4;
 /** How near the list's top or bottom edge the pointer scrolls it, and the most it scrolls in a frame. */
 const EDGE = 40;
 const MAX_SCROLL = 18;
+/** The most moving rows, and cards, that follow the pointer; the count says how many move in all. */
+const GHOST_ROWS = 5;
+const GHOST_CARDS = 3;
+/** How far each card in the stack sits behind the one before it. */
+const STACK_STEP = 6;
 
 /** A rectangle in the list's content, which scrolls with it. */
 export interface Box {
@@ -229,7 +234,7 @@ export class HostPointer {
         el.dataset.dragging = "";
         p.dimmed.push(el);
       }
-      p.ghost = this.ghost(p.el, p.moving.length);
+      p.ghost = this.ghost(p.el, p.dimmed, p.moving.length);
       overlay(classes.line).hidden = true;
     }
     try {
@@ -262,20 +267,37 @@ export class HostPointer {
       });
   }
 
-  /** A copy of the pressed host that follows the pointer, with how many hosts move when there are several. */
-  private ghost(el: HTMLElement, count: number): HTMLElement {
+  /**
+   * Copies of the moving hosts that follow the pointer, the pressed one first: rows one under another, up to
+   * {@link GHOST_ROWS}, and cards stacked behind it, up to {@link GHOST_CARDS}. With several, their number too.
+   */
+  private ghost(pressed: HTMLElement, moving: HTMLElement[], count: number): HTMLElement {
     const { classes } = this.site;
-    const r = el.getBoundingClientRect();
+    const layout = this.site.layout();
     const ghost = document.createElement("div");
     ghost.className = classes.ghost;
+    ghost.dataset.stack = layout;
     ghost.setAttribute("aria-hidden", "true");
+    const r = pressed.getBoundingClientRect();
     ghost.style.width = `${r.width}px`;
-    ghost.style.height = `${r.height}px`;
-    const copy = el.cloneNode(true) as HTMLElement;
-    copy.removeAttribute("data-id");
-    copy.removeAttribute("role");
-    delete copy.dataset.dragging;
-    ghost.appendChild(copy);
+    if (layout === "grid") ghost.style.height = `${r.height}px`;
+    const els = [pressed, ...moving.filter((el) => el !== pressed)].slice(
+      0,
+      layout === "rows" ? GHOST_ROWS : GHOST_CARDS,
+    );
+    const copies = els.map((el, i) => {
+      const r = el.getBoundingClientRect();
+      const copy = el.cloneNode(true) as HTMLElement;
+      copy.removeAttribute("data-id");
+      copy.removeAttribute("role");
+      delete copy.dataset.dragging;
+      copy.style.width = `${r.width}px`;
+      copy.style.height = `${r.height}px`;
+      if (layout === "grid") copy.style.transform = `translate(${i * STACK_STEP}px, ${i * STACK_STEP}px)`;
+      return copy;
+    });
+    // Cards behind come first, so the pressed one paints over them.
+    ghost.append(...(layout === "grid" ? copies.reverse() : copies));
     if (count > 1) {
       const badge = document.createElement("span");
       badge.className = classes.count;

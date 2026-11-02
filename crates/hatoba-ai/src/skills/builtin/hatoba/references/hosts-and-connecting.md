@@ -4,12 +4,13 @@
 
 **Hosts** in the rail opens it. A host is one saved SSH or Telnet destination, in at most one group (groups have one level), with any number of free-text tags.
 
-- The header has a search box (fuzzy match on name, address, user name and tags; Ctrl+Shift+K or ⌘⇧K), **Import**, and **New Host**, with **New Group** under the arrow beside it. It also takes unsaved targets (Quick connect below).
+- The header has a search box (fuzzy match on name, address, user name and tags; Ctrl+Shift+K or ⌘⇧K), **Import**, and **New Host**, with **New Group** under the arrow beside it.
 - Under it: **Favorites**, **Tags** (hosts with every tag picked; × removes a tag), the sort order, **Resource Usage** (`references/resource-usage.md`) and **List** or **Cards**, which this device keeps.
 - Group buttons above the hosts open a group; **Hosts** before its name goes back. Its **…** (or a right-click on its button) has **Rename Group** and **Delete Group**, which keeps the hosts.
 - A row or card shows the name, `user@address:port` (`telnet address:port` for Telnet), tags, and the last connection; a row also the jump host. The dot is green when the host is connected or answers a TCP probe, grey otherwise; **Failed** (red): the last attempt this launch failed.
 - To connect: double-click, select and press Enter, or click **Connect**. Arrow keys move the selection; typing searches. A host can be open in several tabs. Right-click for its menu.
-- Ctrl+click (⌘-click on macOS) or Shift+click selects several hosts; a click beside the rows selects none. The right-click menu of several has **Connect** (a tab each), **Add to Favorites** or **Remove from Favorites**, and **Delete**, for all of them.
+- Ctrl+click (⌘-click on macOS), Shift+click or a box dragged from beside the hosts selects several; a click beside the rows selects none. The right-click menu of several has **Connect** (a tab each), **Add to Favorites** or **Remove from Favorites**, and **Delete**, for all of them.
+- Dragging hosts, or Alt+↑/↓ (⌥↑/↓), moves them and sorts the page by **Custom**, which syncs.
 
 Other labels: **Search hosts or ssh user@host**, **Sort by**, **Recent**, **Name**, **Address**, **Last Connected**, **Duplicate**, **Copy Address**, **Clear Filters**.
 
@@ -25,7 +26,7 @@ Typing `user@host[:port]` or an ssh command such as `ssh -p 2222 deploy@203.0.11
 - It connects through this device's default proxy, if Settings → Proxies has one.
 - Sign-in works like the `ssh` command: the SSH agent first, then the server's own prompts, or a password dialog (also when those fail) whose password is never saved. Saved keys are not tried. A server that hangs up after rejecting too many agent keys is connected to again without the agent. The host key is checked as for any host (trust it on first use; it syncs).
 - The tab is titled `user@host`. Port forwarding is not offered, and **More actions** has **Save as Host**, which opens the host editor filled in with the address, port and user. Once the host is saved, **Reconnect** connects the tab as that host.
-- Nothing is saved as a host by itself. Targets that connected are kept as **Recent** on this device only (at most 8, no passwords, never synced). With the search box empty and focused, they show under it (**Recent Quick Connections**); while typing, matching ones show as extra **Connect** rows. The × button removes one.
+- Targets that connected are kept as **Recent** on this device only (at most 8, no passwords, never synced). With the search box empty and focused, they show under it (**Recent Quick Connections**); while typing, matching ones show as extra **Connect** rows. The × button removes one.
 
 Other labels: **Not saved**, **Remove from Recent**, **Username**.
 

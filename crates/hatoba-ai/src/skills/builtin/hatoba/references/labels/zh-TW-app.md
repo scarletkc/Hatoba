@@ -75,6 +75,7 @@ The labels that these files name in English, as the interface shows them in Trad
 | Recent | 最近連線 |
 | Name | 名稱 |
 | Address | 位址 |
+| Custom | 自訂 |
 | Tags | 標籤 |
 | Last Connected | 最近連線 |
 | Connect | 連線 |
