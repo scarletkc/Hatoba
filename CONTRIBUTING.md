@@ -122,7 +122,7 @@ Commit messages follow
 - Write the description in the imperative mood, without a trailing period,
   for example `fix(desktop): keep IME input when switching tabs`. Start it
   with a lowercase word; identifiers keep their case. Keep the header within
-  72 characters.
+  100 characters.
 - Use the body to explain what changed and why, wrapped at 72 characters.
 - Mark a breaking change with `!` after the type or scope and a
   `BREAKING CHANGE:` footer. Users keep their vaults across versions and
