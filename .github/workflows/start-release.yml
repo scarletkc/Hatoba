@@ -1,0 +1,41 @@
+name: Start release
+
+# Runs the Release workflow when a push to main raises the version, as merging a release pull request
+# does. Publishing still waits for approval in the release environment. Dispatching is the one way
+# GITHUB_TOKEN can start another workflow.
+on:
+  push:
+    branches: [main]
+    paths: [Cargo.toml]
+
+permissions:
+  contents: read
+
+jobs:
+  start:
+    name: Start release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The commit before the push, and the tags that tell whether the version is released.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          version=$(node scripts/release/release.mjs raised --from "$BEFORE")
+          if [ -z "$version" ]; then
+            echo "The push did not raise the version, or the version is already released."
+            exit 0
+          fi
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo "Started the Release workflow for $version." | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          BEFORE: ${{ github.event.before }}
+          GH_TOKEN: ${{ github.token }}

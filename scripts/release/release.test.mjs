@@ -13,7 +13,9 @@ import {
   ciCovers,
   collectDist,
   composeNotes,
+  coveringRun,
   git,
+  raisedVersion,
   releaseCommit,
   releaseOutputs,
   releaseTarget,
@@ -215,6 +217,39 @@ test("also counts it when the later commits only raise the release version", (t)
   assert.ok(!ciCovers(tested, member, repo.root));
   assert.ok(!ciCovers(release, member, repo.root));
   assert.ok(!ciCovers(initial, release, repo.root));
+});
+
+test("prefers a covering CI pass, else a covering run still going", (t) => {
+  const repo = repository(t);
+  const tested = repo.commit("feat: code");
+  const docs = repo.commit("docs: guide", { path: "docs/guide.md" });
+  const later = repo.commit("fix: code");
+  const run = (head_sha, status, conclusion = null) => ({ head_sha, status, conclusion });
+  const passed = run(tested, "completed", "success");
+  const going = run(docs, "in_progress");
+  assert.equal(coveringRun([going, passed], docs, repo.root), passed);
+  assert.equal(coveringRun([run(tested, "completed", "failure"), going], docs, repo.root), going);
+  assert.equal(coveringRun([run(later, "in_progress"), run(tested, "completed", "failure")], docs, repo.root), null);
+});
+
+test("reports a raised version that has no release tag yet", (t) => {
+  const repo = repository(t);
+  const commit = (subject, version, dependencies = "") => {
+    writeFileSync(
+      join(repo.root, "Cargo.toml"),
+      `[workspace.package]\nversion = "${version}"\n\n[workspace.dependencies]\n${dependencies}`,
+    );
+    repo.run("add", "--all");
+    repo.run("commit", "--quiet", "-m", subject);
+    return repo.run("rev-parse", "HEAD");
+  };
+  const before = commit("Initial commit", "0.1.0");
+  const dependency = commit("build: add a dependency", "0.1.0", 'serde = "1"\n');
+  assert.equal(raisedVersion("0.1.0", before, repo.root), null);
+  commit("chore(release): prepare v0.2.0 (#2)", "0.2.0", 'serde = "1"\n');
+  assert.equal(raisedVersion("0.2.0", dependency, repo.root), "0.2.0");
+  repo.run("tag", "v0.2.0");
+  assert.equal(raisedVersion("0.2.0", dependency, repo.root), null);
 });
 
 // A throwaway minisign key pair, made with `tauri signer generate`; its private half was deleted
