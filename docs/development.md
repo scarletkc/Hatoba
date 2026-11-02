@@ -184,6 +184,14 @@ The AI assistant ships with a built-in `hatoba` skill in [`crates/hatoba-ai/src/
 pnpm --filter @hatoba/desktop exec vitest run -u src/i18n/hatobaSkill.test.ts
 ```
 
+## Keep the coding agents' skill short
+
+[`skills/hatoba-cli`](../skills/hatoba-cli/SKILL.md) is the skill that coding agents install to use the `hatoba` command. It tells them to run `hatoba --help` first, so the commands, options, exit codes, and prompts are described in `HELP` in [`crates/hatoba-cli/src/args.rs`](../crates/hatoba-cli/src/args.rs), and a change to the command updates `HELP`, not the skill. The skill keeps a line only when the help doesn't say it and an agent would get it wrong without it, such as following a host's `ai_notes`, or giving a call that waits for the user a long timeout. It leaves out:
+
+- what the help already says;
+- what agents do anyway, such as asking when several hosts fit, or passing a server's message on to the user;
+- general shell knowledge, such as quoting or batch flags. A Hatoba bug that agents trip over is fixed in Hatoba, not worked around in the skill.
+
 ## Website
 
 The website at https://hatoba.fog.moe is an Astro site in [`apps/site`](../apps/site), in English, Simplified and Traditional Chinese, and Japanese. Its text is in `apps/site/src/i18n`, where `en.ts` holds the English that the other files translate. The scripts in [`scripts/media`](../scripts/media/README.md) make its screenshots, the README's promo film, and the repository's social preview. The [Site workflow](../.github/workflows/site.yml) builds it for pull requests that touch it or the desktop frontend, and deploys it to GitHub Pages from `main` and after each release.

@@ -37,7 +37,7 @@ use hatoba_ssh::{SftpClient, SshError, SshSession, TransferProgress, target_labe
 use tauri::AppHandle;
 use tauri_specta::Event;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
@@ -76,7 +76,13 @@ pub struct CliAccess {
     /// Lets one request at a time find the sudo password for a [`sudo_key`], so the others wait
     /// and take the one it found instead of asking again.
     sudo_turns: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    /// The `hatoba exec` commands that wait for the connection with their stdin, by the token
+    /// [`Frame::SendStdin`] gave it.
+    stdin: Mutex<HashMap<String, oneshot::Sender<Input>>>,
 }
+
+/// The connection that brings a command's stdin, after its request.
+type Input = Box<dyn AsyncRead + Send + Unpin>;
 
 struct KeptPassword {
     password: Zeroizing<String>,
@@ -99,6 +105,7 @@ impl CliAccess {
         self.pool.close_all();
         lock(&self.sudo).clear();
         lock(&self.sudo_turns).clear();
+        lock(&self.stdin).clear();
     }
 
     fn sudo_turn(&self, key: &str) -> Arc<tokio::sync::Mutex<()>> {
@@ -311,6 +318,16 @@ where
         Ok(Ok(Some(Frame::Request(request)))) => request,
         _ => return,
     };
+    // The rest of this connection is the stdin of the command that asked for it.
+    if let Op::Stdin { token } = &request.op {
+        let waiting = lock(&state(&app).cli.stdin).remove(token);
+        if let Some(waiting) = waiting
+            && request.version == VERSION
+        {
+            let _ = waiting.send(Box::new(reader));
+        }
+        return;
+    }
     let gone = CancellationToken::new();
     let watch = tauri::async_runtime::spawn({
         let gone = gone.clone();
@@ -377,7 +394,7 @@ async fn handle(
         return End::error(LOCKED);
     }
     let prompt = match &request.op {
-        Op::Hosts => false,
+        Op::Hosts | Op::Stdin { .. } => false,
         Op::Exec { prompt, .. } | Op::Upload { prompt, .. } | Op::Download { prompt, .. } => {
             *prompt
         }
@@ -402,15 +419,17 @@ async fn handle(
             command,
             cwd,
             sudo,
+            stdin,
             ..
-        } => exec(&ctx, &host, command, cwd, sudo).await,
+        } => exec(&ctx, &host, command, cwd, sudo, stdin).await,
         Op::Upload {
             host,
             local,
             remote,
             sudo,
+            mode,
             ..
-        } => upload(&ctx, &host, local, remote, sudo).await,
+        } => upload(&ctx, &host, local, remote, sudo, mode).await,
         Op::Download {
             host,
             remote,
@@ -418,6 +437,8 @@ async fn handle(
             sudo,
             ..
         } => download(&ctx, &host, remote, local, sudo).await,
+        // `serve` hands it to its command.
+        Op::Stdin { .. } => End::error("no command waits for this stdin"),
     }
 }
 
@@ -560,6 +581,35 @@ impl Ctx<'_> {
             )
         } else {
             format!("Hatoba locked, which stopped {what}.")
+        }
+    }
+
+    /// Asks the command for its stdin under `token`, and passes it to `input` as it comes. Its end,
+    /// or a connection for it that does not come in time, ends the command's stdin.
+    async fn take_stdin(&self, token: &str, input: mpsc::Sender<Vec<u8>>) {
+        let (give, take) = oneshot::channel();
+        lock(&state(self.app).cli.stdin).insert(token.to_owned(), give);
+        if self
+            .tx
+            .send(Frame::SendStdin(token.to_owned()))
+            .await
+            .is_err()
+        {
+            return;
+        }
+        let Ok(Ok(mut stdin)) = tokio::time::timeout(REQUEST_WAIT, take).await else {
+            return;
+        };
+        let mut buf = vec![0u8; 32 * 1024];
+        loop {
+            match stdin.read(&mut buf).await {
+                Ok(0) | Err(_) => return,
+                Ok(n) => {
+                    if input.send(buf[..n].to_vec()).await.is_err() {
+                        return;
+                    }
+                }
+            }
         }
     }
 
@@ -867,7 +917,14 @@ fn unattended_error(e: &AppError, outcome: &Unattended, name: &str) -> String {
     }
 }
 
-async fn exec(ctx: &Ctx<'_>, host: &str, command: String, cwd: Option<String>, sudo: bool) -> End {
+async fn exec(
+    ctx: &Ctx<'_>,
+    host: &str,
+    command: String,
+    cwd: Option<String>,
+    sudo: bool,
+    stdin: bool,
+) -> End {
     let target = match ctx.target(host) {
         Ok(target) => target,
         Err(message) => return End::error(message),
@@ -877,7 +934,7 @@ async fn exec(ctx: &Ctx<'_>, host: &str, command: String, cwd: Option<String>, s
         &target,
         detail(sudo, command.clone()),
     );
-    let end = run_exec(ctx, &target, &command, cwd.as_deref(), sudo).await;
+    let end = run_exec(ctx, &target, &command, cwd.as_deref(), sudo, stdin).await;
     ctx.finish(&id, &end);
     end
 }
@@ -888,6 +945,7 @@ async fn run_exec(
     command: &str,
     cwd: Option<&str>,
     sudo: bool,
+    stdin: bool,
 ) -> End {
     let lease = match ctx.lease(target).await {
         Ok(lease) => lease,
@@ -908,12 +966,21 @@ async fn run_exec(
     } else {
         RunAs::Login
     };
+    let (input, stdin) = match stdin {
+        true => {
+            let (tx, rx) = mpsc::channel(4);
+            (Some(tx), Some(rx))
+        }
+        false => (None, None),
+    };
+    let token = uuid::Uuid::new_v4().simple().to_string();
     let (output, mut pieces) = mpsc::channel(16);
     let run = remote_command::run_streaming_as(
         &lease.session,
         command,
         cwd,
         &run_as,
+        stdin,
         ctx.stopped(),
         output,
     );
@@ -927,7 +994,17 @@ async fn run_exec(
             let _ = ctx.tx.send(frame).await;
         }
     };
-    let (ran, ()) = tokio::join!(run, pass_on);
+    let pass_in = async {
+        if let Some(input) = input {
+            ctx.take_stdin(&token, input).await;
+        }
+        std::future::pending::<()>().await;
+    };
+    let (ran, ()) = tokio::select! {
+        ran = async { tokio::join!(run, pass_on) } => ran,
+        () = pass_in => unreachable!("passing the stdin never ends"),
+    };
+    lock(&state(ctx.app).cli.stdin).remove(&token);
     match ran {
         Ok(run) => match (run.stopped, run.output.exit_status) {
             (None, Some(status)) => End::status(i32::try_from(status).unwrap_or(i32::MAX)),
@@ -950,7 +1027,14 @@ async fn run_exec(
     }
 }
 
-async fn upload(ctx: &Ctx<'_>, host: &str, local: String, remote: String, sudo: bool) -> End {
+async fn upload(
+    ctx: &Ctx<'_>,
+    host: &str,
+    local: String,
+    remote: String,
+    sudo: bool,
+    mode: Option<u32>,
+) -> End {
     let target = match ctx.target(host) {
         Ok(target) => target,
         Err(message) => return End::error(message),
@@ -960,7 +1044,7 @@ async fn upload(ctx: &Ctx<'_>, host: &str, local: String, remote: String, sudo: 
         &target,
         detail(sudo, format!("{local} → {remote}")),
     );
-    let end = match run_upload(ctx, &target, Path::new(&local), &remote, sudo).await {
+    let end = match run_upload(ctx, &target, Path::new(&local), &remote, sudo, mode).await {
         Ok(()) => End::ok(),
         Err(message) => End::error(message),
     };
@@ -974,6 +1058,7 @@ async fn run_upload(
     local: &Path,
     remote: &str,
     sudo: bool,
+    mode: Option<u32>,
 ) -> Result<(), String> {
     let meta = std::fs::metadata(local).map_err(|e| format!("{}: {e}", local.display()))?;
     if meta.is_dir() {
@@ -995,11 +1080,30 @@ async fn run_upload(
     let sftp = ctx.sftp(&lease, target).await?;
     let result = async {
         if let Some(run_as) = &run_as {
-            return upload_as_root(ctx, &lease.session, &sftp, run_as, local, remote, &name).await;
+            return upload_as_root(
+                ctx,
+                &lease.session,
+                &sftp,
+                run_as,
+                local,
+                remote,
+                &name,
+                mode,
+            )
+            .await;
         }
         let remote = remote_target(&sftp, remote, &name).await?;
+        // The new file takes the place of one already there, with its permission bits, as `cp`
+        // and `scp` keep them.
+        let mode = match mode {
+            Some(mode) => Some(mode),
+            None => match sftp.stat(&remote).await {
+                Ok(Some(old)) if !old.is_dir() && !old.is_special() => old.mode.map(|m| m & 0o777),
+                _ => None,
+            },
+        };
         let cancel = CancellationToken::new();
-        let copying = sftp.upload(local, &remote, ctx.progress(), cancel.clone());
+        let copying = sftp.upload_with_mode(local, &remote, mode, ctx.progress(), cancel.clone());
         ctx.copy_until_stopped(copying, &cancel).await
     }
     .await;
@@ -1009,6 +1113,7 @@ async fn run_upload(
 
 /// `hatoba cp --sudo` to the host: the file goes over SFTP into a folder that only the login user
 /// can open, and from there, as root, to `remote` (`hatoba_ssh::sudo::install`).
+#[allow(clippy::too_many_arguments)]
 async fn upload_as_root(
     ctx: &Ctx<'_>,
     session: &SshSession,
@@ -1017,6 +1122,7 @@ async fn upload_as_root(
     local: &Path,
     remote: &str,
     name: &str,
+    mode: Option<u32>,
 ) -> Result<(), String> {
     let mut to = absolute(sftp, remote).await?;
     if to.ends_with('/') {
@@ -1030,7 +1136,7 @@ async fn upload_as_root(
         ctx.copy_until_stopped(copying, &cancel).await?;
         // Not stopped once begun: the copy writes the file in place, so stopping it would leave the
         // file cut short, and closing the channel does not end it on the host anyway.
-        sudo::install(session, run_as, &staged, &to, name)
+        sudo::install(session, run_as, &staged, &to, name, mode)
             .await
             .map_err(|e| copy_error(&to, e))
     }

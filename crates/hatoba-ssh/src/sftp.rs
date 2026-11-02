@@ -438,6 +438,20 @@ impl SftpClient {
         progress: impl Fn(TransferProgress) + Send + Sync + 'static,
         cancel: CancellationToken,
     ) -> Result<(), SshError> {
+        self.upload_with_mode(local, remote, None, progress, cancel)
+            .await
+    }
+
+    /// [`upload`](Self::upload), which gives the file the permission bits `mode` before any
+    /// content goes in, as [`write_back`](Self::write_back) does; `None` leaves the server's.
+    pub async fn upload_with_mode(
+        &self,
+        local: &Path,
+        remote: &str,
+        mode: Option<u32>,
+        progress: impl Fn(TransferProgress) + Send + Sync + 'static,
+        cancel: CancellationToken,
+    ) -> Result<(), SshError> {
         let meta = tokio::fs::metadata(local)
             .await
             .map_err(|e| SshError::io_context(&format!("stat {}", local.display()), &e))?;
@@ -451,9 +465,16 @@ impl SftpClient {
             .await
             .map_err(|e| SshError::io_context(&format!("open {}", local.display()), &e))?;
         let (part, target) = self
-            .create_remote_part(remote, None)
+            .create_remote_part(remote, mode)
             .await
             .map_err(|(e, _)| e)?;
+        if let Some(mode) = mode
+            && let Err(e) = self.restrict(&target, remote, mode).await
+        {
+            drop(target);
+            let _ = self.sftp.remove_file(part.as_str()).await;
+            return Err(e);
+        }
         let name = local.display().to_string();
         let result = self
             .write_file(
@@ -462,7 +483,7 @@ impl SftpClient {
                 &name,
                 &part,
                 meta.len(),
-                None,
+                mode,
                 &progress,
                 &cancel,
             )
