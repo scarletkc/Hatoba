@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit's review is advisory: CI decides whether a pull request can merge.
+reviews:
+  # Critical issues, without style and best-practice suggestions.
+  profile: chill
+  request_changes_workflow: false
+  auto_review:
+    # A release pull request only raises the version and adds the release note.
+    ignore_title_keywords:
+      - "chore(release): prepare v"
+  path_instructions:
+    - path: "**"
+      instructions: |
+        - Report a problem only when a real user or maintainer plausibly runs into it. Leave out
+          races and sequences that need several unlikely actions to line up, such as settings
+          edited in another window while a request is in flight.
+        - Don't ask for tests of code that only combines functions that have their own tests.
+        - For AI features, Hatoba follows what Claude Code, Codex and Cursor do. Don't ask for
+          restrictions, confirmations or warning text beyond theirs.
