@@ -72,4 +72,10 @@ describe("ProviderIcon", () => {
       render(<ProviderIcon provider={{ base_url: "https://api.typesafe.ai/v1" }} />).querySelector(".ph-sparkle"),
     ).not.toBeNull();
   });
+
+  it("draws any other brand as its logo", () => {
+    const logo = render(<ProviderIcon provider={{ base_url: "https://api.anthropic.com" }} />).firstElementChild;
+    expect(logo?.tagName).toBe("SPAN");
+    expect(logo?.className).toContain("anthropic");
+  });
 });

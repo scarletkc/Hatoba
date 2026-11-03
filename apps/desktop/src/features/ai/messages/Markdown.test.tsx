@@ -75,7 +75,7 @@ describe("Markdown code blocks", () => {
     });
   }
 
-  it("colors a block in a known language, and copies its text unchanged", async () => {
+  it("colors a block in a known language, and keeps its text as written", async () => {
     const source = 'for f in *.log; do\n  echo "$f" # each file\ndone';
     const host = mount("```sh\n" + source + "\n```");
     await settle();

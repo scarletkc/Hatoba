@@ -28,6 +28,7 @@ describe("wordRuns", () => {
   it("keeps Japanese particles, endings and katakana words with the word before them", () => {
     const runs = wordRuns("新しい鍵を生成するか、既存の鍵をインポートします。", "ja");
     expect(runs.join("")).toBe("新しい鍵を生成するか、既存の鍵をインポートします。");
+    expect(runs.length).toBeGreaterThan(1);
     expect(runs.some((r) => r.includes("インポートします"))).toBe(true);
     expect(runs.every((r) => !/^[\p{Script=Hiragana}]/u.test(r))).toBe(true);
   });
