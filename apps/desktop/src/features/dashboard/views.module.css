@@ -261,6 +261,14 @@
   text-overflow: ellipsis;
 }
 
+/* A value that was not read (NoValue): one dash in the text font, weight and the placeholder color, wherever it stands,
+   also inside a mono or bold value. */
+.noValue {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  color: var(--fg3);
+}
+
 .normal {
   color: var(--fg2);
 }

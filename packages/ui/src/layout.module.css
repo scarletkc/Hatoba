@@ -256,6 +256,16 @@
   font-size: var(--icon-28);
 }
 
+/* Centered short text: balanced lines that break only between words, in every language (EmptyState puts a <wbr>
+   between CJK words, which keep-all leaves as the only breaks inside a run of CJK). A word wider than the line still
+   breaks. */
+.emptyTitle,
+.emptyBody {
+  text-wrap: balance;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
 .emptyTitle {
   font-size: var(--text-xl);
   font-weight: 600;
@@ -267,7 +277,6 @@
   margin-top: 6px;
   max-width: 360px;
   line-height: 1.55;
-  text-wrap: pretty;
 }
 
 .emptyActions {
@@ -292,7 +301,6 @@
 
 .emptyCompact .emptyTitle {
   font-size: var(--text-lg);
-  overflow-wrap: anywhere;
 }
 
 .emptyCompact .emptyBody {

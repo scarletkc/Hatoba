@@ -100,9 +100,7 @@ export function KeyDetail({
         <div className={s.block}>
           <div className={s.blockTitle}>{t("keys.detail.privateKey")}</div>
           <div className={s.privateBox} aria-hidden>
-            {"•".repeat(26)}
-            <br />
-            {"•".repeat(20)}
+            {"•".repeat(16)}
           </div>
         </div>
 

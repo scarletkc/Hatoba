@@ -296,11 +296,11 @@
   word-break: break-all;
 }
 
+/* The private key never reaches the WebView: one line of dots, as a password field shows a secret, in the public
+   key's box. */
 .privateBox {
-  padding: 12px;
-  letter-spacing: 2px;
-  color: var(--fg3);
-  line-height: 1.4;
+  letter-spacing: 1px;
+  color: var(--fg2);
   overflow: hidden;
   white-space: nowrap;
 }

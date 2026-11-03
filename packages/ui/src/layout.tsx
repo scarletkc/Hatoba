@@ -1,4 +1,4 @@
-import { forwardRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, forwardRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Icon, IconButton, controlStyles } from "./controls";
 import { cx } from "./cx";
 import { isImeEvent } from "./ime";
@@ -178,6 +178,60 @@ export function RowValue({ children, mono }: { children: ReactNode; mono?: boole
   );
 }
 
+/** A script whose words have no spaces between them. */
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+const LETTER_START = /^[\p{L}\p{N}]/u;
+const LETTER_END = /[\p{L}\p{N}ー]$/u;
+/** Japanese particles and endings, a word's one Han character, and katakana that goes on: part of the word before. */
+const JOINS_BEFORE = /^(?:[\p{Script=Hiragana}ー]+|\p{Script=Han})$/u;
+const KATAKANA = /^[\p{Script=Katakana}ー]+$/u;
+const segmenters = new Map<string, Intl.Segmenter>();
+
+/**
+ * The runs of `text` that a line must not break inside, for a `<wbr>` between each two under `word-break: keep-all`.
+ * CJK has no spaces between words, so a browser would break between any two characters, also inside a word.
+ * `Intl.Segmenter` finds the words, and a run ends between two words of which one is CJK. Its dictionary splits some
+ * words (服务|器, イン|ポート), so a lone Han character, kana endings and katakana stay with the word before them.
+ * Spaces and punctuation keep their own breaks under `keep-all`. Text without CJK is one run.
+ */
+export function wordRuns(text: string, locale?: string): string[] {
+  if (!CJK.test(text) || typeof Intl.Segmenter !== "function") return [text];
+  const key = locale ?? "";
+  let segmenter = segmenters.get(key);
+  if (!segmenter) {
+    segmenter = new Intl.Segmenter(locale, { granularity: "word" });
+    segmenters.set(key, segmenter);
+  }
+  const runs: string[] = [];
+  let previous = "";
+  for (const { segment } of segmenter.segment(text)) {
+    const last = runs.at(-1);
+    const breaks =
+      last !== undefined &&
+      LETTER_END.test(last) &&
+      LETTER_START.test(segment) &&
+      (CJK.test(previous) || CJK.test(segment)) &&
+      !JOINS_BEFORE.test(segment) &&
+      !(KATAKANA.test(previous) && KATAKANA.test(segment));
+    if (last === undefined || breaks) runs.push(segment);
+    else runs[runs.length - 1] = last + segment;
+    previous = segment;
+  }
+  return runs;
+}
+
+/** Text that breaks a line only between words, also in Chinese and Japanese (`wordRuns`); other nodes as they are. */
+function WordBreaks({ children }: { children: ReactNode }) {
+  if (typeof children !== "string") return children;
+  const lang = typeof document === "undefined" ? undefined : document.documentElement.lang || undefined;
+  return wordRuns(children, lang).map((run, i) => (
+    <Fragment key={i}>
+      {i > 0 && <wbr />}
+      {run}
+    </Fragment>
+  ));
+}
+
 export function EmptyState({
   icon,
   title,
@@ -199,8 +253,14 @@ export function EmptyState({
       <div className={l.emptyIcon}>
         <Icon name={icon} />
       </div>
-      <div className={l.emptyTitle}>{title}</div>
-      {body && <div className={l.emptyBody}>{body}</div>}
+      <div className={l.emptyTitle}>
+        <WordBreaks>{title}</WordBreaks>
+      </div>
+      {body && (
+        <div className={l.emptyBody}>
+          <WordBreaks>{body}</WordBreaks>
+        </div>
+      )}
       {actions && <div className={l.emptyActions}>{actions}</div>}
       {foot && <div className={l.emptyFoot}>{foot}</div>}
     </div>
