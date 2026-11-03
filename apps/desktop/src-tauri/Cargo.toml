@@ -62,7 +62,7 @@ futures.workspace = true
 # SFTP-05: whether a copy of a remote file changed since it was last written back.
 sha2.workspace = true
 # The update check's status probe. Same features and TLS stack as hatoba-core's sync transport.
-reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "system-proxy"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "system-proxy", "socks"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 # Host import from other SSH clients (SSH-15): their ANSI and UTF-16 files, Tabby's YAML config,
 # and Xshell's `.xts` exports, which are zip files. Versions match hatoba-ai's own.

@@ -38,7 +38,7 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 
 # Sync transport: rustls only (no native-tls / openssl). The `ring` provider is used so the
 # whole app shares a single crypto backend with `russh`; it is installed by `sync::http`.
-reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "system-proxy"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "system-proxy", "socks"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 
 [dev-dependencies]

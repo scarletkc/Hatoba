@@ -170,7 +170,7 @@ export const commands = {
 	proxySave: (input: ProxyInput) => __TAURI_INVOKE<ProxyView>("proxy_save", { input }),
 	/**
 	 *  Hosts that named the proxy go back to the device default; this device stops using it as its
-	 *  default.
+	 *  default and for its own connections.
 	 */
 	proxyDelete: (id: string) => __TAURI_INVOKE<null>("proxy_delete", { id }),
 	keysList: () => __TAURI_INVOKE<KeyView[]>("keys_list"),
@@ -2131,6 +2131,11 @@ export type LocalPrefs = {
 	ai_panel_width: number,
 	/**  SSH-13: the proxy that hosts set to the device default connect through, on this device. */
 	default_proxy_id: string | null,
+	/**
+	 *  SSH-13: the proxy that Hatoba's own connections (sync, the AI assistant and the update
+	 *  check) go through on this device; the system proxy while `None` or once it is deleted.
+	 */
+	app_proxy_id: string | null,
 	/**  SEC-02: minutes without input before the vault locks; 0 never locks. */
 	auto_lock_minutes: number,
 	/**  SEC-02: lock the vault when the computer sleeps. */

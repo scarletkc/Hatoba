@@ -38,7 +38,7 @@ use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use hatoba_ai::chat::{ChatRequest, ToolDef};
 use hatoba_ai::entry::{AiEntry, AssistantEntry, AutoVerdict, Finish, ToolCall, ToolStatus};
@@ -51,6 +51,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::dto::{AiTurnContext, AiTurnEndReason, AiTurnEvent};
 use crate::error::{AppError, AppResult, ErrorCode};
+use crate::http::Http;
 use crate::mcp::McpManager;
 
 pub use entries::find_conversation;
@@ -103,9 +104,8 @@ pub struct AiManager(Arc<Inner>);
 
 #[derive(Default)]
 struct Inner {
-    /// The client for provider and search requests, built once
-    /// (`hatoba_ai::provider::http_client`).
-    http: OnceLock<reqwest::Client>,
+    /// The client for provider and search requests, and the proxy of those and of `fetch_url`.
+    http: Http,
     /// The MCP servers whose tools requests offer (§13.9).
     mcp: McpManager,
     /// Running turns by conversation id.
@@ -432,10 +432,16 @@ impl AiManager {
 
     /// The shared client for provider and search requests.
     pub fn http(&self) -> reqwest::Client {
-        self.0
-            .http
-            .get_or_init(hatoba_ai::provider::http_client)
-            .clone()
+        self.0.http.client()
+    }
+
+    /// Provider, search, `fetch_url`, ChatGPT sign-in and MCP requests from now on go through
+    /// `proxy`; `None` uses the system proxy. Requests already sent keep theirs, and so do MCP
+    /// servers already connected.
+    pub fn set_proxy(&self, proxy: Option<reqwest::Proxy>) {
+        self.0.http.set_proxy(proxy.clone());
+        self.0.mcp.set_proxy(proxy.clone());
+        chatgpt::sessions().set_http(hatoba_ai::provider::http_client_through(proxy));
     }
 }
 

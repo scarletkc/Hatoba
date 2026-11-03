@@ -10,6 +10,7 @@ use hatoba_assistant::mcp::McpManager;
 use hatoba_core::vault::Vault;
 use tauri::{AppHandle, Manager};
 
+use crate::app_proxy::AppProxy;
 use crate::cli_access::CliAccess;
 use crate::connection::Connections;
 use crate::dashboard::Dashboard;
@@ -51,6 +52,8 @@ pub struct AppState {
     pub cli: CliAccess,
     /// The update the last check found (spec §11).
     pub updates: Updates,
+    /// The proxy of sync, the AI assistant and the update check (SSH-13).
+    pub app_proxy: AppProxy,
     /// Remote files edited in a local editor (SFTP-05).
     pub edits: RemoteEdits,
     pub mica: bool,
@@ -84,6 +87,7 @@ impl AppState {
             dropped: DroppedPaths::default(),
             cli: CliAccess::default(),
             updates: Updates::default(),
+            app_proxy: AppProxy::default(),
             edits: RemoteEdits::default(),
             mica,
             lock_policy: LockPolicy::default(),

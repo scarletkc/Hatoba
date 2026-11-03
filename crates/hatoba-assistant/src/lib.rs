@@ -12,6 +12,7 @@
 pub mod ai;
 pub mod dropped;
 pub mod dto;
+mod http;
 pub mod mcp;
 pub mod runtime;
 pub mod settings;

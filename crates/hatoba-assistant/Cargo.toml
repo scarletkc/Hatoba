@@ -25,7 +25,7 @@ tracing.workspace = true
 zeroize.workspace = true
 futures.workspace = true
 # Provider and search requests. Same features and TLS stack as hatoba-ai's.
-reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "system-proxy"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "system-proxy", "socks"] }
 # The system prompt names today's local date (spec §13.1).
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 

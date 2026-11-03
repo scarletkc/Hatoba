@@ -295,7 +295,7 @@ async fn the_public_fetch_refuses_loopback() {
         format!("http://[::ffff:127.0.0.1]:{port}/page"),
         format!("http://0.0.0.0:{port}/page"),
     ] {
-        let err = fetch_url(&url, 0, false, &cancel).await.unwrap_err();
+        let err = fetch_url(&url, 0, false, None, &cancel).await.unwrap_err();
         assert!(matches!(err, AiError::Blocked(_)), "{url}: {err:?}");
     }
     assert!(server.received_requests().await.unwrap().is_empty());
@@ -308,7 +308,9 @@ async fn behind_a_local_proxy_the_targets_are_still_checked() {
     let proxy = MockServer::start().await;
     mount(&proxy, "/page", body("text/plain", "through the proxy")).await;
     let fetcher = Fetcher {
-        proxy: Proxy::At(format!("http://localhost:{}", proxy.address().port())),
+        proxy: Proxy::At(Box::new(
+            reqwest::Proxy::all(format!("http://localhost:{}", proxy.address().port())).unwrap(),
+        )),
         ..Fetcher::public()
     };
     let cancel = CancellationToken::new();

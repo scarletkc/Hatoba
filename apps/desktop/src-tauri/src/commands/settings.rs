@@ -168,7 +168,11 @@ pub fn prefs_get(state: State<'_, AppState>) -> AppResult<LocalPrefs> {
 
 #[tauri::command]
 #[specta::specta]
-pub fn prefs_save(state: State<'_, AppState>, mut prefs: LocalPrefs) -> AppResult<()> {
+pub fn prefs_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    mut prefs: LocalPrefs,
+) -> AppResult<()> {
     prefs.auto_lock_minutes = prefs.auto_lock_minutes.min(MAX_AUTO_LOCK_MINUTES);
     prefs.ui_zoom = crate::platform::window::zoom_step(prefs.ui_zoom);
     prefs.dashboard_interval_secs = prefs.dashboard_interval_secs.clamp(1, 60);
@@ -189,6 +193,7 @@ pub fn prefs_save(state: State<'_, AppState>, mut prefs: LocalPrefs) -> AppResul
     lock::refresh_policy(&state);
     #[cfg(not(target_os = "macos"))]
     crate::tray::refresh_close_action(&state);
+    crate::app_proxy::refresh(&app);
     Ok(())
 }
 

@@ -85,17 +85,24 @@ async fn check_with<R: Runtime>(
     before_exit: impl Fn() + Send + Sync + 'static,
 ) -> AppResult<UpdateCheck> {
     let current = &app.package_info().version;
+    // SSH-13: the proxy of this device's own connections.
+    let proxy = app
+        .try_state::<AppState>()
+        .and_then(|st| st.app_proxy.reqwest());
     let endpoint = if current.pre.is_empty() {
         Some(configured_endpoint(app)?)
     } else {
-        newest_manifest(releases).await?
+        newest_manifest(releases, proxy.clone()).await?
     };
     let found = match endpoint {
         None => None,
-        Some(endpoint) => match updater(app, endpoint.clone(), before_exit)?.check().await {
+        Some(endpoint) => match updater(app, endpoint.clone(), before_exit, proxy.clone())?
+            .check()
+            .await
+        {
             Ok(found) => found,
             Err(UpdaterError::ReleaseNotFound) => {
-                no_release(endpoint).await?;
+                no_release(endpoint, proxy).await?;
                 None
             }
             Err(err) => return Err(classify(err)),
@@ -170,20 +177,27 @@ fn package_manager_in(dir: &Path) -> Option<PackageManager> {
     })
 }
 
+/// The updater, whose check and download go through `proxy`, or the system proxy without one.
 fn updater<R: Runtime>(
     app: &AppHandle<R>,
     endpoint: Url,
     before_exit: impl Fn() + Send + Sync + 'static,
+    proxy: Option<reqwest::Proxy>,
 ) -> AppResult<Updater> {
     app.updater_builder()
         .endpoints(vec![endpoint])
         .map_err(classify)?
         .on_before_exit(before_exit)
         .timeout(CHECK_TIMEOUT)
-        .configure_client(|client| {
-            client
+        // Not the builder's `proxy`, which logs the proxy's URL with its password.
+        .configure_client(move |client| {
+            let client = client
                 .connect_timeout(CONNECT_TIMEOUT)
-                .read_timeout(READ_TIMEOUT)
+                .read_timeout(READ_TIMEOUT);
+            match &proxy {
+                Some(proxy) => client.proxy(proxy.clone()),
+                None => client,
+            }
         })
         .build()
         .map_err(classify)
@@ -243,8 +257,8 @@ impl Drop for Installing<'_> {
 /// The updater reports every answer without a release the same way, so this asks the endpoint
 /// again for its status. GitHub answers 404 until a stable release with `latest.json` exists,
 /// which means there is nothing newer; any other status is an error.
-async fn no_release(endpoint: Url) -> AppResult<()> {
-    let resp = client()?
+async fn no_release(endpoint: Url, proxy: Option<reqwest::Proxy>) -> AppResult<()> {
+    let resp = client(proxy)?
         .get(endpoint)
         .send()
         .await
@@ -288,8 +302,11 @@ struct Asset {
 
 /// The `latest.json` of the newest release, prereleases included, or `None` when no release
 /// carries one.
-async fn newest_manifest(releases: &Releases<'_>) -> AppResult<Option<Url>> {
-    let mut resp = client()?
+async fn newest_manifest(
+    releases: &Releases<'_>,
+    proxy: Option<reqwest::Proxy>,
+) -> AppResult<Option<Url>> {
+    let mut resp = client(proxy)?
         .get(releases.api)
         .header(reqwest::header::ACCEPT, "application/vnd.github+json")
         .header("X-GitHub-Api-Version", "2022-11-28")
@@ -327,7 +344,9 @@ fn pick_manifest(list: &[Release], downloads: &str) -> Option<Url> {
         .and_then(|(_, url)| url.parse().ok())
 }
 
-fn client() -> AppResult<reqwest::Client> {
+/// The client of the requests beside the updater's, through `proxy`, or the system proxy without
+/// one.
+fn client(proxy: Option<reqwest::Proxy>) -> AppResult<reqwest::Client> {
     // reqwest is built without a bundled crypto provider; this installs the ring provider that
     // hatoba-core's sync transport and the updater also use. Whichever installs it first wins,
     // and all agree.
@@ -335,12 +354,16 @@ fn client() -> AppResult<reqwest::Client> {
     INSTALL_PROVIDER.call_once(|| {
         let _ = rustls::crypto::ring::default_provider().install_default();
     });
-    reqwest::Client::builder()
+    let builder = reqwest::Client::builder()
         .timeout(CHECK_TIMEOUT)
         .connect_timeout(CONNECT_TIMEOUT)
-        .user_agent(concat!("Hatoba/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .map_err(|_| AppError::internal("could not build the HTTP client"))
+        .user_agent(concat!("Hatoba/", env!("CARGO_PKG_VERSION")));
+    match proxy {
+        Some(proxy) => builder.proxy(proxy),
+        None => builder,
+    }
+    .build()
+    .map_err(|_| AppError::internal("could not build the HTTP client"))
 }
 
 /// No HTTP answer at all (DNS, connection, TLS, timeout, a dropped download): the "offline"

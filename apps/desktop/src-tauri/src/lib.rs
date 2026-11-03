@@ -2,6 +2,7 @@
 //! crypto, sync), `hatoba-ssh` (sessions, SFTP) and `hatoba-assistant` (the AI assistant). The
 //! WebView never receives secrets (spec §3.2).
 
+mod app_proxy;
 mod cli_access;
 mod commands;
 mod connection;

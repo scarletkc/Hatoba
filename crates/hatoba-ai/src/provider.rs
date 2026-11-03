@@ -355,7 +355,18 @@ fn client_builder() -> reqwest::ClientBuilder {
 /// runtime it is first used on. Every request to a provider, SearXNG or MCP server uses it.
 #[must_use]
 pub fn http_client() -> reqwest::Client {
-    client_builder()
+    http_client_through(None)
+}
+
+/// As [`http_client`], through `proxy` instead of the system proxy when one is given.
+#[must_use]
+pub fn http_client_through(proxy: Option<reqwest::Proxy>) -> reqwest::Client {
+    let builder = client_builder();
+    let builder = match proxy {
+        Some(proxy) => builder.proxy(proxy),
+        None => builder,
+    };
+    builder
         .build()
         // Only fails when no TLS provider is available, which `ensure_crypto_provider` rules out.
         .expect("the HTTP client must build with the ring provider installed")
