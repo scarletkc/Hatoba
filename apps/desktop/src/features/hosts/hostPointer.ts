@@ -395,11 +395,16 @@ export class HostPointer {
     const y = p.client.y;
     const speed = (into: number) => Math.min(MAX_SCROLL, Math.ceil((into / EDGE) * MAX_SCROLL));
     const dy = y < r.top + EDGE ? -speed(r.top + EDGE - y) : y > r.bottom - EDGE ? speed(y - (r.bottom - EDGE)) : 0;
-    if (dy !== 0) list.scrollTop += dy;
+    if (dy !== 0) {
+      const top = list.scrollTop;
+      list.scrollTop = top + dy;
+      // At once, as a release before the scroll event must drop where the line now shows.
+      if (list.scrollTop !== top) this.update(p);
+    }
     p.frame = requestAnimationFrame(this.scroll);
   };
 
-  /** The list scrolled, by the pointer near its edge or by the wheel: what the press shows moves with the pointer. */
+  /** The list scrolled, also by the wheel: what the press shows moves with the pointer. */
   private scrolled = () => {
     if (this.press?.started) this.update(this.press);
   };
