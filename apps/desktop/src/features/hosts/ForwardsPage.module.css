@@ -32,8 +32,8 @@
   align-items: center;
 }
 
-/* A narrow page (beside the AI panel, or in a small window) leaves the switch to the rule's dialog, then the status
- * to the state icon's tooltip, so the rule keeps its room. */
+/* A narrow page (beside the AI panel, or in a small window) leaves the switch to the rule's dialog, then shows only the
+ * status dot, whose tooltip says the rest, so the rule keeps its room. */
 @container (max-width: 640px) {
   .cols {
     grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 116px;
@@ -46,10 +46,14 @@
 
 @container (max-width: 460px) {
   .cols {
-    grid-template-columns: minmax(0, 1fr) 116px;
+    grid-template-columns: minmax(0, 1fr) 12px 116px;
   }
 
-  .cols > :nth-child(2) {
+  .headStatus {
+    visibility: hidden;
+  }
+
+  .status > :not(:first-child) {
     display: none;
   }
 }

@@ -322,7 +322,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
         {ready && count > 0 && (
           <div className={cx(layoutStyles.tableHead, s.cols)}>
             <span className={s.headName}>{t("hosts.col.name")}</span>
-            <span>{t("hosts.fwd.col.status")}</span>
+            <span className={s.headStatus}>{t("hosts.fwd.col.status")}</span>
             <span>{t("hosts.fwd.autoStart")}</span>
             <span />
           </div>
@@ -335,6 +335,12 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
           role="listbox"
           aria-label={title}
           aria-activedescendant={selected ? optionId + selected.id : undefined}
+          onMouseDown={(e) => {
+            // A press on a row selects it and leaves the keys to the list, as in the hosts list.
+            if (e.button !== 0 || (e.target as Element).closest("button, a, input, textarea, select")) return;
+            e.preventDefault();
+            listRef.current?.focus({ preventScroll: true });
+          }}
           onClick={(e) => {
             // A click beside the rows selects none.
             if (!(e.target as Element).closest('[role="option"]')) setSelectedId(null);
@@ -433,6 +439,14 @@ function ForwardRow({
   const { running, starting, failure, busy, pending } = state;
   const rule = forwardRule(t, f);
   const bind = hostPort(f.bind_address, f.bind_port || t("hosts.fwd.autoPort"));
+  // A narrow list keeps only the status dot, and this says what it means.
+  const statusTitle = starting
+    ? t("terminal.fwd.starting")
+    : running
+      ? running.kind === "remote"
+        ? t("terminal.fwd.onServer", { addr: running.address })
+        : running.address
+      : (failure ?? t("hosts.fwd.stopped"));
   return (
     <div
       id={id}
@@ -464,7 +478,7 @@ function ForwardRow({
           </span>
         </span>
       </span>
-      <span className={s.status} onDoubleClick={keepClick}>
+      <span className={s.status} title={statusTitle} onDoubleClick={keepClick}>
         {starting ? (
           <>
             <Spinner size={12} />
