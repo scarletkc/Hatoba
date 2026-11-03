@@ -2696,6 +2696,13 @@
         },
         "reasoning": false
       },
+      "grok-imagine-image-quality": {
+        "limit": {
+          "context": 16000,
+          "output": 0
+        },
+        "reasoning": false
+      },
       "grok-imagine-video": {
         "limit": {
           "context": 1024,
