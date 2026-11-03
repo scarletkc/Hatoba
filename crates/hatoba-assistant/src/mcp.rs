@@ -53,6 +53,7 @@ use crate::dto::{
     McpTransportView,
 };
 use crate::error::{AppError, AppResult};
+use crate::http::Http;
 
 /// How long a server gets to start and answer `initialize` (and each `tools/list` page). Long
 /// enough for `npx -y` to download a package the first time.
@@ -684,7 +685,7 @@ pub struct McpManager(Arc<Inner>);
 
 #[derive(Default)]
 struct Inner {
-    http: OnceLock<reqwest::Client>,
+    http: Http,
     events: OnceLock<Arc<dyn McpEvents>>,
     default_path: OnceLock<DefaultPath>,
     servers: Mutex<HashMap<String, Arc<Server>>>,
@@ -709,10 +710,12 @@ impl McpManager {
     }
 
     fn http(&self) -> reqwest::Client {
-        self.0
-            .http
-            .get_or_init(hatoba_ai::provider::http_client)
-            .clone()
+        self.0.http.client()
+    }
+
+    /// `http` servers that connect from now on go through `proxy`; `None` uses the system proxy.
+    pub(crate) fn set_proxy(&self, proxy: Option<reqwest::Proxy>) {
+        self.0.http.set_proxy(proxy);
     }
 
     fn server(&self, id: &str) -> Arc<Server> {

@@ -186,7 +186,7 @@ impl AiManager {
             }
             job => {
                 job.run(
-                    &self.http(),
+                    &self.0.http,
                     &self.0.mcp,
                     vault,
                     env,

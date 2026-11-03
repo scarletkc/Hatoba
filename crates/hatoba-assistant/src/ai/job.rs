@@ -23,6 +23,7 @@ use super::request::resolve_model;
 use super::search::SearchJob;
 use super::skills::read_skill;
 use super::{AiEnv, conn, files, lock, memory, parse, search};
+use crate::http::Http;
 use crate::mcp::{McpManager, OfferedTool};
 
 /// The `run_command` result while the tab has no live session (AI-08).
@@ -206,7 +207,7 @@ impl Job {
     )]
     pub(super) async fn run(
         self,
-        http: &reqwest::Client,
+        http: &Http,
         mcp: &McpManager,
         vault: &SharedVault,
         env: &dyn AiEnv,
@@ -238,7 +239,7 @@ impl Job {
             }
             Self::Search(job) => search::run(live_session(env, session_id), job, cancel).await,
             Self::WebSearch(config, query) => {
-                match web::web_search(http, &config, &query, cancel).await {
+                match web::web_search(&http.client(), &config, &query, cancel).await {
                     Ok(results) => (
                         ToolStatus::Ok,
                         tools::truncate_result(&web::format_search_results(&results)),
@@ -249,7 +250,7 @@ impl Job {
             }
             // Pages through long content instead of being shortened (§13.4).
             Self::FetchUrl(url, offset, full_page) => {
-                match web::fetch_url(&url, offset, full_page, cancel).await {
+                match web::fetch_url(&url, offset, full_page, http.proxy().as_ref(), cancel).await {
                     Ok(page) => (ToolStatus::Ok, web::format_fetch_result(&page)),
                     Err(AiError::Cancelled) => (ToolStatus::Cancelled, String::new()),
                     Err(e) => (

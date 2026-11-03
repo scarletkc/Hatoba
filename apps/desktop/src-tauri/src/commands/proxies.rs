@@ -54,7 +54,13 @@ pub fn proxy_from_input(input: &ProxyInput, existing: Option<&Proxy>) -> AppResu
     if address.is_empty() {
         return Err(AppError::invalid("address", "address is required"));
     }
-    if address.len() > 255 || address.contains(bad) || address.contains(['@', '/', '\\']) {
+    // A colon belongs only to an IPv6 address: `host:port` goes in two fields.
+    let colon = address.contains(':') && address.parse::<std::net::Ipv6Addr>().is_err();
+    if address.len() > 255
+        || address.contains(bad)
+        || address.contains(['@', '/', '\\', '#', '?'])
+        || colon
+    {
         return Err(AppError::invalid(
             "address",
             "address is not a valid host name or IP",
@@ -130,21 +136,23 @@ pub fn proxy_save(
         Ok(proxy_view(&id, &find_proxy(v, &id)?, v))
     })?;
     sync::local_change(&app);
+    crate::app_proxy::refresh(&app);
     Ok(view)
 }
 
 /// Hosts that named the proxy go back to the device default; this device stops using it as its
-/// default.
+/// default and for its own connections.
 #[tauri::command]
 #[specta::specta]
 pub fn proxy_delete(app: AppHandle, state: State<'_, AppState>, id: String) -> AppResult<()> {
     state.with_unlocked(|v| remove(v, &id))?;
     sync::local_change(&app);
+    crate::app_proxy::refresh(&app);
     Ok(())
 }
 
 /// Deletes a proxy. Hosts that used it go back to the device default, and this device stops
-/// using it as its default.
+/// using it as its default and for its own connections.
 fn remove(v: &mut Vault, id: &str) -> AppResult<()> {
     find_proxy(v, id)?;
     for (host_id, mut host) in v.hosts() {
@@ -159,13 +167,19 @@ fn remove(v: &mut Vault, id: &str) -> AppResult<()> {
             v.put(Some(&host_id), Item::TelnetHost(host))?;
         }
     }
-    if device_default(v).as_deref() == Some(id) {
-        let stored = v.local_prefs()?;
-        let mut prefs = stored
-            .as_deref()
-            .map(LocalPrefs::from_stored)
-            .unwrap_or_default();
-        prefs.default_proxy_id = None;
+    let stored = v.local_prefs()?;
+    let mut prefs = stored
+        .as_deref()
+        .map(LocalPrefs::from_stored)
+        .unwrap_or_default();
+    let mut changed = false;
+    for named in [&mut prefs.default_proxy_id, &mut prefs.app_proxy_id] {
+        if named.as_deref() == Some(id) {
+            *named = None;
+            changed = true;
+        }
+    }
+    if changed {
         let json = crate::commands::settings::merge_prefs(stored.as_deref(), &prefs)?;
         v.set_local_prefs(&json)?;
     }
@@ -219,11 +233,14 @@ mod tests {
         let err = proxy_from_input(&input(ProxyKind::Socks5, "a", Some(&long)), None).unwrap_err();
         assert_eq!(err.field.as_deref(), Some("password"));
         let mut bad = input(ProxyKind::Socks5, "", None);
-        bad.address = "proxy example".into();
-        assert_eq!(
-            proxy_from_input(&bad, None).unwrap_err().field.as_deref(),
-            Some("address")
-        );
+        for address in ["proxy example", "127.0.0.1:7890", "proxy#note", "proxy?a"] {
+            bad.address = address.into();
+            assert_eq!(
+                proxy_from_input(&bad, None).unwrap_err().field.as_deref(),
+                Some("address"),
+                "{address}"
+            );
+        }
         bad.address = "proxy".into();
         bad.port = 0;
         assert_eq!(
@@ -233,7 +250,7 @@ mod tests {
     }
 
     #[test]
-    fn deleting_a_proxy_resets_the_hosts_and_the_device_default() {
+    fn deleting_a_proxy_resets_the_hosts_and_the_device_proxies() {
         let mut v = Vault::open_in_memory().unwrap();
         // The master password is made up for each run.
         v.create_with_params(&hatoba_core::new_id(), KdfParams::for_tests())
@@ -242,8 +259,10 @@ mod tests {
         let proxy = proxy_from_input(&input(ProxyKind::Socks5, "", None), None).unwrap();
         let id = v.put(None, Item::Proxy(proxy.clone())).unwrap();
         let other = v.put(None, Item::Proxy(proxy)).unwrap();
-        v.set_local_prefs(&format!(r#"{{"default_proxy_id":"{id}","language":"ja"}}"#))
-            .unwrap();
+        v.set_local_prefs(&format!(
+            r#"{{"default_proxy_id":"{id}","app_proxy_id":"{id}","language":"ja"}}"#
+        ))
+        .unwrap();
         assert_eq!(device_default(&v).as_deref(), Some(id.as_str()));
         let host = |proxy_id: &str| Host {
             proxy: HostProxy::Proxy {
@@ -268,6 +287,7 @@ mod tests {
         assert_eq!(device_default(&v), None);
         // The other prefs stay.
         let prefs = LocalPrefs::from_stored(&v.local_prefs().unwrap().unwrap());
+        assert_eq!(prefs.app_proxy_id, None);
         assert_eq!(prefs.language, crate::dto::Language::Ja);
 
         assert_eq!(

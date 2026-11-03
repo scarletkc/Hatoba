@@ -1,10 +1,10 @@
 //! `fetch_url` (AI-15).
 //!
 //! GET only, `http`/`https` only, no cookies, no credentials, at most 5 redirects followed by
-//! hand, through the system proxy when one is set. Redirects are followed only on the host the
-//! call named: a redirect to another host ends the fetch with that URL, so a fetch of it goes
-//! through approval like any other (AI-19), and an allowed domain cannot pass the call on to one
-//! that is not. Every hop is checked: an IP-literal host and
+//! hand, through the proxy the caller gives, else the system proxy when one is set. Redirects are
+//! followed only on the host the call named: a redirect to another host ends the fetch with that
+//! URL, so a fetch of it goes through approval like any other (AI-19), and an allowed domain
+//! cannot pass the call on to one that is not. Every hop is checked: an IP-literal host and
 //! `localhost` directly, and a host name the client resolves itself through a resolver that
 //! refuses names resolving to any non-public address. The connection uses exactly the addresses
 //! the resolver checked, so DNS rebinding between the check and the connection is not possible.
@@ -98,16 +98,20 @@ pub enum PagePart {
 
 /// Fetches `url` and returns up to 30,000 characters from `offset` (characters, not bytes) of
 /// its content, HTML converted to Markdown: the main content, or with `full_page` the whole page
-/// (AI-15). Refuses non-public addresses at every hop.
+/// (AI-15). Refuses non-public addresses at every hop. Goes through `proxy`, or the system proxy
+/// without one.
 pub async fn fetch_url(
     url: &str,
     offset: u64,
     full_page: bool,
+    proxy: Option<&reqwest::Proxy>,
     cancel: &CancellationToken,
 ) -> Result<FetchResult, AiError> {
-    Fetcher::public()
-        .fetch(url, offset, full_page, cancel)
-        .await
+    let fetcher = Fetcher {
+        proxy: proxy.map_or(Proxy::System, |proxy| Proxy::At(Box::new(proxy.clone()))),
+        ..Fetcher::public()
+    };
+    fetcher.fetch(url, offset, full_page, cancel).await
 }
 
 /// The `fetch_url` result text: a header line with the URL, the content type, the part of an
@@ -170,7 +174,7 @@ pub fn format_fetch_result(r: &FetchResult) -> String {
 }
 
 /// `fetch_url` with an injectable address policy, resolver and proxy (tests use them to reach the
-/// mock server on 127.0.0.1); [`fetch_url`] always uses [`Fetcher::public`].
+/// mock server on 127.0.0.1); [`fetch_url`] uses [`Fetcher::public`] with its proxy.
 pub(crate) struct Fetcher {
     allowed: fn(IpAddr) -> bool,
     lookup: Lookup,
@@ -186,9 +190,8 @@ pub(crate) enum Proxy {
     /// Straight to the host, whatever proxy the environment sets.
     #[cfg(test)]
     None,
-    /// Through the proxy at this URL.
-    #[cfg(test)]
-    At(String),
+    /// Through this proxy.
+    At(Box<reqwest::Proxy>),
 }
 
 /// How a fetch ended.
@@ -245,9 +248,7 @@ impl Fetcher {
             Proxy::System => reqwest::Client::builder(),
             #[cfg(test)]
             Proxy::None => reqwest::Client::builder().no_proxy(),
-            #[cfg(test)]
-            Proxy::At(url) => reqwest::Client::builder()
-                .proxy(reqwest::Proxy::all(url).map_err(|e| AiError::Network(e.to_string()))?),
+            Proxy::At(proxy) => reqwest::Client::builder().proxy(proxy.as_ref().clone()),
         };
         builder
             .redirect(reqwest::redirect::Policy::none())

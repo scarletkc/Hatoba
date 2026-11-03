@@ -94,6 +94,8 @@ pub async fn lock_vault(app: &AppHandle, reason: LockReason) {
         let _ = VaultLockedEvent { reason }.emit(app);
     }
     sync::stop(app);
+    // SEC-01: nor does the password of the proxy for Hatoba.
+    crate::app_proxy::forget(app);
     // DEPLOY-07: a deployment's tokens do not outlive the unlocked vault.
     state.deploy.clear();
     // HOST-14: the dashboard reads nothing behind the lock screen, and its connections close.

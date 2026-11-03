@@ -1177,6 +1177,9 @@ pub struct LocalPrefs {
     pub ai_panel_width: u32,
     /// SSH-13: the proxy that hosts set to the device default connect through, on this device.
     pub default_proxy_id: Option<String>,
+    /// SSH-13: the proxy that Hatoba's own connections (sync, the AI assistant and the update
+    /// check) go through on this device; the system proxy while `None` or once it is deleted.
+    pub app_proxy_id: Option<String>,
     /// SEC-02: minutes without input before the vault locks; 0 never locks.
     pub auto_lock_minutes: u32,
     /// SEC-02: lock the vault when the computer sleeps.
@@ -1227,6 +1230,7 @@ impl Default for LocalPrefs {
             ai_panel_open: false,
             ai_panel_width: 380,
             default_proxy_id: None,
+            app_proxy_id: None,
             auto_lock_minutes: 15,
             lock_on_sleep: true,
             lock_disconnects_sessions: false,

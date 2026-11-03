@@ -172,8 +172,10 @@ The labels that these files name in English, as the interface shows them in Trad
 
 | en | zh-TW |
 |---|---|
-| Default proxy on this device | 這台裝置的預設代理 |
+| Default Proxy on This Device | 這台裝置的預設代理 |
 | No proxy | 不使用代理 |
+| Proxy for Hatoba | Hatoba 自身的代理 |
+| System proxy | 系統代理 |
 | Saved Proxies | 已儲存的代理 |
 | Add Proxy | 新增代理 |
 | Edit Proxy | 編輯代理 |

@@ -357,6 +357,14 @@ pub fn on_unlock(app: &AppHandle) {
     trigger(app, Trigger::Unlock);
 }
 
+/// Builds the backend again from the saved config and syncs, so that sync goes through the proxy
+/// set since (`app_proxy`). Does nothing while sync has no backend.
+pub fn reconnect(app: &AppHandle) {
+    if state(app).sync.backend().is_some() {
+        on_unlock(app);
+    }
+}
+
 /// Stops syncing (on lock), and the backend forgets its credentials. It is rebuilt from the
 /// credential store on the next unlock.
 pub fn stop(app: &AppHandle) {
@@ -581,6 +589,9 @@ pub async fn run_round(app: &AppHandle) -> AppResult<()> {
                     // FWD-05: a rule deleted on another device stops here, and one renamed there
                     // is renamed in the tray.
                     crate::connection::rules_changed(app);
+                    // SSH-13: the proxy of this device's own connections, edited or deleted on
+                    // another device.
+                    crate::app_proxy::refresh(app);
                 }
             }
             Ok(())

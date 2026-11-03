@@ -3,7 +3,7 @@
 //! TLS is rustls with the `ring` provider (the same crypto backend `russh` uses), installed once
 //! per process. Neither backend ever logs a URL query, header or body.
 
-use std::sync::Once;
+use std::sync::{Once, PoisonError, RwLock};
 use std::time::Duration;
 
 use reqwest::StatusCode;
@@ -20,6 +20,9 @@ pub(crate) const MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
 
 static INSTALL_PROVIDER: Once = Once::new();
 
+/// The proxy that clients built from now on use; `None` uses the system proxy.
+static PROXY: RwLock<Option<reqwest::Proxy>> = RwLock::new(None);
+
 /// Installs the process-wide rustls crypto provider (ring). Idempotent; harmless if another
 /// component already installed one.
 pub(crate) fn ensure_crypto_provider() {
@@ -28,7 +31,14 @@ pub(crate) fn ensure_crypto_provider() {
     });
 }
 
-/// Builds the shared client. Loopback targets bypass any configured proxy.
+/// Sets the proxy of sync and deploy requests; `None` uses the system proxy. Backends built
+/// earlier keep the proxy they were built with.
+pub fn set_proxy(proxy: Option<reqwest::Proxy>) {
+    *PROXY.write().unwrap_or_else(PoisonError::into_inner) = proxy;
+}
+
+/// Builds the shared client, through the proxy of [`set_proxy`]. Loopback targets bypass any
+/// proxy.
 pub(crate) fn build_client(loopback: bool) -> Result<reqwest::Client> {
     ensure_crypto_provider();
     let mut builder = reqwest::Client::builder()
@@ -39,6 +49,8 @@ pub(crate) fn build_client(loopback: bool) -> Result<reqwest::Client> {
         .user_agent(concat!("hatoba-core/", env!("CARGO_PKG_VERSION")));
     if loopback {
         builder = builder.no_proxy();
+    } else if let Some(proxy) = PROXY.read().unwrap_or_else(PoisonError::into_inner).clone() {
+        builder = builder.proxy(proxy);
     }
     builder
         .build()

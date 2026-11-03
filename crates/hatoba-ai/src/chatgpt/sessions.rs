@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
 use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
@@ -40,7 +40,7 @@ struct Pending {
 }
 
 struct Inner {
-    http: reqwest::Client,
+    http: RwLock<reqwest::Client>,
     endpoints: Endpoints,
     store: Arc<dyn CredentialStore>,
     /// One lock per session: refreshes, sign-ins and sign-outs of a session run one at a time.
@@ -122,12 +122,17 @@ impl Sessions {
         store: Arc<dyn CredentialStore>,
     ) -> Self {
         Self(Arc::new(Inner {
-            http,
+            http: RwLock::new(http),
             endpoints,
             store,
             locks: Mutex::default(),
             pending: Mutex::default(),
         }))
+    }
+
+    /// Sends the requests that start from now on with `http`.
+    pub fn set_http(&self, http: reqwest::Client) {
+        *self.0.http.write().unwrap_or_else(PoisonError::into_inner) = http;
     }
 
     /// The endpoints sign-ins go to.
@@ -204,7 +209,7 @@ impl Sessions {
             }
             // Not cancellable: a refresh that was sent must be stored.
             let refreshed = oauth::refresh(
-                &inner.http,
+                &inner.http(),
                 &inner.endpoints,
                 &credentials,
                 &CancellationToken::new(),
@@ -286,7 +291,7 @@ impl Sessions {
         };
         Ok(match credentials {
             Some(credentials) => {
-                oauth::revoke(&self.0.http, &self.0.endpoints, &credentials, cancel).await
+                oauth::revoke(&self.0.http(), &self.0.endpoints, &credentials, cancel).await
             }
             None => true,
         })
@@ -294,8 +299,15 @@ impl Sessions {
 }
 
 impl Inner {
+    fn http(&self) -> reqwest::Client {
+        self.http
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
     fn revoke_later(&self, credentials: Credentials) {
-        let (http, endpoints) = (self.http.clone(), self.endpoints.clone());
+        let (http, endpoints) = (self.http(), self.endpoints.clone());
         tokio::spawn(async move {
             oauth::revoke(&http, &endpoints, &credentials, &CancellationToken::new()).await;
         });

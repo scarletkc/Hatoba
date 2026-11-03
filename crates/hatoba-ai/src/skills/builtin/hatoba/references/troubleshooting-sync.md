@@ -10,7 +10,7 @@ Other labels: **Will retry automatically**, **Enter your master password again**
 
 | State | What it means | What to do |
 |---|---|---|
-| Offline | The Worker (or Cloudflare) can't be reached | Check the network and the Worker URL (**Endpoint** on the status page). It retries by itself; **Sync Now** retries at once |
+| Offline | The Worker (or Cloudflare) can't be reached | Check the network and the Worker URL (**Endpoint** on the status page). A network that needs a proxy needs it in **Proxy for Hatoba** (Settings → Proxies). It retries by itself; **Sync Now** retries at once |
 | Signed out | The session expired or was revoked (another device pressed **Remove** on this one, or the master password changed) | Enter the master password under **Sign In Again** on the status page |
 | Sync error | A sync round failed; the page shows the message | Read the message below; it retries automatically |
 | Worker update required | The Worker is too old for this Hatoba | **Update Worker**; see `references/sync-worker.md` |
