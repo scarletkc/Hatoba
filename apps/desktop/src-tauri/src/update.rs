@@ -85,10 +85,7 @@ async fn check_with<R: Runtime>(
     before_exit: impl Fn() + Send + Sync + 'static,
 ) -> AppResult<UpdateCheck> {
     let current = &app.package_info().version;
-    // SSH-13: the proxy of this device's own connections.
-    let proxy = app
-        .try_state::<AppState>()
-        .and_then(|st| st.app_proxy.reqwest());
+    let proxy = app_proxy(app);
     let endpoint = if current.pre.is_empty() {
         Some(configured_endpoint(app)?)
     } else {
@@ -96,10 +93,7 @@ async fn check_with<R: Runtime>(
     };
     let found = match endpoint {
         None => None,
-        Some(endpoint) => match updater(app, endpoint.clone(), before_exit, proxy.clone())?
-            .check()
-            .await
-        {
+        Some(endpoint) => match updater(app, endpoint.clone(), before_exit)?.check().await {
             Ok(found) => found,
             Err(UpdaterError::ReleaseNotFound) => {
                 no_release(endpoint, proxy).await?;
@@ -177,13 +171,21 @@ fn package_manager_in(dir: &Path) -> Option<PackageManager> {
     })
 }
 
-/// The updater, whose check and download go through `proxy`, or the system proxy without one.
+/// SSH-13: the proxy of this device's own connections, while the vault is unlocked.
+fn app_proxy<R: Runtime>(app: &AppHandle<R>) -> Option<reqwest::Proxy> {
+    app.try_state::<AppState>()
+        .and_then(|st| st.app_proxy.reqwest())
+}
+
+/// The updater, whose check and download go through [`app_proxy`] as it is when each starts.
 fn updater<R: Runtime>(
     app: &AppHandle<R>,
     endpoint: Url,
     before_exit: impl Fn() + Send + Sync + 'static,
-    proxy: Option<reqwest::Proxy>,
 ) -> AppResult<Updater> {
+    // The update a check finds keeps this client setup until it installs, so it holds no proxy,
+    // whose password must not outlive the unlocked vault (SEC-01).
+    let handle = app.clone();
     app.updater_builder()
         .endpoints(vec![endpoint])
         .map_err(classify)?
@@ -194,8 +196,8 @@ fn updater<R: Runtime>(
             let client = client
                 .connect_timeout(CONNECT_TIMEOUT)
                 .read_timeout(READ_TIMEOUT);
-            match &proxy {
-                Some(proxy) => client.proxy(proxy.clone()),
+            match app_proxy(&handle) {
+                Some(proxy) => client.proxy(proxy),
                 None => client,
             }
         })
