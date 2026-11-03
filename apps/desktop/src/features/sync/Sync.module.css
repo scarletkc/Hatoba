@@ -7,13 +7,15 @@
   flex-direction: column;
 }
 
+/* Under the page header, with the rule the other pages draw there. */
 .scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   display: flex;
   justify-content: center;
-  padding: 28px 24px;
+  padding: 24px;
+  border-top: 0.5px solid var(--line);
 }
 
 .column {
@@ -40,10 +42,10 @@
   min-width: 0;
 }
 
+/* The state under the page's title, a size below it. */
 .title {
-  font-size: var(--text-title);
+  font-size: var(--text-lg);
   font-weight: 600;
-  letter-spacing: -0.012em;
 }
 
 .sub {

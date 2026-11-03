@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Icon, StatusLine, StatusTile, toast } from "@hatoba/ui";
+import { Button, Icon, PageHeader, StatusLine, StatusTile, toast } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { formatRelative, useT, type MessageKey } from "@/i18n";
@@ -191,6 +191,9 @@ export function SyncConflictsView({ onClose }: { onClose: () => void }) {
 
   return (
     <div className={s.page}>
+      <PageHeader title={t("rail.sync")}>
+        <Button onClick={onClose}>{t("btn.later")}</Button>
+      </PageHeader>
       <div className={s.scroll}>
         <div className={`${s.column} ${s.columnTight}`}>
           <div className={s.header}>
@@ -199,7 +202,6 @@ export function SyncConflictsView({ onClose }: { onClose: () => void }) {
               <div className={s.title}>{t("sync.cf.title", { n: list?.length ?? 0 })}</div>
               <div className={s.sub}>{t("sync.cf.sub")}</div>
             </div>
-            <Button onClick={onClose}>{t("btn.later")}</Button>
           </div>
 
           {list?.length === 0 && <div className={s.empty}>{t("sync.cf.empty")}</div>}
