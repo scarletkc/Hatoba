@@ -92,9 +92,7 @@ others do?", check comparable apps and come back with a decision.
 
 Ask the owner first about positioning copy and anything published under the owner's name, about
 departing from what comparable apps do in either direction, and about product scope: adding or
-removing a settings page, a feature, or the way into one. Ask too when a wrong guess would cost real
-rework and only the owner knows the answer, such as which of two readings of the request they meant
-or what has been checked on a real device. Ask one question, with your pick first.
+removing a settings page, a feature, or the way into one.
 
 External contributors get no work on copy, translations, docs, prompts or how the UI looks. When
 their pull request still gets these wrong after a review, keep their logic and rewrite everything a
