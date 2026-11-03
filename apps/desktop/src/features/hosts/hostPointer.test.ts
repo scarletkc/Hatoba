@@ -30,6 +30,8 @@ describe("a selection box", () => {
     expect(clipBox({ left: -20, top: -50, right: 500, bottom: 900 }, shown)).toEqual(shown);
     const inside = { left: 10, top: 40, right: 50, bottom: 60 };
     expect(clipBox(inside, shown)).toEqual(inside);
+    // Dragged up past the head.
+    expect(clipBox({ left: 10, top: -50, right: 50, bottom: 60 }, shown)).toEqual({ ...inside, top: 30 });
     expect(clipBox({ left: 10, top: 0, right: 50, bottom: 30 }, shown)).toBeNull();
   });
 });
