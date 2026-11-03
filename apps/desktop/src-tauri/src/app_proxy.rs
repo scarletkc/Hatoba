@@ -50,6 +50,17 @@ pub fn refresh(app: &AppHandle) {
     sync::reconnect(app);
 }
 
+/// Drops the saved proxy and its password when the vault locks (SEC-01): until [`refresh`] runs
+/// after the unlock, sync, the AI assistant and the update check use the system proxy.
+pub fn forget(app: &AppHandle) {
+    let st = app.state::<AppState>();
+    if st.app_proxy.applied().take().is_none() {
+        return;
+    }
+    hatoba_core::sync::set_proxy(None);
+    st.ai.set_proxy(None);
+}
+
 /// The saved proxy this device's preferences name, if it still exists.
 fn named(v: &Vault) -> Option<Proxy> {
     let json = v.local_prefs().ok().flatten()?;
