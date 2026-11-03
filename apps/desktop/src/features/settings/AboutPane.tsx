@@ -233,7 +233,7 @@ export function AboutPane() {
           </div>
           {update.notes && (
             <div className={s.notesBody}>
-              <Markdown text={update.notes} />
+              <Markdown text={update.notes} details />
             </div>
           )}
           <LinkButton icon="arrow-up-right" onClick={() => void openExternal(update.release_url)}>
