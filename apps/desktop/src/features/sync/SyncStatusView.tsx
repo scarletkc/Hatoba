@@ -7,6 +7,7 @@ import {
   Icon,
   LinkButton,
   ListRow,
+  PageHeader,
   Row,
   RowValue,
   Section,
@@ -114,6 +115,16 @@ export function SyncStatusView({ status, onReview }: { status: SyncStatus; onRev
 
   return (
     <div className={s.page}>
+      <PageHeader title={t("rail.sync")}>
+        <Button
+          icon="arrows-clockwise"
+          busy={syncing}
+          disabled={status.state === "auth_failed"}
+          onClick={() => void syncNow()}
+        >
+          {t("sync.syncNow")}
+        </Button>
+      </PageHeader>
       <div className={s.scroll}>
         <div className={s.column}>
           <div className={s.header}>
@@ -124,14 +135,6 @@ export function SyncStatusView({ status, onReview }: { status: SyncStatus; onRev
               <div className={s.title}>{view.title}</div>
               <div className={s.sub}>{view.sub}</div>
             </div>
-            <Button
-              icon="arrows-clockwise"
-              busy={syncing}
-              disabled={status.state === "auth_failed"}
-              onClick={() => void syncNow()}
-            >
-              {t("sync.syncNow")}
-            </Button>
           </div>
 
           {status.state === "auth_failed" && <ReloginForm />}

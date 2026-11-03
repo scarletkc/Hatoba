@@ -5,6 +5,7 @@ import { DisclosureCaret, Icon, controlStyles } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import { openExternal, writeClipboard } from "@/lib/clipboard";
 import { cx } from "@/lib/cx";
+import { grammarOf, useHighlight, type Token } from "./highlight";
 import s from "./Markdown.module.css";
 
 interface MdNode {
@@ -111,8 +112,42 @@ function ImageLink({ src, alt }: { src?: unknown; alt?: string }) {
   );
 }
 
-function CodeBlock({ children }: { children?: ReactNode }) {
+/** A fenced block's `<code>` element, from the `pre` that react-markdown passes. */
+function codeOf(pre: MdElement | undefined): { className: unknown; text: string } | null {
+  const code = pre?.children?.find((c) => c.type === "element" && c.tagName === "code");
+  if (!code) return null;
+  const text = (code.children ?? []).map((c) => (c.type === "text" ? (c.value ?? "") : "")).join("");
+  return { className: code.properties?.className, text };
+}
+
+interface MdElement {
+  type: string;
+  tagName?: string;
+  value?: string;
+  properties?: { className?: unknown };
+  children?: MdElement[];
+}
+
+const classNames = (value: unknown) =>
+  Array.isArray(value) ? value.join(" ") : typeof value === "string" ? value : undefined;
+
+function tokens(nodes: readonly Token[]): ReactNode[] {
+  return nodes.map((n, i) =>
+    n.type === "text" ? (
+      n.value
+    ) : n.type === "element" ? (
+      <span key={i} className={classNames(n.properties?.className)}>
+        {tokens(n.children ?? [])}
+      </span>
+    ) : null,
+  );
+}
+
+/** A fenced block, colored when its language is one `highlight.ts` knows, with a copy button on hover. */
+function CodeBlock({ node, children }: { node?: MdElement; children?: ReactNode }) {
   const t = useT();
+  const code = codeOf(node);
+  const highlighted = useHighlight(code ? grammarOf(code.className) : null, code?.text ?? "");
   const ref = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
   const copy = async () => {
@@ -127,7 +162,14 @@ function CodeBlock({ children }: { children?: ReactNode }) {
   return (
     <div className={s.codeBlock}>
       <pre ref={ref} className="selectable">
-        {children}
+        {highlighted ? (
+          <code className={classNames(code?.className)}>
+            {tokens(highlighted.tokens)}
+            {highlighted.rest}
+          </code>
+        ) : (
+          children
+        )}
       </pre>
       <button
         type="button"
@@ -159,7 +201,7 @@ function Details({ summary, initial, children }: { summary: string; initial: boo
 const components: Components = {
   a: ({ href, children }) => <Link href={href}>{children}</Link>,
   img: ({ src, alt }) => <ImageLink src={src} alt={alt} />,
-  pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
+  pre: ({ node, children }) => <CodeBlock node={node}>{children}</CodeBlock>,
   table: ({ children }) => (
     <div className={s.tableWrap}>
       <table>{children}</table>

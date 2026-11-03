@@ -40,6 +40,7 @@ import type {
   SearchProviderView,
 } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { ProviderIcon } from "@/lib/ProviderIcon";
 import {
   changedSettings,
   judgeChoices,
@@ -356,7 +357,7 @@ function ProviderRow({
         onClick={onEdit}
       >
         <span className={s.providerIcon} aria-hidden>
-          <Icon name="sparkle" />
+          <ProviderIcon provider={p} />
         </span>
         <span className={s.providerText}>
           <span className={s.providerName}>{p.name}</span>

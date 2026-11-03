@@ -33,6 +33,26 @@
   width: 56px;
   height: 56px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  animation: rise var(--motion-base) var(--ease-out);
+}
+
+/* The card rises on its own as each step comes in (WizardCard). */
+@keyframes rise {
+  from {
+    transform: translateY(var(--motion-rise));
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo {
+    animation-duration: var(--motion-fade) !important;
+  }
+}
+
+/* The default button, focused as the window opens: no ring until the keyboard is used (Onboarding). */
+.quietFocus:focus-visible {
+  outline: none;
 }
 
 .options {

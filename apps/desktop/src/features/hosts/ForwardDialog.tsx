@@ -204,12 +204,15 @@ export function ForwardDialog({
         title={forward ? t("hosts.fwd.dialog.editTitle") : t("hosts.fwd.dialog.addTitle")}
         subtitle={t(KIND_TEXT[kind].subtitle)}
       />
-      {/* Keys stay inside the dialog: React events bubble through portals to the page behind it. */}
+      {/* Keys stay inside the dialog: React events bubble through portals to the page behind it. Escape goes on to the
+          dialog's own handler, which closes it. */}
       <form
         id={ids.form}
         className={s.form}
         noValidate
-        onKeyDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key !== "Escape") e.stopPropagation();
+        }}
         onSubmit={(e) => {
           e.preventDefault();
           void submit();

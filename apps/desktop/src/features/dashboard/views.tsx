@@ -151,10 +151,23 @@ function mountsTitle(r: StatsReading): string {
   return lines.join("\n");
 }
 
-function rates(r: StatsReading): string | null {
-  if (r.net_rx_rate == null && r.net_tx_rate == null) return null;
-  return `↓ ${r.net_rx_rate != null ? formatRate(r.net_rx_rate) : "—"} ↑ ${r.net_tx_rate != null ? formatRate(r.net_tx_rate) : "—"}`;
+/** A value that was not read, the same in every column, card and the detail sheet. */
+export function NoValue() {
+  return <span className={s.noValue}>—</span>;
 }
+
+/** The receive and send rates, or null when neither was read. */
+function Rates({ reading }: { reading: StatsReading }) {
+  const { net_rx_rate: rx, net_tx_rate: tx } = reading;
+  if (rx == null && tx == null) return null;
+  return (
+    <>
+      ↓ {rx != null ? formatRate(rx) : <NoValue />} ↑ {tx != null ? formatRate(tx) : <NoValue />}
+    </>
+  );
+}
+
+const hasRates = (r: StatsReading) => r.net_rx_rate != null || r.net_tx_rate != null;
 
 // ───────────────────────── Cards ─────────────────────────
 
@@ -191,7 +204,7 @@ function Meter({
       </span>
       <span className={cx(s.meterValue, alert && s.alert)} title={title}>
         {alert && <Icon name="warning" fill />}
-        {percent == null ? "—" : formatPercent(percent)}
+        {percent == null ? <NoValue /> : formatPercent(percent)}
       </span>
     </>
   );
@@ -239,7 +252,9 @@ function DetailLines({ reading, t }: { reading: StatsReading; t: T }) {
   return (
     <>
       <div className={s.line}>
-        <span className={s.lineText}>{rates(reading)}</span>
+        <span className={s.lineText}>
+          <Rates reading={reading} />
+        </span>
       </div>
       <div className={s.line}>
         <span className={s.lineText}>{details.join(" · ")}</span>
@@ -477,7 +492,7 @@ export function StatsHead({
 
 /** A small meter and its percentage, red past the threshold. */
 function MiniMeter({ percent, alert, title }: { percent: number | null; alert: boolean; title?: string }) {
-  if (percent == null) return <span className={s.dim}>—</span>;
+  if (percent == null) return <NoValue />;
   return (
     <span className={cx(s.mini, alert && s.alert)} title={title}>
       <span className={s.meter}>
@@ -537,11 +552,19 @@ export const StatsRow = memo(function StatsRow({
         );
       }
       case "network":
-        return <span className={s.mono}>{reading ? (rates(reading) ?? "—") : "—"}</span>;
-      case "load":
-        return <span className={s.mono}>{(reading && formatLoad(reading.load)) ?? "—"}</span>;
+        return reading && hasRates(reading) ? (
+          <span className={s.mono}>
+            <Rates reading={reading} />
+          </span>
+        ) : (
+          <NoValue />
+        );
+      case "load": {
+        const load = reading && formatLoad(reading.load);
+        return load ? <span className={s.mono}>{load}</span> : <NoValue />;
+      }
       case "uptime":
-        return <span>{reading?.uptime_secs != null ? formatUptime(t.locale, reading.uptime_secs) : "—"}</span>;
+        return reading?.uptime_secs != null ? <span>{formatUptime(t.locale, reading.uptime_secs)}</span> : <NoValue />;
     }
   };
   return (

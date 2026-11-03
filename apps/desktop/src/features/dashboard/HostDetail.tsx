@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button, FooterSpacer, Icon, Sheet, StatusLine, type StatusTone } from "@hatoba/ui";
 import { Sparkline } from "@/features/terminal/Sparkline";
 import {
@@ -18,6 +18,7 @@ import { dashboardSwitch, openTerminal, retryHost } from "./actions";
 import { statusColor, statusText } from "./status";
 import { isStale, memPercent, readingGapMs, mountPercent, pastThreshold, rootPercent } from "./logic";
 import type { HostReadout } from "./readings";
+import { NoValue } from "./views";
 import s from "./HostDetail.module.css";
 
 const TONE: Record<ReturnType<typeof statusText>["tone"], StatusTone> = {
@@ -127,7 +128,7 @@ export function HostDetail({
         <div className={cx(s.body, stale && s.stale)}>
           <Section
             label={t("terminal.stats.cpu")}
-            value={reading.cpu_percent != null ? formatPercent(reading.cpu_percent) : "—"}
+            value={reading.cpu_percent != null ? formatPercent(reading.cpu_percent) : <NoValue />}
             alert={pastThreshold(reading.cpu_percent, alerts.cpu)}
           >
             <Sparkline
@@ -160,9 +161,9 @@ function Section({
   children,
 }: {
   label: string;
-  value?: string;
+  value?: ReactNode;
   alert?: boolean;
-  children?: React.ReactNode;
+  children?: ReactNode;
 }) {
   return (
     <section className={s.section} aria-label={label}>
@@ -285,7 +286,7 @@ function NetworkSection({
   const rx = history.map((r) => r.net_rx_rate);
   const tx = history.map((r) => r.net_tx_rate);
   const max = Math.max(MIN_RATE_SCALE, ...rx.map((v) => v ?? 0), ...tx.map((v) => v ?? 0));
-  const rate = (v: number | null) => (v != null ? formatRate(v) : "—");
+  const rate = (v: number | null) => (v != null ? formatRate(v) : <NoValue />);
   return (
     <section className={s.section} aria-label={t("terminal.stats.net")}>
       <div className={s.row}>

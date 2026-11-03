@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, FooterSpacer, Icon } from "@hatoba/ui";
 import { AppLogo } from "@/app/AppLogo";
 import { WindowChrome } from "@/app/TitleBar";
@@ -20,6 +20,17 @@ export function Onboarding() {
   const [step, setStep] = useState<Step>("choose");
   const [code, setCode] = useState("");
   const [config, setConfig] = useState<SyncConfigInput | null>(null);
+  // The welcome step's Continue is focused when the window opens, so Enter goes on. Like a native
+  // default button it shows no focus ring for that, only once a key other than Enter or Space is pressed.
+  const [keyboard, setKeyboard] = useState(false);
+  useEffect(() => {
+    if (keyboard) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" && e.key !== " ") setKeyboard(true);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [keyboard]);
 
   const stepLabels =
     flow === "create"
@@ -41,7 +52,7 @@ export function Onboarding() {
             footer={
               <>
                 <FooterSpacer />
-                <Button variant="primary" type="submit" autoFocus>
+                <Button variant="primary" type="submit" autoFocus className={cx(!keyboard && s.quietFocus)}>
                   {t("btn.continue")}
                 </Button>
               </>

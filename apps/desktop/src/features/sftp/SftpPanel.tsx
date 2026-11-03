@@ -23,6 +23,7 @@ import { cx } from "@/lib/cx";
 import { editFile } from "@/session/edits";
 import { useTransfers } from "@/session/transfers";
 import { EditList } from "./EditList";
+import { fileIcon } from "./fileIcon";
 import { pickSavePath, pickUploadFiles } from "./native";
 import { joinPath, parentPath, splitLastSegment } from "./paths";
 import { TransferList } from "./TransferList";
@@ -57,13 +58,6 @@ function tooltip(e: FileEntry): string {
     );
   }
   return lines.join("\n");
-}
-
-function fileIcon(e: FileEntry): { name: string; fill: boolean; color: string } {
-  if (e.is_dir) return { name: "folder-simple", fill: true, color: "var(--accent)" };
-  // Owner-only files (private keys, .env…) get the lock.
-  if (/^-rw-------/.test(e.permissions)) return { name: "file-lock", fill: false, color: "var(--fg2)" };
-  return { name: "file-text", fill: false, color: "var(--fg2)" };
 }
 
 interface Props {

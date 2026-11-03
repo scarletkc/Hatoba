@@ -1,0 +1,148 @@
+/* Simple Icons logos are single-color shapes: used as masks and painted in each brand's color, as
+   OsIcon paints the OS logos. Brands whose color is black or gray take the text color, so they show
+   on both themes; the darker colors are lightened on dark, as tokens.css does for the OS logos. */
+.logo {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  background: currentColor;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.glyph {
+  flex: none;
+  font-size: var(--icon-16);
+}
+
+.generic {
+  color: var(--fg2);
+}
+
+.openai {
+  color: var(--fg);
+}
+
+.anthropic {
+  color: var(--fg);
+  -webkit-mask-image: url("./providers/anthropic.svg");
+  mask-image: url("./providers/anthropic.svg");
+}
+
+.ollama {
+  color: var(--fg);
+  -webkit-mask-image: url("./providers/ollama.svg");
+  mask-image: url("./providers/ollama.svg");
+}
+
+.lmstudio {
+  color: var(--fg);
+  -webkit-mask-image: url("./providers/lmstudio.svg");
+  mask-image: url("./providers/lmstudio.svg");
+}
+
+.openrouter {
+  color: var(--fg);
+  -webkit-mask-image: url("./providers/openrouter.svg");
+  mask-image: url("./providers/openrouter.svg");
+}
+
+.deepseek {
+  color: #5786fe;
+  -webkit-mask-image: url("./providers/deepseek.svg");
+  mask-image: url("./providers/deepseek.svg");
+}
+
+.googlegemini {
+  color: #8e75b2;
+  -webkit-mask-image: url("./providers/googlegemini.svg");
+  mask-image: url("./providers/googlegemini.svg");
+}
+
+.mistralai {
+  color: #fa520f;
+  -webkit-mask-image: url("./providers/mistralai.svg");
+  mask-image: url("./providers/mistralai.svg");
+}
+
+.moonshotai {
+  color: var(--fg);
+  -webkit-mask-image: url("./providers/moonshotai.svg");
+  mask-image: url("./providers/moonshotai.svg");
+}
+
+.kimi {
+  color: var(--fg);
+  -webkit-mask-image: url("./providers/kimi.svg");
+  mask-image: url("./providers/kimi.svg");
+}
+
+.zdotai {
+  color: var(--fg);
+  -webkit-mask-image: url("./providers/zdotai.svg");
+  mask-image: url("./providers/zdotai.svg");
+}
+
+.alibabacloud {
+  color: #ff6a00;
+  -webkit-mask-image: url("./providers/alibabacloud.svg");
+  mask-image: url("./providers/alibabacloud.svg");
+}
+
+.perplexity {
+  color: #1fb8cd;
+  -webkit-mask-image: url("./providers/perplexity.svg");
+  mask-image: url("./providers/perplexity.svg");
+}
+
+.nvidia {
+  color: #76b900;
+  -webkit-mask-image: url("./providers/nvidia.svg");
+  mask-image: url("./providers/nvidia.svg");
+}
+
+.cloudflare {
+  color: #f38020;
+  -webkit-mask-image: url("./providers/cloudflare.svg");
+  mask-image: url("./providers/cloudflare.svg");
+}
+
+.github {
+  color: var(--fg);
+  -webkit-mask-image: url("./providers/github.svg");
+  mask-image: url("./providers/github.svg");
+}
+
+.baidu {
+  color: #2932e1;
+  -webkit-mask-image: url("./providers/baidu.svg");
+  mask-image: url("./providers/baidu.svg");
+}
+
+.vercel {
+  color: var(--fg);
+  -webkit-mask-image: url("./providers/vercel.svg");
+  mask-image: url("./providers/vercel.svg");
+}
+
+.poe {
+  color: #5d5cde;
+  -webkit-mask-image: url("./providers/poe.svg");
+  mask-image: url("./providers/poe.svg");
+}
+
+:root[data-theme="dark"] .googlegemini {
+  color: #a690c8;
+}
+
+:root[data-theme="dark"] .baidu {
+  color: #6a71ff;
+}
+
+:root[data-theme="dark"] .poe {
+  color: #8584f0;
+}
