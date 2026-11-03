@@ -32,6 +32,7 @@
 }
 
 .item {
+  position: relative;
   width: calc(var(--rail-width) - 12px);
   min-height: 56px;
   flex: none;
@@ -52,10 +53,24 @@
   color: var(--fg);
 }
 
+/* The page shown: its filled icon and its name in the accent color, with a bar at the rail's edge. No fill, so it
+ * doesn't read as a second selected tab under the home tab. */
 .itemActive,
 .itemActive:hover {
-  background: var(--sel);
-  color: var(--fg);
+  background: transparent;
+  color: var(--accent);
+}
+
+.itemActive::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -5px;
+  width: 3px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  transform: translateY(-50%);
 }
 
 .itemIcon {
