@@ -8,6 +8,7 @@ use hatoba_core::model::{Item, Proxy, ProxyKind};
 use hatoba_core::vault::Vault;
 use reqwest::{NoProxy, Url};
 use tauri::{AppHandle, Manager};
+use zeroize::Zeroizing;
 
 use crate::dto::LocalPrefs;
 use crate::state::AppState;
@@ -72,8 +73,10 @@ fn reqwest_proxy(proxy: &Proxy) -> Option<reqwest::Proxy> {
         .ok()
         .and_then(|mut url| {
             if !proxy.username.is_empty() {
-                url.set_username(&proxy.username).ok()?;
-                url.set_password(Some(&proxy.password)).ok()?;
+                // reqwest decodes the user info, and `Url` leaves `%` as it is.
+                url.set_username(&proxy.username.replace('%', "%25")).ok()?;
+                let password = Zeroizing::new(proxy.password.replace('%', "%25"));
+                url.set_password(Some(&password)).ok()?;
             }
             reqwest::Proxy::all(url.as_str()).ok()
         });
@@ -89,7 +92,6 @@ fn reqwest_proxy(proxy: &Proxy) -> Option<reqwest::Proxy> {
 mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
-    use zeroize::Zeroizing;
 
     use super::*;
 
@@ -126,7 +128,7 @@ mod tests {
     async fn an_http_proxy_gets_the_request_and_the_sign_in() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
-        let client = client(&proxy(ProxyKind::Http, port, "alice", "p@ss:w/rd%"));
+        let client = client(&proxy(ProxyKind::Http, port, "alice", "p@ss:w/%41rd%"));
         let request = tokio::spawn(async move {
             let _ = client.get("http://hatoba.test/page").send().await;
         });
@@ -136,10 +138,10 @@ mod tests {
             head.starts_with("GET http://hatoba.test/page HTTP/1.1\r\n"),
             "{head}"
         );
-        // base64("alice:p@ss:w/rd%")
+        // base64("alice:p@ss:w/%41rd%")
         assert!(
             head.to_lowercase()
-                .contains("proxy-authorization: basic ywxpy2u6cebzczp3l3jkjq=="),
+                .contains("proxy-authorization: basic ywxpy2u6cebzczp3lyu0mxjkjq=="),
             "{head}"
         );
     }

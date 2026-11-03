@@ -1,10 +1,10 @@
 //! `fetch_url` (AI-15).
 //!
 //! GET only, `http`/`https` only, no cookies, no credentials, at most 5 redirects followed by
-//! hand, through the proxy the caller gives, else the system proxy when one is set. Redirects are followed only on the host the
-//! call named: a redirect to another host ends the fetch with that URL, so a fetch of it goes
-//! through approval like any other (AI-19), and an allowed domain cannot pass the call on to one
-//! that is not. Every hop is checked: an IP-literal host and
+//! hand, through the proxy the caller gives, else the system proxy when one is set. Redirects are
+//! followed only on the host the call named: a redirect to another host ends the fetch with that
+//! URL, so a fetch of it goes through approval like any other (AI-19), and an allowed domain
+//! cannot pass the call on to one that is not. Every hop is checked: an IP-literal host and
 //! `localhost` directly, and a host name the client resolves itself through a resolver that
 //! refuses names resolving to any non-public address. The connection uses exactly the addresses
 //! the resolver checked, so DNS rebinding between the check and the connection is not possible.
