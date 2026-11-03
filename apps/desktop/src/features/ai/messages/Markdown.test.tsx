@@ -65,3 +65,39 @@ describe("Markdown <details>", () => {
     expect(mount("<b>bold</b>", true).textContent).toBe("<b>bold</b>");
   });
 });
+
+describe("Markdown code blocks", () => {
+  /** Waits for the grammars, which load with the first block that has a known language. */
+  async function settle() {
+    await act(async () => {
+      await import("./highlighter");
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  }
+
+  it("colors a block in a known language, and copies its text unchanged", async () => {
+    const source = 'for f in *.log; do\n  echo "$f" # each file\ndone';
+    const host = mount("```sh\n" + source + "\n```");
+    await settle();
+    const code = host.querySelector("pre code") as HTMLElement;
+    expect(code.className).toBe("language-sh");
+    expect(code.querySelector(".hljs-keyword")?.textContent).toBe("for");
+    expect(code.querySelector(".hljs-comment")?.textContent).toBe("# each file");
+    expect(code.textContent).toBe(source + "\n");
+  });
+
+  it("leaves a block plain without a language or with one it does not know", async () => {
+    for (const text of ["```\necho hi # no\n```", "```text\necho hi # no\n```", "```brainfuck\n+[-]\n```"]) {
+      const host = mount(text);
+      await settle();
+      expect(host.querySelector("pre code span"), text).toBeNull();
+      act(() => unmount?.());
+    }
+  });
+
+  it("registers every grammar the language table names", async () => {
+    const { GRAMMAR_NAMES } = await import("./highlight");
+    const { registered } = await import("./highlighter");
+    expect(GRAMMAR_NAMES.filter((g) => !registered(g))).toEqual([]);
+  });
+});

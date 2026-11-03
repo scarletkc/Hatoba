@@ -125,6 +125,7 @@
   background: var(--fill);
 }
 
+/* The provider's logo (ProviderIcon) on a tile like an app icon's. */
 .providerIcon {
   width: 30px;
   height: 30px;
@@ -133,9 +134,8 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-md);
-  background: var(--accenttint);
-  color: var(--accent);
-  font-size: var(--icon-16);
+  background: var(--btn);
+  box-shadow: var(--shadow-btn);
 }
 
 .providerText {

@@ -107,6 +107,96 @@
   font-family: inherit;
 }
 
+/* Syntax colors (`highlight.ts`), after Atom One, darkened or lightened where a color was too faint
+   for small text on the panel. */
+.codeBlock {
+  --code-comment: #6f737b;
+  --code-keyword: #a626a4;
+  --code-string: #3b8638;
+  --code-number: #986801;
+  --code-function: #3a6fe0;
+  --code-type: #a36b00;
+  --code-tag: #d23f31;
+  --code-literal: #0b7fae;
+}
+
+:root[data-theme="dark"] .codeBlock {
+  --code-comment: #868b94;
+  --code-keyword: #c678dd;
+  --code-string: #98c379;
+  --code-number: #d19a66;
+  --code-function: #61afef;
+  --code-type: #e5c07b;
+  --code-tag: #e06c75;
+  --code-literal: #56b6c2;
+}
+
+.codeBlock :global(.hljs-comment),
+.codeBlock :global(.hljs-quote) {
+  color: var(--code-comment);
+}
+
+.codeBlock :global(.hljs-keyword),
+.codeBlock :global(.hljs-doctag),
+.codeBlock :global(.hljs-formula) {
+  color: var(--code-keyword);
+}
+
+.codeBlock :global(.hljs-string),
+.codeBlock :global(.hljs-regexp),
+.codeBlock :global(.hljs-addition),
+.codeBlock :global(.hljs-attribute),
+.codeBlock :global(.hljs-meta .hljs-string) {
+  color: var(--code-string);
+}
+
+.codeBlock :global(.hljs-number),
+.codeBlock :global(.hljs-attr),
+.codeBlock :global(.hljs-variable),
+.codeBlock :global(.hljs-template-variable),
+.codeBlock :global(.hljs-type),
+.codeBlock :global(.hljs-selector-class),
+.codeBlock :global(.hljs-selector-attr),
+.codeBlock :global(.hljs-selector-pseudo) {
+  color: var(--code-number);
+}
+
+.codeBlock :global(.hljs-title),
+.codeBlock :global(.hljs-symbol),
+.codeBlock :global(.hljs-bullet),
+.codeBlock :global(.hljs-link),
+.codeBlock :global(.hljs-meta),
+.codeBlock :global(.hljs-selector-id) {
+  color: var(--code-function);
+}
+
+.codeBlock :global(.hljs-built_in),
+.codeBlock :global(.hljs-title.class_),
+.codeBlock :global(.hljs-class .hljs-title) {
+  color: var(--code-type);
+}
+
+.codeBlock :global(.hljs-section),
+.codeBlock :global(.hljs-name),
+.codeBlock :global(.hljs-selector-tag),
+.codeBlock :global(.hljs-deletion),
+.codeBlock :global(.hljs-subst) {
+  color: var(--code-tag);
+}
+
+.codeBlock :global(.hljs-literal) {
+  color: var(--code-literal);
+}
+
+.codeBlock :global(.hljs-section),
+.codeBlock :global(.hljs-strong) {
+  font-weight: 600;
+}
+
+.codeBlock :global(.hljs-link) {
+  text-decoration: underline;
+}
+
 .copy {
   position: absolute;
   top: 5px;
@@ -132,27 +222,40 @@
   opacity: 1;
 }
 
+/* Tables as Claude and ChatGPT draw them: a rounded hairline box, rules between rows only, and a
+   bold header over a stronger rule. A narrow table fills the width; a wide one scrolls. */
 .tableWrap {
   margin: 0 0 8px;
   overflow-x: auto;
+  border: 0.5px solid var(--line2);
+  border-radius: var(--radius-sm);
 }
 
+/* Cells wrap between words only, so a table too wide for the panel scrolls rather than breaking a
+   host name or an address in the middle. */
 .md table {
+  min-width: 100%;
   border-collapse: collapse;
   font-size: var(--text-sm);
+  line-height: 1.5;
+  overflow-wrap: normal;
 }
 
 .md th,
 .md td {
-  padding: 4px 9px;
-  border: 0.5px solid var(--line2);
+  padding: 6px 12px;
   text-align: left;
   vertical-align: top;
 }
 
 .md th {
-  background: var(--group);
+  border-bottom: 1px solid var(--line2);
   font-weight: 600;
+  white-space: nowrap;
+}
+
+.md tbody tr + tr > td {
+  border-top: 0.5px solid var(--line);
 }
 
 .details {
