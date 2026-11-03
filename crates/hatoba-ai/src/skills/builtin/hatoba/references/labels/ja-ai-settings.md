@@ -75,6 +75,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Native Search | ネイティブ検索 |
 | Brave Search API | Brave Search API |
 | Tavily | Tavily |
+| Keenable | Keenable |
 | SearXNG | SearXNG |
 | Instance URL | インスタンスの URL |
 | Remove Configuration | 設定を削除 |

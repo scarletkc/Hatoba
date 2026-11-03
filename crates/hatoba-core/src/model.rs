@@ -819,6 +819,7 @@ pub enum SearchKind {
     #[default]
     Brave,
     Tavily,
+    Keenable,
     /// A SearXNG instance.
     Searxng,
 }
@@ -830,6 +831,7 @@ impl SearchKind {
         match self {
             Self::Brave => "brave",
             Self::Tavily => "tavily",
+            Self::Keenable => "keenable",
             Self::Searxng => "searxng",
         }
     }
@@ -2183,6 +2185,7 @@ mod tests {
         for (kind, text) in [
             (SearchKind::Brave, "brave"),
             (SearchKind::Tavily, "tavily"),
+            (SearchKind::Keenable, "keenable"),
             (SearchKind::Searxng, "searxng"),
         ] {
             assert_eq!(serde_json::to_value(kind).unwrap(), text);

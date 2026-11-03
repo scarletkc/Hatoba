@@ -382,9 +382,9 @@ export function changedSettings(prev: AiSettingsView, next: AiSettingsView): Par
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
-export const SEARCH_KINDS: readonly SearchKind[] = ["brave", "tavily", "searxng"];
+export const SEARCH_KINDS: readonly SearchKind[] = ["brave", "tavily", "keenable", "searxng"];
 
-/** SearXNG is an instance the user runs, so it needs an address and no key; Brave and Tavily need a key. */
+/** SearXNG is an instance the user runs, so it needs an address and no key; Brave, Tavily and Keenable need a key. */
 export const searchNeedsUrl = (kind: SearchKind): boolean => kind === "searxng";
 
 /**

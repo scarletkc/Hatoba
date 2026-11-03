@@ -75,6 +75,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Native Search | 原生搜索 |
 | Brave Search API | Brave Search API |
 | Tavily | Tavily |
+| Keenable | Keenable |
 | SearXNG | SearXNG |
 | Instance URL | 实例地址 |
 | Remove Configuration | 移除配置 |

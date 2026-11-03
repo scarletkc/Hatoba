@@ -83,6 +83,7 @@ pub fn search_kind(kind: CoreSearchKind) -> WebSearchKind {
     match kind {
         CoreSearchKind::Brave => WebSearchKind::Brave,
         CoreSearchKind::Tavily => WebSearchKind::Tavily,
+        CoreSearchKind::Keenable => WebSearchKind::Keenable,
         CoreSearchKind::Searxng => WebSearchKind::Searxng,
     }
 }

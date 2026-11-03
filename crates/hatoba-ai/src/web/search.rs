@@ -1,4 +1,5 @@
-//! `web_search` (AI-14) through a search service: Brave Search API, Tavily or a SearXNG instance.
+//! `web_search` (AI-14) through a search service: Brave Search API, Tavily, Keenable or a SearXNG
+//! instance.
 
 use std::fmt;
 use std::time::Duration;
@@ -24,6 +25,8 @@ pub enum SearchKind {
     Brave,
     /// Tavily (`Authorization: Bearer`).
     Tavily,
+    /// Keenable (`X-API-Key`).
+    Keenable,
     /// A SearXNG instance with the JSON format enabled.
     Searxng,
 }
@@ -33,9 +36,9 @@ pub enum SearchKind {
 pub struct SearchConfig {
     /// Which service.
     pub kind: SearchKind,
-    /// The SearXNG instance URL (ignored for Brave and Tavily).
+    /// The SearXNG instance URL (ignored for Brave, Tavily and Keenable).
     pub base_url: Option<String>,
-    /// API key (Brave, Tavily); SearXNG needs none.
+    /// API key (Brave, Tavily, Keenable); SearXNG needs none.
     pub api_key: Zeroizing<String>,
 }
 
@@ -81,11 +84,13 @@ const RATE_LIMIT_RETRIES: u32 = 3;
 const MAX_RETRY_AFTER: Duration = Duration::from_secs(5);
 const BRAVE_ENDPOINT: &str = "https://api.search.brave.com/res/v1/web/search";
 const TAVILY_ENDPOINT: &str = "https://api.tavily.com/search";
+const KEENABLE_ENDPOINT: &str = "https://api.keenable.ai/v1/search";
 
 /// The fixed service endpoints (replaced in tests).
 pub(crate) struct Endpoints {
     pub brave: String,
     pub tavily: String,
+    pub keenable: String,
 }
 
 impl Default for Endpoints {
@@ -93,6 +98,7 @@ impl Default for Endpoints {
         Self {
             brave: BRAVE_ENDPOINT.into(),
             tavily: TAVILY_ENDPOINT.into(),
+            keenable: KEENABLE_ENDPOINT.into(),
         }
     }
 }
@@ -173,6 +179,16 @@ async fn search(
                     .json(&json!({"query": query, "max_results": MAX_RESULTS})),
                 "/results",
                 "content",
+            )
+        }
+        SearchKind::Keenable => {
+            let key = key_header(require_key(cfg)?)?;
+            (
+                http.post(&endpoints.keenable)
+                    .header(HeaderName::from_static("x-api-key"), key)
+                    .json(&json!({"query": query, "max_results": MAX_RESULTS})),
+                "/results",
+                "snippet",
             )
         }
         SearchKind::Searxng => {
@@ -315,6 +331,7 @@ mod tests {
         Endpoints {
             brave: format!("{}/res/v1/web/search", server.uri()),
             tavily: format!("{}/search", server.uri()),
+            keenable: format!("{}/v1/search", server.uri()),
         }
     }
 
@@ -381,6 +398,36 @@ mod tests {
         )
         .await
         .unwrap();
+        assert_eq!(found[0].snippet, "A language");
+    }
+
+    #[tokio::test]
+    async fn keenable_posts_the_query_with_an_api_key() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/search"))
+            .and(header("x-api-key", "keen-key"))
+            .and(body_json(json!({"query": "rust", "max_results": 10})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "results": [{
+                    "title": "Rust",
+                    "url": "https://rust-lang.org",
+                    "description": "",
+                    "snippet": "A <b>language</b>"
+                }]
+            })))
+            .mount(&server)
+            .await;
+        let found = search_at(
+            &http_client(),
+            &cfg(SearchKind::Keenable, "keen-key", None),
+            "rust",
+            &CancellationToken::new(),
+            &endpoints(&server),
+        )
+        .await
+        .unwrap();
+        assert_eq!(found[0].title, "Rust");
         assert_eq!(found[0].snippet, "A language");
     }
 
@@ -481,6 +528,7 @@ mod tests {
         for config in [
             cfg(SearchKind::Brave, "", None),
             cfg(SearchKind::Tavily, " ", None),
+            cfg(SearchKind::Keenable, "", None),
             cfg(SearchKind::Searxng, "", None),
         ] {
             assert!(matches!(

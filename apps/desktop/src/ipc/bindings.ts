@@ -2508,7 +2508,7 @@ export type RunningForwardView = {
 	dest: string,
 };
 
-export type SearchKind = "brave" | "tavily" | "searxng";
+export type SearchKind = "brave" | "tavily" | "keenable" | "searxng";
 
 export type SearchProviderInput = {
 	id: string | null,

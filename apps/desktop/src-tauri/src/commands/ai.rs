@@ -98,6 +98,7 @@ fn core_search_kind(kind: SearchKind) -> CoreSearchKind {
     match kind {
         SearchKind::Brave => CoreSearchKind::Brave,
         SearchKind::Tavily => CoreSearchKind::Tavily,
+        SearchKind::Keenable => CoreSearchKind::Keenable,
         SearchKind::Searxng => CoreSearchKind::Searxng,
     }
 }
@@ -156,6 +157,7 @@ pub(crate) fn search_provider_view(id: &str, p: &SearchProvider) -> SearchProvid
         kind: match p.kind {
             CoreSearchKind::Brave => SearchKind::Brave,
             CoreSearchKind::Tavily => SearchKind::Tavily,
+            CoreSearchKind::Keenable => SearchKind::Keenable,
             CoreSearchKind::Searxng => SearchKind::Searxng,
         },
         base_url: p.base_url.clone(),
@@ -758,7 +760,7 @@ pub async fn search_provider_save(
         SearchKind::Searxng => Some(checked_base_url(
             input.base_url.as_deref().unwrap_or_default(),
         )?),
-        SearchKind::Brave | SearchKind::Tavily => None,
+        SearchKind::Brave | SearchKind::Tavily | SearchKind::Keenable => None,
     };
     let view = state.with_unlocked(|v| save_search_provider(v, &input, base_url))?;
     sync::local_change(&app);

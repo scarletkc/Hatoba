@@ -371,7 +371,7 @@ interface AiProvider {           // P1, §13.2
 
 interface SearchProvider {       // P1, the backend of web_search (§13.4)
   type: "search_provider";
-  kind: "brave" | "tavily" | "searxng";
+  kind: "brave" | "tavily" | "keenable" | "searxng";
   base_url: string | null;      // The instance URL for searxng, null otherwise
   api_key: string;              // Empty for searxng
   updated_at: number;

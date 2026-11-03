@@ -1270,6 +1270,7 @@ export const AREAS: Area[] = [
           "aiSettings.search.native",
           "aiSettings.search.brave",
           "aiSettings.search.tavily",
+          "aiSettings.search.keenable",
           "aiSettings.search.searxng",
           "aiSettings.search.baseUrl",
           "aiSettings.search.remove",

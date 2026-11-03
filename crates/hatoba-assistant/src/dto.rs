@@ -171,6 +171,7 @@ pub struct AiTestResult {
 pub enum SearchKind {
     Brave,
     Tavily,
+    Keenable,
     Searxng,
 }
 

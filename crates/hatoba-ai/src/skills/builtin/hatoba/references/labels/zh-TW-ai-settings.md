@@ -75,6 +75,7 @@ The labels that these files name in English, as the interface shows them in Trad
 | Native Search | 原生搜尋 |
 | Brave Search API | Brave Search API |
 | Tavily | Tavily |
+| Keenable | Keenable |
 | SearXNG | SearXNG |
 | Instance URL | 實例網址 |
 | Remove Configuration | 移除設定 |
