@@ -21,17 +21,10 @@
   display: flex;
 }
 
-.termColumn {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
 .termArea {
   position: relative;
   flex: 1;
-  min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 

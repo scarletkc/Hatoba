@@ -1,17 +1,4 @@
-/*
- * The bar takes the terminal's colors whatever the app's appearance, so it reads as the terminal's top
- * edge: the tokens its parts use are worked out again from the scheme's background and foreground
- * (barColors), with the accent and status colors of the scheme's appearance. What it opens (menus,
- * popovers) is outside it and keeps the app's own colors.
- */
 .bar {
-  --fg: var(--bar-fg);
-  --fg2: var(--bar-fg2);
-  --fg3: var(--bar-fg3);
-  --line: color-mix(in srgb, var(--bar-fg) 9%, transparent);
-  --line2: color-mix(in srgb, var(--bar-fg) 18%, transparent);
-  --fill: color-mix(in srgb, var(--bar-fg) 9%, transparent);
-  --fill2: color-mix(in srgb, var(--bar-fg) 15%, transparent);
   container-type: inline-size;
   height: 36px;
   flex: none;
@@ -20,27 +7,10 @@
   gap: var(--space-8);
   padding: 0 10px 0 16px;
   border-bottom: 0.5px solid var(--line);
-  background: var(--bar-bg);
   font-size: var(--text-sm);
   color: var(--fg2);
   white-space: nowrap;
   min-width: 0;
-}
-
-.dark {
-  --accent: var(--term-dark-accent);
-  --green: var(--term-dark-green);
-  --orange: var(--term-dark-orange);
-  --red: var(--term-dark-red);
-  color-scheme: dark;
-}
-
-.light {
-  --accent: var(--term-light-accent);
-  --green: var(--term-light-green);
-  --orange: var(--term-light-orange);
-  --red: var(--term-light-red);
-  color-scheme: light;
 }
 
 .state {
