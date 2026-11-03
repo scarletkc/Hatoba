@@ -86,9 +86,9 @@ description: The owner's calls for scarletkc/Hatoba that the repository doesn't 
 
 Decide yourself, and say what you chose in one line of the pull request or reply: all wording in
 every language, including strings the owner wrote earlier; layout and interaction details; which of
-two reasonable options to take. Don't list uncertain spots, attach screenshots for the owner to
-judge, or offer a menu of options. When the owner asks "is this reasonable?" or "what do others
-do?", check comparable apps and come back with a decision.
+two reasonable options to take. Don't hand these back as a list of uncertain spots, screenshots for
+the owner to judge, or a menu of options. When the owner asks "is this reasonable?" or "what do
+others do?", check comparable apps and come back with a decision.
 
 Ask the owner first about positioning copy and anything published under the owner's name, about
 departing from what comparable apps do in either direction, and about product scope: adding or
