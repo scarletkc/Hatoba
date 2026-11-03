@@ -356,7 +356,7 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
               key={host.id}
               ref={host.id === hostId ? focused : undefined}
               role="group"
-              aria-label={host.name}
+              aria-label={`${host.name}, ${hostTarget(host)}`}
               className={s.hostGroup}
             >
               <HostRow host={host} connected={connections.some((c) => c.host_id === host.id)} />
@@ -391,16 +391,18 @@ export function ForwardsPage({ hostId }: { hostId: string | null }) {
   );
 }
 
-/** The row above a host's forwards: its name and `user@address:port`, the badge green while it is connected. */
+const hostTarget = (host: HostView) => (host.username ? `${host.username}@` : "") + hostPort(host.address, host.port);
+
+/**
+ * The row above a host's forwards: its name and `user@address:port`, the badge green while it is connected. Hidden from
+ * a screen reader, which hears the name and address as the group's label: a listbox's group holds only options.
+ */
 function HostRow({ host, connected }: { host: HostView; connected: boolean }) {
   return (
     <div className={s.hostRow} aria-hidden>
       <OsIcon os={host.os} badge={connected ? "var(--green)" : "var(--fg3)"} />
       <span className={s.hostName}>{host.name}</span>
-      <span className={s.hostTarget}>
-        {host.username ? `${host.username}@` : ""}
-        {hostPort(host.address, host.port)}
-      </span>
+      <span className={s.hostTarget}>{hostTarget(host)}</span>
     </div>
   );
 }

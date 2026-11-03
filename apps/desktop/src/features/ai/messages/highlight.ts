@@ -80,9 +80,9 @@ function load(): Promise<Highlighter> {
 /**
  * The tokens of `code` in `grammar`, or null while the grammars load and for plain blocks. While a
  * reply streams, a block's new text is highlighted at a lower priority than the text arriving, and
- * blocks whose text is unchanged keep their tokens.
+ * shows plain in `rest` until its tokens catch up; blocks whose text is unchanged keep their tokens.
  */
-export function useHighlight(grammar: string | null, code: string): Token[] | null {
+export function useHighlight(grammar: string | null, code: string): { tokens: Token[]; rest: string } | null {
   const wanted = grammar !== null && code.length <= MAX_CHARS;
   const [ready, setReady] = useState(() => loaded !== null);
   useEffect(() => {
@@ -97,7 +97,7 @@ export function useHighlight(grammar: string | null, code: string): Token[] | nu
     };
   }, [wanted, ready]);
   const deferred = useDeferredValue(code);
-  return useMemo(() => {
+  const tokens = useMemo(() => {
     if (!wanted || grammar === null || !ready || !loaded) return null;
     try {
       return loaded.highlight(grammar, deferred);
@@ -105,4 +105,6 @@ export function useHighlight(grammar: string | null, code: string): Token[] | nu
       return null;
     }
   }, [wanted, ready, grammar, deferred]);
+  if (!tokens || !code.startsWith(deferred)) return null;
+  return { tokens, rest: code.slice(deferred.length) };
 }

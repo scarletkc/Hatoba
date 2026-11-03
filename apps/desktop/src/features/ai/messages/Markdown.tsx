@@ -162,7 +162,14 @@ function CodeBlock({ node, children }: { node?: MdElement; children?: ReactNode 
   return (
     <div className={s.codeBlock}>
       <pre ref={ref} className="selectable">
-        {highlighted ? <code className={classNames(code?.className)}>{tokens(highlighted)}</code> : children}
+        {highlighted ? (
+          <code className={classNames(code?.className)}>
+            {tokens(highlighted.tokens)}
+            {highlighted.rest}
+          </code>
+        ) : (
+          children
+        )}
       </pre>
       <button
         type="button"

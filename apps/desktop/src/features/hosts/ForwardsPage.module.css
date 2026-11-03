@@ -53,7 +53,18 @@
     visibility: hidden;
   }
 
+  /* Only the dot shows, and the cell's tooltip says what it means. Its text stays for a screen reader; the address's
+     copy button goes. */
   .status > :not(:first-child) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .status > .address {
     display: none;
   }
 }
