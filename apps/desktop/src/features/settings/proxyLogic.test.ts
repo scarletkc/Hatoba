@@ -100,6 +100,8 @@ describe("validateProxy", () => {
     expect(validateProxy({ ...ok, address: "" }).address).toBe("addressRequired");
     expect(validateProxy({ ...ok, address: "a b" }).address).toBe("addressInvalid");
     expect(validateProxy({ ...ok, address: "https://proxy" }).address).toBe("addressInvalid");
+    expect(validateProxy({ ...ok, address: "127.0.0.1:7890" }).address).toBe("addressInvalid");
+    expect(validateProxy({ ...ok, address: "proxy#note" }).address).toBe("addressInvalid");
     expect(validateProxy({ ...ok, address: "[::1]" }).address).toBeUndefined();
     expect(validateProxy({ ...ok, port: "0" }).port).toBe("portInvalid");
     expect(validateProxy({ ...ok, port: "1.5" }).port).toBe("portInvalid");

@@ -100,7 +100,9 @@ export function validateProxy(
   if (!f.name.trim()) e.name = "nameRequired";
   const address = f.address.trim().replace(/^\[(.*)\]$/, "$1");
   if (!address) e.address = "addressRequired";
-  else if (/[\s@/\\]/.test(address)) e.address = "addressInvalid";
+  // A colon belongs only to an IPv6 address, which the backend parses: `host:port` goes in two fields.
+  else if (/[\s@/\\#?]/.test(address) || (address.includes(":") && !/^[\da-f.]*:[\da-f.]*:[\da-f:.]*$/i.test(address)))
+    e.address = "addressInvalid";
   const port = Number(f.port);
   if (!/^\d+$/.test(f.port.trim()) || port < 1 || port > 65535) e.port = "portInvalid";
   const username = f.username.trim();

@@ -54,7 +54,13 @@ pub fn proxy_from_input(input: &ProxyInput, existing: Option<&Proxy>) -> AppResu
     if address.is_empty() {
         return Err(AppError::invalid("address", "address is required"));
     }
-    if address.len() > 255 || address.contains(bad) || address.contains(['@', '/', '\\']) {
+    // A colon belongs only to an IPv6 address: `host:port` goes in two fields.
+    let colon = address.contains(':') && address.parse::<std::net::Ipv6Addr>().is_err();
+    if address.len() > 255
+        || address.contains(bad)
+        || address.contains(['@', '/', '\\', '#', '?'])
+        || colon
+    {
         return Err(AppError::invalid(
             "address",
             "address is not a valid host name or IP",
@@ -227,11 +233,14 @@ mod tests {
         let err = proxy_from_input(&input(ProxyKind::Socks5, "a", Some(&long)), None).unwrap_err();
         assert_eq!(err.field.as_deref(), Some("password"));
         let mut bad = input(ProxyKind::Socks5, "", None);
-        bad.address = "proxy example".into();
-        assert_eq!(
-            proxy_from_input(&bad, None).unwrap_err().field.as_deref(),
-            Some("address")
-        );
+        for address in ["proxy example", "127.0.0.1:7890", "proxy#note", "proxy?a"] {
+            bad.address = address.into();
+            assert_eq!(
+                proxy_from_input(&bad, None).unwrap_err().field.as_deref(),
+                Some("address"),
+                "{address}"
+            );
+        }
         bad.address = "proxy".into();
         bad.port = 0;
         assert_eq!(
