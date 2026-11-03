@@ -54,7 +54,7 @@
   }
 }
 
-/* Lines up with the names after the 16px state icon and the 8px gap. */
+/* Names line up with the host's name, after its 16px icon and the 8px gap. */
 .headName {
   padding-left: 24px;
 }
@@ -133,26 +133,8 @@
 .nameCell {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
   min-width: 0;
-}
-
-/* The state, as in the terminal's forwards popover: stopped, running, failed, or a spinner while it starts. */
-.state {
-  flex: none;
-  display: inline-flex;
-  justify-content: center;
-  width: 16px;
-  font-size: var(--icon-14);
-  color: var(--fg3);
-}
-
-.stateRunning {
-  color: var(--green);
-}
-
-.stateFailed {
-  color: var(--red);
+  padding-left: 24px;
 }
 
 /* The name over the rule, or the rule alone; two lines fit a compact row. */
@@ -194,6 +176,7 @@
 .status {
   display: flex;
   align-items: center;
+  gap: var(--space-8);
   min-width: 0;
   font-size: var(--text-sm);
   color: var(--fg2);
@@ -257,15 +240,13 @@
   margin-right: 4px;
 }
 
-/* Start or Stop, edit and delete show on the row under the pointer, the selected one, and the one the keyboard is in;
- * Retry shows on a rule that failed. */
+/* Edit and delete show on the row under the pointer, the selected one, and the one the keyboard is in. */
 .reveal {
   opacity: 0;
 }
 
 .row:hover .reveal,
 .rowSel .reveal,
-.row:focus-within .reveal,
-.shown {
+.row:focus-within .reveal {
   opacity: 1;
 }

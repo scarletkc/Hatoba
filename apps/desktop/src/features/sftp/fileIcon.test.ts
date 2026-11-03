@@ -19,18 +19,19 @@ describe("fileIcon", () => {
   it("tells the kinds apart by extension, in any case", () => {
     expect(file("main.rs")).toBe("file-code");
     expect(file("App.TSX")).toBe("file-code");
-    expect(file("deploy.sh")).toBe("terminal-window");
-    expect(file("Cargo.toml")).toBe("gear-six");
-    expect(file("docker-compose.yml")).toBe("gear-six");
+    expect(file("deploy.sh")).toBe("file-code");
+    expect(file("Cargo.toml")).toBe("file-code");
+    expect(file("docker-compose.yml")).toBe("file-code");
     expect(file("backup.tar.gz")).toBe("file-archive");
     expect(file("logo.PNG")).toBe("file-image");
     expect(file("manual.pdf")).toBe("file-pdf");
-    expect(file("dump.sql")).toBe("database");
-    expect(file("app.sqlite3")).toBe("database");
+    expect(file("dump.sql")).toBe("file-sql");
+    expect(file("app.sqlite3")).toBe("file-sql");
     expect(file("report.docx")).toBe("file-doc");
     expect(file("users.csv")).toBe("file-csv");
-    expect(file("fullchain.pem")).toBe("certificate");
-    expect(file("id_ed25519.pub")).toBe("key");
+    expect(file("fullchain.pem")).toBe("file-text");
+    expect(file("store.p12")).toBe("file-lock");
+    expect(file("id_ed25519.pub")).toBe("file-text");
     expect(file("notes.md")).toBe("file-text");
     expect(file("access.log")).toBe("file-text");
   });
@@ -41,15 +42,15 @@ describe("fileIcon", () => {
     expect(file("README")).toBe("file-text");
     expect(file("LICENSE")).toBe("file-text");
     expect(file("syslog.1")).toBe("file-text");
-    expect(file(".bashrc")).toBe("gear-six");
-    expect(file(".profile")).toBe("gear-six");
-    expect(file(".gitignore")).toBe("gear-six");
-    expect(file("authorized_keys")).toBe("key");
-    expect(file("id_rsa", "-rw-r--r--")).toBe("key");
+    expect(file(".bashrc")).toBe("file-code");
+    expect(file(".profile")).toBe("file-code");
+    expect(file(".gitignore")).toBe("file-code");
+    expect(file("authorized_keys")).toBe("file-text");
+    expect(file("id_rsa", "-rw-r--r--")).toBe("file-lock");
   });
 
-  it("shows an executable as a terminal window and anything else as a blank page", () => {
-    expect(file("node", "-rwxr-xr-x")).toBe("terminal-window");
+  it("shows anything else as a blank page, executables too", () => {
+    expect(file("node", "-rwxr-xr-x")).toBe("file");
     expect(file("notes.txt", "-rwxrwxrwx")).toBe("file-text");
     expect(file("hosts")).toBe("file");
     expect(file(".bash_history")).toBe("file");

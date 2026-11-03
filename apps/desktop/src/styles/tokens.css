@@ -46,14 +46,6 @@
   /* Windows caption buttons */
   --caption-hover: rgba(0, 0, 0, 0.06);
   --caption-close: #c42b1c;
-
-  /* The app icon's colors (src-tauri/app-icon.svg): its sky, top to bottom, the sea, top to bottom,
-     and the line of its surface. The first-launch and lock screens draw their backdrop with them. */
-  --brand-night: #0d1735;
-  --brand-sky: #24408a;
-  --brand-water: #22a6e8;
-  --brand-deep: #0d4590;
-  --brand-foam: #b5ecff;
 }
 
 :root[data-theme="dark"] {

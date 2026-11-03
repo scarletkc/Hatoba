@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button, FooterSpacer, Icon } from "@hatoba/ui";
-import { AppLogo, BrandBackdrop } from "@/app/AppLogo";
+import { AppLogo } from "@/app/AppLogo";
 import { WindowChrome } from "@/app/TitleBar";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
@@ -39,70 +39,67 @@ export function Onboarding() {
 
   return (
     <div className={s.root}>
-      <BrandBackdrop />
       <WindowChrome />
-      <div className={s.scroll}>
-        <div className={s.center}>
-          <AppLogo className={s.logo} />
-          {step === "choose" && (
-            <WizardCard
-              steps={stepLabels}
-              current={1}
-              title={t("vault.welcome.title")}
-              body={t("vault.welcome.body")}
-              onSubmit={() => setStep(flow === "create" ? "password" : "connect")}
-              footer={
-                <>
-                  <FooterSpacer />
-                  <Button variant="primary" type="submit" autoFocus className={cx(!keyboard && s.quietFocus)}>
-                    {t("btn.continue")}
-                  </Button>
-                </>
-              }
-            >
-              <div className={s.options} role="radiogroup" aria-label={t("vault.welcome.title")}>
-                <OptionCard
-                  selected={flow === "create"}
-                  icon="lock-key"
-                  title={t("vault.opt.create")}
-                  body={t("vault.opt.createDesc")}
-                  onSelect={() => setFlow("create")}
-                />
-                <OptionCard
-                  selected={flow === "restore"}
-                  icon="cloud-arrow-down"
-                  title={t("vault.opt.restore")}
-                  body={t("vault.opt.restoreDesc")}
-                  onSelect={() => setFlow("restore")}
-                />
-              </div>
-            </WizardCard>
-          )}
-          {step === "password" && (
-            <CreatePassword
-              steps={stepLabels}
-              onBack={() => setStep("choose")}
-              onCreated={(recoveryCode) => {
-                setCode(recoveryCode);
-                setStep("recovery");
-              }}
-            />
-          )}
-          {step === "recovery" && <CreateRecovery steps={stepLabels} code={code} />}
-          {step === "connect" && (
-            <RestoreConnect
-              steps={stepLabels}
-              onBack={() => setStep("choose")}
-              onConnected={(cfg) => {
-                setConfig(cfg);
-                setStep("restorePassword");
-              }}
-            />
-          )}
-          {step === "restorePassword" && config && (
-            <RestorePassword steps={stepLabels} config={config} onBack={() => setStep("connect")} />
-          )}
-        </div>
+      <div className={s.center}>
+        <AppLogo className={s.logo} />
+        {step === "choose" && (
+          <WizardCard
+            steps={stepLabels}
+            current={1}
+            title={t("vault.welcome.title")}
+            body={t("vault.welcome.body")}
+            onSubmit={() => setStep(flow === "create" ? "password" : "connect")}
+            footer={
+              <>
+                <FooterSpacer />
+                <Button variant="primary" type="submit" autoFocus className={cx(!keyboard && s.quietFocus)}>
+                  {t("btn.continue")}
+                </Button>
+              </>
+            }
+          >
+            <div className={s.options} role="radiogroup" aria-label={t("vault.welcome.title")}>
+              <OptionCard
+                selected={flow === "create"}
+                icon="lock-key"
+                title={t("vault.opt.create")}
+                body={t("vault.opt.createDesc")}
+                onSelect={() => setFlow("create")}
+              />
+              <OptionCard
+                selected={flow === "restore"}
+                icon="cloud-arrow-down"
+                title={t("vault.opt.restore")}
+                body={t("vault.opt.restoreDesc")}
+                onSelect={() => setFlow("restore")}
+              />
+            </div>
+          </WizardCard>
+        )}
+        {step === "password" && (
+          <CreatePassword
+            steps={stepLabels}
+            onBack={() => setStep("choose")}
+            onCreated={(recoveryCode) => {
+              setCode(recoveryCode);
+              setStep("recovery");
+            }}
+          />
+        )}
+        {step === "recovery" && <CreateRecovery steps={stepLabels} code={code} />}
+        {step === "connect" && (
+          <RestoreConnect
+            steps={stepLabels}
+            onBack={() => setStep("choose")}
+            onConnected={(cfg) => {
+              setConfig(cfg);
+              setStep("restorePassword");
+            }}
+          />
+        )}
+        {step === "restorePassword" && config && (
+          <RestorePassword steps={stepLabels} config={config} onBack={() => setStep("connect")} />
+        )}
       </div>
     </div>
   );

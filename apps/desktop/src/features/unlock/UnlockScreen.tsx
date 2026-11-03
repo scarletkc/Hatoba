@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Button, Icon, LinkButton, Spinner } from "@hatoba/ui";
-import { AppLogo, BrandBackdrop } from "@/app/AppLogo";
+import { AppLogo } from "@/app/AppLogo";
 import { enterUnlocked } from "@/app/boot";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
@@ -187,7 +187,6 @@ export function UnlockScreen() {
 
   return (
     <div className={s.root}>
-      <BrandBackdrop />
       <WindowChrome />
       <div className={s.center}>
         <AppLogo className={s.logo} />

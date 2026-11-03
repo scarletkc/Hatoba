@@ -6,23 +6,17 @@
   flex-direction: column;
   background: var(--side);
   color: var(--fg);
-  overflow: hidden;
+  overflow-y: auto;
 }
 
-/* The Linux window chrome, same as .main in App.module.css. */
+/* The Linux window chrome, same as .main in App.module.css; vertical scrolling stays. */
 :root[data-floating] .root {
   inset: var(--win-pad);
   border-radius: var(--radius-xl);
+  overflow: hidden auto;
   box-shadow:
     var(--shadow-window),
     0 0 0 0.5px var(--winline);
-}
-
-/* Scrolls the steps over the backdrop, which stays where it is. */
-.scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
 }
 
 /* A fixed top offset keeps the logo in place while the card changes height between steps. */

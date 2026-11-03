@@ -8,28 +8,28 @@ export interface FileIcon {
 }
 
 /**
- * The kinds a file list tells apart, as Finder and Termius do, each with a glyph of the bundled Phosphor font. Glyphs
- * that print a type's letters (`file-pdf`, `file-doc`) stay to the types they name.
+ * The kinds a file list tells apart, as Finder and Termius do, each with a page-shaped glyph of the bundled Phosphor
+ * font so the column keeps one outline. Glyphs that print a type's letters (`file-pdf`, `file-sql`) stay to the types
+ * they name.
  */
 const KINDS: [glyph: string, extensions: string][] = [
   ["file-code", "c cc cjs clj cpp cs css cxx dart erl ex exs go gradle groovy h hpp hs htm html java js jsx kt kts"],
   ["file-code", "less lua m mjs php pl pm proto py r rb rs sass scala scss svelte swift ts tsx vue zig"],
-  ["terminal-window", "bash bat cmd command csh fish ksh ps1 psm1 sh zsh"],
-  ["gear-six", "cfg cnf conf env hcl ini json json5 jsonc lock mount plist properties service socket target tf"],
-  ["gear-six", "tfvars timer toml xml yaml yml"],
+  ["file-code", "bash bat cmd command csh fish ksh ps1 psm1 sh zsh"],
+  ["file-code", "cfg cnf conf env hcl ini json json5 jsonc lock mount plist properties service socket target tf"],
+  ["file-code", "tfvars timer toml xml yaml yml"],
   ["file-archive", "7z apk bz2 deb dmg gz img iso jar lz lz4 lzma rar rpm tar tbz tbz2 tgz txz war whl xz zip zst"],
   ["file-image", "avif bmp gif heic heif ico jpeg jpg png psd svg tif tiff webp"],
   ["file-video", "avi flv m4v mkv mov mp4 mpeg mpg webm wmv"],
   ["file-audio", "aac aiff flac m4a mp3 oga ogg opus wav wma"],
   ["file-pdf", "pdf"],
-  ["database", "db db3 mdb rdb sql sqlite sqlite3"],
+  ["file-sql", "db db3 mdb rdb sql sqlite sqlite3"],
   ["file-doc", "doc docx epub odt pages rtf"],
   ["file-xls", "numbers ods xls xlsx"],
   ["file-csv", "csv tsv"],
   ["file-ppt", "odp ppt pptx"],
-  ["certificate", "cer crt csr der jks p12 pem pfx"],
-  ["key", "key ppk pub"],
-  ["file-text", "adoc diff err log markdown md nfo out patch rst text txt"],
+  ["file-text", "adoc cer crt csr der diff err log markdown md nfo out patch pem pub rst text txt"],
+  ["file-lock", "jks key p12 pfx ppk"],
 ];
 
 const BY_EXTENSION = new Map(
@@ -45,9 +45,9 @@ const BY_NAME = new Map<string, string>([
   ["rakefile", "file-code"],
   ["vagrantfile", "file-code"],
   ["jenkinsfile", "file-code"],
-  ["crontab", "gear-six"],
-  ["authorized_keys", "key"],
-  ["known_hosts", "key"],
+  ["crontab", "file-code"],
+  ["authorized_keys", "file-text"],
+  ["known_hosts", "file-text"],
 ]);
 
 /** Text that a project or a package ships under a capital name without an extension. */
@@ -61,9 +61,8 @@ const DOT_CONFIG = /^\.(.*rc|.*profile|.*config|.*ignore|gitattributes|gitmodule
 const ROTATED_LOG = /\.log\.\d+$|^(syslog|messages|auth\.log|kern\.log)(\.\d+)?$/;
 
 /**
- * The glyph of a file list's entry: a folder; a lock for an owner-only file (private keys, `.env`); else the file's
- * kind by its extension or name; else a terminal window for an executable, as Finder shows a Unix executable; else a
- * blank page. Only folders take the accent color.
+ * The glyph of a file list's entry: a folder; a lock for an owner-only file or a private key; else the file's kind by
+ * its extension or name; else a blank page. Only folders take the accent color.
  */
 export function fileIcon(e: Pick<FileEntry, "name" | "is_dir" | "permissions">): FileIcon {
   if (e.is_dir) return { name: "folder-simple", fill: true, color: "var(--accent)" };
@@ -75,13 +74,12 @@ function fileGlyph({ name, permissions }: Pick<FileEntry, "name" | "permissions"
   const lower = name.toLowerCase();
   const byName = BY_NAME.get(lower);
   if (byName) return byName;
-  if (SSH_KEY.test(lower)) return "key";
-  if (DOT_CONFIG.test(lower)) return "gear-six";
+  if (SSH_KEY.test(lower)) return "file-lock";
+  if (DOT_CONFIG.test(lower)) return "file-code";
   if (ROTATED_LOG.test(lower)) return "file-text";
   const dot = lower.lastIndexOf(".");
   const byExtension = dot > 0 ? BY_EXTENSION.get(lower.slice(dot + 1)) : undefined;
   if (byExtension) return byExtension;
   if (TEXT_NAME.test(name)) return "file-text";
-  if (/^-..x/.test(permissions)) return "terminal-window";
   return "file";
 }

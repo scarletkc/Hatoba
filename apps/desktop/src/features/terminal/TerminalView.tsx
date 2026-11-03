@@ -279,79 +279,82 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
 
   return (
     <div className={cx(s.root, !active && s.hidden)} inert={!active}>
-      <StatusBar
-        scheme={chrome}
-        local={!!local}
-        telnet={!!telnet}
-        status={tab.status}
-        target={target}
-        via={jumpName}
-        latencyMs={info.latencyMs}
-        findOpen={findOpen}
-        sftpOpen={info.sftpOpen}
-        forwards={!!forwardRules?.length}
-        forwardCount={hostConnection?.forwards.length ?? 0}
-        forwardsOpen={!!forwardsMenu.anchor}
-        moreOpen={!!menu.anchor?.trigger}
-        statsOn={statsOn}
-        stats={stats}
-        statsOpen={!!statsMenu.anchor}
-        findHint={shortcutLabel(platform, "Ctrl+Shift+F", "⌘F")}
-        onFind={() => (findOpen ? closeFind() : setFindOpen(true))}
-        onShowStats={() => {
-          setStatsOn(true);
-          session.focus();
-        }}
-        onStats={(button) => (statsMenu.anchor ? statsMenu.close() : statsMenu.openBelow(button, true))}
-        onForwards={(button) => (forwardsMenu.anchor ? forwardsMenu.close() : forwardsMenu.openBelow(button, true))}
-        onToggleSftp={() => {
-          patchInfo(tab.id, { sftpOpen: !info.sftpOpen });
-          session.focus(); // keep typing in the terminal after toggling the panel
-        }}
-        onMore={(button) => {
-          setMenuEntries(buildMenu(false));
-          menu.openBelow(button, true);
-        }}
-      />
       <div className={s.main}>
-        <div className={s.termArea} style={{ background: chrome.background }}>
-          <div ref={containerRef} className={s.term} onContextMenu={onContextMenu} />
-          {findOpen && <FindBar session={session} onClose={closeFind} />}
-          {tab.status === "connecting" && (
-            <ConnectingOverlay name={host?.name ?? telnetHost?.name ?? tab.title} local={!!local} />
-          )}
-          {tab.status === "failed" && local && (
-            <LocalErrorCard name={tab.title} error={info.error} onRetry={() => void reconnectSession(tab.id)} />
-          )}
-          {tab.status === "failed" && telnet && (
-            <TelnetErrorCard
-              name={telnetHost?.name ?? tab.title}
-              target={telnetTarget}
-              error={info.error}
-              onRetry={() => void reconnectSession(tab.id)}
-              onEdit={telnetHost ? () => editSessionHost(telnetHost.id) : null}
-            />
-          )}
-          {tab.status === "failed" && !local && !telnet && (
-            <ErrorCard
-              name={host?.name ?? tab.title}
-              host={host}
-              target={tab.target}
-              error={info.error}
-              at={info.errorAt}
-              attempts={info.attempts}
-              onRetry={() => void reconnectSession(tab.id)}
-              onEdit={() => editSessionHost(tab.hostId)}
-              onAskAi={(diagnostics) => askAiAboutConnection(tab.id, host?.name ?? tab.title, diagnostics)}
-            />
-          )}
-          {tab.status === "disconnected" && (
-            <DisconnectedBanner
-              reason={info.reason}
-              local={local ? tab.title : null}
-              onReconnect={() => void reconnectSession(tab.id)}
-            />
-          )}
+        {/* The bar is the terminal's top edge, in its colors; the SFTP panel stands beside both. */}
+        <div className={s.termColumn}>
+          <StatusBar
+            scheme={chrome}
+            local={!!local}
+            telnet={!!telnet}
+            status={tab.status}
+            target={target}
+            via={jumpName}
+            latencyMs={info.latencyMs}
+            findOpen={findOpen}
+            sftpOpen={info.sftpOpen}
+            forwards={!!forwardRules?.length}
+            forwardCount={hostConnection?.forwards.length ?? 0}
+            forwardsOpen={!!forwardsMenu.anchor}
+            moreOpen={!!menu.anchor?.trigger}
+            statsOn={statsOn}
+            stats={stats}
+            statsOpen={!!statsMenu.anchor}
+            findHint={shortcutLabel(platform, "Ctrl+Shift+F", "⌘F")}
+            onFind={() => (findOpen ? closeFind() : setFindOpen(true))}
+            onShowStats={() => {
+              setStatsOn(true);
+              session.focus();
+            }}
+            onStats={(button) => (statsMenu.anchor ? statsMenu.close() : statsMenu.openBelow(button, true))}
+            onForwards={(button) => (forwardsMenu.anchor ? forwardsMenu.close() : forwardsMenu.openBelow(button, true))}
+            onToggleSftp={() => {
+              patchInfo(tab.id, { sftpOpen: !info.sftpOpen });
+              session.focus(); // keep typing in the terminal after toggling the panel
+            }}
+            onMore={(button) => {
+              setMenuEntries(buildMenu(false));
+              menu.openBelow(button, true);
+            }}
+          />
+          <div className={s.termArea} style={{ background: chrome.background }}>
+            <div ref={containerRef} className={s.term} onContextMenu={onContextMenu} />
+            {findOpen && <FindBar session={session} onClose={closeFind} />}
+            {tab.status === "connecting" && (
+              <ConnectingOverlay name={host?.name ?? telnetHost?.name ?? tab.title} local={!!local} />
+            )}
+            {tab.status === "failed" && local && (
+              <LocalErrorCard name={tab.title} error={info.error} onRetry={() => void reconnectSession(tab.id)} />
+            )}
+            {tab.status === "failed" && telnet && (
+              <TelnetErrorCard
+                name={telnetHost?.name ?? tab.title}
+                target={telnetTarget}
+                error={info.error}
+                onRetry={() => void reconnectSession(tab.id)}
+                onEdit={telnetHost ? () => editSessionHost(telnetHost.id) : null}
+              />
+            )}
+            {tab.status === "failed" && !local && !telnet && (
+              <ErrorCard
+                name={host?.name ?? tab.title}
+                host={host}
+                target={tab.target}
+                error={info.error}
+                at={info.errorAt}
+                attempts={info.attempts}
+                onRetry={() => void reconnectSession(tab.id)}
+                onEdit={() => editSessionHost(tab.hostId)}
+                onAskAi={(diagnostics) => askAiAboutConnection(tab.id, host?.name ?? tab.title, diagnostics)}
+              />
+            )}
+            {tab.status === "disconnected" && (
+              <DisconnectedBanner
+                reason={info.reason}
+                local={local ? tab.title : null}
+                onReconnect={() => void reconnectSession(tab.id)}
+              />
+            )}
+          </div>
         </div>
         {info.sftpOpen && connected && tab.sessionId && !local && !telnet && (
           <SftpPanel

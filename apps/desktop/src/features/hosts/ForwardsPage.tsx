@@ -12,11 +12,11 @@ import {
   Button,
   EmptyState,
   ErrorText,
-  Icon,
   IconButton,
   Menu,
   PageHeader,
   Spinner,
+  StatusDot,
   Switch,
   confirm,
   isImeEvent,
@@ -400,9 +400,9 @@ function HostRow({ host, connected }: { host: HostView; connected: boolean }) {
 }
 
 /**
- * A forward's row: whether it runs (a green check), starts (a spinner) or failed (red), its name over its rule or the
- * rule alone, where it listens while it runs or why it could not start, its **Start on connect** switch, and **Start**
- * or **Stop** with edit and delete, shown on the row under the pointer or selected, and Retry always.
+ * A forward's row: its name over its rule or the rule alone; its state with a dot, which is where it listens while it
+ * runs or why it could not start; its **Start on connect** switch; and **Start**, **Stop** or **Retry**, with edit and
+ * delete shown on the row under the pointer or selected.
  */
 function ForwardRow({
   id,
@@ -445,21 +445,6 @@ function ForwardRow({
       onContextMenu={onContext}
     >
       <span className={s.nameCell}>
-        <span
-          className={cx(s.state, running && s.stateRunning, failure && !starting && s.stateFailed)}
-          role={starting ? "status" : undefined}
-          aria-label={starting ? t("terminal.fwd.starting") : undefined}
-          title={starting ? t("terminal.fwd.starting") : (failure ?? undefined)}
-        >
-          {starting ? (
-            <Spinner size={14} />
-          ) : (
-            <Icon
-              name={running ? "check-circle" : failure ? "warning-circle" : "circle"}
-              fill={!!running || !!failure}
-            />
-          )}
-        </span>
         <span className={s.titles}>
           {f.name && (
             <span className={s.name} title={f.name}>
@@ -480,16 +465,30 @@ function ForwardRow({
         </span>
       </span>
       <span className={s.status} onDoubleClick={keepClick}>
-        {running ? (
-          <RunningAddress running={running} onCopy={onCopy} />
-        ) : starting ? (
-          <span className={s.statusText}>{t("terminal.fwd.starting")}</span>
-        ) : (
-          failure && (
+        {starting ? (
+          <>
+            <Spinner size={12} />
+            <span className={s.statusText} role="status">
+              {t("terminal.fwd.starting")}
+            </span>
+          </>
+        ) : running ? (
+          <>
+            <StatusDot color="var(--green)" />
+            <RunningAddress running={running} onCopy={onCopy} />
+          </>
+        ) : failure ? (
+          <>
+            <StatusDot color="var(--red)" />
             <span className={cx(s.statusText, s.error)} title={failure}>
               {failure}
             </span>
-          )
+          </>
+        ) : (
+          <>
+            <StatusDot color="var(--fg3)" />
+            <span className={s.statusText}>{t("hosts.fwd.stopped")}</span>
+          </>
         )}
       </span>
       <span className={s.auto} onDoubleClick={keepClick}>
@@ -501,7 +500,7 @@ function ForwardRow({
         />
       </span>
       <span className={s.actions} onDoubleClick={keepClick}>
-        <Button size="xs" className={cx(s.toggle, s.reveal, failure && s.shown)} disabled={busy} onClick={onToggle}>
+        <Button size="xs" className={s.toggle} disabled={busy} onClick={onToggle}>
           {running ? t("terminal.fwd.stop") : failure ? t("btn.retry") : t("terminal.fwd.start")}
         </Button>
         <IconButton
