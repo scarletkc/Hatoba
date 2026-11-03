@@ -56,7 +56,7 @@ Other labels: **Can’t read this folder**.
 
 These show in Settings → About, in the update row, after **Check for Updates** or **Download and Install**:
 
-- "Can’t reach GitHub. Check your network and try again."
+- "Can’t reach GitHub. Check your network and try again." Behind a proxy, choose it in **Proxy for Hatoba** (Settings → Proxies).
 - "Couldn’t check for updates. Try again later."
 - "Couldn’t install the update. Try again later."
 - "The downloaded update isn’t signed by Hatoba, so it wasn’t installed."

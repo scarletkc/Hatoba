@@ -62,6 +62,7 @@ export const DEFAULT_PREFS: LocalPrefs = {
   ai_panel_open: false,
   ai_panel_width: 380,
   default_proxy_id: null,
+  app_proxy_id: null,
   auto_lock_minutes: 15,
   lock_on_sleep: true,
   lock_disconnects_sessions: false,

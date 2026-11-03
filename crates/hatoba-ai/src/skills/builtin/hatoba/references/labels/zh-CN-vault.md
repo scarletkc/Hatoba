@@ -172,8 +172,10 @@ The labels that these files name in English, as the interface shows them in Simp
 
 | en | zh-CN |
 |---|---|
-| Default proxy on this device | 这台设备的默认代理 |
+| Default Proxy on This Device | 这台设备的默认代理 |
 | No proxy | 不使用代理 |
+| Proxy for Hatoba | Hatoba 自身的代理 |
+| System proxy | 系统代理 |
 | Saved Proxies | 已保存的代理 |
 | Add Proxy | 添加代理 |
 | Edit Proxy | 编辑代理 |

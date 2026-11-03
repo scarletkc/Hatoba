@@ -172,8 +172,10 @@ The labels that these files name in English, as the interface shows them in Japa
 
 | en | ja |
 |---|---|
-| Default proxy on this device | このデバイスの既定のプロキシ |
+| Default Proxy on This Device | このデバイスの既定のプロキシ |
 | No proxy | プロキシなし |
+| Proxy for Hatoba | Hatoba 自体のプロキシ |
+| System proxy | システムのプロキシ |
 | Saved Proxies | 保存したプロキシ |
 | Add Proxy | プロキシを追加 |
 | Edit Proxy | プロキシを編集 |

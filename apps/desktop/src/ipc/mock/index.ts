@@ -897,8 +897,12 @@ export function createMockApi(): HatobaApi {
       hosts = hosts.map((h) =>
         h.proxy_mode === "proxy" && h.proxy_id === pid ? { ...h, proxy_mode: "device_default", proxy_id: null } : h,
       );
-      if (prefs.default_proxy_id === pid) {
-        prefs = { ...prefs, default_proxy_id: null };
+      if (prefs.default_proxy_id === pid || prefs.app_proxy_id === pid) {
+        prefs = {
+          ...prefs,
+          default_proxy_id: prefs.default_proxy_id === pid ? null : prefs.default_proxy_id,
+          app_proxy_id: prefs.app_proxy_id === pid ? null : prefs.app_proxy_id,
+        };
         storePrefs();
       }
       touch();

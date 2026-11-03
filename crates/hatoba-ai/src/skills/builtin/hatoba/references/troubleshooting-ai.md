@@ -56,7 +56,7 @@ Errors of a provider that signs in with a ChatGPT account (usage limits, an ende
 - "A model ID can’t be empty."
 
 - "The provider doesn’t know the model …": the model ID has a typo or the provider lacks it. Fix it in **Models**.
-- "Couldn’t reach the server": a wrong **Base URL**, no network, or a local server (Ollama, LM Studio) that is not running. For a local server `http://localhost:…` is allowed; any other plain-HTTP address is refused.
+- "Couldn’t reach the server": a wrong **Base URL**, no network, a network that needs a proxy (choose it in **Proxy for Hatoba**, Settings → Proxies), or a local server (Ollama, LM Studio) that is not running. For a local server `http://localhost:…` is allowed; any other plain-HTTP address is refused.
 - A local server may need the model name exactly as it lists it, and a context window large enough for the conversation.
 
 ## Web search

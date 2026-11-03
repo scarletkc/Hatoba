@@ -24,8 +24,8 @@ import { Pane, SettingRow, usePrefs } from "./shared";
 import s from "./ProxiesPane.module.css";
 
 /**
- * Settings → Proxies (SSH-13): the saved SOCKS5 and HTTP proxies, which sync, and the default
- * proxy of this device, which does not.
+ * Settings → Proxies (SSH-13): the saved SOCKS5 and HTTP proxies, which sync, and this device's
+ * default proxy and proxy for Hatoba's own connections, which do not.
  */
 export function ProxiesPane() {
   const t = useT();
@@ -35,6 +35,8 @@ export function ProxiesPane() {
   const [prefs, setPrefs] = usePrefs();
   const [dialog, setDialog] = useState<{ proxy: ProxyView | null } | null>(null);
   const defaultId = prefs.default_proxy_id;
+  // A proxy deleted on another device leaves Hatoba on the system proxy.
+  const appId = proxies.some((p) => p.id === prefs.app_proxy_id) ? prefs.app_proxy_id : null;
 
   const defaultOptions: SelectOption<string | null>[] = [
     { value: null, label: t("settings.proxy.none") },
@@ -43,6 +45,10 @@ export function ProxiesPane() {
     ...(defaultId && !proxies.some((p) => p.id === defaultId)
       ? [{ value: defaultId, label: t("settings.proxy.missing") }]
       : []),
+  ];
+  const appOptions: SelectOption<string | null>[] = [
+    { value: null, label: t("settings.proxy.system") },
+    ...proxies.map((p) => ({ value: p.id, label: p.name, hint: proxySummary(p) })),
   ];
 
   const remove = async (p: ProxyView) => {
@@ -58,8 +64,9 @@ export function ProxiesPane() {
     if (!ok) return;
     try {
       await api.proxy_delete(p.id);
-      // The backend also stopped using it as this device's default.
+      // The backend also stopped using it on this device.
       if (prefs.default_proxy_id === p.id) setPrefs({ default_proxy_id: null });
+      if (prefs.app_proxy_id === p.id) setPrefs({ app_proxy_id: null });
       await useVaultData.getState().reload();
       toast(t("settings.proxy.deleted", { name: p.name }));
     } catch (e) {
@@ -87,6 +94,16 @@ export function ProxiesPane() {
             options={defaultOptions}
             minWidth={260}
             onChange={(default_proxy_id) => setPrefs({ default_proxy_id })}
+          />
+        </SettingRow>
+        <SettingRow label={t("settings.proxy.app")} hint={t("settings.proxy.app.hint")}>
+          <PopupSelect<string | null>
+            ariaLabel={t("settings.proxy.app")}
+            icon="globe"
+            value={appId}
+            options={appOptions}
+            minWidth={260}
+            onChange={(app_proxy_id) => setPrefs({ app_proxy_id })}
           />
         </SettingRow>
       </Group>

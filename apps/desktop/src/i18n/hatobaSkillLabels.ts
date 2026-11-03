@@ -678,6 +678,8 @@ export const AREAS: Area[] = [
         Proxies: [
           "settings.proxy.default",
           "settings.proxy.none",
+          "settings.proxy.app",
+          "settings.proxy.system",
           "settings.proxy.saved",
           "settings.proxy.add",
           "settings.proxy.dlg.editTitle",
