@@ -155,6 +155,37 @@
   font-weight: 600;
 }
 
+.details {
+  margin: 0 0 8px;
+}
+
+.summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-height: 22px;
+  padding: 0 7px 0 5px;
+  margin-left: -5px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+}
+
+.summary:hover {
+  background: var(--fill);
+}
+
+.detailsBody {
+  margin-top: 4px;
+}
+
+.detailsBody > :last-child {
+  margin-bottom: 0;
+}
+
 .image {
   display: inline-flex;
   align-items: center;

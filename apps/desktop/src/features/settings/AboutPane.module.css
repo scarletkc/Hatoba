@@ -119,9 +119,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The padding keeps room for the hover background of a section's summary, which starts left of the text. */
 .notesBody {
   align-self: stretch;
   max-height: 240px;
+  margin-left: -5px;
+  padding-left: 5px;
   overflow-y: auto;
 }
 

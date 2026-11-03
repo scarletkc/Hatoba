@@ -40,8 +40,8 @@
   overflow-y: auto;
 }
 
-/* HOST-16: the box drawn from beside the hosts, and the line where moved hosts go; both scroll with the hosts and
- * pass under the list's sticky head. */
+/* HOST-16: the box drawn from beside the hosts, and the line where moved hosts go; both scroll with the hosts. The
+ * box stays below the list's sticky head, and the line passes under it. */
 .marquee,
 .dropLine {
   position: absolute;

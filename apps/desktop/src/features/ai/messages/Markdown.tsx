@@ -1,7 +1,7 @@
 import { memo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Icon } from "@hatoba/ui";
+import { DisclosureCaret, Icon, controlStyles } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import { openExternal, writeClipboard } from "@/lib/clipboard";
 import { cx } from "@/lib/cx";
@@ -9,6 +9,8 @@ import s from "./Markdown.module.css";
 
 interface MdNode {
   type: string;
+  value?: string;
+  data?: { hName?: string; hProperties?: Record<string, string | boolean> };
   children?: MdNode[];
 }
 
@@ -19,6 +21,48 @@ function rawHtmlAsText() {
     node.children?.forEach(walk);
   };
   return (tree: MdNode) => walk(tree);
+}
+
+const DETAILS = /^<details(\s+open)?\s*>(?:\s*<summary>([^<]*)<\/summary>)?$/i;
+const SUMMARY = /^<summary>([^<]*)<\/summary>$/i;
+const DETAILS_END = /^<\/details>$/i;
+
+/**
+ * A `<details>` block with a `<summary>` becomes a section that opens and closes, as release notes
+ * use it; the tags are read as markup and nothing else is, so every other tag stays text.
+ */
+function detailsBlocks() {
+  const group = (nodes: MdNode[]): MdNode[] => {
+    const out: MdNode[] = [];
+    const open: MdNode[] = [];
+    const into = () => open.at(-1)?.children ?? out;
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      const html = node.type === "html" ? (node.value ?? "").trim() : null;
+      const start = html?.match(DETAILS);
+      // The summary may follow the tag as a block of its own.
+      const own = start && start[2] === undefined ? nodes[i + 1] : undefined;
+      const summary = start?.[2] ?? (own?.type === "html" ? own.value?.trim().match(SUMMARY)?.[1] : undefined);
+      if (start && summary !== undefined) {
+        if (own) i++;
+        const details: MdNode = {
+          type: "details",
+          data: { hName: "details", hProperties: { summary: summary.trim(), open: !!start[1] } },
+          children: [],
+        };
+        into().push(details);
+        open.push(details);
+      } else if (html && DETAILS_END.test(html) && open.length > 0) {
+        open.pop();
+      } else {
+        into().push(node);
+      }
+    }
+    return out;
+  };
+  return (tree: MdNode) => {
+    tree.children = group(tree.children ?? []);
+  };
 }
 
 const isWebUrl = (url: string | undefined): url is string => !!url && /^https?:\/\//i.test(url);
@@ -98,6 +142,20 @@ function CodeBlock({ children }: { children?: ReactNode }) {
   );
 }
 
+/** A `<details>` block, whose summary opens and closes it like the reasoning above a reply (AI-06). */
+function Details({ summary, initial, children }: { summary: string; initial: boolean; children?: ReactNode }) {
+  const [open, setOpen] = useState(initial);
+  return (
+    <div className={s.details}>
+      <button type="button" className={s.summary} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        {summary}
+        <DisclosureCaret open={open} size={12} />
+      </button>
+      {open && <div className={cx(s.detailsBody, controlStyles.reveal)}>{children}</div>}
+    </div>
+  );
+}
+
 const components: Components = {
   a: ({ href, children }) => <Link href={href}>{children}</Link>,
   img: ({ src, alt }) => <ImageLink src={src} alt={alt} />,
@@ -107,15 +165,29 @@ const components: Components = {
       <table>{children}</table>
     </div>
   ),
+  details: ({ node, children }) => (
+    <Details summary={String(node?.properties.summary ?? "")} initial={node?.properties.open === true}>
+      {children}
+    </Details>
+  ),
 };
 
 const plugins = [remarkGfm, rawHtmlAsText];
+const pluginsWithDetails = [remarkGfm, detailsBlocks, rawHtmlAsText];
 
-/** A message's Markdown (GFM), with a caret while it streams. */
-export const Markdown = memo(function Markdown({ text, streaming }: { text: string; streaming?: boolean }) {
+/** A message's Markdown (GFM), with a caret while it streams. `details` reads `<details>` blocks as markup. */
+export const Markdown = memo(function Markdown({
+  text,
+  streaming,
+  details,
+}: {
+  text: string;
+  streaming?: boolean;
+  details?: boolean;
+}) {
   return (
     <div className={cx(s.md, streaming && s.streaming, "selectable")}>
-      <ReactMarkdown remarkPlugins={plugins} components={components}>
+      <ReactMarkdown remarkPlugins={details ? pluginsWithDetails : plugins} components={components}>
         {text}
       </ReactMarkdown>
     </div>

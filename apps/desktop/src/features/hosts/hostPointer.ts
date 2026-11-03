@@ -38,6 +38,15 @@ export function hostsInBox(places: Place[], box: Box): string[] {
     .map((p) => p.id);
 }
 
+/** The part of `box` inside `within`, or null when none of it is. */
+export function clipBox(box: Box, within: Box): Box | null {
+  const left = Math.max(box.left, within.left);
+  const top = Math.max(box.top, within.top);
+  const right = Math.min(box.right, within.right);
+  const bottom = Math.min(box.bottom, within.bottom);
+  return right > left && bottom > top ? { left, top, right, bottom } : null;
+}
+
 /** The selection while a box touches `inBox`, from the selection `start` the press began with. */
 export function boxSelection(start: string[], inBox: string[], mode: BoxMode): string[] {
   if (mode === "replace") return inBox;
@@ -131,6 +140,18 @@ function contentPoint(list: HTMLElement, x: number, y: number): { x: number; y: 
   return { x: x - r.left - list.clientLeft + list.scrollLeft, y: y - r.top - list.clientTop + list.scrollTop };
 }
 
+/** The part of the list's content that shows: inside its edges and below its sticky head, if it has one. */
+function shownPart(list: HTMLElement): Box {
+  const head = Array.from(list.children).find((el) => getComputedStyle(el).position === "sticky");
+  const covered = head ? head.getBoundingClientRect().bottom - list.getBoundingClientRect().top - list.clientTop : 0;
+  return {
+    left: list.scrollLeft,
+    top: list.scrollTop + Math.max(0, covered),
+    right: list.scrollLeft + list.clientWidth,
+    bottom: list.scrollTop + list.clientHeight,
+  };
+}
+
 /**
  * The click that the release of a press ended with Escape makes must not act either: beside the hosts it would select
  * none. A press that begins first means the release was missed, outside the window.
@@ -209,6 +230,7 @@ export class HostPointer {
     window.addEventListener("pointercancel", this.cancel);
     window.addEventListener("keydown", this.key, true);
     window.addEventListener("blur", this.cancel);
+    window.addEventListener("scroll", this.scrolled, true);
   };
 
   private move = (e: PointerEvent) => {
@@ -342,7 +364,11 @@ export class HostPointer {
         right: Math.max(p.origin.x, at.x),
         bottom: Math.max(p.origin.y, at.y),
       };
-      place(p.overlays[0], box);
+      // Only the part that shows is drawn, so the box never widens the list; the hosts it touches still count.
+      const drawn = clipBox(box, shownPart(list));
+      const el = p.overlays[0];
+      el.hidden = !drawn;
+      if (drawn) place(el, drawn);
       const ids = boxSelection(p.start, hostsInBox(this.places(list, new Set()), box), p.mode);
       const now = this.site.selected();
       if (ids.length !== now.length || ids.some((id, i) => id !== now[i])) this.site.boxSelect(ids);
@@ -372,9 +398,15 @@ export class HostPointer {
     if (dy !== 0) {
       const top = list.scrollTop;
       list.scrollTop = top + dy;
+      // At once, as a release before the scroll event must drop where the line now shows.
       if (list.scrollTop !== top) this.update(p);
     }
     p.frame = requestAnimationFrame(this.scroll);
+  };
+
+  /** The list scrolled, also by the wheel: what the press shows moves with the pointer. */
+  private scrolled = () => {
+    if (this.press?.started) this.update(this.press);
   };
 
   private up = (e: PointerEvent) => {
@@ -411,6 +443,7 @@ export class HostPointer {
     window.removeEventListener("pointercancel", this.cancel);
     window.removeEventListener("keydown", this.key, true);
     window.removeEventListener("blur", this.cancel);
+    window.removeEventListener("scroll", this.scrolled, true);
     cancelAnimationFrame(p.frame);
     for (const el of p.overlays) el.remove();
     p.ghost?.remove();
