@@ -1,7 +1,10 @@
+import type { CSSProperties } from "react";
 import { Icon, IconButton, StatusDot, controlStyles } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import type { TabStatus } from "@/app/tabs";
 import { cx } from "@/lib/cx";
+import type { TermMode } from "@/session/schemes";
+import { barColors } from "./barColors";
 import { formatPercent, formatRate, percentOf, type SessionStats } from "./stats";
 import s from "./StatusBar.module.css";
 
@@ -13,6 +16,8 @@ const DOT: Record<TabStatus, string> = {
 };
 
 interface Props {
+  /** The terminal's background, foreground and light or dark scheme, which the bar takes. */
+  scheme: { mode: TermMode; background: string; foreground: string };
   /** A local tab (§7.5): its shell runs on this computer, so it has no resource usage, forwards or SFTP. */
   local: boolean;
   /** A Telnet tab (§7.6), which has no resource usage, forwards or SFTP either. */
@@ -45,8 +50,9 @@ interface Props {
   onMore(button: HTMLElement): void;
 }
 
-/** The 36px bar above a terminal. */
+/** The 36px bar above a terminal, in the terminal's colors. */
 export function StatusBar({
+  scheme,
   local,
   telnet,
   status,
@@ -72,8 +78,15 @@ export function StatusBar({
 }: Props) {
   const t = useT();
   const connected = status === "connected";
+  const colors = barColors(scheme.background, scheme.foreground, scheme.mode);
+  const style = {
+    "--bar-bg": colors.background,
+    "--bar-fg": colors.text,
+    "--bar-fg2": colors.secondary,
+    "--bar-fg3": colors.muted,
+  } as CSSProperties;
   return (
-    <div className={s.bar}>
+    <div className={cx(s.bar, scheme.mode === "dark" ? s.dark : s.light)} style={style}>
       <span className={s.state} role="status">
         <StatusDot color={DOT[status]} />
         <span className={s.stateText}>

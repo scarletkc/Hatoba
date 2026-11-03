@@ -280,6 +280,7 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
   return (
     <div className={cx(s.root, !active && s.hidden)} inert={!active}>
       <StatusBar
+        scheme={chrome}
         local={!!local}
         telnet={!!telnet}
         status={tab.status}

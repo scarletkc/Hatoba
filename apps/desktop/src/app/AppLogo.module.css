@@ -4,3 +4,98 @@
   border-radius: calc(208 / 896 * 100%);
   background: url("../../src-tauri/app-icon.svg") center / calc(1024 / 896 * 100%) no-repeat;
 }
+
+/*
+ * The brand backdrop (BrandBackdrop) over the screen's own background. Light keeps the sea paler than
+ * the page, so the secondary text on it keeps AA contrast; dark takes the icon's deep blue. Every color
+ * is translucent, so Mica still shows through.
+ */
+.backdrop {
+  --sky-glow: rgba(255, 255, 255, 0.6);
+  --sky-top: transparent;
+  --sky-bottom: color-mix(in srgb, var(--brand-water) 6%, transparent);
+  --back: color-mix(in srgb, var(--brand-water) 11%, transparent);
+  --water-top: color-mix(in srgb, color-mix(in srgb, var(--brand-water) 20%, #ffffff) 75%, transparent);
+  --water-bottom: color-mix(in srgb, color-mix(in srgb, var(--brand-water) 9%, #ffffff) 75%, transparent);
+  --scales: 0.7;
+  --surface: color-mix(in srgb, var(--brand-water) 38%, transparent);
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(70% 60% at 50% 0%, var(--sky-glow), transparent),
+    linear-gradient(to bottom, var(--sky-top) 25%, var(--sky-bottom));
+  animation: fade var(--motion-slow) var(--ease-out);
+}
+
+:root[data-theme="dark"] .backdrop {
+  --sky-glow: transparent;
+  --sky-top: color-mix(in srgb, var(--brand-night) 22%, transparent);
+  --sky-bottom: color-mix(in srgb, var(--brand-sky) 26%, transparent);
+  --back: color-mix(in srgb, var(--brand-deep) 24%, transparent);
+  --water-top: color-mix(in srgb, var(--brand-water) 10%, transparent);
+  --water-bottom: color-mix(in srgb, var(--brand-deep) 28%, transparent);
+  --scales: 0.06;
+  --surface: color-mix(in srgb, var(--brand-foam) 32%, transparent);
+}
+
+.sea {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: clamp(96px, 21vh, 176px);
+  animation: tide var(--motion-slow) var(--ease-out);
+}
+
+.back {
+  fill: var(--back);
+}
+
+.waterTop {
+  stop-color: var(--water-top);
+}
+
+.waterBottom {
+  stop-color: var(--water-bottom);
+}
+
+/* White to clear white: a stop of `transparent` would pass through grey. */
+.scalesTop,
+.scalesBottom {
+  stop-color: #ffffff;
+  stop-opacity: var(--scales);
+}
+
+.scalesBottom {
+  stop-opacity: 0;
+}
+
+.surface {
+  fill: none;
+  stroke: var(--surface);
+  stroke-width: 1.5px;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes tide {
+  from {
+    transform: translateY(calc(var(--motion-rise) * 2));
+    opacity: 0;
+  }
+}
+
+/* Reduced motion keeps the fade; --motion-rise is zero, so nothing moves. */
+@media (prefers-reduced-motion: reduce) {
+  .backdrop,
+  .sea {
+    animation-duration: var(--motion-fade) !important;
+  }
+}

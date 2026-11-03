@@ -6,17 +6,23 @@
   flex-direction: column;
   background: var(--side);
   color: var(--fg);
-  overflow-y: auto;
+  overflow: hidden;
 }
 
-/* The Linux window chrome, same as .main in App.module.css; vertical scrolling stays. */
+/* The Linux window chrome, same as .main in App.module.css. */
 :root[data-floating] .root {
   inset: var(--win-pad);
   border-radius: var(--radius-xl);
-  overflow: hidden auto;
   box-shadow:
     var(--shadow-window),
     0 0 0 0.5px var(--winline);
+}
+
+/* Scrolls the steps over the backdrop, which stays where it is. */
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* A fixed top offset keeps the logo in place while the card changes height between steps. */
@@ -33,6 +39,26 @@
   width: 56px;
   height: 56px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  animation: rise var(--motion-base) var(--ease-out);
+}
+
+/* The card rises on its own as each step comes in (WizardCard). */
+@keyframes rise {
+  from {
+    transform: translateY(var(--motion-rise));
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo {
+    animation-duration: var(--motion-fade) !important;
+  }
+}
+
+/* The default button, focused as the window opens: no ring until the keyboard is used (Onboarding). */
+.quietFocus:focus-visible {
+  outline: none;
 }
 
 .options {

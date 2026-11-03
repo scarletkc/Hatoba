@@ -20,6 +20,16 @@
   --term-fg: #d5d8de;
   --term-dim: #6b717c;
   --term-dialog: #1c1d21;
+  /* The accent and status colors of @hatoba/ui's light and dark sets, for the session status bar, which
+     takes the terminal scheme's appearance rather than the app's (StatusBar) */
+  --term-light-accent: #007aff;
+  --term-light-green: #28a745;
+  --term-light-orange: #e08600;
+  --term-light-red: #e5342b;
+  --term-dark-accent: #0a84ff;
+  --term-dark-green: #30d158;
+  --term-dark-orange: #ff9f0a;
+  --term-dark-red: #ff453a;
 
   /* Server OS logos (HOST-11): the Simple Icons brand colors, and Windows blue */
   --os-ubuntu: #e95420;
@@ -36,6 +46,14 @@
   /* Windows caption buttons */
   --caption-hover: rgba(0, 0, 0, 0.06);
   --caption-close: #c42b1c;
+
+  /* The app icon's colors (src-tauri/app-icon.svg): its sky, top to bottom, the sea, top to bottom,
+     and the line of its surface. The first-launch and lock screens draw their backdrop with them. */
+  --brand-night: #0d1735;
+  --brand-sky: #24408a;
+  --brand-water: #22a6e8;
+  --brand-deep: #0d4590;
+  --brand-foam: #b5ecff;
 }
 
 :root[data-theme="dark"] {

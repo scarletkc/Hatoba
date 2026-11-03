@@ -26,6 +26,21 @@
   align-items: center;
   justify-content: center;
   padding-bottom: 30px;
+  animation: rise var(--motion-base) var(--ease-out);
+}
+
+@keyframes rise {
+  from {
+    transform: translateY(var(--motion-rise));
+    opacity: 0;
+  }
+}
+
+/* Reduced motion keeps the fade; --motion-rise is zero, so nothing moves. */
+@media (prefers-reduced-motion: reduce) {
+  .center {
+    animation-duration: var(--motion-fade) !important;
+  }
 }
 
 .logo {
