@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boxSelection, dropBefore, dropLine, hostsInBox, type Place } from "./hostPointer";
+import { boxSelection, clipBox, dropBefore, dropLine, hostsInBox, type Place } from "./hostPointer";
 
 const at = (id: string, left: number, top: number, width = 100, height = 40): Place => ({
   id,
@@ -23,6 +23,14 @@ describe("a selection box", () => {
     expect(boxSelection(["a", "b"], ["b", "c"], "replace")).toEqual(["b", "c"]);
     expect(boxSelection(["a", "b"], ["b", "c"], "add")).toEqual(["a", "b", "c"]);
     expect(boxSelection(["a", "b"], ["b", "c"], "toggle")).toEqual(["a", "c"]);
+  });
+
+  it("is drawn only where the list shows", () => {
+    const shown = { left: 0, top: 30, right: 400, bottom: 300 };
+    expect(clipBox({ left: -20, top: -50, right: 500, bottom: 900 }, shown)).toEqual(shown);
+    const inside = { left: 10, top: 40, right: 50, bottom: 60 };
+    expect(clipBox(inside, shown)).toEqual(inside);
+    expect(clipBox({ left: 10, top: 0, right: 50, bottom: 30 }, shown)).toBeNull();
   });
 });
 
