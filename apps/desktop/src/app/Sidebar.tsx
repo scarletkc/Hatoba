@@ -48,12 +48,7 @@ export function Sidebar() {
       title={extra?.title ?? label}
       onClick={() => navigate(target)}
     >
-      <Icon
-        name={icon}
-        fill={active === key}
-        className={cx(st.itemIcon, extra?.spin && st.spin)}
-        color={extra?.color}
-      />
+      <Icon name={icon} className={cx(st.itemIcon, extra?.spin && st.spin)} color={extra?.color} />
       <span className={st.itemLabel}>{label}</span>
     </button>
   );
