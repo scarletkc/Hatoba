@@ -138,18 +138,20 @@ fn keeps(command: &str) -> bool {
 }
 
 /// bash's history, oldest first: one command per line. `HISTTIMEFORMAT` adds a `#<seconds>` line
-/// before each entry, the only mark of where one ends, so an entry of several lines is left out
-/// whole after such a line. Lines before the first one count as a command each.
+/// before each entry, the only mark of where one ends, so several lines between two such lines
+/// are one entry, left out whole. Before the first and after the last, each line counts as a
+/// command: a shell without `HISTTIMEFORMAT` adds its commands with no such line.
 fn bash_history(lines: &[&[u8]]) -> Vec<String> {
-    let text = |line: &&[u8]| String::from_utf8_lossy(line).into_owned();
     let lines: Vec<&[u8]> = lines.iter().copied().filter(|l| !l.is_empty()).collect();
-    let mut entries = lines.split(|line| is_timestamp(line));
-    let unmarked = entries.next().unwrap_or_default();
-    let marked = entries.filter_map(|entry| match entry {
-        [line] => Some(text(line)),
-        _ => None,
-    });
-    unmarked.iter().map(text).chain(marked).collect()
+    let groups: Vec<&[&[u8]]> = lines.split(|line| is_timestamp(line)).collect();
+    let last = groups.len() - 1;
+    groups
+        .iter()
+        .enumerate()
+        .filter(|(i, group)| *i == 0 || *i == last || group.len() == 1)
+        .flat_map(|(_, group)| group.iter())
+        .map(|line| String::from_utf8_lossy(line).into_owned())
+        .collect()
 }
 
 fn is_timestamp(line: &[u8]) -> bool {
@@ -281,6 +283,13 @@ mod tests {
                     #1700000002\nmake\n";
         let s = parse(&output("bash", bash, b"", "", ""));
         assert_eq!(s.history, ["make", "ls -la", "older"]);
+    }
+
+    #[test]
+    fn keeps_bash_commands_added_after_the_last_mark() {
+        let bash = "#1700000000\nls -la\nmake\ngit status\n";
+        let s = parse(&output("bash", bash, b"", "", ""));
+        assert_eq!(s.history, ["git status", "make", "ls -la"]);
     }
 
     #[test]
