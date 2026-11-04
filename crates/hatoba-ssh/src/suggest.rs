@@ -1,7 +1,8 @@
 //! What command suggestions take from the server (TERM-16): the commands of the shell's own history
 //! (`~/.bash_history`, `~/.zsh_history` in either of zsh's formats, and fish's history) and the
-//! names of the commands on `PATH`. One exec channel runs `suggest.sh` as `sh -s`, as resource usage
-//! does (TERM-12), and closes once it has answered; nothing is installed or changed on the server.
+//! names of the commands on `PATH`. One exec channel runs `suggest.sh` as `sh -s`, as resource
+//! usage does (TERM-12), and closes once it has answered; nothing is installed or changed on the
+//! server.
 
 use std::collections::{BTreeSet, HashSet};
 use std::time::Duration;
@@ -150,8 +151,9 @@ fn is_timestamp(line: &[u8]) -> bool {
     matches!(line, [b'#', digits @ ..] if !digits.is_empty() && digits.iter().all(u8::is_ascii_digit))
 }
 
-/// zsh's history, oldest first, in its plain format or the extended one (`: <start>:<elapsed>;cmd`).
-/// A command of several lines continues each line with a backslash; it is left out whole.
+/// zsh's history, oldest first, in its plain format or the extended one
+/// (`: <start>:<elapsed>;cmd`). A command of several lines continues each line with a backslash; it
+/// is left out whole.
 fn zsh_history(lines: &[&[u8]]) -> Vec<String> {
     let mut commands = Vec::new();
     let mut continued = false;

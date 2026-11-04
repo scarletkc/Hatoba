@@ -180,6 +180,8 @@ describe("what the server offers suggestions (TERM-16)", () => {
     expect(serverListsOf("paste-test").history).toEqual(["htop"]);
     suggestions.mockRejectedValue(new Error("the server refused to run the command"));
     await connectAs("s2");
+    // What the previous connection's server offered does not stay.
+    expect(serverListsOf("paste-test").history).toEqual([]);
     await connectAs("s3");
     expect(suggestions.mock.calls).toEqual([["s1"], ["s2"]]);
   });

@@ -546,6 +546,8 @@ export class LiveSession {
 
   /** TERM-16: what an SSH tab's server offers suggestions, read once per connection. */
   private readServerLists(sid: string) {
+    // The previous connection's: the host may since name another server.
+    dropServerLists(this.tabId);
     if (!this.asksServer || this.local || this.telnet) return;
     api.ssh_suggestions(sid).then(
       (lists) => {
