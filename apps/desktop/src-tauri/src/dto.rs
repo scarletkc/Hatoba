@@ -561,6 +561,15 @@ pub enum StatsEvent {
     Ended { error: crate::error::AppError },
 }
 
+/// What command suggestions take from the server of an SSH tab (TERM-16).
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct ServerSuggestionsView {
+    /// The shell's own history, newest first, each command once: the login shell's history first.
+    pub history: Vec<String>,
+    /// The names of the executables on its `PATH`, sorted, each once.
+    pub commands: Vec<String>,
+}
+
 // ───────────────────────── Dashboard (HOST-14) ─────────────────────────
 
 /// Why the dashboard does not sign in to a host on its own: the connection needs the user.

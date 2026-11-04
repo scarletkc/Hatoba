@@ -424,6 +424,34 @@ export const COMMAND_HISTORY: string[] = [
   "ls -la",
 ];
 
+/** What every demo server's shell has run (TERM-16), newest first. */
+export const SERVER_HISTORY: string[] = [
+  "journalctl -u nginx --since today",
+  "cd /srv/www && git pull",
+  "git status",
+  "htop",
+];
+
+/** The command names on every demo server's `PATH` (TERM-16), sorted. */
+export const SERVER_COMMANDS: string[] = [
+  "apt",
+  "cat",
+  "curl",
+  "docker",
+  "git",
+  "grep",
+  "htop",
+  "journalctl",
+  "kubectl",
+  "ls",
+  "lsblk",
+  "nginx",
+  "rsync",
+  "systemctl",
+  "tail",
+  "vim",
+];
+
 export const PREFS: LocalPrefs = {
   language: "system",
   appearance: "system",

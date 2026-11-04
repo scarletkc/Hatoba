@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useApp } from "@/app/store";
+import { appError } from "@/ipc/api";
 import { confirmMultilinePaste } from "./paste";
 import { schemeFor, searchColors } from "./schemes";
+import { serverListsOf } from "./history";
 import { LiveSession } from "./session";
 import { useTermSettings } from "./theme";
 
@@ -31,12 +33,14 @@ vi.mock("@xterm/xterm", () => ({
 }));
 vi.mock("./paste", () => ({ confirmMultilinePaste: vi.fn(async () => true) }));
 const writeBytes = vi.hoisted(() => vi.fn(async () => {}));
+const suggestions = vi.hoisted(() => vi.fn());
 vi.mock("@/ipc/api", async (importActual) => {
   const actual = await importActual<typeof import("@/ipc/api")>();
   return {
     ...actual,
     api: new Proxy(actual.api, {
-      get: (target, prop) => (prop === "ssh_write_bytes" ? writeBytes : Reflect.get(target, prop)),
+      get: (target, prop) =>
+        prop === "ssh_write_bytes" ? writeBytes : prop === "ssh_suggestions" ? suggestions : Reflect.get(target, prop),
     }),
   };
 });
@@ -161,5 +165,49 @@ describe("terminal search", () => {
     pick("nord");
     session.applySettings();
     expect(findNext).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("what the server offers suggestions (TERM-16)", () => {
+  const connectAs = async (sid: string) => {
+    const opened = session as unknown as { onConnected(sid: string, size: { cols: number; rows: number }): void };
+    opened.onConnected(sid, { cols: 80, rows: 24 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+
+  it("is read on each connection until the server refuses", async () => {
+    suggestions.mockResolvedValue({ history: ["htop"], commands: ["ls"] });
+    await connectAs("s1");
+    expect(serverListsOf("paste-test").history).toEqual(["htop"]);
+    suggestions.mockRejectedValue(appError("ssh", "the server refused to run the command", { ssh_kind: "channel" }));
+    await connectAs("s2");
+    // What the previous connection's server offered does not stay.
+    expect(serverListsOf("paste-test").history).toEqual([]);
+    await connectAs("s3");
+    expect(suggestions.mock.calls).toEqual([["s1"], ["s2"]]);
+  });
+
+  it("is asked again after a timeout or a lost connection", async () => {
+    suggestions.mockRejectedValue(appError("ssh", "the server did not answer in time", { ssh_kind: "other" }));
+    await connectAs("s1");
+    suggestions.mockRejectedValue(appError("ssh", "connection closed", { ssh_kind: "disconnected" }));
+    await connectAs("s2");
+    await connectAs("s3");
+    expect(suggestions.mock.calls).toEqual([["s1"], ["s2"], ["s3"]]);
+  });
+
+  it("is not asked of a server that names another system", async () => {
+    suggestions.mockResolvedValue(null);
+    await connectAs("s1");
+    await connectAs("s2");
+    expect(suggestions.mock.calls).toEqual([["s1"]]);
+  });
+
+  it("is not asked of a local shell or a Telnet server", async () => {
+    session = new LiveSession("local-test", { hostId: null, target: null, local: { id: "pwsh" } } as never);
+    await connectAs("s1");
+    session = new LiveSession("telnet-test", { hostId: null, target: null, telnet: { hostId: "t" } } as never);
+    await connectAs("s2");
+    expect(suggestions).not.toHaveBeenCalled();
   });
 });

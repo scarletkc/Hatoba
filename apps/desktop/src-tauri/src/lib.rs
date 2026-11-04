@@ -126,6 +126,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             ssh_cmd::ssh_disconnect,
             ssh_cmd::ssh_stats_start,
             ssh_cmd::ssh_stats_stop,
+            ssh_cmd::ssh_suggestions,
             ssh_cmd::ssh_test,
             local_cmd::local_shells,
             local_cmd::local_open,

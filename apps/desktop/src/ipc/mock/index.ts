@@ -1347,6 +1347,13 @@ export function createMockApi(): HatobaApi {
     ssh_stats_stop: async (sid, statsId) => {
       if (statsTimers.get(sid)?.id === statsId) stopStats(sid);
     },
+    ssh_suggestions: async (sid) => {
+      needUnlocked();
+      const shell = shells.get(sid) ?? fail("not_found", "session");
+      await delay(200);
+      if (shell.os === "freebsd" || shell.os === "windows") return null;
+      return { history: D.SERVER_HISTORY, commands: D.SERVER_COMMANDS };
+    },
     ssh_test: async (input) => {
       await delay(800);
       if (input.address === "172.31.40.8")
