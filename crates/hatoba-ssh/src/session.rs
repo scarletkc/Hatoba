@@ -780,8 +780,8 @@ impl SshSession {
     }
 
     /// What command suggestions take from the server (TERM-16), read over an exec channel that
-    /// closes once it has answered. `None` for a server whose identification string names a
-    /// system other than Linux or macOS, on which nothing is run.
+    /// closes once it has answered. `None` for a server whose identification string names FreeBSD,
+    /// NetBSD or Windows, on which nothing is run.
     pub async fn suggestions(&self) -> Result<Option<ServerSuggestions>, SshError> {
         match self.server_os() {
             Some(ServerOs::FreeBsd | ServerOs::NetBsd | ServerOs::Windows) => Ok(None),

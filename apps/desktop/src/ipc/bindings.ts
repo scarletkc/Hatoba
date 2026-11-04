@@ -219,8 +219,8 @@ export const commands = {
 	/**
 	 *  Reads what command suggestions take from the server of an SSH tab (TERM-16): its shell's history
 	 *  and the command names on its `PATH`, over an exec channel of the tab's connection that closes
-	 *  once it has answered. `null` for a server whose identification string names a system other than
-	 *  Linux or macOS (HOST-11), on which nothing is run; an error for one that refuses the channel.
+	 *  once it has answered. `null` for a server whose identification string names FreeBSD, NetBSD or
+	 *  Windows (HOST-11), on which nothing is run; an error for one that refuses the channel.
 	 */
 	sshSuggestions: (sessionId: string) => __TAURI_INVOKE<{
 	/**  The shell's own history, newest first, each command once: the login shell's history first. */
