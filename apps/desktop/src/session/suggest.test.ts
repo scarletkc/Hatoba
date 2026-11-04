@@ -63,6 +63,9 @@ describe("isPrompt (TERM-14)", () => {
     expect(isPrompt("Enter API key>", null)).toBe(false);
     expect(isPrompt("请输入密码> ", null)).toBe(false);
     expect(isPrompt("PS C:\\keys> ", null)).toBe(true);
+    expect(isPrompt("PS C:\\token> ", null)).toBe(true);
+    expect(isPrompt("C:\\Users\\kc\\key>", null)).toBe(true);
+    expect(isPrompt("~/password> ", null)).toBe(true);
     expect(isPrompt("Continue? [y/N] ", null)).toBe(false);
     expect(isPrompt("", null)).toBe(false);
     expect(isPrompt("   ", "➜")).toBe(false);

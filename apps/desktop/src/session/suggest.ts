@@ -41,9 +41,12 @@ export const COMMAND_MAX_CHARS = 4096;
 const PROMPT_END = /[$#%>❯]\s*$/u;
 /** A line's text up to its first prompt character and the space after it. */
 const PROMPT_IN_LINE = /^[^$#%>❯]*[$#%>❯] ?/u;
-/** A program asking for a secret, such as `Token> `, whose answer may be echoed: no prompt (TERM-14). */
+/**
+ * A program asking for a secret, such as `Token> `, whose answer may be echoed: no prompt (TERM-14). A
+ * folder of that name at the end of a path, as in PowerShell's `PS C:\token> `, is not one.
+ */
 const SECRET_PROMPT =
-  /(?:(?<![\p{L}\p{N}])(?:password|passphrase|passcode|pass|token|secret|otp|pin|key)|密码|密碼|口令|パスワード)\s*>\s*$/iu;
+  /(?<![\\/:])(?:(?<![\p{L}\p{N}])(?:password|passphrase|passcode|pass|token|secret|otp|pin|key)|密码|密碼|口令|パスワード)\s*>\s*$/iu;
 
 /** Whether the history keeps `command` (TERM-15): not empty, not starting with a space, not too long. */
 export function keepsCommand(command: string): boolean {
