@@ -96,9 +96,9 @@ export function removeFromHistory(owner: HistoryOwner, command: string) {
 
 /** Settings → Terminal → Clear Command History: every history on this device, the tabs' own included. */
 export async function clearAllHistory() {
-  lists.clear();
-  changed();
   await api.command_history_clear();
+  // A load that started before the clear ended would bring the commands back.
+  forgetHistory();
 }
 
 /** A quick connection's tab closed: its history goes with it. */

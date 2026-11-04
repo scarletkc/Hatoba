@@ -203,6 +203,8 @@ export class LiveSession {
   private readonly suggestionListeners = new Set<() => void>();
   private suggestFrame = 0;
   private composing = false;
+  /** Input went to the shell and its echo has not come back: the screen does not show it yet. */
+  private awaitingEcho = false;
   private readonly stopHistory: () => void;
 
   constructor(
@@ -230,7 +232,10 @@ export class LiveSession {
       this.sendResize();
       this.scheduleSuggestion();
     });
-    this.term.onWriteParsed(() => this.scheduleSuggestion());
+    this.term.onWriteParsed(() => {
+      this.awaitingEcho = false;
+      this.scheduleSuggestion();
+    });
     this.term.onCursorMove(() => this.scheduleSuggestion());
     this.term.onScroll(() => this.scheduleSuggestion());
     this.stopHistory = onHistoryChange(() => this.scheduleSuggestion());
@@ -686,6 +691,13 @@ export class LiveSession {
     const { command } = this.tracker.onInput(data, this.term.buffer.active);
     if (command !== null) addToHistory(this.history, command);
     void this.io.write(sid, data).catch(() => {});
+    // Until the shell echoes the input, a suggestion read from the screen would be stale: another → would
+    // type the same rest again.
+    this.awaitingEcho = true;
+    if (this.suggestion) {
+      this.suggestion = null;
+      this.suggestionListeners.forEach((listener) => listener());
+    }
     this.scheduleSuggestion();
   }
 
@@ -836,7 +848,9 @@ export class LiveSession {
 
   /** The newest command of the history that continues what is typed at a prompt, while one can show. */
   private findSuggestion(): Suggestion | null {
-    if (this.disposed || !this.opened || this.status !== "connected" || this.composing) return null;
+    if (this.disposed || !this.opened || this.status !== "connected" || this.composing || this.awaitingEcho) {
+      return null;
+    }
     if (!useTermSettings.getState().settings.suggest_commands) return null;
     const buf = this.term.buffer.active;
     if (buf.type === "alternate" || buf.viewportY !== buf.baseY) return null;
