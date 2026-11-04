@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useApp } from "@/app/store";
+import { appError } from "@/ipc/api";
 import { confirmMultilinePaste } from "./paste";
 import { schemeFor, searchColors } from "./schemes";
 import { serverListsOf } from "./history";
@@ -178,12 +179,21 @@ describe("what the server offers suggestions (TERM-16)", () => {
     suggestions.mockResolvedValue({ history: ["htop"], commands: ["ls"] });
     await connectAs("s1");
     expect(serverListsOf("paste-test").history).toEqual(["htop"]);
-    suggestions.mockRejectedValue(new Error("the server refused to run the command"));
+    suggestions.mockRejectedValue(appError("ssh", "the server refused to run the command", { ssh_kind: "channel" }));
     await connectAs("s2");
     // What the previous connection's server offered does not stay.
     expect(serverListsOf("paste-test").history).toEqual([]);
     await connectAs("s3");
     expect(suggestions.mock.calls).toEqual([["s1"], ["s2"]]);
+  });
+
+  it("is asked again after a timeout or a lost connection", async () => {
+    suggestions.mockRejectedValue(appError("ssh", "the server did not answer in time", { ssh_kind: "other" }));
+    await connectAs("s1");
+    suggestions.mockRejectedValue(appError("ssh", "connection closed", { ssh_kind: "disconnected" }));
+    await connectAs("s2");
+    await connectAs("s3");
+    expect(suggestions.mock.calls).toEqual([["s1"], ["s2"], ["s3"]]);
   });
 
   it("is not asked of a server that names another system", async () => {

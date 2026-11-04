@@ -15,8 +15,16 @@ vi.mock("@/ipc/api", async (importActual) => ({
 vi.mock("@/app/store", () => ({ useApp: { subscribe: () => () => {} } }));
 
 const { useVaultData } = await import("@/app/data");
-const { clearAllHistory, dropServerLists, historyOf, listedHistory, removeFromHistory, serverListsOf, setServerLists } =
-  await import("./history");
+const {
+  addToHistory,
+  clearAllHistory,
+  dropServerLists,
+  historyOf,
+  listedHistory,
+  removeFromHistory,
+  serverListsOf,
+  setServerLists,
+} = await import("./history");
 
 const host = (id: string) => ({ id }) as HostView;
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -46,10 +54,12 @@ describe("what a tab's server offers (TERM-16)", () => {
   const commands = ["git", "ls"];
 
   it("lists the server's other commands after the tab's own, the same list until it changes", () => {
-    setServerLists("t1", { history: ["htop", "pwd"], commands });
-    const first = listedHistory("t1", owner);
-    expect(first).toEqual(["htop", "pwd"]);
-    expect(listedHistory("t1", owner)).toBe(first);
+    const own = { key: "tab:t0", saved: false };
+    addToHistory(own, "pwd");
+    setServerLists("t0", { history: ["htop", "pwd"], commands });
+    const first = listedHistory("t0", own);
+    expect(first).toEqual(["pwd", "htop"]);
+    expect(listedHistory("t0", own)).toBe(first);
     expect(serverListsOf("t2").history).toEqual([]);
   });
 

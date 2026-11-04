@@ -555,8 +555,9 @@ export class LiveSession {
         if (lists) setServerLists(this.tabId, lists);
         else this.asksServer = false;
       },
-      () => {
-        if (sid === this.sessionId) this.asksServer = false;
+      (e: unknown) => {
+        // A refusal stays for the tab; a timeout or a lost connection says nothing about the next connection.
+        if (sid === this.sessionId && toAppError(e).ssh_kind === "channel") this.asksServer = false;
       },
     );
   }
