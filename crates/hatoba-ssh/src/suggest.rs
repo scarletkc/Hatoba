@@ -137,14 +137,19 @@ fn keeps(command: &str) -> bool {
         && command.chars().count() <= COMMAND_MAX_CHARS
 }
 
-/// bash's history, oldest first: one command per line, with the `#<seconds>` lines that
-/// `HISTTIMEFORMAT` adds left out.
+/// bash's history, oldest first: one command per line. `HISTTIMEFORMAT` adds a `#<seconds>` line
+/// before each entry, the only mark of where one ends, so an entry of several lines is left out
+/// whole after such a line. Lines before the first one count as a command each.
 fn bash_history(lines: &[&[u8]]) -> Vec<String> {
-    lines
-        .iter()
-        .filter(|line| !is_timestamp(line))
-        .map(|line| String::from_utf8_lossy(line).into_owned())
-        .collect()
+    let text = |line: &&[u8]| String::from_utf8_lossy(line).into_owned();
+    let lines: Vec<&[u8]> = lines.iter().copied().filter(|l| !l.is_empty()).collect();
+    let mut entries = lines.split(|line| is_timestamp(line));
+    let unmarked = entries.next().unwrap_or_default();
+    let marked = entries.filter_map(|entry| match entry {
+        [line] => Some(text(line)),
+        _ => None,
+    });
+    unmarked.iter().map(text).chain(marked).collect()
 }
 
 fn is_timestamp(line: &[u8]) -> bool {
@@ -246,7 +251,7 @@ mod tests {
     fn reads_each_history_newest_first_the_login_shells_first() {
         let out = output(
             "zsh",
-            "#1700000000\nls -la\nmake\n",
+            "#1700000000\nls -la\n#1700000001\nmake\n",
             b": 1700000001:0;git status\n: 1700000002:3;cargo test\n",
             "- cmd: fish_config\n  when: 1700000003\n  paths:\n    - ~/x\n",
             "",
@@ -268,6 +273,14 @@ mod tests {
         let fish = "- cmd: echo a\\nb\n- cmd: echo back\\\\slash\n";
         let s = parse(&output("bash", &bash, zsh, fish, ""));
         assert_eq!(s.history, ["make", "uptime", "echo back\\slash"]);
+    }
+
+    #[test]
+    fn leaves_out_a_bash_entry_of_several_lines_where_the_file_marks_entries() {
+        let bash = "older\n#1700000000\nls -la\n#1700000001\nprintf \"first\nsecond\"\n\
+                    #1700000002\nmake\n";
+        let s = parse(&output("bash", bash, b"", "", ""));
+        assert_eq!(s.history, ["make", "ls -la", "older"]);
     }
 
     #[test]
