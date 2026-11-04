@@ -39,6 +39,7 @@ import {
 } from "./history";
 import { clearInfo, getInfo, patchInfo } from "./info";
 import { confirmMultilinePaste } from "./paste";
+import { PathLister } from "./pathSuggest";
 import { askPassword, askSecret, cancelSessionPrompts, pushAuthBanner, stopWaiting } from "./prompts";
 import { useRecentTargets } from "./recent";
 import { searchColors } from "./schemes";
@@ -219,6 +220,7 @@ export class LiveSession {
   private readonly stopHistory: () => void;
   /** TERM-16: false once the server refused, or names a system that is not asked (HOST-11). */
   private asksServer = true;
+  private readonly paths = new PathLister(() => this.scheduleSuggestion());
 
   constructor(
     readonly tabId: string,
@@ -538,6 +540,7 @@ export class LiveSession {
     this.sendResize(); // the view may have been resized while connecting
     historyOf(this.history); // TERM-15: read before the first suggestion is needed
     this.readServerLists(sid);
+    this.paths.connected(this.local || this.telnet ? null : sid);
     const early = earlyEvents.get(sid);
     earlyEvents.delete(sid);
     early?.forEach((ev) => this.onState(ev));
@@ -708,6 +711,7 @@ export class LiveSession {
     this.stopHistory();
     if (!this.history.saved) dropTabHistory(this.tabId);
     dropServerLists(this.tabId);
+    this.paths.connected(null);
     this.observer?.disconnect();
     this.term.element?.removeEventListener("paste", this.onPasteEvent, true);
     this.unloadWebgl();
@@ -883,7 +887,7 @@ export class LiveSession {
 
   /**
    * What continues what is typed at a prompt, while one can show: the newest command of the tab's history,
-   * or else of its server's history, or else a command name of the server (TERM-16).
+   * or else of its server's history, or else a command name or a path on the server (TERM-16).
    */
   private findSuggestion(): Suggestion | null {
     if (this.disposed || !this.opened || this.status !== "connected" || this.composing || this.awaitingEcho) {
@@ -898,7 +902,8 @@ export class LiveSession {
     const rest =
       suggestionFor(typed, historyOf(this.history)) ??
       suggestionFor(typed, server.history) ??
-      commandNameFor(typed, server.commands);
+      commandNameFor(typed, server.commands) ??
+      this.paths.rest(typed);
     return rest === null ? null : { rest, x: buf.cursorX, y: buf.cursorY };
   }
 
