@@ -272,6 +272,8 @@ export class LiveSession {
 
   /** A quick connection whose target is now a saved host connects as that host from here on. */
   adoptHost(host: HostView) {
+    // The tab's own history goes; the host's history takes over (TERM-15).
+    dropTabHistory(this.tabId);
     this.source = { hostId: host.id, target: null };
     useTabs.getState().adoptHost(this.tabId, host.id, host.name);
   }
