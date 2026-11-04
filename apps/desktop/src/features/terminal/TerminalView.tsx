@@ -25,6 +25,7 @@ import { ConnectingOverlay, DisconnectedBanner, ErrorCard, LocalErrorCard, Telne
 import { clearStats, startStats, stopStats, useSessionStats } from "./stats";
 import { StatsPopover } from "./StatsPopover";
 import { StatusBar } from "./StatusBar";
+import { SuggestionGhost, SuggestionList } from "./Suggestions";
 import s from "./TerminalView.module.css";
 
 /** One terminal session. Inactive tabs stay mounted so their sessions keep running. */
@@ -87,6 +88,17 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
     session.focus();
   }, [session]);
 
+  // TERM-14: Ctrl+Shift+Space (⌘⇧Space) in the terminal asks for the list of commands.
+  const [listOpen, setListOpen] = useState(false);
+  const seenSuggestTick = useRef(info.suggestTick);
+  useEffect(() => {
+    if (info.suggestTick !== seenSuggestTick.current) {
+      seenSuggestTick.current = info.suggestTick;
+      setListOpen(true);
+    }
+  }, [info.suggestTick]);
+  const areaRef = useRef<HTMLDivElement>(null);
+
   const connected = tab.status === "connected";
   const closeForwards = forwardsMenu.close;
   const closeStats = statsMenu.close;
@@ -95,6 +107,7 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
     if (!active || !connected) {
       closeForwards();
       closeStats();
+      setListOpen(false);
     }
   }, [active, connected, closeForwards, closeStats]);
 
@@ -313,8 +326,10 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
         }}
       />
       <div className={s.main}>
-        <div className={s.termArea} style={{ background: chrome.background }}>
+        <div ref={areaRef} className={s.termArea} style={{ background: chrome.background }}>
           <div ref={containerRef} className={s.term} onContextMenu={onContextMenu} />
+          <SuggestionGhost session={session} area={areaRef} />
+          {listOpen && active && connected && <SuggestionList session={session} onClose={() => setListOpen(false)} />}
           {findOpen && <FindBar session={session} onClose={closeFind} />}
           {tab.status === "connecting" && (
             <ConnectingOverlay name={host?.name ?? telnetHost?.name ?? tab.title} local={!!local} />

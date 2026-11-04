@@ -410,8 +410,19 @@ export const SETTINGS: SettingsView = {
     scrollback: 10000,
     right_click: "copy_paste",
     confirm_multiline_paste: true,
+    suggest_commands: true,
   },
 };
+
+/** The commands every demo host and local shell starts its history with (TERM-15), newest first. */
+export const COMMAND_HISTORY: string[] = [
+  "git status",
+  "docker compose ps",
+  "systemctl status nginx",
+  "tail -f /var/log/nginx/access.log",
+  "df -h",
+  "ls -la",
+];
 
 export const PREFS: LocalPrefs = {
   language: "system",

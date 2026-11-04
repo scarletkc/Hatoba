@@ -1,0 +1,78 @@
+/* TERM-14: the dimmed rest of a command after the cursor, over the terminal's screen. */
+.ghost {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: pre;
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.ghost span {
+  flex: none;
+  display: inline-block;
+}
+
+/* The list Ctrl+Shift+Space opens at the cursor, styled like the AI input's `/` menu. */
+.list {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border-radius: var(--radius-md);
+  background: var(--sheet);
+  box-shadow: var(--shadow-popover);
+  color: var(--fg);
+  font-size: var(--text-md);
+}
+
+.filter {
+  flex: none;
+  height: 28px;
+  margin: 0 0 4px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--radius-xs);
+  outline: none;
+  background: var(--fill);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.filter::placeholder {
+  color: var(--fg3);
+  font-family: var(--font-sans);
+}
+
+.rows {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.row {
+  min-height: 28px;
+  padding: 5px 8px;
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: pre;
+  cursor: default;
+  /* The highlight follows ↑, ↓ and the pointer at once. */
+  transition: none;
+}
+
+.active {
+  background: var(--fill);
+}
+
+.empty {
+  padding: 5px 8px;
+  color: var(--fg2);
+}

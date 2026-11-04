@@ -16,6 +16,8 @@ export interface SessionInfo {
   statsOn: boolean;
   /** Bumped to ask the view to open its find bar (Ctrl+Shift+F while the terminal has focus). */
   findTick: number;
+  /** Bumped to ask the view to open the command suggestions list (TERM-14). */
+  suggestTick: number;
 }
 
 export const EMPTY_INFO: SessionInfo = {
@@ -27,6 +29,7 @@ export const EMPTY_INFO: SessionInfo = {
   sftpOpen: false,
   statsOn: false,
   findTick: 0,
+  suggestTick: 0,
 };
 
 const useInfoStore = create<{ byTab: Record<string, SessionInfo> }>(() => ({ byTab: {} }));

@@ -25,6 +25,9 @@ Other labels: **New Tab**, **Close Tab**, **Show AI Panel**, **Hide AI Panel**, 
 | Paste | Ctrl+V, Ctrl+Shift+V, or Shift+Insert | ⌘V |
 | Find in the terminal | Ctrl+Shift+F | ⌘F |
 | Open a link in the output | Ctrl+click | ⌘+click |
+| Take the dimmed command suggestion | → or End | → or End |
+| Take the suggestion's next word | Ctrl+→ | ⌥→ |
+| List the commands you ran | Ctrl+Shift+Space | ⌘⇧Space |
 
 In the find bar, Enter goes to the next match, Shift+Enter to the previous one, and Esc closes the bar. Right-click either copies or pastes, or opens a menu, depending on **Right-Click in Terminal** (see `references/terminal.md`).
 

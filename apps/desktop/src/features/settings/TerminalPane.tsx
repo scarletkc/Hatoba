@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { PopupSelect, Segmented, Stepper, Switch, TextField, isImeEvent } from "@hatoba/ui";
+import { Button, PopupSelect, Segmented, Stepper, Switch, TextField, confirm, isImeEvent, toast } from "@hatoba/ui";
+import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { pickProgram, programName } from "@/features/sftp/native";
 import { useT } from "@/i18n";
 import type { LocalShellView, TerminalSettings } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { defaultTerminalFont } from "@/lib/platform";
+import { defaultTerminalFont, shortcutLabel } from "@/lib/platform";
+import { clearAllHistory } from "@/session/history";
 import { loadLocalShells, shellName } from "@/session/localShells";
 import { FONT_SIZE_MAX, FONT_SIZE_MIN, resolveScheme, terminalTheme, useTermSettings } from "@/session/theme";
 import { SchemePicker } from "./SchemePicker";
@@ -47,6 +49,23 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
   }, [fontFamily]);
 
   if (!term) return <Pane>{null}</Pane>;
+
+  // TERM-15: the history of every host and local shell on this device.
+  const clearHistory = async () => {
+    const ok = await confirm({
+      title: t("settings.commandHistory.clearTitle"),
+      body: t("settings.commandHistory.clearBody"),
+      confirmLabel: t("settings.commandHistory.clear"),
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await clearAllHistory();
+      toast(t("settings.commandHistory.cleared"));
+    } catch (e) {
+      toast(errorMessage(t, e), "error");
+    }
+  };
 
   const commitFont = () => {
     const from = typedFrom.current;
@@ -185,6 +204,21 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
             checked={term.confirm_multiline_paste}
             onChange={(confirm_multiline_paste) => updateTerminal({ confirm_multiline_paste })}
           />
+        </SettingRow>
+        <SettingRow
+          label={t("settings.suggestCommands")}
+          hint={t("settings.suggestCommands.hint", { keys: shortcutLabel(platform, "Ctrl+Shift+Space", "⌘⇧Space") })}
+        >
+          <Switch
+            label={t("settings.suggestCommands")}
+            checked={term.suggest_commands}
+            onChange={(suggest_commands) => updateTerminal({ suggest_commands })}
+          />
+        </SettingRow>
+        <SettingRow label={t("settings.commandHistory")}>
+          <Button icon="trash" onClick={() => void clearHistory()}>
+            {t("settings.commandHistory.clear")}
+          </Button>
         </SettingRow>
         <SettingRow label={t("settings.term.scrollback")}>
           <PopupSelect

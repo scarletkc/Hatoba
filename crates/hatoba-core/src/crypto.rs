@@ -65,6 +65,10 @@ pub const AAD_PIN_VAULT_KEY: &str = "hatoba/pin-vault-key/v1";
 /// `hatoba/ai-file-snapshot/v1/{part}/{key}`, with the part (`meta` or `content`) and the row's
 /// key as a JSON array, so an envelope opens only in its own row and column.
 pub const AAD_AI_FILE_SNAPSHOT_PREFIX: &str = "hatoba/ai-file-snapshot/v1/";
+/// Prefix of the AAD of a local-only command history (TERM-15):
+/// `hatoba/command-history/v1/{owner}`, so a history opens only in its own host's or local
+/// shell's row.
+pub const AAD_COMMAND_HISTORY_PREFIX: &str = "hatoba/command-history/v1/";
 
 /// AAD for the item with the given id. Conflict-log copies reuse the item AAD of their item.
 #[must_use]
