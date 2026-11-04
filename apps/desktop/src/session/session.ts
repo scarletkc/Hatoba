@@ -574,6 +574,7 @@ export class LiveSession {
         // A refusal stays for the tab; a timeout or a lost connection says nothing about the next connection.
         if (toAppError(e).ssh_kind === "channel") this.asksServer = false;
         this.paths.connected(sid);
+        this.scheduleSuggestion(); // a path typed while waiting
       },
     );
   }
