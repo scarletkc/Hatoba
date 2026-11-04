@@ -55,7 +55,10 @@ export function historyOf(owner: HistoryOwner): readonly string[] {
         loaded.add(owner.key);
         // A command added while loading stays on top.
         const added = lists.get(owner.key) ?? [];
-        lists.set(owner.key, added.reduceRight((acc, c) => withCommand(acc, c), saved));
+        lists.set(
+          owner.key,
+          added.reduceRight((acc, c) => withCommand(acc, c), saved),
+        );
         changed();
       })
       .catch(() => {
@@ -82,7 +85,11 @@ export function addToHistory(owner: HistoryOwner, command: string) {
 /** Removes a command from the history (Shift+Delete in the list). */
 export function removeFromHistory(owner: HistoryOwner, command: string) {
   const list = lists.get(owner.key);
-  if (list) lists.set(owner.key, list.filter((c) => c !== command));
+  if (list)
+    lists.set(
+      owner.key,
+      list.filter((c) => c !== command),
+    );
   changed();
   if (owner.saved) void api.command_history_remove(owner.key, command).catch(() => {});
 }

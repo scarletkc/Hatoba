@@ -10,8 +10,7 @@ import { terminalFontFamily, useTermSettings, useTerminalChrome } from "@/sessio
 import s from "./Suggestions.module.css";
 
 /** East Asian wide and fullwidth characters, and emoji, which take two cells. */
-const WIDE =
-  /[ᄀ-ᅟ⺀-〾ぁ-㏿㐀-䶿一-鿿ꀀ-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦\u{1F300}-\u{1FAFF}\u{20000}-\u{3FFFD}]/u;
+const WIDE = /[ᄀ-ᅟ⺀-〾ぁ-㏿㐀-䶿一-鿿ꀀ-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦\u{1F300}-\u{1FAFF}\u{20000}-\u{3FFFD}]/u;
 
 /**
  * TERM-14: the rest of a command, dimmed after the cursor. Each character takes its own cells, so the

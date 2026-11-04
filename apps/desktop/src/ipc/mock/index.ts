@@ -1163,7 +1163,10 @@ export function createMockApi(): HatobaApi {
     },
     command_history_remove: async (owner, command) => {
       needUnlocked();
-      commandHistory.set(owner, historyOf(owner).filter((c) => c !== command));
+      commandHistory.set(
+        owner,
+        historyOf(owner).filter((c) => c !== command),
+      );
     },
     command_history_clear: async () => {
       needUnlocked();
