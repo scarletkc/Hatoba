@@ -7,6 +7,7 @@ pub mod cli;
 pub mod dashboard;
 pub mod deploy;
 pub mod forwards;
+pub mod history;
 pub mod hosts;
 pub mod import;
 pub mod keys;

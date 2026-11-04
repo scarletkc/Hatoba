@@ -402,6 +402,30 @@ export const commands = {
 	starPromptGet: () => __TAURI_INVOKE<StarPrompt>("star_prompt_get"),
 	/**  The user starred, opened the bug report form, or closed the prompt: it never shows again. */
 	starPromptDone: () => __TAURI_INVOKE<null>("star_prompt_done"),
+	/**
+	 *  The commands typed on this device in a saved host's terminals or in a local shell, newest
+	 *  first. `owner` is the host's id (SSH or Telnet), or `local:` and the shell's id
+	 *  (`LocalShellView.id`). A host or shell without a history has an empty one.
+	 */
+	commandHistoryList: (owner: string) => __TAURI_INVOKE<string[]>("command_history_list", { owner }),
+	/**
+	 *  Puts a command that Enter sent to the shell at the top of the history of `owner` (as in
+	 *  `command_history_list`). A command already there moves up, and past 1,000 commands the oldest
+	 *  goes. Nothing is kept for a command that is blank, starts with a space or is longer than 4,096
+	 *  characters, nor for a host that is no longer saved. A quick connection keeps its commands in
+	 *  its tab and never sends them here.
+	 */
+	commandHistoryAdd: (owner: string, command: string) => __TAURI_INVOKE<null>("command_history_add", { owner, command }),
+	/**
+	 *  Removes a command from the history of `owner` (as in `command_history_list`), as Shift+Delete
+	 *  does in the suggestion list. A command the history does not have changes nothing.
+	 */
+	commandHistoryRemove: (owner: string, command: string) => __TAURI_INVOKE<null>("command_history_remove", { owner, command }),
+	/**
+	 *  Deletes the command history of every saved host and local shell on this device (Settings →
+	 *  Terminal → Clear Command History).
+	 */
+	commandHistoryClear: () => __TAURI_INVOKE<null>("command_history_clear"),
 	/**  AI-01: the providers. API keys go one way to Rust and never come back. */
 	aiProvidersList: () => __TAURI_INVOKE<AiProviderView[]>("ai_providers_list"),
 	aiProviderSave: (input: AiProviderInput) => __TAURI_INVOKE<AiProviderView>("ai_provider_save", { input }),
@@ -2797,6 +2821,11 @@ export type TerminalSettings = {
 	right_click: RightClick,
 	/**  TERM-04: ask before pasting text with line breaks. */
 	confirm_multiline_paste: boolean,
+	/**
+	 *  TERM-14: show the rest of a matching command dimmed after the cursor at a shell prompt.
+	 *  The suggestion list opens with its keys either way.
+	 */
+	suggest_commands: boolean,
 };
 
 /**  The terminal fields a [`SettingsPatch`] changes; a field left out keeps its stored value. */
@@ -2810,6 +2839,7 @@ export type TerminalSettingsPatch = {
 	scrollback?: number | null,
 	right_click?: RightClick | null,
 	confirm_multiline_paste?: boolean | null,
+	suggest_commands?: boolean | null,
 };
 
 export type TestResult = {

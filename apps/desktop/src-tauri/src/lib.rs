@@ -28,9 +28,9 @@ mod update;
 
 use commands::{
     ai as ai_cmd, allowances, app, cli, dashboard as dashboard_cmd, deploy as deploy_cmd, forwards,
-    hosts, import as import_cmd, keys, local as local_cmd, mcp as mcp_cmd, memory as memory_cmd,
-    proxies, quick, settings, sftp, skills, ssh as ssh_cmd, sync as sync_cmd, telnet as telnet_cmd,
-    vault,
+    history, hosts, import as import_cmd, keys, local as local_cmd, mcp as mcp_cmd,
+    memory as memory_cmd, proxies, quick, settings, sftp, skills, ssh as ssh_cmd, sync as sync_cmd,
+    telnet as telnet_cmd, vault,
 };
 // `crate::error`: `AppError`, which every command returns, is in a crate the assistant's shares.
 use hatoba_ipc::error;
@@ -201,6 +201,10 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             settings::prefs_save,
             settings::star_prompt_get,
             settings::star_prompt_done,
+            history::command_history_list,
+            history::command_history_add,
+            history::command_history_remove,
+            history::command_history_clear,
             ai_cmd::ai_providers_list,
             ai_cmd::ai_provider_save,
             ai_cmd::ai_provider_delete,

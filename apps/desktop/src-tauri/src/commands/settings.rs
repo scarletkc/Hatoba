@@ -46,6 +46,7 @@ pub fn settings_view(s: &Settings) -> SettingsView {
                 CoreRightClick::CopyPaste => RightClick::CopyPaste,
             },
             confirm_multiline_paste: s.terminal.confirm_multiline_paste(),
+            suggest_commands: s.terminal.suggest_commands(),
         },
     }
 }
@@ -143,6 +144,9 @@ fn patch_terminal(t: &mut CoreTerminal, patch: &TerminalSettingsPatch) -> AppRes
     }
     if let Some(confirm) = patch.confirm_multiline_paste {
         t.set_confirm_multiline_paste(confirm);
+    }
+    if let Some(suggest) = patch.suggest_commands {
+        t.set_suggest_commands(suggest);
     }
     Ok(())
 }
@@ -607,12 +611,27 @@ mod tests {
             font_size: Some(shown.font_size),
             right_click: Some(shown.right_click),
             confirm_multiline_paste: Some(shown.confirm_multiline_paste),
+            suggest_commands: Some(shown.suggest_commands),
             ..TerminalSettingsPatch::default()
         });
         assert!(!save_settings(&mut vault, &same).unwrap());
         assert!(!save_settings(&mut vault, &SettingsPatch::default()).unwrap());
         assert_eq!(vault.settings(), before);
         assert_eq!(vault.settings().terminal.right_click, None);
+        assert_eq!(vault.settings().terminal.suggest_commands, None);
+    }
+
+    #[test]
+    fn command_suggestions_can_be_turned_off() {
+        let mut vault = vault();
+        assert!(settings_view(&vault.settings()).terminal.suggest_commands);
+        let off = terminal(TerminalSettingsPatch {
+            suggest_commands: Some(false),
+            ..TerminalSettingsPatch::default()
+        });
+        assert!(save_settings(&mut vault, &off).unwrap());
+        assert_eq!(vault.settings().terminal.suggest_commands, Some(false));
+        assert!(!settings_view(&vault.settings()).terminal.suggest_commands);
     }
 
     #[test]

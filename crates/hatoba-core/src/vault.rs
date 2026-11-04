@@ -1432,10 +1432,10 @@ impl Vault {
     /// none that its key opens (none yet, or a damaged one), the local one is queued dated at the
     /// epoch, older than any settings of the remote's own devices, which therefore replace it
     /// whenever they arrive (an edit made here after the join is dated as usual). Tombstones,
-    /// items that cannot be decrypted, and the conflict log are dropped, and every
-    /// [`SealedLocal`] is sealed again, and the PIN unlock is turned off. Returns whether the
-    /// vault key changed, so the caller can drop what still holds the old one (biometric unlock,
-    /// the PIN's copy in the OS credential store).
+    /// items that cannot be decrypted, and the conflict log are dropped, every [`SealedLocal`],
+    /// file snapshot and command history is sealed again, and the PIN unlock is turned off.
+    /// Returns whether the vault key changed, so the caller can drop what still holds the old one
+    /// (biometric unlock, the PIN's copy in the OS credential store).
     ///
     /// Once the transaction has committed the join has happened: if reloading the items then
     /// fails, the vault is left locked (never on the old key) and this still returns `Ok`.
@@ -1505,6 +1505,7 @@ impl Vault {
                 }
                 tx.clear_conflicts()?;
                 crate::vault_snapshots::reseal_snapshots(tx, &old, &vault_key)?;
+                crate::vault_history::reseal_command_history(tx, &old, &vault_key)?;
                 // The PIN wraps the old key, like the biometric unlock, and is turned off with it.
                 tx.delete_meta(meta::PIN)?;
                 for (key, resealed) in &local {

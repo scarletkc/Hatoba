@@ -1090,6 +1090,9 @@ pub struct TerminalSettings {
     pub right_click: RightClick,
     /// TERM-04: ask before pasting text with line breaks.
     pub confirm_multiline_paste: bool,
+    /// TERM-14: show the rest of a matching command dimmed after the cursor at a shell prompt.
+    /// The suggestion list opens with its keys either way.
+    pub suggest_commands: bool,
 }
 
 /// The synced settings item (spec §5.1 `Settings`).
@@ -1111,6 +1114,7 @@ pub struct TerminalSettingsPatch {
     pub scrollback: Option<u32>,
     pub right_click: Option<RightClick>,
     pub confirm_multiline_paste: Option<bool>,
+    pub suggest_commands: Option<bool>,
 }
 
 /// What `settings_save` changes. Only these fields are written, over the stored settings, so a

@@ -17,6 +17,7 @@
 //! | `vault_cascade` | deleting a host, group or key and repairing references, in one transaction |
 //! | `vault_pin` | PIN unlock after a lock, device-local (SEC-11) |
 //! | `vault_snapshots` | device-local, sealed snapshots of AI file edits, for Revert (spec AI-41) |
+//! | `vault_history` | device-local, sealed command history per host and local shell (TERM-15) |
 //! | [`sync`] | backends (Worker / D1), engine, conflict rules, user-facing flows (spec §6) |
 //! | [`backup`] | encrypted backup export / import (VAULT-07) |
 //! | [`platform`] | injected capabilities (`SecretStore`, `DeviceInfo`) |
@@ -50,6 +51,7 @@ pub mod sync;
 pub mod vault;
 mod vault_ai;
 mod vault_cascade;
+mod vault_history;
 pub mod vault_order;
 mod vault_pin;
 mod vault_snapshots;
@@ -63,5 +65,6 @@ pub use recovery::RecoveryCode;
 pub use store::SnapshotState;
 pub use vault::{PasswordChange, RecoveryChange, Vault, VaultStatusInfo};
 pub use vault_ai::{AI_PART_MAX_BYTES, StoredEntry};
+pub use vault_history::{COMMAND_HISTORY_MAX, COMMAND_MAX_CHARS, LOCAL_SHELL_OWNER_PREFIX};
 pub use vault_pin::{MAX_PIN_ATTEMPTS, PinStatus};
 pub use vault_snapshots::{AI_SNAPSHOTS_MAX_BYTES, FileSnapshot, SnapshotKey, StoredSnapshot};

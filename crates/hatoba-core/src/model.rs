@@ -1223,6 +1223,10 @@ pub struct TerminalSettings {
     /// [`Self::confirm_multiline_paste`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confirm_multiline_paste: Option<bool>,
+    /// Show the rest of a matching command dimmed after the cursor at a shell prompt (TERM-14).
+    /// `None` until a value is recorded; read it with [`Self::suggest_commands`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggest_commands: Option<bool>,
 }
 
 /// The terminal font a new vault starts with. Cascadia Mono comes with Windows (WIN-02), and
@@ -1247,6 +1251,7 @@ impl Default for TerminalSettings {
             scrollback: 10_000,
             right_click: None,
             confirm_multiline_paste: None,
+            suggest_commands: None,
         }
     }
 }
@@ -1264,6 +1269,12 @@ impl TerminalSettings {
         self.confirm_multiline_paste.unwrap_or(true)
     }
 
+    /// Whether a matching command shows dimmed after the cursor; `true` while unset.
+    #[must_use]
+    pub fn suggest_commands(&self) -> bool {
+        self.suggest_commands.unwrap_or(true)
+    }
+
     /// Records the right-click behaviour. An unset field stays unset when `value` is the default.
     pub fn set_right_click(&mut self, value: RightClick) {
         record(&mut self.right_click, value, RightClick::platform_default());
@@ -1273,6 +1284,12 @@ impl TerminalSettings {
     /// is the default.
     pub fn set_confirm_multiline_paste(&mut self, value: bool) {
         record(&mut self.confirm_multiline_paste, value, true);
+    }
+
+    /// Records whether a matching command shows dimmed after the cursor. An unset field stays
+    /// unset when `value` is the default.
+    pub fn set_suggest_commands(&mut self, value: bool) {
+        record(&mut self.suggest_commands, value, true);
     }
 }
 
@@ -2701,12 +2718,14 @@ mod tests {
         assert_eq!(s.terminal.scrollback, 10_000);
         assert_eq!(s.terminal.right_click(), RightClick::platform_default());
         assert!(s.terminal.confirm_multiline_paste());
+        assert!(s.terminal.suggest_commands());
         let value = serde_json::to_value(Item::Settings(s)).unwrap();
         assert_eq!(value["terminal"]["theme"], "dark");
         assert_eq!(value["terminal"]["cursor_style"], "block");
         // Unset fields are left out, as builds that kept them device-local wrote them.
         assert!(value["terminal"].get("right_click").is_none());
         assert!(value["terminal"].get("confirm_multiline_paste").is_none());
+        assert!(value["terminal"].get("suggest_commands").is_none());
         assert!(value["terminal"].get("dark_scheme").is_none());
         assert!(value["terminal"].get("light_scheme").is_none());
     }
@@ -2721,16 +2740,28 @@ mod tests {
         let unset = read(json!({"font_size": 14}));
         assert_eq!(unset.right_click, None);
         assert_eq!(unset.confirm_multiline_paste, None);
-        let set = read(json!({"right_click":"copy_paste","confirm_multiline_paste":true}));
+        assert_eq!(unset.suggest_commands, None);
+        let set = read(json!({
+            "right_click": "copy_paste",
+            "confirm_multiline_paste": true,
+            "suggest_commands": true
+        }));
         assert_eq!(set.right_click, Some(RightClick::CopyPaste));
         assert_eq!(set.right_click(), RightClick::CopyPaste);
         assert_eq!(set.confirm_multiline_paste, Some(true));
-        let set = read(json!({"right_click":"menu","confirm_multiline_paste":false}));
+        assert_eq!(set.suggest_commands, Some(true));
+        let set = read(json!({
+            "right_click": "menu",
+            "confirm_multiline_paste": false,
+            "suggest_commands": false
+        }));
         assert_eq!(set.right_click(), RightClick::Menu);
         assert!(!set.confirm_multiline_paste());
+        assert!(!set.suggest_commands());
         let value = serde_json::to_value(&set).unwrap();
         assert_eq!(value["right_click"], "menu");
         assert_eq!(value["confirm_multiline_paste"], false);
+        assert_eq!(value["suggest_commands"], false);
         // An unknown future value still counts as a choice the user made.
         assert_eq!(
             read(json!({"right_click":"middle_paste"})).right_click,
@@ -2765,21 +2796,28 @@ mod tests {
         let mut t = TerminalSettings::default();
         t.set_right_click(default);
         t.set_confirm_multiline_paste(true);
+        t.set_suggest_commands(true);
         assert_eq!(t.right_click, None);
         assert_eq!(t.right_click(), default);
         assert_eq!(t.confirm_multiline_paste, None);
+        assert_eq!(t.suggest_commands, None);
 
         t.set_right_click(other);
         t.set_confirm_multiline_paste(false);
+        t.set_suggest_commands(false);
         assert_eq!(t.right_click, Some(other));
         assert_eq!(t.right_click(), other);
         assert_eq!(t.confirm_multiline_paste, Some(false));
+        assert_eq!(t.suggest_commands, Some(false));
+        assert!(!t.suggest_commands());
 
         // Once set, changing back to the default is recorded too.
         t.set_right_click(default);
         t.set_confirm_multiline_paste(true);
+        t.set_suggest_commands(true);
         assert_eq!(t.right_click, Some(default));
         assert_eq!(t.confirm_multiline_paste, Some(true));
+        assert_eq!(t.suggest_commands, Some(true));
     }
 
     #[test]
