@@ -1,4 +1,5 @@
 import type { TabSource } from "@/app/tabs";
+import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { api } from "@/ipc/api";
 import { withCommand } from "./suggest";
@@ -28,8 +29,6 @@ const loaded = new Set<string>();
 const listeners = new Set<() => void>();
 /** Returned for a history with nothing in it, the same each time. */
 const EMPTY: readonly string[] = [];
-/** Moves on with each lock, so a load that ends after it keeps nothing. */
-let generation = 0;
 
 function changed() {
   listeners.forEach((listener) => listener());
@@ -47,11 +46,11 @@ export function onHistoryChange(listener: () => void): () => void {
 export function historyOf(owner: HistoryOwner): readonly string[] {
   const list = lists.get(owner.key) ?? EMPTY;
   if (owner.saved && !loaded.has(owner.key) && !loading.has(owner.key)) {
-    const gen = generation;
-    const load = api
+    const load: Promise<void> = api
       .command_history_list(owner.key)
       .then((saved) => {
-        if (gen !== generation) return;
+        // The lock, Clear Command History or the host's deletion dropped this load.
+        if (loading.get(owner.key) !== load) return;
         loaded.add(owner.key);
         // A command added while loading stays on top.
         const added = lists.get(owner.key) ?? [];
@@ -106,9 +105,16 @@ export function dropTabHistory(tabId: string) {
   lists.delete(`tab:${tabId}`);
 }
 
+/** Drops the copy of one owner's history, and a load of it still running. */
+function forgetOwner(key: string) {
+  const had = lists.delete(key);
+  loading.delete(key);
+  loaded.delete(key);
+  if (had) changed();
+}
+
 /** Drops every copy held here, which the lock does. */
 export function forgetHistory() {
-  generation++;
   lists.clear();
   loading.clear();
   loaded.clear();
@@ -117,4 +123,11 @@ export function forgetHistory() {
 
 useApp.subscribe((st, prev) => {
   if (prev.phase === "unlocked" && st.phase !== "unlocked") forgetHistory();
+});
+
+// A deleted host's history goes with it (TERM-15), also while one of its tabs stays open.
+useVaultData.subscribe((st, prev) => {
+  if (st.hosts === prev.hosts && st.telnetHosts === prev.telnetHosts) return;
+  const kept = new Set([...st.hosts, ...st.telnetHosts].map((h) => h.id));
+  for (const host of [...prev.hosts, ...prev.telnetHosts]) if (!kept.has(host.id)) forgetOwner(host.id);
 });
