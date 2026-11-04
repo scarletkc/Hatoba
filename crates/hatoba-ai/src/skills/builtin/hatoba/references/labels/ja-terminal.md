@@ -81,6 +81,17 @@ The labels that these files name in English, as the interface shows them in Japa
 | Copy if selected, otherwise paste | 選択があればコピー、なければ貼り付け |
 | Show context menu | コンテキストメニューを表示 |
 
+### Command suggestions
+
+| en | ja |
+|---|---|
+| Command suggestions | コマンドの候補 |
+| Search commands | コマンドを検索 |
+| No matching commands | 一致するコマンドはありません |
+| Terminal | ターミナル |
+| Suggest commands | 入力中にコマンドを提案 |
+| Clear Command History | コマンド履歴を消去 |
+
 ### Terminal settings
 
 | en | ja |
@@ -107,6 +118,10 @@ The labels that these files name in English, as the interface shows them in Japa
 | Copy if selected, otherwise paste | 選択があればコピー、なければ貼り付け |
 | Show context menu | コンテキストメニューを表示 |
 | Confirm before pasting multiple lines | 複数行を貼り付ける前に確認 |
+| Suggest commands | 入力中にコマンドを提案 |
+| Command history | コマンド履歴 |
+| Clear Command History | コマンド履歴を消去 |
+| Clear the command history? | コマンド履歴を消去しますか？ |
 | Scrollback | スクロールバック |
 | Local Terminal Shell | ローカル ターミナルのシェル |
 | SFTP | SFTP |

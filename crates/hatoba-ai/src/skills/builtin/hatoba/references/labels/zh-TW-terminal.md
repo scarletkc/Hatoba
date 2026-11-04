@@ -81,6 +81,17 @@ The labels that these files name in English, as the interface shows them in Trad
 | Copy if selected, otherwise paste | 有選取時複製，否則貼上 |
 | Show context menu | 顯示選單 |
 
+### Command suggestions
+
+| en | zh-TW |
+|---|---|
+| Command suggestions | 命令建議 |
+| Search commands | 搜尋命令 |
+| No matching commands | 沒有符合的命令 |
+| Terminal | 終端機 |
+| Suggest commands | 輸入時提示命令 |
+| Clear Command History | 清除命令歷史記錄 |
+
 ### Terminal settings
 
 | en | zh-TW |
@@ -107,6 +118,10 @@ The labels that these files name in English, as the interface shows them in Trad
 | Copy if selected, otherwise paste | 有選取時複製，否則貼上 |
 | Show context menu | 顯示選單 |
 | Confirm before pasting multiple lines | 貼上多行文字前確認 |
+| Suggest commands | 輸入時提示命令 |
+| Command history | 命令歷史記錄 |
+| Clear Command History | 清除命令歷史記錄 |
+| Clear the command history? | 清除命令歷史記錄？ |
 | Scrollback | 捲動緩衝區 |
 | Local Terminal Shell | 本機終端機的 shell |
 | SFTP | SFTP |

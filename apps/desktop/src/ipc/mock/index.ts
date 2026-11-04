@@ -1,5 +1,6 @@
 import { hostPort, reachableAddress } from "@/lib/address";
 import { formatTarget, sameTarget } from "@/session/quickConnect";
+import { withCommand } from "@/session/suggest";
 import { appError, type FrameHandler, type HatobaApi, type Unlisten } from "../api";
 import type {
   ConnectionsEvent,
@@ -152,6 +153,10 @@ export function createMockApi(): HatobaApi {
   let devices = [...D.DEVICES];
   let forwards: ForwardView[] = demo === "empty" ? [] : D.FORWARDS.map((f) => ({ ...f }));
   let recentTargets: QuickTarget[] = demo === "empty" ? [] : D.RECENT_TARGETS.map((r) => ({ ...r }));
+  // TERM-15: each host's and local shell's commands, newest first; the demo starts every one with a few.
+  const commandHistory = new Map<string, string[]>();
+  let historySeeded = demo !== "empty";
+  const historyOf = (owner: string) => commandHistory.get(owner) ?? (historySeeded ? [...D.COMMAND_HISTORY] : []);
   const trustedQuickHosts = new Set(recentTargets.map((r) => `${r.address}:${r.port}`));
   /**
    * SSH-16: each host's shared connection, with its tabs and forwards. `?tunnel=lost` drops a host's connection 5 s
@@ -1147,6 +1152,23 @@ export function createMockApi(): HatobaApi {
         stopStats(sid);
       };
       return sid;
+    },
+    command_history_list: async (owner) => {
+      needUnlocked();
+      return historyOf(owner);
+    },
+    command_history_add: async (owner, command) => {
+      needUnlocked();
+      commandHistory.set(owner, withCommand(historyOf(owner), command));
+    },
+    command_history_remove: async (owner, command) => {
+      needUnlocked();
+      commandHistory.set(owner, historyOf(owner).filter((c) => c !== command));
+    },
+    command_history_clear: async () => {
+      needUnlocked();
+      commandHistory.clear();
+      historySeeded = false;
     },
     recent_targets_list: async () => {
       needUnlocked();

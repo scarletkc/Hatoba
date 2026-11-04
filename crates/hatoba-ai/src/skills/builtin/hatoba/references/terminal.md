@@ -74,6 +74,22 @@ Plain Ctrl+letter always reaches the remote shell (Ctrl+L, Ctrl+W, Ctrl+K and so
 
 Other labels: **Previous (Shift+Enter)**, **Next (Enter)**, **Close find (Esc)**, **Copy if selected, otherwise paste**.
 
+## Command suggestions
+
+While you type a command at a shell prompt, in an SSH, local or Telnet tab, the rest of the newest command you ran there that starts with what you typed shows dimmed after the cursor, as in fish or PowerShell.
+
+| Action | Windows / Linux | macOS |
+|---|---|---|
+| Take the dimmed command | → or End | → or End |
+| Take its next word | Ctrl+→ | ⌥→ |
+| List the commands you ran | Ctrl+Shift+Space | ⌘⇧Space |
+
+- The commands come from the history Hatoba keeps of each saved host and each local shell, on this device only, encrypted with the vault and not synced. A quick connection keeps its commands for the tab only. Deleting a host deletes its history.
+- A command is added when you press Enter at a prompt. It is read from the screen, so what the shell does not show, such as a password, is never kept, and a command that starts with a space is left out, as the shells leave it out of their own history.
+- A prompt is a line that ends with `$`, `#`, `%`, `>` or `❯`, or one that starts like the line where Enter was last pressed (such as oh-my-zsh's `➜`). Nothing shows in a full-screen program (vim, htop), while the view is scrolled up, or while an input method is composing, and nothing shows where the shell already draws its own suggestion (fish, zsh-autosuggestions, PowerShell's predictions).
+- The list (**Command suggestions**) opens at the cursor with the commands that contain what you typed, those that start with it first. Typing in **Search commands** filters it, ↑ and ↓ select, Enter, Tab or a click puts the command in place of what you typed without running it, Shift+Delete removes it from the history, and Esc closes the list. With nothing to show it says "No matching commands".
+- Settings → Terminal → **Suggest commands** turns the dimmed command off; the list still opens with its keys. **Clear Command History** deletes the history of every host and shell on this device.
+
 ## Terminal settings
 
 All of them are in Settings → Terminal and sync with the vault, except **Local Terminal Shell** and **Editor**. The page has four sections: **Text and Cursor**, with a preview under it of the font, size, cursor and color scheme, then **Colors**, **Behavior** and **SFTP**.
@@ -91,6 +107,8 @@ Other labels: **Decrease font size**, **Increase font size**.
   - There are no custom schemes and no import from other terminals.
 - **Right-Click in Terminal**: **Copy if selected, otherwise paste** (default, except on macOS) or **Show context menu** (default on macOS).
 - **Confirm before pasting multiple lines**: on by default. Pasting text that contains line breaks shows a preview first.
+- **Suggest commands**: on by default. Shows the rest of a command you ran before as you type; see "Command suggestions" above.
+- **Command history** → **Clear Command History**: deletes the command history of every host and local shell on this device, after **Clear the command history?**.
 - **Scrollback**: 1,000, 5,000, 10,000 (default), or 50,000 lines.
 - **Local Terminal Shell**: the shell new local tabs run, kept on this device only (not synced); see "Local terminal tabs" above.
 - **SFTP** → **Editor**: the program that opens files edited from the SFTP panel, kept on this device only: **System Default** (the system's app for each kind of file) or a program picked with **Choose a Program**; see `references/sftp.md`.

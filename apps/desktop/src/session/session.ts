@@ -25,13 +25,32 @@ import {
 import { openExternal, readClipboard, writeClipboard } from "@/lib/clipboard";
 import { isMac } from "@/lib/platform";
 import { editSessionChanged } from "./edits";
+import { addToHistory, dropTabHistory, historyOf, historyOwner, onHistoryChange, removeFromHistory } from "./history";
 import { clearInfo, getInfo, patchInfo } from "./info";
 import { confirmMultilinePaste } from "./paste";
 import { askPassword, askSecret, cancelSessionPrompts, pushAuthBanner, stopWaiting } from "./prompts";
 import { useRecentTargets } from "./recent";
 import { searchColors } from "./schemes";
+import { InputTracker, eraseKeys, nextWord, suggestionFor } from "./suggest";
 import { resolveScheme, terminalOptions, useTermSettings } from "./theme";
 import { useTransfers } from "./transfers";
+
+/** TERM-14: the dimmed rest of a command after the cursor, at the cursor's cell of the view. */
+export interface Suggestion {
+  rest: string;
+  x: number;
+  y: number;
+}
+
+/** A screen cell in window coordinates. */
+export interface CellBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  /** The right edge of the terminal's screen. */
+  screenRight: number;
+}
 
 /** One-off credentials for a connection attempt (SSH-03). They are passed to `ssh_connect` and dropped. */
 export interface Credentials {
@@ -177,6 +196,14 @@ export class LiveSession {
   private fitTimer: number | undefined;
   private readonly outputListeners = new Set<(text: string) => void>();
   private readonly outputDecoder = new TextDecoder();
+  /** TERM-14, TERM-15: where the input starts on the current prompt. */
+  private readonly tracker = new InputTracker();
+  /** The suggestion showing after the cursor; null while none does. */
+  suggestion: Suggestion | null = null;
+  private readonly suggestionListeners = new Set<() => void>();
+  private suggestFrame = 0;
+  private composing = false;
+  private readonly stopHistory: () => void;
 
   constructor(
     readonly tabId: string,
@@ -199,7 +226,19 @@ export class LiveSession {
     this.term.attachCustomKeyEventHandler(this.handleKey);
     this.term.onData((data) => this.write(data));
     this.term.onBinary((data) => this.writeBinary(data));
-    this.term.onResize(() => this.sendResize());
+    this.term.onResize(() => {
+      this.sendResize();
+      this.scheduleSuggestion();
+    });
+    this.term.onWriteParsed(() => this.scheduleSuggestion());
+    this.term.onCursorMove(() => this.scheduleSuggestion());
+    this.term.onScroll(() => this.scheduleSuggestion());
+    this.stopHistory = onHistoryChange(() => this.scheduleSuggestion());
+  }
+
+  /** Whose command history the tab reads and adds to (TERM-15). */
+  private get history() {
+    return historyOwner(this.tabId, this.source);
   }
 
   /** The saved host; null for a quick connection. */
@@ -242,6 +281,9 @@ export class LiveSession {
       this.opened = true;
       // Capture phase: we own pasting so multi-line content can be confirmed first (TERM-04).
       this.term.element?.addEventListener("paste", this.onPasteEvent, true);
+      // TERM-14: no suggestion while an input method composes.
+      this.term.textarea?.addEventListener("compositionstart", this.onComposition);
+      this.term.textarea?.addEventListener("compositionend", this.onComposition);
       void document.fonts?.ready.then(() => this.fitNow());
     } else if (this.term.element && this.term.element.parentElement !== container) {
       container.appendChild(this.term.element);
@@ -282,6 +324,7 @@ export class LiveSession {
   applySettings() {
     if (this.disposed) return;
     Object.assign(this.term.options, terminalOptions(useTermSettings.getState().settings));
+    this.scheduleSuggestion();
     requestAnimationFrame(() => this.fitNow());
     // The search addon keeps the colours it drew matches with, so a new scheme redraws them. Searching
     // again scrolls to a match; the view stays where the user left it.
@@ -354,6 +397,7 @@ export class LiveSession {
     patchInfo(this.tabId, { error: null, errorAt: null, reason: null, latencyMs: null, attempts: this.attempts });
     this.sessionId = null;
     this.pendingSessionId = null;
+    this.tracker.reset();
     this.term.write("\x1b[?25h"); // show the cursor again (hidden while failed / disconnected)
     this.setStatus("connecting");
     if (this.source.local) {
@@ -472,6 +516,7 @@ export class LiveSession {
           .catch(() => {});
     }
     this.sendResize(); // the view may have been resized while connecting
+    historyOf(this.history); // TERM-15: read before the first suggestion is needed
     const early = earlyEvents.get(sid);
     earlyEvents.delete(sid);
     early?.forEach((ev) => this.onState(ev));
@@ -512,6 +557,7 @@ export class LiveSession {
     patchInfo(this.tabId, { reason });
     this.term.write("\x1b[?25l");
     this.setStatus("disconnected");
+    this.scheduleSuggestion();
   }
 
   onState(ev: SessionStateEvent) {
@@ -619,6 +665,9 @@ export class LiveSession {
     if (sid) useTransfers.getState().purge(sid);
     this.releaseSession();
     window.clearTimeout(this.fitTimer);
+    cancelAnimationFrame(this.suggestFrame);
+    this.stopHistory();
+    if (!this.history.saved) dropTabHistory(this.tabId);
     this.observer?.disconnect();
     this.term.element?.removeEventListener("paste", this.onPasteEvent, true);
     this.unloadWebgl();
@@ -632,7 +681,12 @@ export class LiveSession {
 
   private write(data: string) {
     const sid = this.sessionId;
-    if (sid && this.status === "connected") void this.io.write(sid, data).catch(() => {});
+    if (!sid || this.status !== "connected") return;
+    // TERM-15: Enter at a prompt adds the command, read from the screen before the shell answers.
+    const { command } = this.tracker.onInput(data, this.term.buffer.active);
+    if (command !== null) addToHistory(this.history, command);
+    void this.io.write(sid, data).catch(() => {});
+    this.scheduleSuggestion();
   }
 
   /**
@@ -753,6 +807,103 @@ export class LiveSession {
     patchInfo(this.tabId, { findTick: getInfo(this.tabId).findTick + 1 });
   }
 
+  // ───────────── command suggestions (TERM-14) ─────────────
+
+  /** Calls `listener` when the suggestion changes. Returns the unsubscribe function. */
+  subscribeSuggestion = (listener: () => void): (() => void) => {
+    this.suggestionListeners.add(listener);
+    return () => {
+      this.suggestionListeners.delete(listener);
+    };
+  };
+
+  private onComposition = (e: CompositionEvent) => {
+    this.composing = e.type === "compositionstart";
+    this.scheduleSuggestion();
+  };
+
+  private scheduleSuggestion() {
+    if (this.disposed || this.suggestFrame) return;
+    this.suggestFrame = requestAnimationFrame(() => {
+      this.suggestFrame = 0;
+      const next = this.findSuggestion();
+      const now = this.suggestion;
+      if (next?.rest === now?.rest && next?.x === now?.x && next?.y === now?.y) return;
+      this.suggestion = next;
+      this.suggestionListeners.forEach((listener) => listener());
+    });
+  }
+
+  /** The newest command of the history that continues what is typed at a prompt, while one can show. */
+  private findSuggestion(): Suggestion | null {
+    if (this.disposed || !this.opened || this.status !== "connected" || this.composing) return null;
+    if (!useTermSettings.getState().settings.suggest_commands) return null;
+    const buf = this.term.buffer.active;
+    if (buf.type === "alternate" || buf.viewportY !== buf.baseY) return null;
+    const typed = this.tracker.typedAtEnd(buf);
+    if (!typed) return null;
+    const rest = suggestionFor(typed, historyOf(this.history));
+    return rest === null ? null : { rest, x: buf.cursorX, y: buf.cursorY };
+  }
+
+  /** The screen cell at column `x`, row `y` of the view, in window coordinates; null before the terminal opens. */
+  cellBox(x: number, y: number): CellBox | null {
+    const screen = this.term.element?.querySelector<HTMLElement>(".xterm-screen");
+    if (!screen || !this.term.cols || !this.term.rows) return null;
+    const r = screen.getBoundingClientRect();
+    const width = r.width / this.term.cols;
+    const height = r.height / this.term.rows;
+    return { left: r.left + x * width, top: r.top + y * height, width, height, screenRight: r.right };
+  }
+
+  /** What the list of commands opens with (TERM-14): what is typed and the cursor's cell. */
+  listContext(): { typed: string; cursor: CellBox | null } {
+    const buf = this.term.buffer.active;
+    return { typed: this.tracker.typedAtEnd(buf) ?? "", cursor: this.cellBox(buf.cursorX, buf.cursorY) };
+  }
+
+  /** The tab's command history, newest first, the same list until it changes (TERM-15). */
+  commandHistory = (): readonly string[] => historyOf(this.history);
+
+  /** Types `command` from the list in place of what is typed, without running it. */
+  acceptListed(command: string) {
+    const typed = this.tracker.typedAtEnd(this.term.buffer.active) ?? "";
+    this.write(eraseKeys(typed) + command);
+    this.term.focus();
+  }
+
+  /** Shift+Delete in the list. */
+  removeListed(command: string) {
+    removeFromHistory(this.history, command);
+  }
+
+  /**
+   * →, End and Ctrl+→ (⌥→ on macOS) take the suggestion while one shows, and Ctrl+Shift+Space
+   * (⌘⇧Space) opens the list. True when the key was taken.
+   */
+  private suggestionKey(e: KeyboardEvent, mac: boolean): boolean {
+    if (e.isComposing) return false;
+    const down = e.type === "keydown";
+    const listKey =
+      e.code === "Space" && e.shiftKey && !e.altKey && (mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey);
+    if (listKey) {
+      e.preventDefault();
+      if (down && this.status === "connected") {
+        patchInfo(this.tabId, { suggestTick: getInfo(this.tabId).suggestTick + 1 });
+      }
+      return true;
+    }
+    const shown = this.suggestion;
+    if (!shown || (e.key !== "ArrowRight" && e.key !== "End")) return false;
+    const plain = !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
+    const word =
+      e.key === "ArrowRight" && !e.shiftKey && !e.metaKey && (mac ? e.altKey && !e.ctrlKey : e.ctrlKey && !e.altKey);
+    if (!plain && !word) return false;
+    e.preventDefault();
+    if (down) this.write(word ? nextWord(shown.rest) : shown.rest);
+    return true;
+  }
+
   // ───────────── keyboard (WIN-04, WIN-05) ─────────────
 
   /**
@@ -762,6 +913,7 @@ export class LiveSession {
   private handleKey = (e: KeyboardEvent): boolean => {
     const platform = useApp.getState().info.platform;
     if (isAppShortcut(e, platform)) return false;
+    if (this.suggestionKey(e, isMac(platform))) return false;
     const down = e.type === "keydown";
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
 

@@ -115,6 +115,9 @@ export default defineMessages({
     // clipboard (TERM-04, WIN-05)
     "terminal.paste.title": "粘贴多行内容？",
     "terminal.paste.body": "要粘贴的内容共 {n} 行。包含换行的内容在粘贴后可能立即被当作命令执行。",
+    "terminal.suggest.list": "命令建议",
+    "terminal.suggest.filter": "搜索命令",
+    "terminal.suggest.empty": "没有匹配的命令",
     "terminal.paste.more": "… 另有 {n} 行",
     "terminal.paste.confirm": "粘贴",
     "terminal.clipboardDenied": "无法访问剪贴板。",
@@ -343,6 +346,9 @@ export default defineMessages({
     "terminal.paste.title": "Paste multiple lines?",
     "terminal.paste.body":
       "You’re about to paste {n} lines. Text that contains line breaks may run as commands right away.",
+    "terminal.suggest.list": "Command suggestions",
+    "terminal.suggest.filter": "Search commands",
+    "terminal.suggest.empty": "No matching commands",
     "terminal.paste.more": "… {n} more lines",
     "terminal.paste.confirm": "Paste",
     "terminal.clipboardDenied": "Can’t access the clipboard.",
@@ -575,6 +581,9 @@ export default defineMessages({
     "terminal.paste.title": "複数行を貼り付けますか？",
     "terminal.paste.body":
       "{n} 行のテキストを貼り付けようとしています。改行を含む内容は、貼り付けた直後にコマンドとして実行される場合があります。",
+    "terminal.suggest.list": "コマンドの候補",
+    "terminal.suggest.filter": "コマンドを検索",
+    "terminal.suggest.empty": "一致するコマンドはありません",
     "terminal.paste.more": "… ほか {n} 行",
     "terminal.paste.confirm": "貼り付け",
     "terminal.clipboardDenied": "クリップボードにアクセスできません。",
@@ -802,6 +811,9 @@ export default defineMessages({
     // clipboard (TERM-04, WIN-05)
     "terminal.paste.title": "貼上多行內容？",
     "terminal.paste.body": "要貼上的內容共 {n} 行。包含換行的內容在貼上後可能立即被當作命令執行。",
+    "terminal.suggest.list": "命令建議",
+    "terminal.suggest.filter": "搜尋命令",
+    "terminal.suggest.empty": "沒有符合的命令",
     "terminal.paste.more": "… 另有 {n} 行",
     "terminal.paste.confirm": "貼上",
     "terminal.clipboardDenied": "無法存取剪貼簿。",

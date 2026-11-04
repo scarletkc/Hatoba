@@ -81,6 +81,17 @@ The labels that these files name in English, as the interface shows them in Simp
 | Copy if selected, otherwise paste | 有选中则复制，否则粘贴 |
 | Show context menu | 弹出菜单 |
 
+### Command suggestions
+
+| en | zh-CN |
+|---|---|
+| Command suggestions | 命令建议 |
+| Search commands | 搜索命令 |
+| No matching commands | 没有匹配的命令 |
+| Terminal | 终端 |
+| Suggest commands | 输入时提示命令 |
+| Clear Command History | 清除命令历史 |
+
 ### Terminal settings
 
 | en | zh-CN |
@@ -107,6 +118,10 @@ The labels that these files name in English, as the interface shows them in Simp
 | Copy if selected, otherwise paste | 有选中则复制，否则粘贴 |
 | Show context menu | 弹出菜单 |
 | Confirm before pasting multiple lines | 粘贴多行文本前确认 |
+| Suggest commands | 输入时提示命令 |
+| Command history | 命令历史 |
+| Clear Command History | 清除命令历史 |
+| Clear the command history? | 清除命令历史？ |
 | Scrollback | 回滚缓冲区 |
 | Local Terminal Shell | 本地终端的 shell |
 | SFTP | SFTP |

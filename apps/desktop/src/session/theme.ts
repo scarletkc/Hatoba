@@ -22,6 +22,7 @@ export function defaultTerminalSettings(platform: Platform): TerminalSettings {
     scrollback: 10_000,
     right_click: defaultRightClick(platform),
     confirm_multiline_paste: true,
+    suggest_commands: true,
   };
 }
 
