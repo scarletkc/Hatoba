@@ -39,6 +39,7 @@ import {
 } from "./history";
 import { clearInfo, getInfo, patchInfo } from "./info";
 import { confirmMultilinePaste } from "./paste";
+import { PathLister } from "./pathSuggest";
 import { askPassword, askSecret, cancelSessionPrompts, pushAuthBanner, stopWaiting } from "./prompts";
 import { useRecentTargets } from "./recent";
 import { searchColors } from "./schemes";
@@ -217,8 +218,11 @@ export class LiveSession {
   /** Input went to the shell and its echo has not come back: the screen does not show it yet. */
   private awaitingEcho = false;
   private readonly stopHistory: () => void;
-  /** TERM-16: false once the server refused, or names a system that is not asked (HOST-11). */
+  /** TERM-16: false once the server refused the exec channel. */
   private asksServer = true;
+  /** TERM-16: the server names a system that is not asked (HOST-11), through SFTP neither. */
+  private otherSystem = false;
+  private readonly paths = new PathLister(() => this.scheduleSuggestion());
 
   constructor(
     readonly tabId: string,
@@ -548,16 +552,29 @@ export class LiveSession {
   private readServerLists(sid: string) {
     // The previous connection's: the host may since name another server.
     dropServerLists(this.tabId);
-    if (!this.asksServer || this.local || this.telnet) return;
+    this.paths.connected(null);
+    if (this.local || this.telnet || this.otherSystem) return;
+    if (!this.asksServer) {
+      this.paths.connected(sid);
+      return;
+    }
+    // The answer tells whether the server is one to list paths on as well.
     api.ssh_suggestions(sid).then(
       (lists) => {
         if (this.disposed || sid !== this.sessionId) return;
-        if (lists) setServerLists(this.tabId, lists);
-        else this.asksServer = false;
+        if (lists) {
+          setServerLists(this.tabId, lists);
+          this.paths.connected(sid);
+        } else {
+          this.otherSystem = true;
+        }
       },
       (e: unknown) => {
+        if (this.disposed || sid !== this.sessionId) return;
         // A refusal stays for the tab; a timeout or a lost connection says nothing about the next connection.
-        if (sid === this.sessionId && toAppError(e).ssh_kind === "channel") this.asksServer = false;
+        if (toAppError(e).ssh_kind === "channel") this.asksServer = false;
+        this.paths.connected(sid);
+        this.scheduleSuggestion(); // a path typed while waiting
       },
     );
   }
@@ -708,6 +725,7 @@ export class LiveSession {
     this.stopHistory();
     if (!this.history.saved) dropTabHistory(this.tabId);
     dropServerLists(this.tabId);
+    this.paths.connected(null);
     this.observer?.disconnect();
     this.term.element?.removeEventListener("paste", this.onPasteEvent, true);
     this.unloadWebgl();
@@ -883,7 +901,7 @@ export class LiveSession {
 
   /**
    * What continues what is typed at a prompt, while one can show: the newest command of the tab's history,
-   * or else of its server's history, or else a command name of the server (TERM-16).
+   * or else of its server's history, or else a command name or a path on the server (TERM-16).
    */
   private findSuggestion(): Suggestion | null {
     if (this.disposed || !this.opened || this.status !== "connected" || this.composing || this.awaitingEcho) {
@@ -898,7 +916,8 @@ export class LiveSession {
     const rest =
       suggestionFor(typed, historyOf(this.history)) ??
       suggestionFor(typed, server.history) ??
-      commandNameFor(typed, server.commands);
+      commandNameFor(typed, server.commands) ??
+      this.paths.rest(typed);
     return rest === null ? null : { rest, x: buf.cursorX, y: buf.cursorY };
   }
 

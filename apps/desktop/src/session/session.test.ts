@@ -4,6 +4,7 @@ import { appError } from "@/ipc/api";
 import { confirmMultilinePaste } from "./paste";
 import { schemeFor, searchColors } from "./schemes";
 import { serverListsOf } from "./history";
+import { PathLister } from "./pathSuggest";
 import { LiveSession } from "./session";
 import { useTermSettings } from "./theme";
 
@@ -201,6 +202,20 @@ describe("what the server offers suggestions (TERM-16)", () => {
     await connectAs("s1");
     await connectAs("s2");
     expect(suggestions.mock.calls).toEqual([["s1"]]);
+  });
+
+  it("lists paths unless the server names another system", async () => {
+    const paths = vi.spyOn(PathLister.prototype, "connected");
+    suggestions.mockRejectedValue(appError("ssh", "refused", { ssh_kind: "channel" }));
+    await connectAs("s1");
+    expect(paths).toHaveBeenLastCalledWith("s1");
+    await connectAs("s2");
+    expect(paths).toHaveBeenLastCalledWith("s2");
+    session = new LiveSession("other-test", { hostId: "host", target: null });
+    suggestions.mockResolvedValue(null);
+    await connectAs("s3");
+    expect(paths).toHaveBeenLastCalledWith(null);
+    paths.mockRestore();
   });
 
   it("is not asked of a local shell or a Telnet server", async () => {
