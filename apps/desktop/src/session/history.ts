@@ -15,6 +15,14 @@ export interface HistoryOwner {
   saved: boolean;
 }
 
+/** What a tab's server offers suggestions (TERM-16), kept in memory for the tab. */
+export interface ServerLists {
+  /** The shell's own history, newest first. */
+  history: readonly string[];
+  /** The names of the commands on its `PATH`, sorted. */
+  commands: readonly string[];
+}
+
 /** Whose history a tab reads and adds to. */
 export function historyOwner(tabId: string, source: TabSource): HistoryOwner {
   if (source.local) return { key: `local:${source.local.id}`, saved: true };
@@ -29,6 +37,11 @@ const loaded = new Set<string>();
 const listeners = new Set<() => void>();
 /** Returned for a history with nothing in it, the same each time. */
 const EMPTY: readonly string[] = [];
+/** By tab. */
+const serverLists = new Map<string, ServerLists>();
+const NO_SERVER_LISTS: ServerLists = { history: EMPTY, commands: EMPTY };
+/** The list each tab last showed, the same until what it is made of changes. */
+const merged = new Map<string, { own: readonly string[]; server: readonly string[]; all: readonly string[] }>();
 
 function changed() {
   listeners.forEach((listener) => listener());
@@ -71,6 +84,36 @@ export function historyOf(owner: HistoryOwner): readonly string[] {
   return list;
 }
 
+/** What the tab's server offers, as far as it answered. */
+export function serverListsOf(tabId: string): ServerLists {
+  return serverLists.get(tabId) ?? NO_SERVER_LISTS;
+}
+
+/** Keeps what the tab's server answered. */
+export function setServerLists(tabId: string, lists: ServerLists) {
+  serverLists.set(tabId, lists);
+  changed();
+}
+
+/** The tab closed: what its server answered goes with it. */
+export function dropServerLists(tabId: string) {
+  serverLists.delete(tabId);
+  merged.delete(tabId);
+}
+
+/** What the list of commands shows (TERM-14): the owner's commands, then the server's other ones. */
+export function listedHistory(tabId: string, owner: HistoryOwner): readonly string[] {
+  const own = historyOf(owner);
+  const server = serverListsOf(tabId).history;
+  if (server.length === 0) return own;
+  const last = merged.get(tabId);
+  if (last?.own === own && last.server === server) return last.all;
+  const mine = new Set(own);
+  const all = [...own, ...server.filter((c) => !mine.has(c))];
+  merged.set(tabId, { own, server, all });
+  return all;
+}
+
 /** Adds a command the user ran at a prompt. */
 export function addToHistory(owner: HistoryOwner, command: string) {
   const list = lists.get(owner.key) ?? [];
@@ -81,8 +124,13 @@ export function addToHistory(owner: HistoryOwner, command: string) {
   if (owner.saved) void api.command_history_add(owner.key, command).catch(() => {});
 }
 
-/** Removes a command from the history (Shift+Delete in the list). */
-export function removeFromHistory(owner: HistoryOwner, command: string) {
+/**
+ * Removes a command from the history (Shift+Delete in the list), and from the copy the tab holds of its
+ * server's history: the file on the server stays as it is.
+ */
+export function removeFromHistory(tabId: string, owner: HistoryOwner, command: string) {
+  const server = serverLists.get(tabId);
+  if (server) serverLists.set(tabId, { ...server, history: server.history.filter((c) => c !== command) });
   const list = lists.get(owner.key);
   if (list)
     lists.set(
@@ -96,6 +144,8 @@ export function removeFromHistory(owner: HistoryOwner, command: string) {
 /** Settings → Terminal → Clear Command History: every history on this device, the tabs' own included. */
 export async function clearAllHistory() {
   await api.command_history_clear();
+  // The copies of the servers' histories too; each server's file stays as it is.
+  for (const [tabId, server] of serverLists) serverLists.set(tabId, { ...server, history: EMPTY });
   // A load that started before the clear ended would bring the commands back.
   forgetHistory();
 }

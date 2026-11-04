@@ -216,6 +216,18 @@ export const commands = {
 	sshStatsStart: (sessionId: string, channel: Channel<StatsEvent>) => __TAURI_INVOKE<number>("ssh_stats_start", { sessionId, channel }),
 	/**  Stops the sampling that `ssh_stats_start` returned `stats_id` for; a later one keeps running. */
 	sshStatsStop: (sessionId: string, statsId: number) => __TAURI_INVOKE<void>("ssh_stats_stop", { sessionId, statsId }),
+	/**
+	 *  Reads what command suggestions take from the server of an SSH tab (TERM-16): its shell's history
+	 *  and the command names on its `PATH`, over an exec channel of the tab's connection that closes
+	 *  once it has answered. `null` for a server whose identification string names a system other than
+	 *  Linux or macOS (HOST-11), on which nothing is run; an error for one that refuses the channel.
+	 */
+	sshSuggestions: (sessionId: string) => __TAURI_INVOKE<{
+	/**  The shell's own history, newest first, each command once: the login shell's history first. */
+	history: string[],
+	/**  The names of the executables on its `PATH`, sorted, each once. */
+	commands: string[],
+} | null>("ssh_suggestions", { sessionId }),
 	/**  "Test connection" in the host editor: connect, authenticate, verify the host key, disconnect. */
 	sshTest: (input: HostInput) => __TAURI_INVOKE<TestResult>("ssh_test", { input }),
 	/**  The shells a local tab can run (LOCAL-02), the default one first. */
@@ -2586,6 +2598,14 @@ export type ServerStatsView = {
 	 *  dashboard (HOST-14), refreshed every fifth reading.
 	 */
 	mounts: MountView[],
+};
+
+/**  What command suggestions take from the server of an SSH tab (TERM-16). */
+export type ServerSuggestionsView = {
+	/**  The shell's own history, newest first, each command once: the login shell's history first. */
+	history: string[],
+	/**  The names of the executables on its `PATH`, sorted, each once. */
+	commands: string[],
 };
 
 export type SessionState = "connecting" | "connected" | "disconnected" | "failed";

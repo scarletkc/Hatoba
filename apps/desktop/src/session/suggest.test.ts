@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   HISTORY_LIMIT,
   InputTracker,
+  commandNameFor,
   eraseKeys,
   isPrompt,
   listMatches,
@@ -106,6 +107,18 @@ describe("suggestions", () => {
     expect(suggestionFor("git status", history)).toBeNull();
     expect(suggestionFor("", history)).toBeNull();
     expect(suggestionFor("Git", history)).toBeNull();
+  });
+
+  it("completes the first word from the server's command names (TERM-16)", () => {
+    const names = ["docker", "docker-compose", "git", "ls", "lsblk", "lsof"];
+    expect(commandNameFor("do", names)).toBe("cker");
+    expect(commandNameFor("lsb", names)).toBe("lk");
+    // A word that is a command already suggests no longer name.
+    expect(commandNameFor("ls", names)).toBeNull();
+    expect(commandNameFor("docker", names)).toBeNull();
+    expect(commandNameFor("git s", names)).toBeNull();
+    expect(commandNameFor("", names)).toBeNull();
+    expect(commandNameFor("zz", names)).toBeNull();
   });
 
   it("lists commands that start with the filter first, ignoring case", () => {

@@ -8,12 +8,15 @@ vi.mock("@/ipc/api", async (importActual) => ({
   api: {
     command_history_list: () => new Promise<string[]>((resolve) => backend.pending.push(resolve)),
     command_history_add: async () => null,
+    command_history_remove: async () => null,
+    command_history_clear: async () => null,
   },
 }));
 vi.mock("@/app/store", () => ({ useApp: { subscribe: () => () => {} } }));
 
 const { useVaultData } = await import("@/app/data");
-const { historyOf } = await import("./history");
+const { clearAllHistory, dropServerLists, historyOf, listedHistory, removeFromHistory, serverListsOf, setServerLists } =
+  await import("./history");
 
 const host = (id: string) => ({ id }) as HostView;
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -35,5 +38,28 @@ describe("a deleted host's history (TERM-15)", () => {
     loadB(["pwd"]);
     await settle();
     expect(historyOf(b)).toEqual([]);
+  });
+});
+
+describe("what a tab's server offers (TERM-16)", () => {
+  const owner = { key: "tab:t1", saved: false };
+  const commands = ["git", "ls"];
+
+  it("lists the server's other commands after the tab's own, the same list until it changes", () => {
+    setServerLists("t1", { history: ["htop", "pwd"], commands });
+    const first = listedHistory("t1", owner);
+    expect(first).toEqual(["htop", "pwd"]);
+    expect(listedHistory("t1", owner)).toBe(first);
+    expect(serverListsOf("t2").history).toEqual([]);
+  });
+
+  it("removes a command from the tab's copy only, and clearing keeps the command names", async () => {
+    setServerLists("t1", { history: ["htop", "pwd"], commands });
+    removeFromHistory("t1", owner, "htop");
+    expect(listedHistory("t1", owner)).toEqual(["pwd"]);
+    await clearAllHistory();
+    expect(serverListsOf("t1")).toEqual({ history: [], commands });
+    dropServerLists("t1");
+    expect(serverListsOf("t1").commands).toEqual([]);
   });
 });

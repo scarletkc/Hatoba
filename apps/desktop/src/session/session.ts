@@ -25,13 +25,24 @@ import {
 import { openExternal, readClipboard, writeClipboard } from "@/lib/clipboard";
 import { isMac } from "@/lib/platform";
 import { editSessionChanged } from "./edits";
-import { addToHistory, dropTabHistory, historyOf, historyOwner, onHistoryChange, removeFromHistory } from "./history";
+import {
+  addToHistory,
+  dropServerLists,
+  dropTabHistory,
+  historyOf,
+  historyOwner,
+  listedHistory,
+  onHistoryChange,
+  removeFromHistory,
+  serverListsOf,
+  setServerLists,
+} from "./history";
 import { clearInfo, getInfo, patchInfo } from "./info";
 import { confirmMultilinePaste } from "./paste";
 import { askPassword, askSecret, cancelSessionPrompts, pushAuthBanner, stopWaiting } from "./prompts";
 import { useRecentTargets } from "./recent";
 import { searchColors } from "./schemes";
-import { InputTracker, nextWord, suggestionFor } from "./suggest";
+import { InputTracker, commandNameFor, nextWord, suggestionFor } from "./suggest";
 import { resolveScheme, terminalOptions, useTermSettings } from "./theme";
 import { useTransfers } from "./transfers";
 
@@ -206,6 +217,8 @@ export class LiveSession {
   /** Input went to the shell and its echo has not come back: the screen does not show it yet. */
   private awaitingEcho = false;
   private readonly stopHistory: () => void;
+  /** TERM-16: false once the server refused, or names a system that is not asked (HOST-11). */
+  private asksServer = true;
 
   constructor(
     readonly tabId: string,
@@ -524,10 +537,26 @@ export class LiveSession {
     }
     this.sendResize(); // the view may have been resized while connecting
     historyOf(this.history); // TERM-15: read before the first suggestion is needed
+    this.readServerLists(sid);
     const early = earlyEvents.get(sid);
     earlyEvents.delete(sid);
     early?.forEach((ev) => this.onState(ev));
     if (this.active && this.status === "connected") this.term.focus();
+  }
+
+  /** TERM-16: what an SSH tab's server offers suggestions, read once per connection. */
+  private readServerLists(sid: string) {
+    if (!this.asksServer || this.local || this.telnet) return;
+    api.ssh_suggestions(sid).then(
+      (lists) => {
+        if (this.disposed || sid !== this.sessionId) return;
+        if (lists) setServerLists(this.tabId, lists);
+        else this.asksServer = false;
+      },
+      () => {
+        if (sid === this.sessionId) this.asksServer = false;
+      },
+    );
   }
 
   /** Whether this tab is connecting as backend session `sid`. */
@@ -675,6 +704,7 @@ export class LiveSession {
     cancelAnimationFrame(this.suggestFrame);
     this.stopHistory();
     if (!this.history.saved) dropTabHistory(this.tabId);
+    dropServerLists(this.tabId);
     this.observer?.disconnect();
     this.term.element?.removeEventListener("paste", this.onPasteEvent, true);
     this.unloadWebgl();
@@ -848,7 +878,10 @@ export class LiveSession {
     });
   }
 
-  /** The newest command of the history that continues what is typed at a prompt, while one can show. */
+  /**
+   * What continues what is typed at a prompt, while one can show: the newest command of the tab's history,
+   * or else of its server's history, or else a command name of the server (TERM-16).
+   */
   private findSuggestion(): Suggestion | null {
     if (this.disposed || !this.opened || this.status !== "connected" || this.composing || this.awaitingEcho) {
       return null;
@@ -858,7 +891,11 @@ export class LiveSession {
     if (buf.type === "alternate" || buf.viewportY !== buf.baseY) return null;
     const typed = this.tracker.typedAtEnd(buf);
     if (!typed) return null;
-    const rest = suggestionFor(typed, historyOf(this.history));
+    const server = serverListsOf(this.tabId);
+    const rest =
+      suggestionFor(typed, historyOf(this.history)) ??
+      suggestionFor(typed, server.history) ??
+      commandNameFor(typed, server.commands);
     return rest === null ? null : { rest, x: buf.cursorX, y: buf.cursorY };
   }
 
@@ -878,8 +915,8 @@ export class LiveSession {
     return { typed: this.tracker.typedAtEnd(buf) ?? "", cursor: this.cellBox(buf.cursorX, buf.cursorY) };
   }
 
-  /** The tab's command history, newest first, the same list until it changes (TERM-15). */
-  commandHistory = (): readonly string[] => historyOf(this.history);
+  /** The commands the list shows (TERM-14, TERM-16), the same list until it changes. */
+  commandHistory = (): readonly string[] => listedHistory(this.tabId, this.history);
 
   /** Types `command` from the list in place of what is typed, without running it. */
   acceptListed(command: string) {
@@ -890,7 +927,7 @@ export class LiveSession {
 
   /** Shift+Delete in the list. */
   removeListed(command: string) {
-    removeFromHistory(this.history, command);
+    removeFromHistory(this.tabId, this.history, command);
   }
 
   /**

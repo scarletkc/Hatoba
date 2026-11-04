@@ -133,6 +133,21 @@ export function suggestionFor(typed: string, history: readonly string[]): string
   return hit === undefined ? null : hit.slice(typed.length);
 }
 
+/**
+ * The rest of the shortest command name that starts with `typed`, the first word of a command, of the
+ * server's sorted `commands` (TERM-16), or null. A word that already is a command suggests no longer
+ * name, or `ls` would suggest `lsblk`.
+ */
+export function commandNameFor(typed: string, commands: readonly string[]): string | null {
+  if (typed === "" || /\s/u.test(typed)) return null;
+  let best: string | null = null;
+  for (const name of commands) {
+    if (name === typed) return null;
+    if (name.startsWith(typed) && (best === null || name.length < best.length)) best = name;
+  }
+  return best === null ? null : best.slice(typed.length);
+}
+
 /** The commands in `history` that contain `filter`, ignoring case: those that start with it first, newest first. */
 export function listMatches(filter: string, history: readonly string[]): string[] {
   const needle = filter.toLocaleLowerCase();

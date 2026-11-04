@@ -18,7 +18,8 @@ use crate::commands::quick;
 use crate::connection;
 use crate::convert::stats_view;
 use crate::dto::{
-    ConnectOptions, HostInput, QuickTarget, SessionState, SessionStateEvent, StatsEvent, TestResult,
+    ConnectOptions, HostInput, QuickTarget, ServerSuggestionsView, SessionState, SessionStateEvent,
+    StatsEvent, TestResult,
 };
 use crate::error::{AppError, AppResult, SshErrorKind};
 use crate::ssh::{LiveSession, Overrides, build_config, connect_with, resolve_proxy};
@@ -420,6 +421,26 @@ pub fn ssh_stats_stop(state: State<'_, AppState>, session_id: String, stats_id: 
     if let Ok(live) = state.ssh.get(&session_id) {
         live.stop_stats(stats_id);
     }
+}
+
+/// Reads what command suggestions take from the server of an SSH tab (TERM-16): its shell's history
+/// and the command names on its `PATH`, over an exec channel of the tab's connection that closes
+/// once it has answered. `null` for a server whose identification string names a system other than
+/// Linux or macOS (HOST-11), on which nothing is run; an error for one that refuses the channel.
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_suggestions(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> AppResult<Option<ServerSuggestionsView>> {
+    // SEC-03: nothing runs on the server behind the lock screen.
+    state.with_unlocked(|_| Ok(()))?;
+    let live = state.ssh.get(&session_id)?;
+    let found = live.session.suggestions().await?;
+    Ok(found.map(|s| ServerSuggestionsView {
+        history: s.history,
+        commands: s.commands,
+    }))
 }
 
 #[tauri::command]

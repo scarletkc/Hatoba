@@ -37,6 +37,7 @@ pub mod shell;
 mod socks;
 pub mod stats;
 pub mod sudo;
+pub mod suggest;
 #[cfg(all(test, unix))]
 mod test_sh;
 
@@ -58,3 +59,4 @@ pub use session::{
     ShellHandle, ShellOptions, SshSession, StatsEvent, StatsHandle, connect, target_label,
 };
 pub use sftp::{FileEntry, RemoteStat, SftpClient, TransferDirection, TransferProgress};
+pub use suggest::ServerSuggestions;
