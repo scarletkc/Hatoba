@@ -59,6 +59,10 @@ describe("isPrompt (TERM-14)", () => {
 
   it("refuses password and question prompts, and empty lines", () => {
     expect(isPrompt("Password: ", null)).toBe(false);
+    expect(isPrompt("Token> ", null)).toBe(false);
+    expect(isPrompt("Enter API key>", null)).toBe(false);
+    expect(isPrompt("请输入密码> ", null)).toBe(false);
+    expect(isPrompt("PS C:\\keys> ", null)).toBe(true);
     expect(isPrompt("Continue? [y/N] ", null)).toBe(false);
     expect(isPrompt("", null)).toBe(false);
     expect(isPrompt("   ", "➜")).toBe(false);
@@ -207,6 +211,16 @@ describe("InputTracker (TERM-15)", () => {
     const vim = screen([row("$ ls")], 4, 0, "alternate");
     tr.onInput("l", vim);
     expect(tr.onInput("\r", vim).command).toBeNull();
+  });
+
+  it("clears the whole input for the list, also with the cursor inside it", () => {
+    const tr = new InputTracker();
+    tr.onInput("g", at("$ "));
+    expect(tr.clearKeys(at("$ ", "git"), "→")).toBe("\x7f".repeat(3));
+    expect(tr.clearKeys(screen([row("$ git status")], 5, 0), "→")).toBe("→".repeat(7) + "\x7f".repeat(10));
+    // The shell's own suggestion after the cursor is no input.
+    expect(tr.clearKeys(screen([row("$ git status", { suggestFrom: 5 })], 5, 0), "→")).toBe("\x7f".repeat(3));
+    expect(new InputTracker().clearKeys(at("$ ", "git"), "→")).toBe("");
   });
 
   it("leaves out a command that starts with a space", () => {

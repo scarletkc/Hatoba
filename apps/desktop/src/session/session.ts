@@ -31,7 +31,7 @@ import { confirmMultilinePaste } from "./paste";
 import { askPassword, askSecret, cancelSessionPrompts, pushAuthBanner, stopWaiting } from "./prompts";
 import { useRecentTargets } from "./recent";
 import { searchColors } from "./schemes";
-import { InputTracker, eraseKeys, nextWord, suggestionFor } from "./suggest";
+import { InputTracker, nextWord, suggestionFor } from "./suggest";
 import { resolveScheme, terminalOptions, useTermSettings } from "./theme";
 import { useTransfers } from "./transfers";
 
@@ -867,8 +867,8 @@ export class LiveSession {
 
   /** Types `command` from the list in place of what is typed, without running it. */
   acceptListed(command: string) {
-    const typed = this.tracker.typedAtEnd(this.term.buffer.active) ?? "";
-    this.write(eraseKeys(typed) + command);
+    const right = this.term.modes.applicationCursorKeysMode ? "\x1bOC" : "\x1b[C";
+    this.write(this.tracker.clearKeys(this.term.buffer.active, right) + command);
     this.term.focus();
   }
 

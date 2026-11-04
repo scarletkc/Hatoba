@@ -142,7 +142,11 @@ export function SuggestionList({ session, onClose }: { session: LiveSession; onC
           setFilter(e.target.value);
           setActive(0);
         }}
-        onBlur={close}
+        onBlur={(e) => {
+          // A click on another field keeps the focus there; a click on nothing that takes it returns it to the terminal.
+          onClose();
+          if (!e.relatedTarget) session.focus();
+        }}
         onKeyDown={(e) => {
           if (isImeEvent(e)) return;
           if (e.key === "ArrowDown" || e.key === "ArrowUp") {

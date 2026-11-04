@@ -41,6 +41,9 @@ export const COMMAND_MAX_CHARS = 4096;
 const PROMPT_END = /[$#%>❯]\s*$/u;
 /** A line's text up to its first prompt character and the space after it. */
 const PROMPT_IN_LINE = /^[^$#%>❯]*[$#%>❯] ?/u;
+/** A program asking for a secret, such as `Token> `, whose answer may be echoed: no prompt (TERM-14). */
+const SECRET_PROMPT =
+  /(?:(?<![\p{L}\p{N}])(?:password|passphrase|passcode|pass|token|secret|otp|pin|key)|密码|密碼|口令|パスワード)\s*>\s*$/iu;
 
 /** Whether the history keeps `command` (TERM-15): not empty, not starting with a space, not too long. */
 export function keepsCommand(command: string): boolean {
@@ -61,10 +64,10 @@ function firstWord(prompt: string): string {
 /**
  * Whether `prompt`, the text before the input on its line, is a shell's prompt: it ends with a prompt
  * character, or it starts with the same word as the line Enter was last pressed on, as oh-my-zsh's
- * default `➜  dir git:(main) ✗ ` does.
+ * default `➜  dir git:(main) ✗ ` does. A program's question for a secret, such as `Token> `, is none.
  */
 export function isPrompt(prompt: string, lastWord: string | null): boolean {
-  if (prompt.trim() === "") return false;
+  if (prompt.trim() === "" || SECRET_PROMPT.test(prompt)) return false;
   return PROMPT_END.test(prompt) || (lastWord !== null && firstWord(prompt) === lastWord);
 }
 
@@ -204,6 +207,21 @@ export class InputTracker {
     if (before === null) return null;
     const after = textAfterCursor(buf);
     return after.suggested ? before : before + after.text;
+  }
+
+  /**
+   * Keys that clear the input of a recognized prompt, for the list to put a command in its place: `right`
+   * (the → key) to its end, past text the user typed after the cursor, then one Backspace per character.
+   * Empty when there is no input, or no prompt it is known to follow.
+   */
+  clearKeys(buf: SuggestBuffer, right: string): string {
+    if (buf.type === "alternate" || this.prompt === null) return "";
+    const before = this.beforeCursor(buf);
+    if (before === null || !isPrompt(this.prompt, this.lastWord)) return "";
+    const after = textAfterCursor(buf);
+    // The shell's own suggestion goes with the input's last character; → could take it.
+    if (after.suggested || after.text === "") return eraseKeys(before);
+    return right.repeat(Array.from(after.text).length) + eraseKeys(before + after.text);
   }
 
   /** The input before the cursor at a recognized prompt, with nothing but blanks after the cursor; null otherwise. */
