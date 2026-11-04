@@ -34,6 +34,13 @@ describe("pathWord", () => {
       expect(pathWord(typed)).toBeNull();
     }
   });
+
+  it("tells an open quote from a closed one", () => {
+    expect(pathWord('git commit -m "fix /etc/ho')).toBeNull();
+    expect(pathWord("echo 'it\\ /etc/ho")).toBeNull();
+    expect(pathWord('cat "a b" /etc/ho')).toEqual({ folder: "/etc/", prefix: "ho" });
+    expect(pathWord("echo it\\'s /etc/ho")).toEqual({ folder: "/etc/", prefix: "ho" });
+  });
 });
 
 describe("pathRest", () => {
@@ -80,17 +87,11 @@ describe("PathLister", () => {
     expect(onChange).toHaveBeenCalled();
   });
 
-  it("stops asking once the server refuses SFTP, also after a reconnect", async () => {
-    backend.home.mockRejectedValue(appError("ssh", "refused", { ssh_kind: "sftp" }));
-    expect(await read("ls /et")).toBeNull();
-    lister.connected("s2");
-    expect(await read("ls /et")).toBeNull();
-    expect(backend.home).toHaveBeenCalledTimes(1);
-  });
-
-  it("asks again on the next connection after a lost connection", async () => {
-    backend.home.mockRejectedValueOnce(appError("ssh", "closed", { ssh_kind: "disconnected" }));
+  it("asks once per connection when the server does not answer", async () => {
+    backend.home.mockRejectedValueOnce(appError("ssh", "SFTP request timed out", { ssh_kind: "sftp" }));
     expect(await read("ls /bi")).toBeNull();
+    expect(backend.home).toHaveBeenCalledTimes(1);
+    expect(backend.list).not.toHaveBeenCalled();
     lister.connected("s2");
     expect(await read("ls /bi")).toBe("n/");
   });

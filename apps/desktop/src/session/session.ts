@@ -218,8 +218,10 @@ export class LiveSession {
   /** Input went to the shell and its echo has not come back: the screen does not show it yet. */
   private awaitingEcho = false;
   private readonly stopHistory: () => void;
-  /** TERM-16: false once the server refused, or names a system that is not asked (HOST-11). */
+  /** TERM-16: false once the server refused the exec channel. */
   private asksServer = true;
+  /** TERM-16: the server names a system that is not asked (HOST-11), through SFTP neither. */
+  private otherSystem = false;
   private readonly paths = new PathLister(() => this.scheduleSuggestion());
 
   constructor(
@@ -540,7 +542,6 @@ export class LiveSession {
     this.sendResize(); // the view may have been resized while connecting
     historyOf(this.history); // TERM-15: read before the first suggestion is needed
     this.readServerLists(sid);
-    this.paths.connected(this.local || this.telnet ? null : sid);
     const early = earlyEvents.get(sid);
     earlyEvents.delete(sid);
     early?.forEach((ev) => this.onState(ev));
@@ -551,16 +552,28 @@ export class LiveSession {
   private readServerLists(sid: string) {
     // The previous connection's: the host may since name another server.
     dropServerLists(this.tabId);
-    if (!this.asksServer || this.local || this.telnet) return;
+    this.paths.connected(null);
+    if (this.local || this.telnet || this.otherSystem) return;
+    if (!this.asksServer) {
+      this.paths.connected(sid);
+      return;
+    }
+    // The answer tells whether the server is one to list paths on as well.
     api.ssh_suggestions(sid).then(
       (lists) => {
         if (this.disposed || sid !== this.sessionId) return;
-        if (lists) setServerLists(this.tabId, lists);
-        else this.asksServer = false;
+        if (lists) {
+          setServerLists(this.tabId, lists);
+          this.paths.connected(sid);
+        } else {
+          this.otherSystem = true;
+        }
       },
       (e: unknown) => {
+        if (this.disposed || sid !== this.sessionId) return;
         // A refusal stays for the tab; a timeout or a lost connection says nothing about the next connection.
-        if (sid === this.sessionId && toAppError(e).ssh_kind === "channel") this.asksServer = false;
+        if (toAppError(e).ssh_kind === "channel") this.asksServer = false;
+        this.paths.connected(sid);
       },
     );
   }

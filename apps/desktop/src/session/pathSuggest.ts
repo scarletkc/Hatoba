@@ -1,4 +1,4 @@
-import { api, toAppError } from "@/ipc/api";
+import { api } from "@/ipc/api";
 
 /** Path suggestions on an SSH tab (TERM-16): the files and folders of a path being typed, through SFTP. */
 
@@ -13,12 +13,25 @@ const MAX_FOLDERS = 20;
 /** A listing older than this is read again when it is used. */
 const FRESH_MS = 10_000;
 
+/** Whether `typed` ends inside a quote the shell has yet to see closed. */
+function endsInQuote(typed: string): boolean {
+  let quote: string | null = null;
+  for (let i = 0; i < typed.length; i++) {
+    const c = typed[i];
+    if (c === "\\" && quote !== "'") i++;
+    else if (quote !== null) quote = c === quote ? null : quote;
+    else if (c === "'" || c === '"') quote = c;
+  }
+  return quote !== null;
+}
+
 /**
  * The folder and the start of a name that the last word of `typed` holds, when it is a plain path that
- * starts with `/` or `~/` and has part of a name after its last `/`. A word with quotes, a variable or
- * a wildcard is left to the shell.
+ * starts with `/` or `~/` and has part of a name after its last `/`. A word inside quotes, or with a
+ * variable or a wildcard, is left to the shell.
  */
 export function pathWord(typed: string): { folder: string; prefix: string } | null {
+  if (endsInQuote(typed)) return null;
   const word = /(?:^|\s)((?:[^\s\\]|\\.)*)$/u.exec(typed)?.[1];
   if (!word || !/^~?\//u.test(word)) return null;
   if (/[$`*?"'[\]{}();&|<>]/u.test(word.replace(/\\./gu, ""))) return null;
@@ -46,9 +59,8 @@ export function pathRest(prefix: string, entries: readonly PathEntry[]): string 
 export class PathLister {
   private sid: string | null = null;
   private home: string | null = null;
+  /** Asked once per connection: a server that refuses SFTP or times out gets nothing more on it. */
   private homeAsked = false;
-  /** False once the server refused SFTP; stays so across the tab's reconnects. */
-  private asks = true;
   private readonly folders = new Map<string, { entries: readonly PathEntry[]; at: number }>();
   private readonly loading = new Set<string>();
 
@@ -66,7 +78,7 @@ export class PathLister {
 
   /** What continues the path `typed` ends with, as far as it is listed; starts listing what is missing. */
   rest(typed: string): string | null {
-    if (this.sid === null || !this.asks) return null;
+    if (this.sid === null) return null;
     const word = pathWord(typed);
     if (!word) return null;
     this.askHome(this.sid);
@@ -77,7 +89,7 @@ export class PathLister {
     return known ? pathRest(word.prefix, known.entries) : null;
   }
 
-  /** The first SFTP request of a connection, which tells whether the server allows SFTP at all. */
+  /** The first SFTP request of a connection: without an answer, nothing is listed on it. */
   private askHome(sid: string) {
     if (this.homeAsked) return;
     this.homeAsked = true;
@@ -87,10 +99,7 @@ export class PathLister {
         this.home = home;
         this.onChange();
       },
-      (e: unknown) => {
-        const kind = toAppError(e).ssh_kind;
-        if (sid === this.sid && (kind === "channel" || kind === "sftp")) this.asks = false;
-      },
+      () => {},
     );
   }
 

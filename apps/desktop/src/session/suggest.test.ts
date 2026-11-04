@@ -130,6 +130,8 @@ describe("suggestions", () => {
     expect(nextWord(" commit -m 'x'")).toBe(" commit");
     expect(nextWord("tatus")).toBe("tatus");
     expect(nextWord("   ")).toBe("   ");
+    expect(nextWord("\\ notes.txt -l")).toBe("\\ notes.txt");
+    expect(nextWord("end\\")).toBe("end\\");
   });
 
   it("erases one character per Backspace", () => {

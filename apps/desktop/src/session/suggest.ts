@@ -163,7 +163,8 @@ export function listMatches(filter: string, history: readonly string[]): string[
 
 /** The next word of a suggestion's rest, with the spaces before it, which Ctrl+→ (⌥→ on macOS) types. */
 export function nextWord(rest: string): string {
-  return /^\s*\S+/u.exec(rest)?.[0] ?? rest;
+  // A backslash stays with what it escapes, as in the rest of a file name with spaces.
+  return /^\s*(?:\\.|[^\s\\]|\\$)+/u.exec(rest)?.[0] ?? rest;
 }
 
 /** Keystrokes that erase `typed` before the cursor: one Backspace per character. */
