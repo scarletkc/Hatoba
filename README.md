@@ -14,6 +14,7 @@
 [![Sync](https://img.shields.io/badge/sync-Cloudflare%20Workers%20%2B%20D1-F38020?logo=cloudflare&logoColor=white)](workers/sync/README.md)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Mentioned in Awesome Rust](https://img.shields.io/badge/mentioned%20in-Awesome%20Rust-FC60A8?logo=awesomelists&logoColor=white)](https://github.com/rust-unofficial/awesome-rust#applications)
+[![Mentioned in Awesome Cloudflare](https://img.shields.io/badge/mentioned%20in-Awesome%20Cloudflare-FC60A8?logo=awesomelists&logoColor=white)](https://github.com/zhuima/awesome-cloudflare#%E5%85%B6%E4%BB%96)
 
 https://github.com/user-attachments/assets/cd33e989-36e3-4e17-bc7f-74d472c96078
 
