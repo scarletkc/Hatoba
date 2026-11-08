@@ -28,6 +28,9 @@ Hatoba accepts by design. A report that only shows one of them is not a
 vulnerability, for example an attacker who controls the device while the vault
 is unlocked, or who holds the recovery code.
 
+For security reviews and code scans, [SECURITY_MODEL.md](SECURITY_MODEL.md)
+summarizes the components, entry points, assets, attackers, and accepted risks.
+
 ## What to include
 
 - the Hatoba version or the commit you built from, and the operating system;
