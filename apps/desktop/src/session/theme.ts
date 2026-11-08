@@ -79,13 +79,84 @@ export function terminalChrome(scheme: TermScheme): { background: string; foregr
   return { background: th.background!, foreground: th.foreground! };
 }
 
+/** Whether a family, given as a CSS font-family value, is installed and measures as a monospace. */
+export type MonoProbe = (family: string) => boolean;
+
+let probeContext: CanvasRenderingContext2D | null | undefined;
+
 /**
- * Font stack: the configured family first, then the app's mono stack, which already ends with the
- * CJK fallbacks (Microsoft YaHei UI, Yu Gothic UI) that TERM-02 needs for wide characters.
- * xterm needs a concrete string, so `var(--font-mono)` is resolved here.
+ * Asks the browser which families are installed and monospaced, by measuring them: a monospace has
+ * the same advance for W and i.
+ *
+ * Measuring is not cosmetic here. WebKitGTK answers a family that is not installed with fontconfig's
+ * substitute, a proportional face (Liberation Sans for Menlo on Linux), and then counts the whole
+ * font-family list as satisfied: the `monospace` and the CJK fallbacks after it never apply, and
+ * xterm measures every cell from the substitute. A vault made on another platform carries that
+ * platform's default (`Menlo` from macOS) into a list that looks safe but is not, and the terminal
+ * then draws each glyph in a cell wider than the glyph, with a gap between the letters.
  */
-export function terminalFontFamily(family: string): string {
+function browserMonoProbe(): MonoProbe | null {
+  if (probeContext === undefined) {
+    probeContext = typeof document === "undefined" ? null : document.createElement("canvas").getContext("2d");
+  }
+  const ctx = probeContext;
+  if (!ctx) return null;
+  return (family) => {
+    // A value the canvas cannot read leaves the previous font in place, so start from a known
+    // proportional one: an unreadable family then measures as proportional rather than passing.
+    ctx.font = "16px serif";
+    ctx.font = `16px ${family}`;
+    const wide = ctx.measureText("W").width;
+    const narrow = ctx.measureText("i").width;
+    return wide > 0 && narrow > 0 && Math.abs(wide - narrow) <= wide * 0.01;
+  };
+}
+
+/** The families of a CSS font-family value, unquoted. */
+function familiesIn(value: string): string[] {
+  return value
+    .split(",")
+    .map((family) => family.trim().replace(/^["']|["']$/g, ""))
+    .filter(Boolean);
+}
+
+/** CSS generic families: quoting one of these would name a font instead of the generic. */
+const GENERIC: Record<string, true> = {
+  serif: true,
+  "sans-serif": true,
+  monospace: true,
+  cursive: true,
+  fantasy: true,
+  "system-ui": true,
+  "ui-serif": true,
+  "ui-sans-serif": true,
+  "ui-monospace": true,
+  "ui-rounded": true,
+  emoji: true,
+  math: true,
+  fangsong: true,
+};
+
+/**
+ * Font stack: a family that is installed and monospaced first, then the app's mono stack, which
+ * ends with the CJK fallbacks (Microsoft YaHei UI, Yu Gothic UI) that TERM-02 needs for wide
+ * characters. xterm needs a concrete string, so `var(--font-mono)` is resolved here.
+ *
+ * The first family decides the cell width, and on WebKitGTK a family that is not installed still
+ * resolves (to a proportional substitute) and stops the list there, so the configured family cannot
+ * simply be trusted: the first one that measures as a monospace takes its place.
+ */
+export function terminalFontFamily(family: string, probe?: MonoProbe | null): string {
   const mono = cssVar("--font-mono", "Consolas, monospace");
+  const measure = probe === undefined ? browserMonoProbe() : probe;
+  const chosen = measure && [...familiesIn(family), ...familiesIn(mono)].find((candidate) => measure(candidate));
+  if (chosen) {
+    // A named family is quoted; a generic (monospace, ui-monospace) must not be, or it names a font.
+    const head = GENERIC[chosen.toLowerCase()] ? chosen : `"${chosen}"`;
+    // The stack already leading with it needs no second copy: its first family is installed.
+    return familiesIn(mono)[0]?.toLowerCase() === chosen.toLowerCase() ? mono : `${head}, ${mono}`;
+  }
+  // Nothing could be measured (no canvas, or no monospace installed): keep the family as it was typed.
   const configured = family.trim();
   if (!configured) return mono;
   const head = configured.includes(",") || /^["'].*["']$/.test(configured) ? configured : `"${configured}"`;
