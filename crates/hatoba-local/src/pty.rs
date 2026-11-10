@@ -338,10 +338,17 @@ mod tests {
         }
     }
 
-    /// macOS's sh can drop what is typed while it starts, so tests type after its `$ ` prompt.
+    /// sh's prompt in these tests: as root it would be `# `, and a `PS1` of the user's anything.
+    const PROMPT: &str = "hatoba> ";
+
+    fn prompt_env() -> [(String, String); 1] {
+        [("PS1".into(), PROMPT.into())]
+    }
+
+    /// macOS's sh can drop what is typed while it starts, so tests type after its prompt.
     #[cfg(not(windows))]
     async fn wait_for_prompt(events: &mut mpsc::Receiver<PtyEvent>) {
-        output_until(events, "$ ").await;
+        output_until(events, PROMPT).await;
     }
 
     fn test_shell() -> Shell {
@@ -368,7 +375,7 @@ mod tests {
     async fn runs_input_and_reports_the_exit_status() {
         let shell = test_shell();
         let (pty, mut events) =
-            LocalPty::spawn(&shell, size(), &[], std::env::temp_dir().parent()).unwrap();
+            LocalPty::spawn(&shell, size(), &prompt_env(), std::env::temp_dir().parent()).unwrap();
         pty.resize(PtySize {
             cols: 100,
             rows: 30,
@@ -398,7 +405,7 @@ mod tests {
     #[tokio::test]
     async fn close_ends_the_shell() {
         let shell = test_shell();
-        let (pty, mut events) = LocalPty::spawn(&shell, size(), &[], None).unwrap();
+        let (pty, mut events) = LocalPty::spawn(&shell, size(), &prompt_env(), None).unwrap();
         // macOS's sh can outlive a hangup that comes while it is still starting, and a tab is
         // closed once its shell runs, so the test waits until sh has run a command. Only the
         // command's output, not its echo, has `hatoba-42`.
