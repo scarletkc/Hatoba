@@ -236,9 +236,11 @@ fn memory_commands_follow_the_memory_tools_rules() {
             .unwrap_err()
             .contains("is a Telnet host")
     );
+    // A miss names the host's memories and says nothing of a global one of that name.
     assert_eq!(
-        change("db", Delete, "logs", None).unwrap_err(),
-        "There is no host memory named \"logs\" of db. The host memories of db: \"sudo use\"."
+        change("db", Delete, "reply language", None).unwrap_err(),
+        "There is no host memory named \"reply language\" of db. The host memories of db: \
+         \"sudo use\"."
     );
 
     let stored: Vec<(String, Option<String>)> = v

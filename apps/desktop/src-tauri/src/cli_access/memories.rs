@@ -6,7 +6,7 @@
 //! Memories reach models as context, so their text is never logged (SEC-04).
 
 use hatoba_ai::entry::ToolStatus;
-use hatoba_ai::tools::{MemoryAction, MemoryArgs, MemoryScope};
+use hatoba_ai::tools::MemoryAction;
 use hatoba_assistant::ai::memory::{self, Listed, Place, Scope};
 use hatoba_core::vault::Vault;
 use serde::Serialize;
@@ -98,13 +98,7 @@ pub(super) fn change(
     content: Option<String>,
 ) -> Result<String, String> {
     let place = place(vault, host)?;
-    let args = MemoryArgs {
-        action,
-        scope: MemoryScope::Host,
-        name,
-        content,
-    };
-    match memory::run(vault, Some(&place), &args) {
+    match memory::run_on_host(vault, &place, action, name, content) {
         (ToolStatus::Ok, done) => Ok(done),
         (_, refused) => Err(refused),
     }

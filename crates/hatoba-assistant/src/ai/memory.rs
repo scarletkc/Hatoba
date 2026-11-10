@@ -320,9 +320,37 @@ fn words(place: Option<&Place>) -> (&'static str, String) {
 }
 
 /// Runs a `memory` call of a conversation on `place`, whose host memories its `host` scope
-/// changes, or a `hatoba memory save` or `delete` for that host (HOST-15). A call from a response
-/// made while memory was on runs nothing once it is off.
+/// changes. A call from a response made while memory was on runs nothing once it is off.
 pub fn run(v: &mut Vault, place: Option<&Place>, args: &MemoryArgs) -> (ToolStatus, String) {
+    change(v, place, args, true)
+}
+
+/// Runs a `hatoba memory save` or `delete` on the memories of `place` (HOST-15), as a `host` call
+/// of a conversation there, except that a delete that finds nothing doesn't point at a global
+/// memory of that name: other programs don't see those.
+pub fn run_on_host(
+    v: &mut Vault,
+    place: &Place,
+    action: MemoryAction,
+    name: String,
+    content: Option<String>,
+) -> (ToolStatus, String) {
+    let args = MemoryArgs {
+        action,
+        scope: MemoryScope::Host,
+        name,
+        content,
+    };
+    change(v, Some(place), &args, false)
+}
+
+/// [`run`], and with `global_shown` false [`run_on_host`].
+fn change(
+    v: &mut Vault,
+    place: Option<&Place>,
+    args: &MemoryArgs,
+    global_shown: bool,
+) -> (ToolStatus, String) {
     if !on(v) {
         return (ToolStatus::Error, OFF.to_owned());
     }
@@ -373,7 +401,9 @@ pub fn run(v: &mut Vault, place: Option<&Place>, args: &MemoryArgs) -> (ToolStat
                 (MemoryScope::Global, Some(p)) if !named(v, &p.scope, &name).is_empty() => {
                     format!(" There is a host memory of that name of {}.", p.name)
                 }
-                (MemoryScope::Host, _) if !named(v, &Scope::Global, &name).is_empty() => {
+                (MemoryScope::Host, _)
+                    if global_shown && !named(v, &Scope::Global, &name).is_empty() =>
+                {
                     " There is a global memory of that name.".to_owned()
                 }
                 _ => String::new(),
