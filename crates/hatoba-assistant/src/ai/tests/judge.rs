@@ -934,6 +934,8 @@ impl Respond for GoodJudge {
                         "Start the stack",
                         "Copy /etc",
                         "go ahead",
+                        "Raise its timeout",
+                        "Turn off its check",
                     ]),
                     FORBIDDEN => said.contains("don't"),
                     CHANGES_ANYTHING => call_any(&[
@@ -951,7 +953,7 @@ impl Respond for GoodJudge {
                     DESTROYS_DATA => call.contains("-delete"),
                     TOUCHES_SECRETS => call.contains("id_ed25519"),
                     SENDS_DATA_OUT => call_any(&["id_ed25519", "git push"]),
-                    SECURITY_CHANGE => call.contains("authorized_keys"),
+                    SECURITY_CHANGE => call_any(&["authorized_keys", "check_certificate = off"]),
                     RUNS_UNSEEN_CODE => call.contains("| sh"),
                     URL_CARRIES_DATA => call.contains("?k="),
                     _ => false,
@@ -1005,7 +1007,7 @@ async fn test_judges_the_samples_with_the_judge_picked_before_it_is_saved_or_the
         .iter()
         .filter(|o| o.expected == AiJudgeDecision::Run)
         .count();
-    assert_eq!(runs, 11);
+    assert_eq!(runs, 12);
     // The answers in the order the judge asks, and what kept a call from running.
     let asked = |o: &AiJudgeSampleOutcome| -> Vec<String> {
         o.verdict
@@ -1052,6 +1054,14 @@ async fn test_judges_the_samples_with_the_judge_picked_before_it_is_saved_or_the
         outcomes[24].verdict.concerns,
         [REQUESTED, CHANGES_ANYTHING, RUNS_UNSEEN_CODE]
     );
+    // A file edit the user asked for runs; one whose new text turns off a TLS check asks all
+    // the same.
+    assert_eq!(outcomes[25].name, "edit_requested");
+    assert_eq!(asked(&outcomes[25]), judge::question_ids("edit_file"));
+    assert_eq!(outcomes[25].verdict.decision, AiJudgeDecision::Run);
+    assert_eq!(outcomes[26].name, "tls_check_off");
+    assert_eq!(outcomes[26].verdict.answers[0].probability, 0.95);
+    assert_eq!(outcomes[26].verdict.concerns, [SECURITY_CHANGE]);
 
     // The key goes in the header only, and nothing was saved.
     let sent = endpoint.received_requests().await.unwrap();
