@@ -1,8 +1,9 @@
 //! The `hatoba` command's own commands (HOST-15): `hatoba hosts`, `hatoba exec` and `hatoba cp`
-//! let other programs, such as coding agents and scripts, use the hosts saved in Hatoba. The
-//! command asks the running app over a local endpoint ([`endpoint`], [`protocol`]); the app signs
-//! in with the vault's credentials and sends back only what the command printed or the file
-//! copied. Any other command line opens Hatoba with its arguments (HOST-13).
+//! let other programs, such as coding agents and scripts, use the hosts saved in Hatoba, and
+//! `hatoba memory` lets them read and change the AI assistant's memories (AI-53). The command
+//! asks the running app over a local endpoint ([`endpoint`], [`protocol`]); the app signs in with
+//! the vault's credentials and sends back only what the command printed or the file copied. Any
+//! other command line opens Hatoba with its arguments (HOST-13).
 //!
 //! On Windows this runs as `hatoba.exe`, a console program beside the app, whose own executable
 //! has no console. Elsewhere the app's executable runs it before anything else ([`own_command`]).

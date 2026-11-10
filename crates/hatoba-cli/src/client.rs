@@ -13,7 +13,7 @@ use crate::protocol::{End, Frame, HostInfo, Op, Request, VERSION};
 
 /// The exit status of `exec` when Hatoba could not run the command, as `ssh` has it.
 const EXEC_FAILED: i32 = 255;
-/// The exit status of `hosts` and `cp` when they fail.
+/// The exit status of `hosts`, `cp` and `memory` when they fail.
 const FAILED: i32 = 1;
 
 pub fn run(app: &App, command: Command) -> i32 {
@@ -51,8 +51,77 @@ pub fn run(app: &App, command: Command) -> i32 {
             sudo,
             mode,
         } => copy(app, source, target, prompt, sudo, mode),
+        Command::Memories { host, json } => memory(app, Op::Memories { host, json }),
+        Command::MemorySave {
+            host,
+            name,
+            content,
+        } => match content.map_or_else(stdin_text, Ok) {
+            Ok(content) => memory(
+                app,
+                Op::MemorySave {
+                    host,
+                    name,
+                    content,
+                },
+            ),
+            Err(message) => fail(&message, FAILED),
+        },
+        Command::MemoryDelete { host, name } => memory(app, Op::MemoryDelete { host, name }),
         Command::Open(args) => open(app, args),
     }
+}
+
+/// A `hatoba memory` request: Hatoba answers with what to print.
+fn memory(app: &App, op: Op) -> i32 {
+    let mut stream = match request(app, op) {
+        Ok(stream) => stream,
+        Err(message) => return fail(&message, FAILED),
+    };
+    loop {
+        match Frame::read(&mut stream) {
+            Ok(Some(Frame::Stdout(bytes))) => {
+                if write_out(&mut io::stdout(), &bytes).is_err() {
+                    return FAILED;
+                }
+            }
+            Ok(Some(Frame::Notice(text))) => eprintln!("hatoba: {text}"),
+            Ok(Some(Frame::End(end))) => return ended(end, FAILED),
+            Ok(Some(_)) => {}
+            Ok(None) | Err(_) => return fail(ENDED_EARLY, FAILED),
+        }
+    }
+}
+
+/// The most text `hatoba memory save` reads from stdin: more than Hatoba keeps in a memory, which
+/// it says, and what fits a request however it is escaped.
+const MAX_MEMORY_TEXT: usize = 64 * 1024;
+
+/// The text of a memory from this command's stdin, a pipe or a file as `exec` takes it.
+fn stdin_text() -> Result<String, String> {
+    if !passes_stdin() {
+        return Err(
+            "save needs the memory's text, after its name or on stdin: hatoba memory save \
+             [--host <host>] <name> [<text>]"
+                .into(),
+        );
+    }
+    let mut bytes = Vec::new();
+    io::stdin()
+        .lock()
+        .take(MAX_MEMORY_TEXT as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("can't read stdin: {e}"))?;
+    memory_text(bytes)
+}
+
+/// What stdin gave as a memory's text, without the byte order mark PowerShell may put first.
+fn memory_text(bytes: Vec<u8>) -> Result<String, String> {
+    if bytes.len() > MAX_MEMORY_TEXT {
+        return Err("the text on stdin is too long for a memory".into());
+    }
+    let text = String::from_utf8(bytes).map_err(|_| "the text on stdin is not UTF-8")?;
+    Ok(text.trim_start_matches('\u{feff}').to_owned())
 }
 
 fn hosts(app: &App, json: bool) -> i32 {
@@ -606,6 +675,27 @@ mod tests {
             msys_path("//server/share/x", true).unwrap(),
             r"\\server\share\x"
         );
+    }
+
+    #[test]
+    fn a_memory_text_from_stdin_is_utf8_of_a_size_a_request_takes() {
+        assert_eq!(
+            memory_text("\u{feff}Uses doas.\n".into()).unwrap(),
+            "Uses doas.\n"
+        );
+        assert!(memory_text(vec![0xff, 0xfe]).is_err());
+        assert!(memory_text(vec![b'x'; MAX_MEMORY_TEXT]).is_ok());
+        assert!(memory_text(vec![b'x'; MAX_MEMORY_TEXT + 1]).is_err());
+        // Escaped at its worst, it still fits a frame.
+        let request = Frame::Request(Request {
+            version: VERSION,
+            op: Op::MemorySave {
+                host: None,
+                name: "n".into(),
+                content: "\u{1}".repeat(MAX_MEMORY_TEXT),
+            },
+        });
+        assert!(request.encode().len() < crate::protocol::MAX_FRAME);
     }
 
     #[test]

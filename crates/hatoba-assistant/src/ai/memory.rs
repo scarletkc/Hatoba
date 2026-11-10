@@ -3,7 +3,8 @@
 //! computer's local terminal (§7.5). A conversation starts with them in a `memory` note before its
 //! first message and before each summary, and a message on a host whose memories no note of the
 //! context showed starts with a note of those, so the system prompt and the context before them
-//! stay the same. The `memory` tool and Settings → AI save and delete them under the same rules.
+//! stay the same. The `memory` tool, Settings → AI and `hatoba memory` (HOST-15) save and delete
+//! them under the same rules.
 //!
 //! Memories reach the model as context, so their text is never logged (SEC-04).
 
@@ -49,10 +50,13 @@ impl Scope {
 /// A saved host or a computer's local terminal that a conversation is on (AI-53): the scope of the
 /// host memories it shows, and how notes name it.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Place {
-    pub(crate) scope: Scope,
-    pub(crate) name: String,
+pub struct Place {
+    pub scope: Scope,
+    pub name: String,
 }
+
+/// What a `memory` call, and `hatoba memory`, say while memory is off.
+pub const OFF: &str = "Memory is turned off in Hatoba's settings.";
 
 /// Why a memory was not saved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -207,7 +211,7 @@ pub fn save(
 
 /// Whether memory is on (`Settings.ai.memory`), read without copying the settings: on while no
 /// settings are stored, as by default.
-pub(crate) fn on(v: &Vault) -> bool {
+pub fn on(v: &Vault) -> bool {
     v.get(SETTINGS_ID)
         .and_then(Item::as_settings)
         .is_none_or(|s| s.ai.memory)
@@ -246,6 +250,38 @@ pub(crate) fn place_note(v: &Vault, place: &Place) -> String {
         return String::new();
     }
     block(Some(place), &[], &shown(v, &place.scope))
+}
+
+/// A memory as `hatoba memory` lists it (HOST-15).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Listed {
+    pub name: String,
+    pub content: String,
+    /// The host of a host memory, as notes name it; `None` for a global one.
+    pub host: Option<String>,
+    /// The local day it was last saved, `YYYY-MM-DD`, or empty.
+    pub updated: String,
+}
+
+/// The memories the `memory` note of a conversation on `place` shows ([`note`]), in its order.
+/// Empty while memory is off or there are none.
+pub fn listed(v: &Vault, place: Option<&Place>) -> Vec<Listed> {
+    if !on(v) {
+        return Vec::new();
+    }
+    let entry = |m: AiMemory, host: Option<&Place>| Listed {
+        updated: day(m.updated_at),
+        name: m.name,
+        content: m.content,
+        host: host.map(|p| p.name.clone()),
+    };
+    let global = shown(v, &Scope::Global).into_iter().map(|m| entry(m, None));
+    let host = place.into_iter().flat_map(|p| {
+        shown(v, &p.scope)
+            .into_iter()
+            .map(move |m| entry(m, Some(p)))
+    });
+    global.chain(host).collect()
 }
 
 fn block(place: Option<&Place>, global: &[AiMemory], host: &[AiMemory]) -> String {
@@ -290,13 +326,11 @@ fn words(place: Option<&Place>) -> (&'static str, String) {
 }
 
 /// Runs a `memory` call of a conversation on `place`, whose host memories its `host` scope
-/// changes. A call from a response made while memory was on runs nothing once it is off.
-pub(crate) fn run(v: &mut Vault, place: Option<&Place>, args: &MemoryArgs) -> (ToolStatus, String) {
+/// changes, or a `hatoba memory save` or `delete` for that host (HOST-15). A call from a response
+/// made while memory was on runs nothing once it is off.
+pub fn run(v: &mut Vault, place: Option<&Place>, args: &MemoryArgs) -> (ToolStatus, String) {
     if !on(v) {
-        return (
-            ToolStatus::Error,
-            "Memory is turned off in Hatoba's settings.".to_owned(),
-        );
+        return (ToolStatus::Error, OFF.to_owned());
     }
     let (scope, at, other) = match (args.scope, place) {
         (MemoryScope::Global, _) => (Scope::Global, None, place),
@@ -702,6 +736,24 @@ mod tests {
             name: "LAPTOP (local terminal)".into(),
         };
         assert_eq!(place_note(&v, &empty), "");
+        // `hatoba memory` lists what the note shows, in its order.
+        let lists = |place: Option<&Place>| -> Vec<(String, Option<String>)> {
+            listed(&v, place)
+                .into_iter()
+                .map(|m| (m.name, m.host))
+                .collect()
+        };
+        assert_eq!(lists(None), [("one".into(), None), ("two".into(), None)]);
+        assert_eq!(
+            lists(Some(&web)),
+            [
+                ("one".into(), None),
+                ("two".into(), None),
+                ("sudo".into(), Some("web-1".into()))
+            ]
+        );
+        let sudo = &listed(&v, Some(&web))[2];
+        assert_eq!((sudo.content.as_str(), &sudo.updated), ("doas", &days[1]));
         // On one with no memories of its own, the note names it and its entries stay global.
         assert!(note(&v, Some(&empty)).starts_with(
             "<memory entries=\"2\" conversation_host=\"LAPTOP (local terminal)\">\n<entry \
@@ -722,6 +774,7 @@ mod tests {
         v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
         assert_eq!(note(&v, Some(&web)), "");
         assert_eq!(place_note(&v, &web), "");
+        assert!(listed(&v, Some(&web)).is_empty());
         assert_eq!(
             call(
                 &mut v,

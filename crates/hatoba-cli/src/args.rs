@@ -1,4 +1,4 @@
-//! Reading the command line of `hatoba hosts`, `hatoba exec` and `hatoba cp`.
+//! Reading the command line of `hatoba hosts`, `hatoba exec`, `hatoba cp` and `hatoba memory`.
 
 use std::ffi::OsString;
 
@@ -12,6 +12,10 @@ Usage:
   hatoba hosts [--json]                         List the saved SSH hosts
   hatoba exec [options] <host> [--] <command>   Run a command on a host
   hatoba cp [options] <source> <target>         Copy a file to or from a host
+  hatoba memory [--host <host>] [--json]        List the AI assistant's memories
+  hatoba memory save [--host <host>] <name> [<text>]
+                                                Save a memory
+  hatoba memory delete [--host <host>] <name>   Delete a memory
   hatoba <name> | hatoba [user@]<address>       Open a terminal in Hatoba
   hatoba telnet <address> [<port>]              Open a Telnet terminal in Hatoba
 
@@ -61,6 +65,20 @@ signing in goes to stderr. Without --no-prompt, the command waits while the
 server holds the login, as Tailscale SSH does until you sign in at the link it
 prints.
 
+memory reads and changes what Hatoba's AI assistant remembers between
+conversations: notes that it, the user and other programs save, such as a
+host's paths, services and quirks. The assistant starts its conversations with
+them, and Settings > AI > Memory lists them. Without --host, memory lists the
+global ones, which hold everywhere; with it, those and then the host's own.
+save keeps <text>, or its stdin when there is none, under <name>, in place of
+the memory of that name: as a global memory, or with --host as one of that
+host. delete removes one. Save what will still matter later and can't be found
+by looking: a correction or preference of the user, or a fact about their hosts
+and setup. Leave out what only matters to the task at hand, what the host's
+ai_notes already say, and passwords, keys or tokens. When a memory turns out
+wrong or out of date, save it again or delete it instead of adding another.
+Where a memory differs from a host's ai_notes, follow those.
+
 Hatoba has to be running and unlocked, with Settings > General >
 \"Let other programs use saved hosts\" on.
 ";
@@ -87,6 +105,20 @@ pub enum Command {
         /// The permission bits of the file a copy to the host writes.
         mode: Option<u32>,
     },
+    Memories {
+        host: Option<String>,
+        json: bool,
+    },
+    MemorySave {
+        host: Option<String>,
+        name: String,
+        /// `None` takes the text from stdin.
+        content: Option<String>,
+    },
+    MemoryDelete {
+        host: Option<String>,
+        name: String,
+    },
     /// Anything else opens Hatoba with these arguments (HOST-13).
     Open(Vec<OsString>),
 }
@@ -99,7 +131,16 @@ pub enum Place {
 }
 
 /// The words that are this command's own when they come first.
-pub const COMMANDS: &[&str] = &["hosts", "exec", "cp", "help", "-h", "--help", "--version"];
+pub const COMMANDS: &[&str] = &[
+    "hosts",
+    "exec",
+    "cp",
+    "memory",
+    "help",
+    "-h",
+    "--help",
+    "--version",
+];
 
 /// Reads the arguments after the program.
 pub fn parse(args: Vec<OsString>) -> Result<Command, String> {
@@ -124,6 +165,7 @@ pub fn parse(args: Vec<OsString>) -> Result<Command, String> {
         "hosts" => hosts(&rest),
         "exec" => exec(rest),
         "cp" => copy(&rest),
+        "memory" => memory(rest),
         "--version" => Ok(Command::Version),
         _ => Ok(Command::Help),
     }
@@ -132,7 +174,7 @@ pub fn parse(args: Vec<OsString>) -> Result<Command, String> {
 /// The command `word` is one letter off, by a typo or two letters swapped, as `exce` is from
 /// `exec`. `cp` is left out: a two-letter host name is as likely as a typo of it.
 fn misspelled(word: &str) -> Option<&'static str> {
-    const LONG: [&str; 4] = ["hosts", "exec", "help", "telnet"];
+    const LONG: [&str; 5] = ["hosts", "exec", "memory", "help", "telnet"];
     let word = word.to_ascii_lowercase();
     LONG.into_iter()
         .find(|command| word != *command && one_letter_off(&word, command))
@@ -268,6 +310,105 @@ fn copy(args: &[String]) -> Result<Command, String> {
     }
 }
 
+/// What `hatoba memory` does.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MemoryAction {
+    List,
+    Save,
+    Delete,
+}
+
+/// `list` (or nothing), `save` or `delete`, then the name, then for a save its text, which starts
+/// at the first other argument after the name and takes the rest, joined with spaces. Options come
+/// anywhere before the text.
+fn memory(args: Vec<String>) -> Result<Command, String> {
+    use MemoryAction::{Delete, List, Save};
+    let mut host = None;
+    let mut json = false;
+    let mut action = None;
+    let mut name: Option<String> = None;
+    let mut text = Vec::new();
+    let mut options = true;
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        if options {
+            match arg.as_str() {
+                "--" => {
+                    options = false;
+                    continue;
+                }
+                "--host" => {
+                    host = Some(args.next().ok_or("--host needs a host")?);
+                    continue;
+                }
+                "--json" => {
+                    json = true;
+                    continue;
+                }
+                "-h" | "--help" => return Ok(Command::Help),
+                a if a.starts_with("--host=") => {
+                    host = Some(a["--host=".len()..].to_owned());
+                    continue;
+                }
+                a if a.starts_with('-') && a != "-" => {
+                    return Err(format!(
+                        "memory does not take {a}; put -- before a name or a text that starts \
+                         with -"
+                    ));
+                }
+                _ => {}
+            }
+        }
+        match action {
+            None => {
+                action = Some(match arg.as_str() {
+                    "list" => List,
+                    "save" => Save,
+                    "delete" => Delete,
+                    other => {
+                        return Err(format!("memory takes list, save or delete, not {other}"));
+                    }
+                });
+            }
+            Some(List) => return Err(format!("memory list does not take {arg}")),
+            Some(_) if name.is_none() => name = Some(arg),
+            Some(Save) => {
+                text.push(arg);
+                text.extend(args.by_ref());
+            }
+            Some(Delete) => {
+                return Err(format!(
+                    "delete takes one name; put quotes around a name with spaces, such as \
+                     \"{} {arg}\"",
+                    name.unwrap_or_default()
+                ));
+            }
+        }
+    }
+    if host.as_deref().is_some_and(|h: &str| h.trim().is_empty()) {
+        return Err("--host needs a host".into());
+    }
+    let action = action.unwrap_or(List);
+    if json && action != List {
+        return Err("--json is for listing memories".into());
+    }
+    match (action, name) {
+        (List, _) => Ok(Command::Memories { host, json }),
+        (Save, Some(name)) => Ok(Command::MemorySave {
+            host,
+            name,
+            content: (!text.is_empty()).then(|| text.join(" ")),
+        }),
+        (Save, None) => {
+            Err("save needs a name: hatoba memory save [--host <host>] <name> [<text>]".into())
+        }
+        (Delete, Some(name)) => Ok(Command::MemoryDelete { host, name }),
+        (Delete, None) => {
+            Err("delete needs a name: hatoba memory delete [--host <host>] <name>".into())
+        }
+    }
+}
+
 /// A mode in octal, as `chmod` takes it: three or four digits, such as 600 or 0755.
 fn octal(text: &str) -> Result<u32, String> {
     let valid = (3..=4).contains(&text.len()) && text.bytes().all(|b| (b'0'..=b'7').contains(&b));
@@ -332,6 +473,8 @@ mod tests {
             ("hsots", "hosts"),
             ("hlep", "help"),
             ("telent", "telnet"),
+            ("memroy", "memory"),
+            ("memor", "memory"),
         ] {
             assert_eq!(
                 parse_words(&[word, "db", "ls"]),
@@ -482,6 +625,90 @@ mod tests {
         if cfg!(windows) {
             assert_eq!(place(r"C:\x\y"), Place::Local(r"C:\x\y".into()));
         }
+    }
+
+    #[test]
+    fn memory_lists_saves_and_deletes() {
+        let list = |host: Option<&str>, json| {
+            Ok(Command::Memories {
+                host: host.map(Into::into),
+                json,
+            })
+        };
+        assert_eq!(parse_words(&["memory"]), list(None, false));
+        assert_eq!(parse_words(&["memory", "list", "--json"]), list(None, true));
+        assert_eq!(
+            parse_words(&["memory", "--host", "My Server"]),
+            list(Some("My Server"), false)
+        );
+        assert_eq!(
+            parse_words(&["memory", "--json", "--host=db", "list"]),
+            list(Some("db"), true)
+        );
+
+        let save = |host: Option<&str>, name: &str, content: Option<&str>| {
+            Ok(Command::MemorySave {
+                host: host.map(Into::into),
+                name: name.into(),
+                content: content.map(Into::into),
+            })
+        };
+        // Without a text, it comes from stdin.
+        assert_eq!(
+            parse_words(&["memory", "save", "sudo"]),
+            save(None, "sudo", None)
+        );
+        assert_eq!(
+            parse_words(&["memory", "save", "--host", "db", "sudo use", "Uses doas."]),
+            save(Some("db"), "sudo use", Some("Uses doas."))
+        );
+        // Options come anywhere before the text, which takes the rest.
+        assert_eq!(
+            parse_words(&[
+                "memory",
+                "--host",
+                "db",
+                "save",
+                "logs",
+                "--host=web",
+                "in",
+                "--json"
+            ]),
+            save(Some("web"), "logs", Some("in --json"))
+        );
+        assert_eq!(
+            parse_words(&["memory", "save", "--", "-x", "--host"]),
+            save(None, "-x", Some("--host"))
+        );
+
+        assert_eq!(
+            parse_words(&["memory", "delete", "sudo use", "--host", "db"]),
+            Ok(Command::MemoryDelete {
+                host: Some("db".into()),
+                name: "sudo use".into(),
+            })
+        );
+
+        for words in [
+            &["memory", "sudo"][..],
+            &["memory", "list", "sudo"],
+            &["memory", "save"],
+            &["memory", "save", "--host", "db"],
+            &["memory", "save", "--json", "sudo", "x"],
+            &["memory", "save", "-x", "y"],
+            &["memory", "delete"],
+            &["memory", "delete", "sudo", "use"],
+            &["memory", "delete", "--json", "sudo"],
+            &["memory", "--host"],
+            &["memory", "--host", " "],
+            &["memory", "--host="],
+        ] {
+            assert!(parse_words(words).is_err(), "{words:?}");
+        }
+        assert_eq!(
+            parse_words(&["memory", "save", "--help"]),
+            Ok(Command::Help)
+        );
     }
 
     #[test]

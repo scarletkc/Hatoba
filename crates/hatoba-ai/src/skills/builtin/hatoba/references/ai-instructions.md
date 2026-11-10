@@ -30,6 +30,7 @@ The assistant keeps short notes for later conversations, as Claude Code's auto m
 - They are not for passwords, keys or tokens: like custom instructions, they go to the model provider.
 - Where a memory differs from your custom instructions or a host's AI notes, those win.
 - Settings → AI → **Memory** (or `/memory` in the input box) lists them by where they apply, each group with the space it takes: **Global**, **This Computer**, each host, other computers, and hosts deleted since. Click one to edit it; **Applies To** there moves it to another host or makes it global. The trash button deletes one, **Add Memory** adds one, and **Delete All** deletes every memory. **Remember across conversations** turns memory off: the assistant then neither sees nor saves memories, and the saved ones are kept.
+- Coding agents and scripts read and save the same memories with the `hatoba memory` command, the global ones and those of saved SSH hosts, while **Let other programs use saved hosts** is on (`references/command-line.md`).
 - Memories saved before host memories existed are global; move one that is about a single host with **Applies To**, or ask the assistant to. Deleting a host deletes its memories.
 - Memories sync to your other devices with the vault, and so does the switch. A computer's memories sync too, but only conversations in that computer's local terminal start with them.
 
