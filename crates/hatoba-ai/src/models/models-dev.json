@@ -638,6 +638,25 @@
           }
         ]
       },
+      "claude-fable-5-2": {
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      },
       "claude-haiku-4-5": {
         "limit": {
           "context": 200000,
@@ -997,7 +1016,7 @@
     "models": {
       "deep-research-max-preview-04-2026": {
         "limit": {
-          "context": 131072,
+          "context": 1048576,
           "output": 65536
         },
         "reasoning": true,
@@ -1005,7 +1024,7 @@
       },
       "deep-research-preview-04-2026": {
         "limit": {
-          "context": 131072,
+          "context": 1048576,
           "output": 65536
         },
         "reasoning": true,
@@ -2690,13 +2709,6 @@
         "reasoning_options": []
       },
       "grok-imagine-image": {
-        "limit": {
-          "context": 16000,
-          "output": 0
-        },
-        "reasoning": false
-      },
-      "grok-imagine-image-quality": {
         "limit": {
           "context": 16000,
           "output": 0
