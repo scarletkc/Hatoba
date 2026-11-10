@@ -338,6 +338,12 @@ mod tests {
         }
     }
 
+    /// macOS's sh can drop what is typed while it starts, so tests type after its `$ ` prompt.
+    #[cfg(not(windows))]
+    async fn wait_for_prompt(events: &mut mpsc::Receiver<PtyEvent>) {
+        output_until(events, "$ ").await;
+    }
+
     fn test_shell() -> Shell {
         #[cfg(windows)]
         {
@@ -368,13 +374,22 @@ mod tests {
             rows: 30,
         });
         // ConPTY asks where the cursor is before it starts the shell, and xterm.js answers; so
-        // does the test, which any shell takes as input it ignores.
-        pty.write(b"[1;1R".to_vec()).unwrap();
-        pty.write(b"echo hatoba-ok-$((40+2))%PROMPT:~0,0%\r".to_vec())
+        // does the test. sh would read the answer as the start of the command.
+        #[cfg(windows)]
+        pty.write(b"\x1b[1;1R".to_vec()).unwrap();
+        #[cfg(not(windows))]
+        wait_for_prompt(&mut events).await;
+        pty.write(b"echo hatoba-ok%PROMPT:~0,0%-$((40+2))\r".to_vec())
             .unwrap();
-        // sh expands $((…)), cmd the empty substring; either prints a line only the command could.
-        let (text, _) = output_until(&mut events, "hatoba-ok-").await;
-        assert!(text.contains("hatoba-ok-"), "{text}");
+        // cmd drops the empty substring and sh works out $((…)), so only the command's output
+        // has this, not the echo of what was typed.
+        let printed = if cfg!(windows) {
+            "hatoba-ok-$((40+2))"
+        } else {
+            "hatoba-ok%PROMPT:~0,0%-42"
+        };
+        let (text, _) = output_until(&mut events, printed).await;
+        assert!(text.contains(printed), "{text}");
         pty.write(b"exit 3\r".to_vec()).unwrap();
         let (_, exited) = output_until(&mut events, "").await;
         assert_eq!(exited, Some(Some(3)));
@@ -389,6 +404,7 @@ mod tests {
         // command's output, not its echo, has `hatoba-42`.
         #[cfg(not(windows))]
         {
+            wait_for_prompt(&mut events).await;
             pty.write(b"echo hatoba-$((40+2))\r".to_vec()).unwrap();
             output_until(&mut events, "hatoba-42").await;
         }
