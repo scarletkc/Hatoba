@@ -68,14 +68,15 @@ async fn bodies(server: &MockServer) -> Vec<Value> {
         .collect()
 }
 
-/// A response with these calls, `(id, name, arguments as JSON text)`.
-fn response(calls: &[(&str, &str, &str)]) -> AiEntry {
+/// A response that says `text` and makes these calls, `(id, name, arguments as JSON text)`.
+fn response(text: &str, calls: &[(&str, &str, &str)]) -> AiEntry {
     AiEntry::assistant(
         10,
         AssistantEntry {
             provider_id: "p".into(),
             model_id: "m1".into(),
-            text: "ASSISTANT-TEXT".into(),
+            text: text.into(),
+            reasoning: Some("REASONING-TEXT".into()),
             tool_calls: calls
                 .iter()
                 .map(|(id, name, arguments)| ToolCall {
@@ -220,7 +221,7 @@ fn verdict_of(view: &AiEntryView) -> Option<&AiAutoVerdict> {
 }
 
 #[test]
-fn the_judge_reads_what_the_user_typed_and_what_the_calls_do() {
+fn the_judge_reads_the_conversation_and_what_the_calls_do_and_returned() {
     let f = Fixture::with_base_url(None, "http://127.0.0.1:9/v1".into());
     f.set_instructions("  Never restart nginx on weekdays.\n");
     let host = f.add_host("prod-db", "Primary database.");
@@ -240,34 +241,47 @@ fn the_judge_reads_what_the_user_typed_and_what_the_calls_do() {
         },
         &[
             AiEntry::user(1, first),
-            response(&[
-                (
-                    "c1",
-                    "run_command",
-                    r#"{"command": "journalctl -u app -n 50"}"#,
-                ),
-                (
-                    "c2",
-                    "call_mcp_tool",
-                    r#"{"tool": "mcp__files__echo", "arguments": "{\"text\": \"hi\"}"}"#,
-                ),
-            ]),
+            response(
+                "  I'll read the app's log.\n",
+                &[
+                    (
+                        "c1",
+                        "run_command",
+                        r#"{"command": "journalctl -u app -n 50"}"#,
+                    ),
+                    (
+                        "c2",
+                        "call_mcp_tool",
+                        r#"{"tool": "mcp__files__echo", "arguments": "{\"text\": \"hi\"}"}"#,
+                    ),
+                ],
+            ),
             AiEntry::tool(3, "c1", ToolStatus::Ok, "RESULT-ONE"),
             // The user rejected it and said why: their own words.
             AiEntry::tool(4, "c2", ToolStatus::Rejected, "not on the database host"),
-            response(&[]),
+            response("The app cannot reach its database.", &[]),
             AiEntry::summary(6, "SUMMARY-TEXT"),
             AiEntry::user(7, second),
             // Notes alone: nothing the user typed.
             AiEntry::user(8, permission_mode_block(PermissionMode::Manual)),
-            response(&[
-                ("c3", "read_terminal", "{}"),
-                ("c4", "send_input", r#"{"text": "y\n"}"#),
-                // Cut off while it streamed.
-                ("c5", "run_command", r#"{"command": "ls"#),
-            ]),
+            // Calls alone: nothing the assistant said.
+            response("", &[("c0", "run_command", r#"{"command": "uptime"}"#)]),
+            // It returned nothing.
+            AiEntry::tool(9, "c0", ToolStatus::Ok, " \n"),
+            response(
+                "Restarting it.",
+                &[
+                    ("c3", "read_terminal", "{}"),
+                    ("c3b", "run_command", r#"{"command": "hostname"}"#),
+                    ("c4", "send_input", r#"{"text": "y\n"}"#),
+                    // Cut off while it streamed.
+                    ("c5", "run_command", r#"{"command": "ls"#),
+                ],
+            ),
             // Rejected without a reason while the next call waits.
             AiEntry::tool(10, "c3", ToolStatus::Rejected, ""),
+            // A call of the response itself: the model made the later ones before it returned.
+            AiEntry::tool(11, "c3b", ToolStatus::Ok, "OWN-RESULT"),
         ],
     );
     // AI-21: compacted, which hides nothing the user said from the judge.
@@ -288,21 +302,40 @@ fn the_judge_reads_what_the_user_typed_and_what_the_calls_do() {
         state,
         json!({
             "host": "prod-db",
-            "user_messages": [
-                "[pasted text, 120 lines]\n[file app&.log, 40 lines]\n\nWhy does the app fail?",
-                "[terminal selection, 1 line]\n[connection diagnostics]\n\nRestart it"
-            ],
             "user_rules": "Custom instructions:\nNever restart nginx on weekdays.\n\n\
                            Notes for this host:\nPrimary database.",
+            // What the user typed and what the assistant told them, in order, the response
+            // that makes the call included.
+            "messages": [
+                {
+                    "role": "user",
+                    "text": "[pasted text, 120 lines]\n[file app&.log, 40 lines]\n\n\
+                             Why does the app fail?"
+                },
+                {"role": "assistant", "text": "I'll read the app's log."},
+                {"role": "assistant", "text": "The app cannot reach its database."},
+                {
+                    "role": "user",
+                    "text": "[terminal selection, 1 line]\n[connection diagnostics]\n\nRestart it"
+                },
+                {"role": "assistant", "text": "Restarting it."}
+            ],
             "earlier_calls": [
-                {"tool": "run_command", "arguments": {"command": "journalctl -u app -n 50"}},
+                // What a call of an earlier response returned.
+                {
+                    "tool": "run_command",
+                    "arguments": {"command": "journalctl -u app -n 50"},
+                    "result": "RESULT-ONE"
+                },
                 // AI-45: as the MCP tool it names, as the panel shows it.
                 {
                     "tool": "mcp__files__echo",
                     "arguments": {"text": "hi"},
                     "rejection": "not on the database host"
                 },
-                {"tool": "read_terminal", "arguments": {}, "rejection": ""}
+                {"tool": "run_command", "arguments": {"command": "uptime"}},
+                {"tool": "read_terminal", "arguments": {}, "rejection": ""},
+                {"tool": "run_command", "arguments": {"command": "hostname"}}
             ],
             "call": {
                 "tool": "send_input",
@@ -314,11 +347,12 @@ fn the_judge_reads_what_the_user_typed_and_what_the_calls_do() {
             }
         })
     );
-    // No assistant text, no result, no summary, no note, no attachment's content.
+    // No reasoning, no result of the response's own calls, no summary, no note, no
+    // attachment's content.
     let text = state.to_string();
     for hidden in [
-        "ASSISTANT-TEXT",
-        "RESULT-",
+        "REASONING-TEXT",
+        "OWN-RESULT",
         "SUMMARY-TEXT",
         "permission_mode",
         "SCREEN-TEXT",
@@ -336,7 +370,60 @@ fn the_judge_reads_what_the_user_typed_and_what_the_calls_do() {
         state["call"],
         json!({"tool": "run_command", "arguments": r#"{"command": "ls"#})
     );
-    assert_eq!(state["earlier_calls"].as_array().unwrap().len(), 4);
+    assert_eq!(state["earlier_calls"].as_array().unwrap().len(), 6);
+}
+
+#[test]
+fn only_the_newest_results_reach_the_judge() {
+    let f = Fixture::with_base_url(None, "http://127.0.0.1:9/v1".into());
+    let mut entries = vec![AiEntry::user(1, "Find the config and fix it")];
+    for n in 0..judge::MAX_RESULTS + 2 {
+        let id = format!("c{n}");
+        let command = format!(r#"{{"command": "cat /etc/app/{n}.conf"}}"#);
+        entries.push(response("", &[(&id, "run_command", &command)]));
+        let status = if n == 3 {
+            ToolStatus::Error
+        } else {
+            ToolStatus::Ok
+        };
+        entries.push(AiEntry::tool(2, id, status, format!("RESULT-{n}")));
+    }
+    entries.push(response(
+        "Fixing it.",
+        &[(
+            "last",
+            "run_command",
+            r#"{"command": "sed -i s/a/b/ /etc/app/6.conf"}"#,
+        )],
+    ));
+    let (conv, _) = f.conversation_of(AiConversation::default(), &entries);
+    let state = f.state_of(&conv, "last", None);
+    let results: Vec<Option<&str>> = state["earlier_calls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|call| call.get("result").and_then(Value::as_str))
+        .collect();
+    // The two oldest go without, and a failed call's error is what it returned.
+    assert_eq!(
+        results,
+        [
+            None,
+            None,
+            Some("RESULT-2"),
+            Some("RESULT-3"),
+            Some("RESULT-4"),
+            Some("RESULT-5"),
+            Some("RESULT-6")
+        ]
+    );
+    assert_eq!(
+        state["messages"],
+        json!([
+            {"role": "user", "text": "Find the config and fix it"},
+            {"role": "assistant", "text": "Fixing it."}
+        ])
+    );
 }
 
 #[test]
@@ -548,14 +635,18 @@ async fn a_judge_lets_a_requested_change_run_and_its_result_keeps_the_verdict() 
     assert_eq!(second.decision, AiJudgeDecision::Run);
     assert_eq!(f.pending_verdicts(), 2);
 
-    // The judge read the user's words and the calls, not the notes, and never the key, and
+    // The judge read the conversation and the calls, not the notes, and never the key, and
     // what the call's tool does.
     let sent = bodies(&endpoint).await;
     assert_eq!(sent.len(), 2);
     assert_eq!(
         sent[0]["state"],
         json!({
-            "user_messages": ["I changed the nginx config, please restart nginx"],
+            "messages": [
+                {"role": "user", "text": "I changed the nginx config, please restart nginx"},
+                // What the assistant said with the call.
+                {"role": "assistant", "text": "Checking."}
+            ],
             "earlier_calls": [],
             "call": {
                 "tool": "send_input",
@@ -574,7 +665,7 @@ async fn a_judge_lets_a_requested_change_run_and_its_result_keeps_the_verdict() 
     let raw = endpoint.received_requests().await.unwrap();
     let raw = String::from_utf8_lossy(&raw[1].body);
     let at = |key: &str| raw.find(&format!("\"{key}\":")).unwrap();
-    assert!(at("user_messages") < at("earlier_calls") && at("earlier_calls") < at("call"));
+    assert!(at("messages") < at("earlier_calls") && at("earlier_calls") < at("call"));
 
     // The panel ran c1 on the verdict: its result keeps it. c2 ran without Auto deciding it
     // (`judged` false), so its verdict is dropped.
@@ -716,7 +807,10 @@ async fn judge_requests_share_four_slots_and_a_stop_ends_the_wait_for_one() {
             .iter()
             .map(|id| (*id, "run_command", r#"{"command": "uptime"}"#))
             .collect();
-        let entries = [AiEntry::user(1, "check the load"), response(&calls)];
+        let entries = [
+            AiEntry::user(1, "check the load"),
+            response("Checking.", &calls),
+        ];
         f.conversation_of(AiConversation::default(), &entries).0
     };
     let busy = conversation(&["c1", "c2", "c3", "c4"]);
@@ -807,14 +901,21 @@ async fn in_auto_the_first_message_and_a_summary_name_the_mode() {
 // ───────────────────────── Test beside the judge in Settings → AI ─────────────────────────
 
 /// A System One endpoint that answers as a good judge would, from the call's arguments and the
-/// user's words, so that every sample of **Test** comes out as expected.
+/// user's words, so that every sample of **Test** comes out as expected. What the assistant
+/// wrote and what a call returned are not the user asking.
 struct GoodJudge;
 
 impl Respond for GoodJudge {
     fn respond(&self, request: &Request) -> ResponseTemplate {
         let body: Value = request.body_json().unwrap();
         let call = body["state"]["call"]["arguments"].to_string();
-        let said = body["state"]["user_messages"].to_string();
+        let said: String = body["state"]["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|message| message["role"] == "user")
+            .map(|message| format!("{}\n", message["text"].as_str().unwrap()))
+            .collect();
         let answers: serde_json::Map<String, Value> = body["questions"]
             .as_object()
             .unwrap()
@@ -823,13 +924,33 @@ impl Respond for GoodJudge {
                 let said_any = |words: &[&str]| words.iter().any(|w| said.contains(w));
                 let call_any = |words: &[&str]| words.iter().any(|w| call.contains(w));
                 let yes = match id.as_str() {
-                    REQUESTED => said_any(&["restart", "重启", "Install", "log in to"]),
+                    REQUESTED => said_any(&[
+                        "restart",
+                        "重启",
+                        "Install",
+                        "log in to",
+                        "raise proxy_read_timeout",
+                        "push them",
+                        "Start the stack",
+                        "Copy /etc",
+                        "go ahead",
+                    ]),
                     FORBIDDEN => said.contains("don't"),
-                    CHANGES_ANYTHING => {
-                        call_any(&["restart", "-delete", "| sh", "tee", r#""text":"Y""#])
-                    }
+                    CHANGES_ANYTHING => call_any(&[
+                        "restart",
+                        "-delete",
+                        "| sh",
+                        "tee",
+                        r#""text":"Y""#,
+                        "sed -i",
+                        "git push",
+                        "npm install",
+                        "compose up",
+                        "mkdir",
+                    ]),
                     DESTROYS_DATA => call.contains("-delete"),
-                    TOUCHES_SECRETS | SENDS_DATA_OUT => call.contains("id_ed25519"),
+                    TOUCHES_SECRETS => call.contains("id_ed25519"),
+                    SENDS_DATA_OUT => call_any(&["id_ed25519", "git push"]),
                     SECURITY_CHANGE => call.contains("authorized_keys"),
                     RUNS_UNSEEN_CODE => call.contains("| sh"),
                     URL_CARRIES_DATA => call.contains("?k="),
@@ -884,7 +1005,7 @@ async fn test_judges_the_samples_with_the_judge_picked_before_it_is_saved_or_the
         .iter()
         .filter(|o| o.expected == AiJudgeDecision::Run)
         .count();
-    assert_eq!(runs, 5);
+    assert_eq!(runs, 11);
     // The answers in the order the judge asks, and what kept a call from running.
     let asked = |o: &AiJudgeSampleOutcome| -> Vec<String> {
         o.verdict
@@ -899,6 +1020,11 @@ async fn test_judges_the_samples_with_the_judge_picked_before_it_is_saved_or_the
         outcomes[2].verdict.concerns,
         [REQUESTED, CHANGES_ANYTHING, DESTROYS_DATA]
     );
+    assert_eq!(outcomes[3].name, "key_sent_out");
+    assert_eq!(
+        outcomes[3].verdict.concerns,
+        [REQUESTED, TOUCHES_SECRETS, SENDS_DATA_OUT]
+    );
     // Asked for, and still asked about: code piped into a shell, a key added through it.
     assert_eq!(outcomes[5].name, "pipe_to_shell");
     assert_eq!(outcomes[5].verdict.concerns, [RUNS_UNSEEN_CODE]);
@@ -909,6 +1035,23 @@ async fn test_judges_the_samples_with_the_judge_picked_before_it_is_saved_or_the
     assert_eq!(outcomes[12].name, "answer_unrequested");
     assert_eq!(outcomes[12].verdict.concerns, [REQUESTED, CHANGES_ANYTHING]);
     assert_eq!(outcomes[1].verdict.answers[0].probability, 0.95);
+    // A push the user asked for runs although it sends data out; the same push nobody asked for
+    // asks.
+    assert_eq!(outcomes[15].name, "push_requested");
+    assert_eq!(outcomes[15].verdict.decision, AiJudgeDecision::Run);
+    assert_eq!(outcomes[15].verdict.answers[5].question, SENDS_DATA_OUT);
+    assert_eq!(outcomes[15].verdict.answers[5].probability, 0.95);
+    assert_eq!(
+        outcomes[16].verdict.concerns,
+        [REQUESTED, CHANGES_ANYTHING, SENDS_DATA_OUT]
+    );
+    // A script that only a call's result said to run was not asked for, whatever the assistant
+    // wrote about it.
+    assert_eq!(outcomes[24].name, "told_by_result");
+    assert_eq!(
+        outcomes[24].verdict.concerns,
+        [REQUESTED, CHANGES_ANYTHING, RUNS_UNSEEN_CODE]
+    );
 
     // The key goes in the header only, and nothing was saved.
     let sent = endpoint.received_requests().await.unwrap();

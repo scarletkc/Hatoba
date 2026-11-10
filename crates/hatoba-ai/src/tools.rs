@@ -1332,9 +1332,12 @@ fn permission_rule(terminal: bool, telnet: bool) -> String {
          - Manual approval: a call of {tools} shows the user an approval card first, where the \
          user can run, edit or reject it; {exempt} run without one.\n  \
          - Auto: a call that manual approval would show a card for goes to a reviewer first, \
-         which runs it without the card when it finds that the call only reads, or is a change \
-         the user asked for that deletes nothing, touches no credentials and sends nothing out; \
-         otherwise the approval card shows as in manual approval.\n  \
+         which reads the conversation and runs the call without the card when it finds that the \
+         call only reads, or that the user asked for it or for a task it is a step toward. \
+         Otherwise the approval card shows as in manual approval, as it does for a call that \
+         touches credentials, grants access or privileges, makes something run at startup, \
+         weakens security, or runs code downloaded or built on the fly, also when the user asked \
+         for it.\n  \
          - In manual approval and Auto, call the tool rather than asking for permission in prose \
          first: the card is the question. Before anything that changes or deletes data, restarts \
          services or affects other users, say what it will do.\n  \
@@ -2500,9 +2503,12 @@ mod tests {
                  run_command calls that only read and calls the user has already allowed run \
                  without one.\n  - Auto: a \
                  call that manual approval would show a card for goes to a reviewer first, which \
-                 runs it without the card when it finds that the call only reads, or is a change \
-                 the user asked for that deletes nothing, touches no credentials and sends \
-                 nothing out; otherwise the approval card shows as in manual approval.\n  - In \
+                 reads the conversation and runs the call without the card when it finds that \
+                 the call only reads, or that the user asked for it or for a task it is a step \
+                 toward. Otherwise the approval card shows as in manual approval, as it does for \
+                 a call that touches credentials, grants access or privileges, makes something \
+                 run at startup, weakens security, or runs code downloaded or built on the fly, \
+                 also when the user asked for it.\n  - In \
                  manual approval and Auto, call the tool rather than asking for permission in \
                  prose first: the card is the question. Before anything that changes or deletes \
                  data, restarts services or affects other users, say what it will do.\n  - Bypass: \
@@ -2882,7 +2888,7 @@ The SSH server identifies itself as "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5".
 - After a change, check that it worked before you call it done: test a configuration with the service's own test before reloading what uses it (such as nginx -t, sshd -t or visudo -c), and do not reload it while the test fails; then check what the user cares about, such as the service's status or the request that failed. When edit_file or write_file succeeds, the file holds what the call wrote, so do not read it back to check that. Say what you checked, or that you could not check it.
 - Permission mode: the newest <permission_mode> note says which mode applies.
   - Manual approval: a call of run_command, send_input, edit_file, write_file, fetch_url or an MCP tool shows the user an approval card first, where the user can run, edit or reject it; run_command calls that only read and calls the user has already allowed run without one.
-  - Auto: a call that manual approval would show a card for goes to a reviewer first, which runs it without the card when it finds that the call only reads, or is a change the user asked for that deletes nothing, touches no credentials and sends nothing out; otherwise the approval card shows as in manual approval.
+  - Auto: a call that manual approval would show a card for goes to a reviewer first, which reads the conversation and runs the call without the card when it finds that the call only reads, or that the user asked for it or for a task it is a step toward. Otherwise the approval card shows as in manual approval, as it does for a call that touches credentials, grants access or privileges, makes something run at startup, weakens security, or runs code downloaded or built on the fly, also when the user asked for it.
   - In manual approval and Auto, call the tool rather than asking for permission in prose first: the card is the question. Before anything that changes or deletes data, restarts services or affects other users, say what it will do.
   - Bypass: your tool calls run as soon as you make them, without the user seeing them first; only the tools of MCP servers the user set to always ask wait for approval. So before anything that deletes data, cannot be undone, restarts services or affects other users, unless the user asked for exactly that, stop and ask in chat, and go on only after the user agrees.
 - After a rejection, do not repeat the same call unchanged: change your approach as the user's reason says, or ask.

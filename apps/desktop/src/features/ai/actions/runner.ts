@@ -618,11 +618,11 @@ export class TurnRunner {
 
   /**
    * AI-47: in Auto, asks the judge about a response's calls as soon as it arrives, so that their answers
-   * mostly overlap (the judge reads no results, so none waits for an earlier call): each `run_command`,
-   * `edit_file`, `write_file` and `fetch_url` call that, as far as can be told now, will reach it (it asks, no
-   * approval covers it, and no hard rule sends it to the card). Not `send_input`, whose judge and hard rules read
-   * the screen as it is when the call's turn comes, nor MCP calls, whose tool is resolved first. A call that ends up not
-   * taking its verdict stores its result without it.
+   * mostly overlap (the judge reads no result of the response's own calls, so none waits for an earlier call):
+   * each `run_command`, `edit_file`, `write_file` and `fetch_url` call that, as far as can be told now, will reach
+   * it (it asks, no approval covers it, and no hard rule sends it to the card). Not `send_input`, whose judge and
+   * hard rules read the screen as it is when the call's turn comes, nor MCP calls, whose tool is resolved first. A
+   * call that ends up not taking its verdict stores its result without it.
    */
   private prefetch(convId: string, calls: readonly AiToolCall[]) {
     if (callMode(this.mode, getSlot(this.slotId).mode) !== "auto") return;

@@ -226,7 +226,7 @@ describe("AiPane", () => {
 
     act(() => test()?.click());
     await until(() => document.body.textContent?.includes(t("aiSettings.judge.test.running")));
-    await until(() => document.body.textContent?.includes(t("aiSettings.judge.test.summary", { n: 12, total: 13 })));
+    await until(() => document.body.textContent?.includes(t("aiSettings.judge.test.summary", { n: 24, total: 25 })));
     const marks = (label: string) => document.querySelectorAll(`[role=img][aria-label="${label}"]`).length;
     // The count shows; each sample shows under Details.
     expect(marks(t("aiSettings.judge.test.match"))).toBe(0);
@@ -236,7 +236,7 @@ describe("AiPane", () => {
     expect(details.getAttribute("aria-expanded")).toBe("false");
     act(() => details.click());
     expect(details.getAttribute("aria-expanded")).toBe("true");
-    expect(marks(t("aiSettings.judge.test.match"))).toBe(12);
+    expect(marks(t("aiSettings.judge.test.match"))).toBe(24);
     expect(marks(t("aiSettings.judge.test.mismatch"))).toBe(1);
     const text = document.body.textContent ?? "";
     for (const name of [
@@ -246,6 +246,10 @@ describe("AiPane", () => {
       "key_via_shell",
       "token_in_url",
       "input_read",
+      "push_requested",
+      "compose_unrequested",
+      "fix_agreed",
+      "told_by_result",
     ] as const) {
       expect(text).toContain(t(`aiSettings.judge.sample.${name}`));
     }
@@ -257,7 +261,7 @@ describe("AiPane", () => {
     pick(judge, t("aiSettings.judge.none"));
     await until(async () => (await api.ai_settings_get()).judge_model === null);
     expect(judge.textContent).toBe(t("aiSettings.judge.placeholder"));
-    expect(document.body.textContent).not.toContain(t("aiSettings.judge.test.summary", { n: 12, total: 13 }));
+    expect(document.body.textContent).not.toContain(t("aiSettings.judge.test.summary", { n: 24, total: 25 }));
     expect(document.body.textContent).toContain(t("aiSettings.mode.hintNoJudge"));
     expect(test()?.disabled).toBe(true);
   });

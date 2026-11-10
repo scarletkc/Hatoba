@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 
 use hatoba_ai::entry::{AiEntry, AutoDecision, AutoVerdict, EntryBody, ToolStatus, pair_results};
-use hatoba_ai::judge::{self, JudgeCall, JudgeFailure, JudgeState, Verdict};
+use hatoba_ai::judge::{self, JudgeCall, JudgeFailure, JudgeMessage, JudgeState, Verdict};
 use hatoba_ai::mcp::deferred;
 use hatoba_ai::tools;
 use hatoba_core::Vault;
@@ -29,7 +29,7 @@ use crate::mcp::McpManager;
 impl AiManager {
     /// `ai_judge` (AI-47): asks the judge of Auto mode about the open call `tool_call_id`, one
     /// that manual approval would ask about, and returns its verdict: run the call without the
-    /// approval card, or ask. The judge reads what the user said and what the calls do
+    /// approval card, or ask. The judge reads the conversation and what the calls do
     /// ([`judge_state`]); `screen_tail` is the screen's last lines, which a `send_input` call
     /// shows it. Without a judge in `Settings.ai`, or with one whose provider or model is gone,
     /// the verdict asks as `unavailable` and nothing is sent; so does one cleared, replaced or
@@ -181,18 +181,22 @@ const MAX_SCREEN_TAIL_LINES: usize = 10;
 const MAX_SCREEN_TAIL_CHARS: usize = 2_000;
 
 /// AI-47: what the judge reads about the call `index` of the response `at` in `entries`, every
-/// entry of the conversation, as spec §13.5 lists it, never what the model wrote or a tool
-/// returned:
+/// entry of the conversation, as spec §13.5 lists it:
 ///
 /// - `host`: the conversation's host, as the system prompt names it (§13.1): its display name,
 ///   or its quick-connect target (HOST-12).
-/// - `user_messages`: every message the user sent, those before a compaction included, as
-///   [`typed_text`] gives it; messages left empty are left out. Summaries are the model's.
 /// - `user_rules`: the custom instructions (AI-36) and the host's AI notes (AI-37), each cut to
 ///   its limit as the system prompt cuts it, under a line that says which they are.
+/// - `messages`: every message the user sent, as [`typed_text`] gives it, and the text of every
+///   response up to the call's own, without reasoning, in the order they were stored, those
+///   before a compaction included; messages left empty are left out. Summaries stand for
+///   messages that are there already.
 /// - `earlier_calls`: the calls before it, oldest first, those of its own response included, as
 ///   [`shown_call`] gives them. A call the user rejected adds the reason they typed
-///   (`rejection`): the user's own words, which no user message carries.
+///   (`rejection`): the user's own words, which no user message carries. The newest
+///   [`judge::MAX_RESULTS`] calls of earlier responses that returned something add it
+///   (`result`); the model made this call before any call of its own response returned, so a
+///   verdict asked for ahead reads what one asked for later does.
 /// - `call`: the call itself. An MCP tool, called directly or through `call_mcp_tool` (AI-45),
 ///   adds its server's name and the tool's description and annotations; `send_input` adds
 ///   `screen_tail` ([`screen_tail`]).
@@ -211,13 +215,14 @@ pub(super) fn judge_state(
         .and_then(|id| host_name(v, id))
         .or_else(|| conversation.quick_target.as_ref().map(target_name))
         .or_else(|| conversation.local.as_deref().map(local_name));
-    let user_messages = entries[..at]
+    let messages = entries[..=at]
         .iter()
         .filter_map(|e| match &e.body {
-            EntryBody::User { text, .. } => Some(typed_text(text)),
+            EntryBody::User { text, .. } => Some(JudgeMessage::user(typed_text(text))),
+            EntryBody::Assistant(response) => Some(JudgeMessage::assistant(response.text.trim())),
             _ => None,
         })
-        .filter(|text| !text.is_empty())
+        .filter(|message| !message.text.is_empty())
         .collect();
     let results = pair_results(entries);
     let rejection = |response: usize, call: usize| match results
@@ -232,17 +237,35 @@ pub(super) fn judge_state(
         _ => None,
     };
     let calls = calls_of(&entries[at]);
-    let earlier_calls = (0..at)
+    // What a call of an earlier response returned, when it returned anything.
+    let returned = |response: usize, call: usize| match results
+        .get(&(response, call))
+        .map(|&result| &entries[result].body)
+    {
+        Some(EntryBody::Tool {
+            status, content, ..
+        }) if response < at && *status != ToolStatus::Rejected && !content.trim().is_empty() => {
+            Some(content)
+        }
+        _ => None,
+    };
+    let mut earlier_calls: Vec<JudgeCall> = (0..at)
         .flat_map(|response| (0..calls_of(&entries[response]).len()).map(move |c| (response, c)))
         .chain((0..index).map(|c| (at, c)))
-        .map(|(response, c)| {
+        .rev()
+        .scan(0, |shown, (response, c)| {
             let call = &calls_of(&entries[response])[c];
-            JudgeCall {
+            // Newest first: only the newest results go along.
+            let result = returned(response, c).filter(|_| *shown < judge::MAX_RESULTS);
+            *shown += usize::from(result.is_some());
+            Some(JudgeCall {
                 rejection: rejection(response, c),
+                result: result.cloned(),
                 ..shown_call(&call.name, &call.arguments)
-            }
+            })
         })
         .collect();
+    earlier_calls.reverse();
     let call = &calls[index];
     let mut judged = shown_call(&call.name, &call.arguments);
     let offered = if call.name.starts_with(MCP_PREFIX) {
@@ -268,7 +291,7 @@ pub(super) fn judge_state(
     JudgeState {
         host,
         user_rules: judge_rules(v, conversation),
-        user_messages,
+        messages,
         earlier_calls,
         call: judged,
     }

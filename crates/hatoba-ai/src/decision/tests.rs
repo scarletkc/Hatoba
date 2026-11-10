@@ -541,7 +541,7 @@ async fn an_anthropic_model_answers_through_one_forced_tool_without_thinking() {
 }
 
 #[tokio::test]
-async fn an_anthropic_request_caches_the_state_up_to_the_key_given() {
+async fn an_anthropic_request_caches_the_state_up_to_the_shared_start_given() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/v1/messages"))
@@ -553,7 +553,7 @@ async fn an_anthropic_request_caches_the_state_up_to_the_key_given() {
         .respond_with(ResponseTemplate::new(200).set_body_json(chat_reply(&model_arguments())))
         .mount(&server)
         .await;
-    let send = |protocol, key: &'static str| {
+    let send = |protocol, key: &'static str, items: usize| {
         let p = provider(server.uri(), protocol);
         async move {
             let model = ModelSpec::new("claude-haiku-4-5");
@@ -565,7 +565,7 @@ async fn an_anthropic_request_caches_the_state_up_to_the_key_given() {
                 &p,
                 &model,
                 &state,
-                Some(key),
+                Some(SharedStart { key, items }),
                 &questions,
                 &cancel,
             )
@@ -573,7 +573,7 @@ async fn an_anthropic_request_caches_the_state_up_to_the_key_given() {
             .unwrap()
         }
     };
-    assert_answered(&send(Protocol::Anthropic, "middle_grows").await);
+    assert_answered(&send(Protocol::Anthropic, "middle_grows", 0).await);
     let body = &bodies(&server).await[0];
     let content = body["messages"][0]["content"].as_array().unwrap();
     assert_eq!(content.len(), 2);
@@ -595,17 +595,96 @@ async fn an_anthropic_request_caches_the_state_up_to_the_key_given() {
     // Together they are the message a request without a breakpoint sends, as Chat Completions
     // does, whose provider caches the start of a prompt by itself.
     let whole = format!("{}{rest}", content[0]["text"].as_str().unwrap());
-    assert_answered(&send(Protocol::ChatCompletions, "middle_grows").await);
+    assert_answered(&send(Protocol::ChatCompletions, "middle_grows", 0).await);
     let body = &bodies(&server).await[1];
     assert_eq!(body["messages"][1]["content"], json!(whole));
     assert!(!body.to_string().contains("cache_control"));
 
     // A key the state does not have at its top level splits nothing.
-    assert_answered(&send(Protocol::Anthropic, "one").await);
+    assert_answered(&send(Protocol::Anthropic, "one", 0).await);
     assert_eq!(
         bodies(&server).await[2]["messages"][0]["content"],
         json!(whole)
     );
+
+    // A list that grows at its end shares its first items: the start ends after the last of
+    // them, before the comma, so it is the same once the list has more.
+    assert_answered(&send(Protocol::Anthropic, "middle_grows", 1).await);
+    let content = &bodies(&server).await[3]["messages"][0]["content"];
+    assert_eq!(
+        content[0]["text"],
+        "<state>\n{\n  \"zeta_stays\": \"the same in every request\",\n  \
+         \"middle_grows\": [\n    \"one\""
+    );
+    assert_eq!(content[0]["cache_control"], json!({"type": "ephemeral"}));
+    let rest = content[1]["text"].as_str().unwrap();
+    assert!(rest.starts_with(",\n    \"two\"\n  ],\n  \"alpha_changes\""));
+    assert_eq!(
+        format!("{}{rest}", content[0]["text"].as_str().unwrap()),
+        whole
+    );
+}
+
+#[test]
+fn the_shared_start_ends_before_a_member_or_after_items_of_a_list() {
+    #[derive(Serialize)]
+    struct State {
+        host: &'static str,
+        messages: Vec<Value>,
+        notes: Vec<&'static str>,
+        empty: Vec<Value>,
+        call: Value,
+    }
+    let state = State {
+        host: "web-01",
+        messages: vec![
+            json!({"role": "user", "text": "restart [nginx],"}),
+            json!({}),
+            json!({"role": "assistant", "text": "{", "parts": ["a", {"b": [1, 2]}]}),
+            json!(["nested", ["deeper"]]),
+        ],
+        notes: vec!["{", "[", "ends with a comma,"],
+        empty: Vec::new(),
+        call: json!({"tool": "run_command"}),
+    };
+    let text = serde_json::to_string_pretty(&state).unwrap();
+    let head = |key: &'static str, items: usize| {
+        shared_end(&text, SharedStart { key, items }).map(|end| &text[..end])
+    };
+    // Before the member: what the state holds ahead of it.
+    assert_eq!(head("messages", 0), Some("{\n  \"host\": \"web-01\","));
+    assert_eq!(head("missing", 2), None);
+    // After items of a list of objects, whatever they hold: the comma after the last is not
+    // part of the start.
+    let first = head("messages", 1).unwrap();
+    assert!(first.ends_with("\"text\": \"restart [nginx],\"\n    }"));
+    assert_eq!(head("messages", 2).unwrap(), format!("{first},\n    {{}}"));
+    let third = head("messages", 3).unwrap();
+    assert!(third.ends_with("\"text\": \"{\"\n    }") && third.contains("\"b\": ["));
+    assert!(!third.contains("nested"));
+    // A list with fewer items shares them all, up to its closing bracket.
+    let all = head("messages", 4).unwrap();
+    assert!(all.ends_with("\"deeper\"\n      ]\n    ]"));
+    assert_eq!(head("messages", 9), Some(all));
+    assert!(text[all.len()..].starts_with("\n  ],\n  \"notes\": ["));
+    // Items that are strings, also ones that look like an opening or end in a comma.
+    assert!(
+        head("notes", 1)
+            .unwrap()
+            .ends_with("\"notes\": [\n    \"{\"")
+    );
+    assert!(head("notes", 2).unwrap().ends_with("\n    \"[\""));
+    assert!(
+        head("notes", 3)
+            .unwrap()
+            .ends_with("\"ends with a comma,\"")
+    );
+    // An empty list and a member that is no list share what comes before them.
+    let before_empty = head("empty", 0).unwrap();
+    assert!(before_empty.ends_with("\"ends with a comma,\"\n  ],"));
+    assert_eq!(head("empty", 3), Some(before_empty));
+    assert_eq!(head("host", 1), Some("{"));
+    assert!(head("call", 1).unwrap().ends_with("\"empty\": [],"));
 }
 
 fn responses_reply(arguments: &Value) -> Value {

@@ -491,6 +491,18 @@ const SAMPLE_LABEL: Record<string, MessageKey> = {
   token_in_url: "aiSettings.judge.sample.token_in_url",
   input_read: "aiSettings.judge.sample.input_read",
   answer_unrequested: "aiSettings.judge.sample.answer_unrequested",
+  config_requested: "aiSettings.judge.sample.config_requested",
+  config_unrequested: "aiSettings.judge.sample.config_unrequested",
+  push_requested: "aiSettings.judge.sample.push_requested",
+  push_unrequested: "aiSettings.judge.sample.push_unrequested",
+  build_requested: "aiSettings.judge.sample.build_requested",
+  build_unrequested: "aiSettings.judge.sample.build_unrequested",
+  compose_requested: "aiSettings.judge.sample.compose_requested",
+  compose_unrequested: "aiSettings.judge.sample.compose_unrequested",
+  copy_requested: "aiSettings.judge.sample.copy_requested",
+  copy_unrequested: "aiSettings.judge.sample.copy_unrequested",
+  fix_agreed: "aiSettings.judge.sample.fix_agreed",
+  told_by_result: "aiSettings.judge.sample.told_by_result",
 };
 
 const DECISION_LABEL: Record<AiJudgeDecision, MessageKey> = {
