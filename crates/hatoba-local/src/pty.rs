@@ -338,6 +338,20 @@ mod tests {
         }
     }
 
+    /// sh's prompt in these tests: as root it would be `# `, and a user's `PS1`, or a file their
+    /// `ENV` names, could make it anything.
+    const PROMPT: &str = "hatoba> ";
+
+    fn prompt_env() -> [(String, String); 2] {
+        [("PS1".into(), PROMPT.into()), ("ENV".into(), String::new())]
+    }
+
+    /// macOS's sh can drop what is typed while it starts, so tests type after its prompt.
+    #[cfg(not(windows))]
+    async fn wait_for_prompt(events: &mut mpsc::Receiver<PtyEvent>) {
+        output_until(events, PROMPT).await;
+    }
+
     fn test_shell() -> Shell {
         #[cfg(windows)]
         {
@@ -362,19 +376,28 @@ mod tests {
     async fn runs_input_and_reports_the_exit_status() {
         let shell = test_shell();
         let (pty, mut events) =
-            LocalPty::spawn(&shell, size(), &[], std::env::temp_dir().parent()).unwrap();
+            LocalPty::spawn(&shell, size(), &prompt_env(), std::env::temp_dir().parent()).unwrap();
         pty.resize(PtySize {
             cols: 100,
             rows: 30,
         });
         // ConPTY asks where the cursor is before it starts the shell, and xterm.js answers; so
-        // does the test, which any shell takes as input it ignores.
-        pty.write(b"[1;1R".to_vec()).unwrap();
-        pty.write(b"echo hatoba-ok-$((40+2))%PROMPT:~0,0%\r".to_vec())
+        // does the test. sh would read the answer as the start of the command.
+        #[cfg(windows)]
+        pty.write(b"\x1b[1;1R".to_vec()).unwrap();
+        #[cfg(not(windows))]
+        wait_for_prompt(&mut events).await;
+        pty.write(b"echo hatoba-ok%PROMPT:~0,0%-$((40+2))\r".to_vec())
             .unwrap();
-        // sh expands $((…)), cmd the empty substring; either prints a line only the command could.
-        let (text, _) = output_until(&mut events, "hatoba-ok-").await;
-        assert!(text.contains("hatoba-ok-"), "{text}");
+        // cmd drops the empty substring and sh works out $((…)), so only the command's output
+        // has this, not the echo of what was typed.
+        let printed = if cfg!(windows) {
+            "hatoba-ok-$((40+2))"
+        } else {
+            "hatoba-ok%PROMPT:~0,0%-42"
+        };
+        let (text, _) = output_until(&mut events, printed).await;
+        assert!(text.contains(printed), "{text}");
         pty.write(b"exit 3\r".to_vec()).unwrap();
         let (_, exited) = output_until(&mut events, "").await;
         assert_eq!(exited, Some(Some(3)));
@@ -383,12 +406,13 @@ mod tests {
     #[tokio::test]
     async fn close_ends_the_shell() {
         let shell = test_shell();
-        let (pty, mut events) = LocalPty::spawn(&shell, size(), &[], None).unwrap();
+        let (pty, mut events) = LocalPty::spawn(&shell, size(), &prompt_env(), None).unwrap();
         // macOS's sh can outlive a hangup that comes while it is still starting, and a tab is
         // closed once its shell runs, so the test waits until sh has run a command. Only the
         // command's output, not its echo, has `hatoba-42`.
         #[cfg(not(windows))]
         {
+            wait_for_prompt(&mut events).await;
             pty.write(b"echo hatoba-$((40+2))\r".to_vec()).unwrap();
             output_until(&mut events, "hatoba-42").await;
         }
