@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use hatoba_ai::entry::{AutoDecision, AutoVerdict, EntryBody, ToolStatus, pair_results};
+use hatoba_ai::entry::{AiEntry, AutoDecision, AutoVerdict, EntryBody, ToolStatus, pair_results};
 use hatoba_ai::judge::{self, JudgeCall, JudgeFailure, JudgeMessage, JudgeState, Verdict};
 use hatoba_ai::mcp::deferred;
 use hatoba_ai::tools;
@@ -63,7 +63,7 @@ impl AiManager {
                         &self.0.mcp,
                         conversation_id,
                         &conversation,
-                        &entries,
+                        &entries.list,
                         (at, index),
                         screen_tail,
                     );
@@ -196,10 +196,7 @@ const MAX_SCREEN_TAIL_CHARS: usize = 2_000;
 ///   (`rejection`): the user's own words, which no user message carries. The newest
 ///   [`judge::MAX_RESULTS`] calls of earlier responses that returned something add it
 ///   (`result`); the model made this call before any call of its own response returned, so a
-///   verdict asked for ahead reads what one asked for later does. Only a judge that is a model
-///   of the provider whose model made the call's response reads results, and only those in the
-///   context that response was made from (AI-21): that provider has them already, so the
-///   judge sends command output and files' text to no other provider (§4.4).
+///   verdict asked for ahead reads what one asked for later does.
 /// - `call`: the call itself. An MCP tool, called directly or through `call_mcp_tool` (AI-45),
 ///   adds its server's name and the tool's description and annotations; `send_input` adds
 ///   `screen_tail` ([`screen_tail`]).
@@ -208,11 +205,10 @@ pub(super) fn judge_state(
     mcp: &McpManager,
     conversation_id: &str,
     conversation: &AiConversation,
-    stored: &Entries,
+    entries: &[AiEntry],
     (at, index): (usize, usize),
     screen: Option<&str>,
 ) -> JudgeState {
-    let entries = stored.list.as_slice();
     let host = conversation
         .host_id
         .as_deref()
@@ -241,17 +237,6 @@ pub(super) fn judge_state(
         _ => None,
     };
     let calls = calls_of(&entries[at]);
-    // Results go only to a judge that is no new recipient of them: a model of the provider
-    // whose model made this response, and then those the response's context held.
-    let same_provider = match &entries[at].body {
-        EntryBody::Assistant(response) => v
-            .settings()
-            .ai
-            .judge_model
-            .is_some_and(|judge| judge.provider_id == response.provider_id),
-        _ => false,
-    };
-    let context = stored.context_from(conversation.context_start.as_deref());
     // What a call of an earlier response returned, when it returned anything.
     let returned = |response: usize, call: usize| match results
         .get(&(response, call))
@@ -259,11 +244,7 @@ pub(super) fn judge_state(
     {
         Some(EntryBody::Tool {
             status, content, ..
-        }) if same_provider
-            && (context..at).contains(&response)
-            && *status != ToolStatus::Rejected
-            && !content.trim().is_empty() =>
-        {
+        }) if response < at && *status != ToolStatus::Rejected && !content.trim().is_empty() => {
             Some(content)
         }
         _ => None,

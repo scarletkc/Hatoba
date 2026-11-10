@@ -195,7 +195,7 @@ export default defineMessages({
     "aiSettings.judge.placeholder": "选择判定模型",
     "aiSettings.judge.none": "无",
     "aiSettings.judge.hint":
-      "自动批准模式下，需要询问的调用会连同对话先发给判定模型：只读或你要求的改动直接运行，其余照常询问。只有判定模型和对话模型来自同一服务商时，才会附带工具结果。",
+      "自动批准模式下，需要询问的调用会连同对话和最近的工具结果先发给判定模型：只读或你要求的改动直接运行，其余照常询问。",
     "aiSettings.judge.test": "测试",
     "aiSettings.judge.test.running": "正在让判定模型判断示例调用…",
     "aiSettings.judge.test.summary": "{total} 个示例中有 {n} 个符合预期",
@@ -675,7 +675,7 @@ export default defineMessages({
     "aiSettings.judge.placeholder": "Choose a judge",
     "aiSettings.judge.none": "None",
     "aiSettings.judge.hint":
-      "In Auto mode, a call that would ask goes to the judge first, with the conversation: a read or a change you asked for runs, and anything else asks as usual. Tool results go along only when the judge and the conversation’s model are from the same provider.",
+      "In Auto mode, a call that would ask goes to the judge first, with the conversation and the newest tool results: a read or a change you asked for runs, and anything else asks as usual.",
     "aiSettings.judge.test": "Test",
     "aiSettings.judge.test.running": "Asking the judge about sample calls…",
     "aiSettings.judge.test.summary": "{n} of {total} as expected",
@@ -1169,7 +1169,7 @@ export default defineMessages({
     "aiSettings.judge.placeholder": "判定モデルを選択",
     "aiSettings.judge.none": "なし",
     "aiSettings.judge.hint":
-      "自動承認モードでは、確認が必要な呼び出しを会話とあわせて先に判定モデルに送ります。読み取りや依頼された変更はそのまま実行し、それ以外は通常どおり確認します。ツールの結果は、判定モデルと会話のモデルが同じプロバイダーの場合にだけ送られます。",
+      "自動承認モードでは、確認が必要な呼び出しを、会話と直近のツールの結果とあわせて先に判定モデルに送ります。読み取りや依頼された変更はそのまま実行し、それ以外は通常どおり確認します。",
     "aiSettings.judge.test": "テスト",
     "aiSettings.judge.test.running": "判定モデルにサンプルの呼び出しを判定させています…",
     "aiSettings.judge.test.summary": "{total} 件中 {n} 件が期待どおり",
@@ -1648,7 +1648,7 @@ export default defineMessages({
     "aiSettings.judge.placeholder": "選擇判定模型",
     "aiSettings.judge.none": "無",
     "aiSettings.judge.hint":
-      "自動核准模式下，需要詢問的呼叫會連同對話先發給判定模型：唯讀或你要求的變更直接執行，其餘照常詢問。只有判定模型和對話模型來自同一供應商時，才會附帶工具結果。",
+      "自動核准模式下，需要詢問的呼叫會連同對話和最近的工具結果先發給判定模型：唯讀或你要求的變更直接執行，其餘照常詢問。",
     "aiSettings.judge.test": "測試",
     "aiSettings.judge.test.running": "正在讓判定模型判斷範例呼叫…",
     "aiSettings.judge.test.summary": "{total} 個範例中有 {n} 個符合預期",
