@@ -338,11 +338,12 @@ mod tests {
         }
     }
 
-    /// sh's prompt in these tests: as root it would be `# `, and a `PS1` of the user's anything.
+    /// sh's prompt in these tests: as root it would be `# `, and a user's `PS1`, or a file their
+    /// `ENV` names, could make it anything.
     const PROMPT: &str = "hatoba> ";
 
-    fn prompt_env() -> [(String, String); 1] {
-        [("PS1".into(), PROMPT.into())]
+    fn prompt_env() -> [(String, String); 2] {
+        [("PS1".into(), PROMPT.into()), ("ENV".into(), String::new())]
     }
 
     /// macOS's sh can drop what is typed while it starts, so tests type after its prompt.
