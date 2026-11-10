@@ -74,22 +74,20 @@ pub enum Op {
     Stdin {
         token: String,
     },
-    /// The AI assistant's memories (AI-53): the global ones, and with `host` that host's after
-    /// them, as text or as JSON.
+    /// The AI assistant's memories of `host` (AI-53), as text or as JSON.
     Memories {
-        host: Option<String>,
+        host: String,
         json: bool,
     },
-    /// Saves `content` as the memory `name`, in place of the one of that name: a global memory,
-    /// or with `host` one of that host's.
+    /// Saves `content` as the memory `name` of `host`, in place of its memory of that name.
     MemorySave {
-        host: Option<String>,
+        host: String,
         name: String,
         content: String,
     },
-    /// Deletes the memory `name`: a global one, or with `host` one of that host's.
+    /// Deletes the memory `name` of `host`.
     MemoryDelete {
-        host: Option<String>,
+        host: String,
         name: String,
     },
 }
@@ -279,14 +277,14 @@ mod tests {
             Frame::Request(Request {
                 version: VERSION,
                 op: Op::Memories {
-                    host: Some("db".into()),
+                    host: "db".into(),
                     json: true,
                 },
             }),
             Frame::Request(Request {
                 version: VERSION,
                 op: Op::MemorySave {
-                    host: None,
+                    host: "db".into(),
                     name: "sudo".into(),
                     content: "Uses doas.\nNot sudo.".into(),
                 },
@@ -294,7 +292,7 @@ mod tests {
             Frame::Request(Request {
                 version: VERSION,
                 op: Op::MemoryDelete {
-                    host: Some("db".into()),
+                    host: "db".into(),
                     name: "sudo".into(),
                 },
             }),

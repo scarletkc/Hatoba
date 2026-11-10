@@ -158,11 +158,13 @@ fn a_missing_password_says_how_to_give_it() {
     assert_eq!(config_error(&AppError::locked(), "db"), LOCKED);
 }
 
-/// HOST-15: `hatoba memory` saves, lists and deletes under the `memory` tool's rules, among the
-/// global memories or a saved SSH host's.
+/// HOST-15: `hatoba memory` saves, lists and deletes a saved SSH host's memories under the
+/// `memory` tool's rules, and leaves the global ones out.
 #[test]
 fn memory_commands_follow_the_memory_tools_rules() {
+    use hatoba_ai::entry::ToolStatus;
     use hatoba_ai::tools::MemoryAction::{Delete, Save};
+    use hatoba_ai::tools::{MemoryArgs, MemoryScope};
     use hatoba_core::model::SETTINGS_ID;
 
     let mut v = vault();
@@ -181,28 +183,30 @@ fn memory_commands_follow_the_memory_tools_rules() {
 
     // Nothing yet: the listing says so beside an empty stdout, and JSON is an empty list.
     assert_eq!(
-        memories::list(&v, None, false).unwrap(),
+        memories::list(&v, "db", false).unwrap(),
         memories::Listing {
             text: String::new(),
-            notice: Some("no global memories are saved in Hatoba yet".into()),
+            notice: Some("no memories of db are saved in Hatoba yet".into()),
         }
     );
     assert_eq!(
-        memories::list(&v, Some("db"), false)
-            .unwrap()
-            .notice
-            .as_deref(),
-        Some("no global memories and no memories of db are saved in Hatoba yet")
-    );
-    assert_eq!(
-        memories::list(&v, Some("db"), true).unwrap(),
+        memories::list(&v, "db", true).unwrap(),
         memories::Listing {
             text: "[]\n".into(),
             notice: None,
         }
     );
 
-    let mut change = |host: Option<&str>, action, name: &str, content: Option<&str>| {
+    // A global memory the assistant saved, which the commands never show.
+    let global = MemoryArgs {
+        action: Save,
+        scope: MemoryScope::Global,
+        name: "reply language".into(),
+        content: Some("Chinese.".into()),
+    };
+    assert_eq!(memory::run(&mut v, None, &global).0, ToolStatus::Ok);
+
+    let mut change = |host: &str, action, name: &str, content: Option<&str>| {
         memories::change(
             &mut v,
             host,
@@ -211,34 +215,30 @@ fn memory_commands_follow_the_memory_tools_rules() {
             content.map(str::to_owned),
         )
     };
-    assert_eq!(
-        change(None, Save, "reply language", Some("Chinese.\n")).unwrap(),
-        "Saved the global memory \"reply language\"."
-    );
     // A host is named by its name or its id, as for exec.
     assert_eq!(
-        change(Some("DB"), Save, "sudo use", Some("Uses doas.")).unwrap(),
+        change("DB", Save, "sudo use", Some("Uses doas.")).unwrap(),
         "Saved the host memory \"sudo use\" of db."
     );
     // A save under a name that exists replaces that memory.
-    change(Some(&db), Save, "sudo use", Some("Uses doas,\n\nnot sudo.")).unwrap();
+    change(&db, Save, "sudo use", Some("Uses doas,\n\nnot sudo.")).unwrap();
     assert_eq!(
-        change(None, Save, "empty", Some(" ")).unwrap_err(),
+        change("db", Save, "empty", Some(" ")).unwrap_err(),
         "The memory is empty. To remove a memory, delete it."
     );
     assert!(
-        change(Some("nope"), Save, "x", Some("y"))
+        change("nope", Save, "x", Some("y"))
             .unwrap_err()
             .contains("no saved host is named nope")
     );
     assert!(
-        change(Some("core switch"), Save, "x", Some("y"))
+        change("core switch", Save, "x", Some("y"))
             .unwrap_err()
             .contains("is a Telnet host")
     );
     assert_eq!(
-        change(None, Delete, "sudo use", None).unwrap_err(),
-        "There is no global memory named \"sudo use\". The global memories: \"reply language\"."
+        change("db", Delete, "logs", None).unwrap_err(),
+        "There is no host memory named \"logs\" of db. The host memories of db: \"sudo use\"."
     );
 
     let stored: Vec<(String, Option<String>)> = v
@@ -254,38 +254,25 @@ fn memory_commands_follow_the_memory_tools_rules() {
         ]
     );
 
-    // Without a host, the global ones; with it, the host's after them.
-    let day = memory::listed(&v, None)[0].updated.clone();
+    // Only the host's own memories, without the global one.
+    let day = memory::listed(&v, &memory::Scope::Host(db.clone()))[0]
+        .updated
+        .clone();
     assert_eq!(day.len(), 10, "{day}");
     assert_eq!(
-        memories::list(&v, None, false).unwrap(),
+        memories::list(&v, "db", false).unwrap(),
         memories::Listing {
-            text: format!("reply language (global, {day})\n  Chinese.\n"),
+            text: format!("sudo use ({day})\n  Uses doas,\n\n  not sudo.\n"),
             notice: None,
         }
     );
-    assert_eq!(
-        memories::list(&v, Some("db"), false).unwrap().text,
-        format!(
-            "reply language (global, {day})\n  Chinese.\n\nsudo use (host db, {day})\n  Uses \
-             doas,\n\n  not sudo.\n"
-        )
-    );
     let json: serde_json::Value =
-        serde_json::from_str(&memories::list(&v, Some("db"), true).unwrap().text).unwrap();
+        serde_json::from_str(&memories::list(&v, "db", true).unwrap().text).unwrap();
     assert_eq!(
         json,
         serde_json::json!([
             {
-                "name": "reply language",
-                "scope": "global",
-                "updated": day,
-                "content": "Chinese.",
-            },
-            {
                 "name": "sudo use",
-                "scope": "host",
-                "host": "db",
                 "updated": day,
                 "content": "Uses doas,\n\nnot sudo.",
             },
@@ -293,7 +280,7 @@ fn memory_commands_follow_the_memory_tools_rules() {
     );
 
     assert_eq!(
-        memories::change(&mut v, Some("db"), Delete, "sudo use".into(), None).unwrap(),
+        memories::change(&mut v, "db", Delete, "sudo use".into(), None).unwrap(),
         "Deleted the host memory \"sudo use\" of db."
     );
     assert_eq!(v.ai_memories().len(), 1);
@@ -302,9 +289,9 @@ fn memory_commands_follow_the_memory_tools_rules() {
     let mut settings = v.settings();
     settings.ai.memory = false;
     v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
-    assert_eq!(memories::list(&v, None, true).unwrap_err(), memory::OFF);
+    assert_eq!(memories::list(&v, "db", true).unwrap_err(), memory::OFF);
     assert_eq!(
-        memories::change(&mut v, None, Save, "x".into(), Some("y".into())).unwrap_err(),
+        memories::change(&mut v, "db", Save, "x".into(), Some("y".into())).unwrap_err(),
         memory::OFF
     );
     assert_eq!(v.ai_memories().len(), 1);

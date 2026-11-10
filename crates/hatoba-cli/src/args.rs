@@ -12,10 +12,10 @@ Usage:
   hatoba hosts [--json]                         List the saved SSH hosts
   hatoba exec [options] <host> [--] <command>   Run a command on a host
   hatoba cp [options] <source> <target>         Copy a file to or from a host
-  hatoba memory [--host <host>] [--json]        List the AI assistant's memories
-  hatoba memory save [--host <host>] <name> [<text>]
-                                                Save a memory
-  hatoba memory delete [--host <host>] <name>   Delete a memory
+  hatoba memory --host <host> [--json]          List a host's memories
+  hatoba memory save --host <host> <name> [<text>]
+                                                Save a memory of a host
+  hatoba memory delete --host <host> <name>     Delete a memory of a host
   hatoba <name> | hatoba [user@]<address>       Open a terminal in Hatoba
   hatoba telnet <address> [<port>]              Open a Telnet terminal in Hatoba
 
@@ -65,19 +65,18 @@ signing in goes to stderr. Without --no-prompt, the command waits while the
 server holds the login, as Tailscale SSH does until you sign in at the link it
 prints.
 
-memory reads and changes what Hatoba's AI assistant remembers between
-conversations: notes that it, the user and other programs save, such as a
-host's paths, services and quirks. The assistant starts its conversations with
-them, and Settings > AI > Memory lists them. Without --host, memory lists the
-global ones, which hold everywhere; with it, those and then the host's own.
+memory reads and changes what Hatoba's AI assistant remembers about a host
+between conversations: notes that it, the user and other programs save, such
+as the host's paths, services and quirks. The assistant starts its
+conversations on the host with them, and Settings > AI > Memory lists them.
 save keeps <text>, or its stdin when there is none, under <name>, in place of
-the memory of that name: as a global memory, or with --host as one of that
-host. delete removes one. Save what will still matter later and can't be found
-by looking: a correction or preference of the user, or a fact about their hosts
-and setup. Leave out what only matters to the task at hand, what the host's
-ai_notes already say, and passwords, keys or tokens. When a memory turns out
-wrong or out of date, save it again or delete it instead of adding another.
-Where a memory differs from a host's ai_notes, follow those.
+the host's memory of that name, and delete removes one. Save a fact about the
+host, or a correction of the user about working on it, that will still matter
+later and can't be found by looking. Leave out what only matters to the task
+at hand, what the host's ai_notes already say, and passwords, keys or tokens.
+When a memory turns out wrong or out of date, save it again or delete it
+instead of adding another. Where a memory differs from the host's ai_notes,
+follow those.
 
 Hatoba has to be running and unlocked, with Settings > General >
 \"Let other programs use saved hosts\" on.
@@ -105,18 +104,19 @@ pub enum Command {
         /// The permission bits of the file a copy to the host writes.
         mode: Option<u32>,
     },
+    /// The memories of a host.
     Memories {
-        host: Option<String>,
+        host: String,
         json: bool,
     },
     MemorySave {
-        host: Option<String>,
+        host: String,
         name: String,
         /// `None` takes the text from stdin.
         content: Option<String>,
     },
     MemoryDelete {
-        host: Option<String>,
+        host: String,
         name: String,
     },
     /// Anything else opens Hatoba with these arguments (HOST-13).
@@ -320,7 +320,7 @@ enum MemoryAction {
 
 /// `list` (or nothing), `save` or `delete`, then the name, then for a save its text, which starts
 /// at the first other argument after the name and takes the rest, joined with spaces. Options come
-/// anywhere before the text.
+/// anywhere before the text. `--host` is needed: other programs get only a host's memories.
 fn memory(args: Vec<String>) -> Result<Command, String> {
     use MemoryAction::{Delete, List, Save};
     let mut host = None;
@@ -392,6 +392,14 @@ fn memory(args: Vec<String>) -> Result<Command, String> {
     if json && action != List {
         return Err("--json is for listing memories".into());
     }
+    let (word, usage) = match action {
+        List => ("memory", "hatoba memory --host <host> [--json]"),
+        Save => ("save", "hatoba memory save --host <host> <name> [<text>]"),
+        Delete => ("delete", "hatoba memory delete --host <host> <name>"),
+    };
+    let Some(host) = host else {
+        return Err(format!("{word} needs --host <host>: {usage}"));
+    };
     match (action, name) {
         (List, _) => Ok(Command::Memories { host, json }),
         (Save, Some(name)) => Ok(Command::MemorySave {
@@ -399,13 +407,8 @@ fn memory(args: Vec<String>) -> Result<Command, String> {
             name,
             content: (!text.is_empty()).then(|| text.join(" ")),
         }),
-        (Save, None) => {
-            Err("save needs a name: hatoba memory save [--host <host>] <name> [<text>]".into())
-        }
         (Delete, Some(name)) => Ok(Command::MemoryDelete { host, name }),
-        (Delete, None) => {
-            Err("delete needs a name: hatoba memory delete [--host <host>] <name>".into())
-        }
+        (_, None) => Err(format!("{word} needs a name: {usage}")),
     }
 }
 
@@ -628,39 +631,37 @@ mod tests {
     }
 
     #[test]
-    fn memory_lists_saves_and_deletes() {
-        let list = |host: Option<&str>, json| {
+    fn memory_lists_saves_and_deletes_the_memories_of_a_host() {
+        let list = |host: &str, json| {
             Ok(Command::Memories {
-                host: host.map(Into::into),
+                host: host.into(),
                 json,
             })
         };
-        assert_eq!(parse_words(&["memory"]), list(None, false));
-        assert_eq!(parse_words(&["memory", "list", "--json"]), list(None, true));
         assert_eq!(
             parse_words(&["memory", "--host", "My Server"]),
-            list(Some("My Server"), false)
+            list("My Server", false)
         );
         assert_eq!(
             parse_words(&["memory", "--json", "--host=db", "list"]),
-            list(Some("db"), true)
+            list("db", true)
         );
 
-        let save = |host: Option<&str>, name: &str, content: Option<&str>| {
+        let save = |host: &str, name: &str, content: Option<&str>| {
             Ok(Command::MemorySave {
-                host: host.map(Into::into),
+                host: host.into(),
                 name: name.into(),
                 content: content.map(Into::into),
             })
         };
         // Without a text, it comes from stdin.
         assert_eq!(
-            parse_words(&["memory", "save", "sudo"]),
-            save(None, "sudo", None)
+            parse_words(&["memory", "save", "--host", "db", "sudo"]),
+            save("db", "sudo", None)
         );
         assert_eq!(
             parse_words(&["memory", "save", "--host", "db", "sudo use", "Uses doas."]),
-            save(Some("db"), "sudo use", Some("Uses doas."))
+            save("db", "sudo use", Some("Uses doas."))
         );
         // Options come anywhere before the text, which takes the rest.
         assert_eq!(
@@ -674,37 +675,56 @@ mod tests {
                 "in",
                 "--json"
             ]),
-            save(Some("web"), "logs", Some("in --json"))
+            save("web", "logs", Some("in --json"))
         );
         assert_eq!(
-            parse_words(&["memory", "save", "--", "-x", "--host"]),
-            save(None, "-x", Some("--host"))
+            parse_words(&["memory", "save", "--host", "db", "--", "-x", "--host"]),
+            save("db", "-x", Some("--host"))
         );
 
         assert_eq!(
             parse_words(&["memory", "delete", "sudo use", "--host", "db"]),
             Ok(Command::MemoryDelete {
-                host: Some("db".into()),
+                host: "db".into(),
                 name: "sudo use".into(),
             })
         );
 
+        // Without --host, nothing: the global memories are the assistant's own.
+        assert_eq!(
+            parse_words(&["memory"]),
+            Err("memory needs --host <host>: hatoba memory --host <host> [--json]".into())
+        );
+        assert_eq!(
+            parse_words(&["memory", "save", "sudo", "Uses doas."]),
+            Err(
+                "save needs --host <host>: hatoba memory save --host <host> <name> [<text>]".into()
+            )
+        );
         for words in [
-            &["memory", "sudo"][..],
+            &["memory", "list", "--json"][..],
+            &["memory", "save", "sudo"],
+            &["memory", "save", "--", "-x", "--host"],
+            &["memory", "delete", "sudo"],
+            &["memory", "sudo"],
             &["memory", "list", "sudo"],
             &["memory", "save"],
             &["memory", "save", "--host", "db"],
-            &["memory", "save", "--json", "sudo", "x"],
+            &["memory", "save", "--json", "--host", "db", "sudo", "x"],
             &["memory", "save", "-x", "y"],
-            &["memory", "delete"],
-            &["memory", "delete", "sudo", "use"],
-            &["memory", "delete", "--json", "sudo"],
+            &["memory", "delete", "--host", "db"],
+            &["memory", "delete", "--host", "db", "sudo", "use"],
+            &["memory", "delete", "--json", "--host", "db", "sudo"],
             &["memory", "--host"],
             &["memory", "--host", " "],
             &["memory", "--host="],
         ] {
             assert!(parse_words(words).is_err(), "{words:?}");
         }
+        assert_eq!(
+            parse_words(&["memory", "delete", "--host", "db"]),
+            Err("delete needs a name: hatoba memory delete --host <host> <name>".into())
+        );
         assert_eq!(
             parse_words(&["memory", "save", "--help"]),
             Ok(Command::Help)
