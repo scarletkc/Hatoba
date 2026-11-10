@@ -198,8 +198,8 @@ const MAX_SCREEN_TAIL_CHARS: usize = 2_000;
 ///   (`result`); the model made this call before any call of its own response returned, so a
 ///   verdict asked for ahead reads what one asked for later does. Only a judge that is a model
 ///   of the provider whose model made the call's response reads results, and only those in the
-///   context that response was made from (AI-21): that provider has them already, so command
-///   output and files' text reach no other service through the judge (§4.4).
+///   context that response was made from (AI-21): that provider has them already, so the
+///   judge sends command output and files' text to no other provider (§4.4).
 /// - `call`: the call itself. An MCP tool, called directly or through `call_mcp_tool` (AI-45),
 ///   adds its server's name and the tool's description and annotations; `send_input` adds
 ///   `screen_tail` ([`screen_tail`]).
