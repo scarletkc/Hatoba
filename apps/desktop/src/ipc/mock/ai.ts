@@ -1586,7 +1586,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   /** Like Rust's `question_ids`: the questions a call of `tool` gets, in the judge's order. */
   function judgeQuestions(tool: string): string[] {
     if (tool === "edit_file" || tool === "write_file")
-      return ["requested", "forbidden", "touches_secrets", "sensitive_file"];
+      return ["requested", "forbidden", "touches_secrets", "security_change", "sensitive_file"];
     if (tool === "fetch_url") return ["forbidden", "url_carries_data"];
     return [
       "requested",
@@ -1609,6 +1609,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const text = [args.command, args.text, args.path, args.url, args.content]
       .filter((v): v is string => typeof v === "string")
       .join("\n");
+    // What an edit writes, which only `security_change` asks about.
+    const written = typeof args.new_string === "string" ? `${text}\n${args.new_string}` : text;
     const asked = parseMessage(lastUser(c).text).typed.toLowerCase();
     const named = text
       .toLowerCase()
@@ -1625,10 +1627,12 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       destroys_data: yes(/\b(rm|truncate|prune|vacuum|drop|delete)\b|(^|[^>])>(?!>)/, 0.66),
       touches_secrets: yes(/\.ssh|id_rsa|id_ed25519|shadow|passw|token|secret|\.env\b/i, 0.72),
       sends_data_out: yes(/\b(curl|wget|scp|rsync|nc|ssh)\b/, 0.58),
-      security_change: yes(
-        /\b(chmod|chown|useradd|usermod|passwd|visudo|crontab|ufw|iptables|setenforce)\b|authorized_keys|sudoers|systemctl\s+enable/,
-        0.74,
-      ),
+      security_change:
+        /\b(chmod|chown|useradd|usermod|passwd|visudo|crontab|ufw|iptables|setenforce)\b|authorized_keys|sudoers|systemctl\s+enable|strict-ssl\s*=\s*false|sslVerify\s*=\s*false|check_certificate\s*=\s*off|StrictHostKeyChecking\s+no|PermitRootLogin\s+yes/.test(
+          written,
+        )
+          ? 0.74
+          : 0.03,
       runs_unseen_code: yes(/\|\s*(sudo\s+)?(ba|z)?sh\b|base64\s+(-d|--decode)|\b(ba|z)?sh\s+\S+\.sh\b/, 0.83),
       sensitive_file: yes(/authorized_keys|sudoers|cron|systemd|\.bashrc|\.profile|\.zshrc|rc\.local|\/etc\/pam/, 0.81),
       url_carries_data: yes(/[?&][^=&]*(token|key|secret|password)=/i, 0.7),

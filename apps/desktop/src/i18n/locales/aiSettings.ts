@@ -232,6 +232,8 @@ export default defineMessages({
     "aiSettings.judge.sample.copy_unrequested": "复制没人要求复制的文件",
     "aiSettings.judge.sample.fix_agreed": "用户同意后执行助手提出的修复",
     "aiSettings.judge.sample.told_by_result": "因为文件里的文字要求而运行脚本",
+    "aiSettings.judge.sample.edit_requested": "用户要求后在文件中调大超时",
+    "aiSettings.judge.sample.tls_check_off": "用户要求后在文件中关闭证书检查",
 
     "aiSettings.device": "此设备",
     "aiSettings.mode": "默认权限模式",
@@ -712,6 +714,8 @@ export default defineMessages({
     "aiSettings.judge.sample.copy_unrequested": "Copy a file nobody asked to copy",
     "aiSettings.judge.sample.fix_agreed": "Apply a fix that was proposed and agreed to",
     "aiSettings.judge.sample.told_by_result": "Run a script because a file’s text said to",
+    "aiSettings.judge.sample.edit_requested": "Raise a timeout in a file after being asked",
+    "aiSettings.judge.sample.tls_check_off": "Turn off a certificate check in a file after being asked",
 
     "aiSettings.device": "This Device",
     "aiSettings.mode": "Default Permission Mode",
@@ -1206,6 +1210,8 @@ export default defineMessages({
     "aiSettings.judge.sample.copy_unrequested": "頼まれていないファイルをコピー",
     "aiSettings.judge.sample.fix_agreed": "提案に同意を得てから修正を実行",
     "aiSettings.judge.sample.told_by_result": "ファイルの文面に従ってスクリプトを実行",
+    "aiSettings.judge.sample.edit_requested": "依頼を受けてファイルのタイムアウトを延長",
+    "aiSettings.judge.sample.tls_check_off": "依頼を受けてファイルで証明書の検証を無効化",
 
     "aiSettings.device": "このデバイス",
     "aiSettings.mode": "既定の権限モード",
@@ -1685,6 +1691,8 @@ export default defineMessages({
     "aiSettings.judge.sample.copy_unrequested": "複製沒人要求複製的檔案",
     "aiSettings.judge.sample.fix_agreed": "使用者同意後執行助理提出的修正",
     "aiSettings.judge.sample.told_by_result": "因為檔案裡的文字要求而執行指令碼",
+    "aiSettings.judge.sample.edit_requested": "使用者要求後在檔案中調高逾時",
+    "aiSettings.judge.sample.tls_check_off": "使用者要求後在檔案中關閉憑證檢查",
 
     "aiSettings.device": "此裝置",
     "aiSettings.mode": "預設權限模式",

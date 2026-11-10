@@ -503,6 +503,8 @@ const SAMPLE_LABEL: Record<string, MessageKey> = {
   copy_unrequested: "aiSettings.judge.sample.copy_unrequested",
   fix_agreed: "aiSettings.judge.sample.fix_agreed",
   told_by_result: "aiSettings.judge.sample.told_by_result",
+  edit_requested: "aiSettings.judge.sample.edit_requested",
+  tls_check_off: "aiSettings.judge.sample.tls_check_off",
 };
 
 const DECISION_LABEL: Record<AiJudgeDecision, MessageKey> = {
