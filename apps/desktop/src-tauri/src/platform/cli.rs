@@ -587,7 +587,7 @@ mod tests {
         assert!(launcher.contains("nohup '/home/me/Apps/Hatoba.AppImage' \"$@\""));
         // HOST-15: `hatoba exec` and the rest run in the foreground.
         assert!(launcher.contains(
-            "case \"$1\" in\n  hosts|exec|cp|help|-h|--help|--version) \
+            "case \"$1\" in\n  hosts|exec|cp|memory|help|-h|--help|--version) \
              exec '/home/me/Apps/Hatoba.AppImage' \"$@\" ;;\nesac\n"
         ));
     }
@@ -598,7 +598,7 @@ mod tests {
         let launcher = git_bash_launcher("hatoba.exe");
         assert!(launcher.starts_with("#!/bin/sh\n# Hatoba command line launcher."));
         assert!(launcher.contains(
-            "\ncase \"$1\" in\n  hosts|exec|cp|help|-h|--help|--version) \
+            "\ncase \"$1\" in\n  hosts|exec|cp|memory|help|-h|--help|--version) \
              export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' ;;\nesac\n"
         ));
         assert!(launcher.ends_with("\nexec \"$(dirname \"$0\")/hatoba.exe\" \"$@\"\n"));

@@ -12,7 +12,10 @@
 //! `--sudo` runs the command, or reads or writes the remote file, as root (`hatoba_ssh::sudo`).
 //! When sudo asks for a password, the one given in the window for the host within the last 15
 //! minutes goes first, then the host's saved password, then the window asks, as for a connection.
+//!
+//! `hatoba memory` lists, saves and deletes the AI assistant's memories ([`memories`]).
 
+mod memories;
 mod pool;
 #[cfg(test)]
 mod tests;
@@ -24,6 +27,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, SystemTime};
 
+use hatoba_ai::tools::MemoryAction;
 use hatoba_cli::SWITCH;
 use hatoba_cli::protocol::{
     AuthKind, End, Frame, HEADER, HostInfo, Op, Progress, Request, VERSION,
@@ -394,7 +398,11 @@ async fn handle(
         return End::error(LOCKED);
     }
     let prompt = match &request.op {
-        Op::Hosts | Op::Stdin { .. } => false,
+        Op::Hosts
+        | Op::Stdin { .. }
+        | Op::Memories { .. }
+        | Op::MemorySave { .. }
+        | Op::MemoryDelete { .. } => false,
         Op::Exec { prompt, .. } | Op::Upload { prompt, .. } | Op::Download { prompt, .. } => {
             *prompt
         }
@@ -439,6 +447,53 @@ async fn handle(
         } => download(&ctx, &host, remote, local, sudo).await,
         // `serve` hands it to its command.
         Op::Stdin { .. } => End::error("no command waits for this stdin"),
+        Op::Memories { host, json } => {
+            match state.with_unlocked(|v| Ok(memories::list(v, host.as_deref(), json))) {
+                Ok(Ok(listing)) => {
+                    if !listing.text.is_empty() {
+                        let _ = tx.send(Frame::Stdout(listing.text.into_bytes())).await;
+                    }
+                    if let Some(notice) = listing.notice {
+                        let _ = tx.send(Frame::Notice(notice)).await;
+                    }
+                    End::ok()
+                }
+                Ok(Err(refused)) => End::error(refused),
+                Err(_) => End::error(LOCKED),
+            }
+        }
+        Op::MemorySave {
+            host,
+            name,
+            content,
+        } => change_memory(&ctx, host, MemoryAction::Save, name, Some(content)).await,
+        Op::MemoryDelete { host, name } => {
+            change_memory(&ctx, host, MemoryAction::Delete, name, None).await
+        }
+    }
+}
+
+/// `hatoba memory save` and `delete`: what was done goes to stdout, and the change syncs.
+async fn change_memory(
+    ctx: &Ctx<'_>,
+    host: Option<String>,
+    action: MemoryAction,
+    name: String,
+    content: Option<String>,
+) -> End {
+    let changed = state(ctx.app)
+        .with_unlocked(|v| Ok(memories::change(v, host.as_deref(), action, name, content)));
+    match changed {
+        Ok(Ok(done)) => {
+            crate::sync::local_change(ctx.app);
+            let _ = ctx
+                .tx
+                .send(Frame::Stdout(format!("{done}\n").into_bytes()))
+                .await;
+            End::ok()
+        }
+        Ok(Err(refused)) => End::error(refused),
+        Err(_) => End::error(LOCKED),
     }
 }
 
@@ -485,8 +540,8 @@ pub(crate) fn host_list(vault: &Vault) -> Vec<HostInfo> {
 }
 
 /// The saved host a command names: by its id, or by its name as `hatoba <name>` finds it
-/// (HOST-13), which several hosts may share. Only SSH hosts run commands and copy files; naming a
-/// Telnet host says so (TELNET-01).
+/// (HOST-13), which several hosts may share. Only SSH hosts run commands and copy files, and
+/// `hatoba memory` names only them; naming a Telnet host says so (TELNET-01).
 pub(crate) fn find_host(vault: &Vault, wanted: &str) -> Result<(String, Host), String> {
     if let Some(host) = vault.get(wanted).and_then(Item::as_host) {
         return Ok((wanted.to_owned(), host.clone()));
@@ -501,8 +556,8 @@ pub(crate) fn find_host(vault: &Vault, wanted: &str) -> Result<(String, Host), S
         1 => Ok(named.remove(0)),
         0 => Err(match telnet_name(vault, wanted, &key) {
             Some(name) => format!(
-                "{wanted} is a Telnet host, and exec and cp work only on SSH hosts. Run hatoba \
-                 {name} to open it in Hatoba."
+                "{wanted} is a Telnet host, and exec, cp and memory work only on SSH hosts. Run \
+                 hatoba {name} to open it in Hatoba."
             ),
             None => {
                 format!("no saved host is named {wanted}. Run hatoba hosts to see their names.")

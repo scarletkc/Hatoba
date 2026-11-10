@@ -8,6 +8,9 @@
 //! opens a second connection, sends [`Op::Stdin`] with the token, and after it the stdin as it
 //! comes, closing the connection where the stdin ends. The first connection stays free for the
 //! output, and its end still stops the command.
+//!
+//! The memory requests are answered with what the command prints: the memories or what was done
+//! as [`Frame::Stdout`], and a line for the person as [`Frame::Notice`].
 
 use std::io::{self, Read};
 
@@ -70,6 +73,24 @@ pub enum Op {
     /// connection as raw bytes.
     Stdin {
         token: String,
+    },
+    /// The AI assistant's memories (AI-53): the global ones, and with `host` that host's after
+    /// them, as text or as JSON.
+    Memories {
+        host: Option<String>,
+        json: bool,
+    },
+    /// Saves `content` as the memory `name`, in place of the one of that name: a global memory,
+    /// or with `host` one of that host's.
+    MemorySave {
+        host: Option<String>,
+        name: String,
+        content: String,
+    },
+    /// Deletes the memory `name`: a global one, or with `host` one of that host's.
+    MemoryDelete {
+        host: Option<String>,
+        name: String,
     },
 }
 
@@ -254,6 +275,28 @@ mod tests {
             Frame::Request(Request {
                 version: VERSION,
                 op: Op::Stdin { token: "t1".into() },
+            }),
+            Frame::Request(Request {
+                version: VERSION,
+                op: Op::Memories {
+                    host: Some("db".into()),
+                    json: true,
+                },
+            }),
+            Frame::Request(Request {
+                version: VERSION,
+                op: Op::MemorySave {
+                    host: None,
+                    name: "sudo".into(),
+                    content: "Uses doas.\nNot sudo.".into(),
+                },
+            }),
+            Frame::Request(Request {
+                version: VERSION,
+                op: Op::MemoryDelete {
+                    host: Some("db".into()),
+                    name: "sudo".into(),
+                },
             }),
             Frame::Stdout(b"out\n".to_vec()),
             Frame::Stderr(Vec::new()),
