@@ -163,11 +163,23 @@ impl Fixture {
             &self.mcp,
             conversation_id,
             &conversation,
-            &entries.list,
+            &entries,
             at,
             screen,
         );
         serde_json::to_value(state).unwrap()
+    }
+
+    /// Chooses the model `m1` of the provider `provider_id` as the judge, without storing a
+    /// provider: enough for what the judge reads, which depends on whose model it is.
+    fn judge_of(&self, provider_id: &str) {
+        let mut v = lock(&self.vault);
+        let mut settings = v.settings();
+        settings.ai.judge_model = Some(hatoba_core::model::AiModelRef {
+            provider_id: provider_id.into(),
+            model_id: "m1".into(),
+        });
+        v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
     }
 
     /// Stores a result the panel produced for a call Auto decided.
@@ -265,9 +277,16 @@ fn the_judge_reads_the_conversation_and_what_the_calls_do_and_returned() {
             // Notes alone: nothing the user typed.
             AiEntry::user(8, permission_mode_block(PermissionMode::Manual)),
             // Calls alone: nothing the assistant said.
-            response("", &[("c0", "run_command", r#"{"command": "uptime"}"#)]),
+            response(
+                "",
+                &[
+                    ("c0", "run_command", r#"{"command": "uptime"}"#),
+                    ("c0b", "run_command", r#"{"command": "true"}"#),
+                ],
+            ),
+            AiEntry::tool(9, "c0", ToolStatus::Ok, "RESULT-TWO"),
             // It returned nothing.
-            AiEntry::tool(9, "c0", ToolStatus::Ok, " \n"),
+            AiEntry::tool(9, "c0b", ToolStatus::Ok, " \n"),
             response(
                 "Restarting it.",
                 &[
@@ -297,6 +316,8 @@ fn the_judge_reads_the_conversation_and_what_the_calls_do_and_returned() {
         .join("\r\n")
         + "\r\n\r\n   \r\n";
 
+    // The judge is a model of the provider that made the responses.
+    f.judge_of("p");
     let state = f.state_of(&conv, "c4", Some(&screen));
     assert_eq!(
         state,
@@ -321,19 +342,21 @@ fn the_judge_reads_the_conversation_and_what_the_calls_do_and_returned() {
                 {"role": "assistant", "text": "Restarting it."}
             ],
             "earlier_calls": [
-                // What a call of an earlier response returned.
-                {
-                    "tool": "run_command",
-                    "arguments": {"command": "journalctl -u app -n 50"},
-                    "result": "RESULT-ONE"
-                },
+                // Before the summary: its result is not in the context the call was made from.
+                {"tool": "run_command", "arguments": {"command": "journalctl -u app -n 50"}},
                 // AI-45: as the MCP tool it names, as the panel shows it.
                 {
                     "tool": "mcp__files__echo",
                     "arguments": {"text": "hi"},
                     "rejection": "not on the database host"
                 },
-                {"tool": "run_command", "arguments": {"command": "uptime"}},
+                // What a call of an earlier response returned.
+                {
+                    "tool": "run_command",
+                    "arguments": {"command": "uptime"},
+                    "result": "RESULT-TWO"
+                },
+                {"tool": "run_command", "arguments": {"command": "true"}},
                 {"tool": "read_terminal", "arguments": {}, "rejection": ""},
                 {"tool": "run_command", "arguments": {"command": "hostname"}}
             ],
@@ -347,11 +370,12 @@ fn the_judge_reads_the_conversation_and_what_the_calls_do_and_returned() {
             }
         })
     );
-    // No reasoning, no result of the response's own calls, no summary, no note, no
-    // attachment's content.
+    // No reasoning, no result from before the summary or of the response's own calls, no
+    // summary, no note, no attachment's content.
     let text = state.to_string();
     for hidden in [
         "REASONING-TEXT",
+        "RESULT-ONE",
         "OWN-RESULT",
         "SUMMARY-TEXT",
         "permission_mode",
@@ -370,12 +394,31 @@ fn the_judge_reads_the_conversation_and_what_the_calls_do_and_returned() {
         state["call"],
         json!({"tool": "run_command", "arguments": r#"{"command": "ls"#})
     );
-    assert_eq!(state["earlier_calls"].as_array().unwrap().len(), 6);
+    assert_eq!(state["earlier_calls"].as_array().unwrap().len(), 7);
+
+    // A judge of another provider, as a System One endpoint is, reads what the assistant said
+    // and no result: what the calls returned stays with the provider that has it.
+    for judge in [Some("another"), None] {
+        match judge {
+            Some(provider) => f.judge_of(provider),
+            None => {
+                let mut v = lock(&f.vault);
+                let mut settings = v.settings();
+                settings.ai.judge_model = None;
+                v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
+            }
+        }
+        let state = f.state_of(&conv, "c4", Some(&screen));
+        assert!(!state.to_string().contains("RESULT-"), "{judge:?}");
+        assert_eq!(state["messages"].as_array().unwrap().len(), 5);
+        assert_eq!(state["earlier_calls"].as_array().unwrap().len(), 6);
+    }
 }
 
 #[test]
 fn only_the_newest_results_reach_the_judge() {
     let f = Fixture::with_base_url(None, "http://127.0.0.1:9/v1".into());
+    f.judge_of("p");
     let mut entries = vec![AiEntry::user(1, "Find the config and fix it")];
     for n in 0..judge::MAX_RESULTS + 2 {
         let id = format!("c{n}");
