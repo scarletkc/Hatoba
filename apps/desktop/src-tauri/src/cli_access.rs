@@ -13,7 +13,7 @@
 //! When sudo asks for a password, the one given in the window for the host within the last 15
 //! minutes goes first, then the host's saved password, then the window asks, as for a connection.
 //!
-//! `hatoba memory` lists, saves and deletes the AI assistant's memories ([`memories`]).
+//! `hatoba memory` lists, saves and deletes the AI assistant's memories of a host ([`memories`]).
 
 mod memories;
 mod pool;
@@ -448,7 +448,7 @@ async fn handle(
         // `serve` hands it to its command.
         Op::Stdin { .. } => End::error("no command waits for this stdin"),
         Op::Memories { host, json } => {
-            match state.with_unlocked(|v| Ok(memories::list(v, host.as_deref(), json))) {
+            match state.with_unlocked(|v| Ok(memories::list(v, &host, json))) {
                 Ok(Ok(listing)) => {
                     if !listing.text.is_empty() {
                         let _ = tx.send(Frame::Stdout(listing.text.into_bytes())).await;
@@ -476,13 +476,13 @@ async fn handle(
 /// `hatoba memory save` and `delete`: what was done goes to stdout, and the change syncs.
 async fn change_memory(
     ctx: &Ctx<'_>,
-    host: Option<String>,
+    host: String,
     action: MemoryAction,
     name: String,
     content: Option<String>,
 ) -> End {
-    let changed = state(ctx.app)
-        .with_unlocked(|v| Ok(memories::change(v, host.as_deref(), action, name, content)));
+    let changed =
+        state(ctx.app).with_unlocked(|v| Ok(memories::change(v, &host, action, name, content)));
     match changed {
         Ok(Ok(done)) => {
             crate::sync::local_change(ctx.app);

@@ -102,7 +102,7 @@ fn stdin_text() -> Result<String, String> {
     if !passes_stdin() {
         return Err(
             "save needs the memory's text, after its name or on stdin: hatoba memory save \
-             [--host <host>] <name> [<text>]"
+             --host <host> <name> [<text>]"
                 .into(),
         );
     }
@@ -690,7 +690,7 @@ mod tests {
         let request = Frame::Request(Request {
             version: VERSION,
             op: Op::MemorySave {
-                host: None,
+                host: "db".into(),
                 name: "n".into(),
                 content: "\u{1}".repeat(MAX_MEMORY_TEXT),
             },

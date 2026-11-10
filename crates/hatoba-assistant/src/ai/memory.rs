@@ -252,36 +252,30 @@ pub(crate) fn place_note(v: &Vault, place: &Place) -> String {
     block(Some(place), &[], &shown(v, &place.scope))
 }
 
-/// A memory as `hatoba memory` lists it (HOST-15).
+/// A memory of a host as `hatoba memory` lists it (HOST-15).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Listed {
     pub name: String,
     pub content: String,
-    /// The host of a host memory, as notes name it; `None` for a global one.
-    pub host: Option<String>,
     /// The local day it was last saved, `YYYY-MM-DD`, or empty.
     pub updated: String,
 }
 
-/// The memories the `memory` note of a conversation on `place` shows ([`note`]), in its order.
-/// Empty while memory is off or there are none.
-pub fn listed(v: &Vault, place: Option<&Place>) -> Vec<Listed> {
+/// The memories of a host that a conversation on it shows ([`place_note`]), in their order. The
+/// global ones stay out: like the custom instructions, they are for Hatoba's assistant. Empty
+/// while memory is off or there are none.
+pub fn listed(v: &Vault, scope: &Scope) -> Vec<Listed> {
     if !on(v) {
         return Vec::new();
     }
-    let entry = |m: AiMemory, host: Option<&Place>| Listed {
-        updated: day(m.updated_at),
-        name: m.name,
-        content: m.content,
-        host: host.map(|p| p.name.clone()),
-    };
-    let global = shown(v, &Scope::Global).into_iter().map(|m| entry(m, None));
-    let host = place.into_iter().flat_map(|p| {
-        shown(v, &p.scope)
-            .into_iter()
-            .map(move |m| entry(m, Some(p)))
-    });
-    global.chain(host).collect()
+    shown(v, scope)
+        .into_iter()
+        .map(|m| Listed {
+            updated: day(m.updated_at),
+            name: m.name,
+            content: m.content,
+        })
+        .collect()
 }
 
 fn block(place: Option<&Place>, global: &[AiMemory], host: &[AiMemory]) -> String {
@@ -326,9 +320,37 @@ fn words(place: Option<&Place>) -> (&'static str, String) {
 }
 
 /// Runs a `memory` call of a conversation on `place`, whose host memories its `host` scope
-/// changes, or a `hatoba memory save` or `delete` for that host (HOST-15). A call from a response
-/// made while memory was on runs nothing once it is off.
+/// changes. A call from a response made while memory was on runs nothing once it is off.
 pub fn run(v: &mut Vault, place: Option<&Place>, args: &MemoryArgs) -> (ToolStatus, String) {
+    change(v, place, args, true)
+}
+
+/// Runs a `hatoba memory save` or `delete` on the memories of `place` (HOST-15), as a `host` call
+/// of a conversation there, except that a delete that finds nothing doesn't point at a global
+/// memory of that name: other programs don't see those.
+pub fn run_on_host(
+    v: &mut Vault,
+    place: &Place,
+    action: MemoryAction,
+    name: String,
+    content: Option<String>,
+) -> (ToolStatus, String) {
+    let args = MemoryArgs {
+        action,
+        scope: MemoryScope::Host,
+        name,
+        content,
+    };
+    change(v, Some(place), &args, false)
+}
+
+/// [`run`], and with `global_shown` false [`run_on_host`].
+fn change(
+    v: &mut Vault,
+    place: Option<&Place>,
+    args: &MemoryArgs,
+    global_shown: bool,
+) -> (ToolStatus, String) {
     if !on(v) {
         return (ToolStatus::Error, OFF.to_owned());
     }
@@ -379,7 +401,9 @@ pub fn run(v: &mut Vault, place: Option<&Place>, args: &MemoryArgs) -> (ToolStat
                 (MemoryScope::Global, Some(p)) if !named(v, &p.scope, &name).is_empty() => {
                     format!(" There is a host memory of that name of {}.", p.name)
                 }
-                (MemoryScope::Host, _) if !named(v, &Scope::Global, &name).is_empty() => {
+                (MemoryScope::Host, _)
+                    if global_shown && !named(v, &Scope::Global, &name).is_empty() =>
+                {
                     " There is a global memory of that name.".to_owned()
                 }
                 _ => String::new(),
@@ -736,24 +760,16 @@ mod tests {
             name: "LAPTOP (local terminal)".into(),
         };
         assert_eq!(place_note(&v, &empty), "");
-        // `hatoba memory` lists what the note shows, in its order.
-        let lists = |place: Option<&Place>| -> Vec<(String, Option<String>)> {
-            listed(&v, place)
-                .into_iter()
-                .map(|m| (m.name, m.host))
-                .collect()
-        };
-        assert_eq!(lists(None), [("one".into(), None), ("two".into(), None)]);
+        // `hatoba memory` lists a host's own, without the global ones.
         assert_eq!(
-            lists(Some(&web)),
-            [
-                ("one".into(), None),
-                ("two".into(), None),
-                ("sudo".into(), Some("web-1".into()))
-            ]
+            listed(&v, &web.scope),
+            [Listed {
+                name: "sudo".into(),
+                content: "doas".into(),
+                updated: days[1].clone(),
+            }]
         );
-        let sudo = &listed(&v, Some(&web))[2];
-        assert_eq!((sudo.content.as_str(), &sudo.updated), ("doas", &days[1]));
+        assert!(listed(&v, &empty.scope).is_empty());
         // On one with no memories of its own, the note names it and its entries stay global.
         assert!(note(&v, Some(&empty)).starts_with(
             "<memory entries=\"2\" conversation_host=\"LAPTOP (local terminal)\">\n<entry \
@@ -774,7 +790,7 @@ mod tests {
         v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
         assert_eq!(note(&v, Some(&web)), "");
         assert_eq!(place_note(&v, &web), "");
-        assert!(listed(&v, Some(&web)).is_empty());
+        assert!(listed(&v, &web.scope).is_empty());
         assert_eq!(
             call(
                 &mut v,
