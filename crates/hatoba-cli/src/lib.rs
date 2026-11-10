@@ -34,6 +34,18 @@ pub fn own_command(first: Option<&OsStr>) -> bool {
         .is_some_and(|word| COMMANDS.contains(&word))
 }
 
+/// What the macOS launcher puts before the first word of its command line to ask the app's
+/// executable whether that word is one of this command's own ([`answer`]). That launcher is
+/// written once, so a list of the words in it would miss the commands a later version adds.
+pub const ASK: &str = "--own-command";
+
+/// The exit status that answers a launcher, for a command line, given without the program, that
+/// starts with [`ASK`]: 0 when the word after it is one of this command's own, 1 when it is not.
+pub fn answer(args: impl IntoIterator<Item = OsString>) -> Option<i32> {
+    let mut args = args.into_iter();
+    (args.next()? == ASK).then(|| i32::from(!own_command(args.next().as_deref())))
+}
+
 /// Runs a command line, given with the program first as `std::env::args_os` has it, and returns
 /// the exit status.
 pub fn run(app: &App, argv: impl IntoIterator<Item = OsString>) -> i32 {
@@ -43,5 +55,28 @@ pub fn run(app: &App, argv: impl IntoIterator<Item = OsString>) -> i32 {
             eprintln!("hatoba: {message}\nRun hatoba --help to see how to use it.");
             2
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// HOST-13: the macOS launcher asks which words are the command's own.
+    #[test]
+    fn answers_whether_a_word_is_one_of_the_commands_own() {
+        let answer = |words: &[&str]| answer(words.iter().map(OsString::from));
+        for command in COMMANDS {
+            assert_eq!(answer(&[ASK, command]), Some(0), "{command}");
+        }
+        for word in ["db", "Exec", "", ASK] {
+            assert_eq!(answer(&[ASK, word]), Some(1), "{word}");
+        }
+        assert_eq!(answer(&[ASK]), Some(1));
+        // Any other command line asks nothing, and the question is not a command.
+        for words in [&[][..], &["exec", "db", "ls"], &["db", ASK]] {
+            assert_eq!(answer(words), None, "{words:?}");
+        }
+        assert!(!own_command(Some(OsStr::new(ASK))));
     }
 }
