@@ -145,6 +145,49 @@ describe("read-only commands (§13.5)", () => {
     }
   });
 
+  it("runs a printf that only prints, and asks for one that could set a variable", () => {
+    for (const line of [
+      "printf 'x'",
+      "printf '%s\\n' a b c",
+      "printf '100%%\\tdone\\n'",
+      "printf '%-10s %5.2f\\n' cpu 3.14159 mem 42",
+      "printf '%d %x %o\\n' 255 0xff -8",
+      // After the format, or after `--`, no word is an option.
+      "printf '%s\\n' -v PATH",
+      "printf -- '-%s\\n' a",
+      "printf '%s\\n' PATH=7",
+      // A backslash, then `u0025n`.
+      "printf 'a\\\\u0025n' PATH",
+    ]) {
+      expect(readsOnlyCommand(line), line).toBe(true);
+    }
+    for (const line of [
+      // `-v` assigns what it prints to the variable.
+      "printf -v PATH .:/usr/bin; ls",
+      "printf -v HOME /tmp/x; git status",
+      "printf -vPATH .; ls",
+      // `%n` assigns the count of what was printed.
+      "printf 'ab%n' PATH; ls",
+      "printf '%5n' HOME",
+      "printf '%1$n' HOME",
+      // zsh and ksh read `\u0025` as the `%` of a conversion.
+      "printf 'ab\\u0025n' PATH",
+      "printf 'ab\\x25n' PATH",
+      // zsh and ksh evaluate a number's argument, and a `*` width, as an arithmetic expression.
+      "printf '%d' PATH=7; ls",
+      "printf '%s %d\\n' a 1 b HOME=7",
+      "printf '%*s' HOME=7 x",
+      "printf '%(%F)T' -1",
+      // In a folder that holds a file named `-v`, the glob becomes the option.
+      "printf [-]v PATH .",
+      "printf '%s\\n' *",
+      "printf",
+      "printf --",
+    ]) {
+      expect(readsOnlyCommand(line), line).toBe(false);
+    }
+  });
+
   it("asks for anything that writes, runs other programs, follows output or is unclear", () => {
     for (const line of [
       "rm -rf /tmp/x",
@@ -576,6 +619,9 @@ describe("allowed prefixes (AI-19)", () => {
     ]) {
       expect(commandAllowed(line, ["git pull", "sudo", "sudo git"]), line).toBe(false);
     }
+    for (const line of ["printf -v PATH .:/usr/bin; ls", "printf 'ab%n' HOME; git status"]) {
+      expect(commandAllowed(line, ["printf", "printf -v"]), line).toBe(false);
+    }
   });
 
   it("ignores empty prefixes", () => {
@@ -612,6 +658,9 @@ describe("allowancePrefixes", () => {
       "sh -c 'rm x'",
       "bash script.sh",
       "env X=1 make",
+      // Sets a variable for the commands after it, as `PATH=. ls` does.
+      "printf -v PATH .:/usr/bin; ls",
+      "printf 'ab%n' HOME; git status",
       "git",
       "git -C /srv pull",
       "./run* x",
