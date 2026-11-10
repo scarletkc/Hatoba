@@ -122,7 +122,8 @@ fn set_flag(vault: &mut Vault, key: &str, on: bool) -> AppResult<()> {
 
 /// At startup, puts the command back when it is on but gone: an uninstall before a reinstall
 /// took it off the `PATH`, or the AppImage moved. Only release builds on Windows and Linux do
-/// this; macOS would ask for an administrator's password at launch.
+/// this; macOS would ask for an administrator's password at launch, and its launcher needs no
+/// rewrite when an update adds an own command (`platform::cli`).
 pub fn restore(state: &AppState) {
     if cfg!(debug_assertions) || cfg!(target_os = "macos") {
         return;
