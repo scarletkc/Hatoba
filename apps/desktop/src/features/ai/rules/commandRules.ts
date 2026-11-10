@@ -583,6 +583,31 @@ function hostnameReads(args: string[]): boolean {
   );
 }
 
+/**
+ * The parts of a `printf` format that only print: text, the escapes every shell reads alike, `%%`, and a conversion
+ * with its flags, width and precision in digits, whose letter is captured. Not `\u0025`, which zsh and
+ * ksh read as the `%` of a conversion, `%n`, or a `*` width.
+ */
+const PRINTF_PART = /[^%\\]+|\\[\\abfnrtv]|%%|%[-+ #0]*\d*(?:\.\d*)?([sbqcdiouxXeEfgG])/g;
+
+/** A number as every shell's `printf` reads it, with nothing to evaluate. */
+const PRINTF_NUMBER = /^[-+]?(\d+\.?\d*|\.\d+|0[xX][\da-fA-F]+)$/;
+
+/**
+ * `printf` that only prints. The shell's own `printf` also assigns variables, `PATH` and `HOME` among them: with
+ * `-v`, with `%n`, and in zsh and ksh with the argument of a number's conversion, which they evaluate as an
+ * arithmetic expression (`x=7`). So the format comes first, or after `--`, holds only {@link PRINTF_PART}s, and
+ * takes a {@link PRINTF_NUMBER} for each number, also when it repeats for the arguments left.
+ */
+function printfReads(args: string[]): boolean {
+  const [format, ...values] = args[0] === "--" ? args.slice(1) : args;
+  if (format === undefined || (format.startsWith("-") && args[0] !== "--")) return false;
+  const parts = [...format.matchAll(PRINTF_PART)];
+  if (parts.map((p) => p[0]).join("") !== format) return false;
+  const numbers = parts.filter((p) => p[1]).map((p) => !"sbqc".includes(p[1]));
+  return values.every((v, i) => !numbers[i % numbers.length] || PRINTF_NUMBER.test(v));
+}
+
 function dmesgReads(args: string[]): boolean {
   return args.every(
     (a) =>
@@ -755,7 +780,8 @@ const READ_ONLY: Record<string, Rule> = {
   lsof: free,
   getent: free,
   echo: free,
-  printf: free,
+  // No unquoted glob: `[-]v` becomes `-v` in a folder that holds a file of that name.
+  printf: { ok: printfReads },
   cd: free,
   true: free,
   realpath: free,
@@ -1038,12 +1064,14 @@ function reading(commands: readonly Simple[], dialect: ShellDialect): boolean[] 
 }
 
 /**
- * A command that sets environment variables before it runs, or runs with sudo, never matches a prefix. In
- * PowerShell and Command Prompt the splitter refuses variables, and sudo counts by its {@link windowsName}.
+ * A command that sets environment variables before it runs, or runs with sudo, never matches a prefix, and
+ * neither does a `printf` that does not only print ({@link printfReads}): it may set a variable for the commands
+ * after it. In PowerShell and Command Prompt the splitter refuses variables, and sudo counts by its
+ * {@link windowsName}.
  */
 function plain(words: string[], dialect: ShellDialect): boolean {
   if (dialect !== "posix") return windowsName(words[0]) !== "sudo";
-  return !/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]) && words[0] !== "sudo";
+  return !/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]) && words[0] !== "sudo" && words[0] !== "printf";
 }
 
 /** The words of a prefix the user allowed. */
@@ -1316,12 +1344,12 @@ const MAX_PREFIXES = 3;
  * What Allow for this conversation and Always allow on the approval card of a `run_command` call allow
  * (AI-19): for each command of the line that does not only read, its name, and for a tool such as `git`
  * its subcommand too. Null when the card offers neither: the line uses what `splitCommands` refuses,
- * a command runs another one (`sudo`, `xargs`, `sh -c`, `Start-Process`), sets variables first, or gives no
- * subcommand (in PowerShell and Command Prompt also a `/` switch in its place), or the line would need more
- * than three prefixes. A `workdir` counts as a `cd` before the line; when that `cd` does not only read (in
- * Command Prompt beside any command, in PowerShell to a network path), it is offered for that folder alone
- * (`cd C:\src`), so that allowing it never lets a program of every other folder run, and not for a folder whose
- * name has a space, which a prefix cannot name.
+ * a command runs another one (`sudo`, `xargs`, `sh -c`, `Start-Process`), sets variables first, is a `printf`
+ * that does not only print, or gives no subcommand (in PowerShell and Command Prompt also a `/` switch in its
+ * place), or the line would need more than three prefixes. A `workdir` counts as a `cd` before the line; when
+ * that `cd` does not only read (in Command Prompt beside any command, in PowerShell to a network path), it is
+ * offered for that folder alone (`cd C:\src`), so that allowing it never lets a program of every other folder
+ * run, and not for a folder whose name has a space, which a prefix cannot name.
  */
 export function allowancePrefixes(line: string, dialect: ShellDialect = "posix", workdir = ""): string[] | null {
   const commands = callCommands(line, dialect, workdir);
