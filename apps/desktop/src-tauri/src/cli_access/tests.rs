@@ -330,3 +330,25 @@ fn requests_for_one_host_find_its_sudo_password_one_at_a_time() {
     drop(first);
     assert!(cli.sudo_turn("h1\nv1").try_lock_owned().is_ok());
 }
+
+/// HOST-15: a connection whose command has already closed its end, as `hatoba exec` does once it
+/// sent a short stdin, still counts as this user's.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_connection_closed_before_it_is_accepted_is_still_the_users() {
+    use std::io::Write;
+    use std::os::unix::fs::MetadataExt;
+
+    let dir = std::env::temp_dir().join(format!("hatoba-peer-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("cli.sock");
+    let listener = tokio::net::UnixListener::bind(&path).unwrap();
+    let owner = std::fs::metadata(&path).unwrap().uid();
+    let mut command = std::os::unix::net::UnixStream::connect(&path).unwrap();
+    command.write_all(b"request and stdin").unwrap();
+    drop(command);
+    let (stream, _) = listener.accept().await.unwrap();
+    let uid = peer_uid(&stream);
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(uid.unwrap(), owner);
+}

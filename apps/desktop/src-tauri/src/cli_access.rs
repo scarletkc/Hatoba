@@ -295,7 +295,7 @@ async fn listen(app: &AppHandle, stop: &CancellationToken) -> std::io::Result<()
             _ = idle.tick() => state(app).cli.pool.close_idle(pool::IDLE),
             accepted = listener.accept() => match accepted {
                 // Another user's process, which the socket's mode keeps out already.
-                Ok((stream, _)) if stream.peer_cred().is_ok_and(|c| c.uid() == owner) => {
+                Ok((stream, _)) if peer_uid(&stream).is_ok_and(|uid| uid == owner) => {
                     tauri::async_runtime::spawn(serve(app.clone(), stream));
                 }
                 Ok(_) => {}
@@ -308,6 +308,29 @@ async fn listen(app: &AppHandle, stop: &CancellationToken) -> std::io::Result<()
         let _ = std::fs::remove_file(&path);
     }
     result
+}
+
+/// The user a `hatoba` command that connected runs as. On macOS, Tokio's `peer_cred` also asks
+/// for the command's process id (`LOCAL_PEEREPID`), which the system no longer gives once the
+/// command has closed its end, as `hatoba exec` does right after it sent a short stdin;
+/// `getpeereid` still gives the user then.
+#[cfg(target_os = "macos")]
+fn peer_uid(stream: &tokio::net::UnixStream) -> std::io::Result<u32> {
+    use std::os::fd::AsRawFd;
+    let (mut uid, mut gid) = (0, 0);
+    // SAFETY: the descriptor is the stream's, open for the whole call, and the pointers are to
+    // locals that outlive it.
+    if unsafe { libc::getpeereid(stream.as_raw_fd(), &mut uid, &mut gid) } == 0 {
+        Ok(uid)
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+/// The user a `hatoba` command that connected runs as.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn peer_uid(stream: &tokio::net::UnixStream) -> std::io::Result<u32> {
+    stream.peer_cred().map(|c| c.uid())
 }
 
 /// One `hatoba` command: its request, then the frames that answer it, the last one
