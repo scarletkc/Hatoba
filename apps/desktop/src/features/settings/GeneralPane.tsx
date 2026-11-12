@@ -313,6 +313,9 @@ const ACTIVITY_ICON: Record<CliActivity["kind"], string> = {
   exec: "terminal-window",
   upload: "upload-simple",
   download: "download-simple",
+  host_add: "plus",
+  host_edit: "pencil-simple",
+  host_delete: "trash",
 };
 
 /** HOST-15: what programs did through the command since the unlock, newest first, under **Details**. */
@@ -342,7 +345,18 @@ function CliActivityList() {
   const outcome = (a: CliActivity) => {
     if (a.state === "running") return t("settings.cliAccess.running");
     if (a.state === "failed") return a.error ?? "";
-    return a.kind === "exec" ? t("settings.cliAccess.exit", { status: a.status ?? 0 }) : t("settings.cliAccess.copied");
+    switch (a.kind) {
+      case "exec":
+        return t("settings.cliAccess.exit", { status: a.status ?? 0 });
+      case "upload":
+      case "download":
+        return t("settings.cliAccess.copied");
+      case "host_add":
+      case "host_edit":
+        return t("settings.cliAccess.saved");
+      case "host_delete":
+        return t("settings.cliAccess.deleted");
+    }
   };
 
   return (

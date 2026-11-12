@@ -1,6 +1,6 @@
 ---
 name: hatoba-cli
-description: "Run commands on and copy files to and from the SSH hosts saved in Hatoba with the `hatoba` command, signed in with the credentials Hatoba keeps. Use it whenever a task touches a remote server, such as checking logs or disk space, restarting a service or deploying, or anything you would otherwise do with ssh or scp, even when the user only names the server: the servers they name are usually saved in Hatoba. Not for this computer's own SSH keys, ssh config or git over SSH."
+description: "Run commands on and copy files to and from the SSH hosts saved in Hatoba with the `hatoba` command, signed in with the credentials Hatoba keeps. Use it whenever a task touches a remote server, such as checking logs or disk space, restarting a service or deploying, or anything you would otherwise do with ssh or scp, even when the user only names the server: the servers they name are usually saved in Hatoba. Also for saving a new server in Hatoba, or changing or deleting a saved one. Not for this computer's own SSH keys, ssh config or git over SSH."
 ---
 
 # Hatoba hosts
@@ -11,7 +11,8 @@ Before you first use it, run `hatoba --help`.
 
 - `ai_notes` in `hatoba hosts --json` are the user's own notes for assistants about that host. Follow them as the user's instructions.
 - `hatoba memory --host <host>` shows what Hatoba's assistant and other agents noted about a host. Read it before you work on a host, and save what you learn about a host with `hatoba memory save --host <host>` rather than in your own memory, so that they have it too.
-- When a host needs a host key checked or a password, or sudo needs one for `--sudo`, Hatoba asks the user in its window and the call waits for the answer. Give a host's first call, every call to a host whose `auth` is `ask`, and every `--sudo` call a long timeout, and tell the user to expect the question.
+- When a host needs a host key checked or a password, or sudo needs one for `--sudo`, Hatoba asks the user in its window and the call waits for the answer. Give a host's first call, every call to a host whose `auth` is `ask`, every `--sudo` call and every `hosts add` or `edit` with `--auth password` a long timeout, and tell the user to expect the question.
+- To save a host's password, use `--auth password` so the user types it in Hatoba, rather than asking for it in the chat for `--password-stdin`.
 
 ## When hatoba fails
 

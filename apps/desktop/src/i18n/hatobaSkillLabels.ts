@@ -237,6 +237,7 @@ export const AREAS: Area[] = [
         "Opening hosts": ["settings.cli"],
         "Other programs": [
           "settings.cliAccess",
+          "hosts.newHost",
           "settings.cliAccess.skill",
           "settings.about.copyCommand",
           "settings.cliAccess.activity",

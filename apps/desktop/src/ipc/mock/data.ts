@@ -527,6 +527,7 @@ export function cliActivity(): CliActivity[] {
   });
   return [
     entry("4", "exec", "prod-api-tokyo", "journalctl -u api.service -n 200 --no-pager", 0, { state: "running" }),
+    entry("5", "host_edit", "db-osaka-01", "hosts edit --port 2222 --env TZ=Asia/Tokyo", 2 * MIN, {}),
     entry("3", "upload", "prod-api-tokyo", "/home/demo/src/api/dist/api.tar.gz → /tmp/", 3 * MIN, {}),
     entry("2", "exec", "prod-api-tokyo", "systemctl status api.service --no-pager", 4 * MIN, { status: 3 }),
     entry("1", "exec", "db-osaka-01", "psql -c 'select count(*) from orders'", 6 * MIN, {

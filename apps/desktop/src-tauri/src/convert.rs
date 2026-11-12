@@ -54,7 +54,7 @@ pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
     }
 }
 
-fn proxy_choice(proxy: &HostProxy) -> (ProxyMode, Option<String>) {
+pub(crate) fn proxy_choice(proxy: &HostProxy) -> (ProxyMode, Option<String>) {
     match proxy {
         HostProxy::DeviceDefault => (ProxyMode::DeviceDefault, None),
         HostProxy::Direct => (ProxyMode::Direct, None),
