@@ -240,7 +240,10 @@ function BannerDialog({ item }: { item: PromptItem & { kind: "banner" } }) {
   );
 }
 
-/** SSH-03 / key passphrase: a secret used once and never stored; or a sudo password (HOST-15). */
+/**
+ * SSH-03 / key passphrase: a secret used once and never stored; or a sudo password, or a password
+ * that `hatoba hosts` saves (HOST-15).
+ */
 function SecretDialog({ item }: { item: PromptItem & { kind: "secret" } }) {
   const t = useT();
   const r = item.request;
@@ -254,15 +257,19 @@ function SecretDialog({ item }: { item: PromptItem & { kind: "secret" } }) {
   const title =
     r.kind === "sudo"
       ? t("terminal.sudo.title", { name: r.hostName })
-      : isPassword
-        ? t("terminal.password.title", { name: r.hostName })
-        : t("terminal.passphrase.title");
+      : r.kind === "save"
+        ? t("terminal.save.title", { name: r.hostName })
+        : isPassword
+          ? t("terminal.password.title", { name: r.hostName })
+          : t("terminal.passphrase.title");
   const body =
     r.kind === "sudo"
       ? t("terminal.sudo.body", { target: r.target })
-      : isPassword
-        ? !r.oneOff && t("terminal.password.body", { target: r.target })
-        : t("terminal.passphrase.body", { name: r.hostName });
+      : r.kind === "save"
+        ? t("terminal.save.body", { target: r.target })
+        : isPassword
+          ? !r.oneOff && t("terminal.password.body", { target: r.target })
+          : t("terminal.passphrase.body", { name: r.hostName });
   const label = isPassword ? t("terminal.password.label") : t("terminal.passphrase.label");
   return (
     <Modal center onClose={cancel} closeOnBackdrop={false}>
@@ -294,7 +301,7 @@ function SecretDialog({ item }: { item: PromptItem & { kind: "secret" } }) {
         <div className={s.actions}>
           <Button onClick={cancel}>{t("btn.cancel")}</Button>
           <Button variant="primary" type="submit" disabled={!value}>
-            {r.kind === "sudo" ? t("btn.continue") : t("terminal.connect")}
+            {r.kind === "sudo" ? t("btn.continue") : r.kind === "save" ? t("btn.save") : t("terminal.connect")}
           </Button>
         </div>
       </form>

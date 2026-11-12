@@ -29,6 +29,7 @@ import type {
   TelnetHostView,
   TransferProgressEvent,
   TrayUpdateEvent,
+  VaultChangedEvent,
   VaultLockedEvent,
   WindowChromeEvent,
   ZoomView,
@@ -63,6 +64,8 @@ export const FRAME_SESSION = 3;
 /** The events Rust emits (§10.2), by name. */
 export interface EventMap {
   "vault://locked": VaultLockedEvent;
+  /** HOST-15: a program saved, changed or deleted a host through the `hatoba` command. */
+  "vault://changed": VaultChangedEvent;
   "sync://status": SyncStatus;
   "ssh://hostkey-prompt": HostKeyPrompt;
   "ssh://auth-prompt": AuthPrompt;

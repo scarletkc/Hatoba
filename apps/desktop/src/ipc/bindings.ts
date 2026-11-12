@@ -707,6 +707,7 @@ export const events = {
 	syncStatus: makeEvent<SyncStatus>("sync://status"),
 	transferProgress: makeEvent<TransferProgressEvent>("transfer://progress"),
 	trayUpdate: makeEvent<TrayUpdateEvent>("tray://update"),
+	vaultChanged: makeEvent<VaultChangedEvent>("vault://changed"),
 	vaultLocked: makeEvent<VaultLockedEvent>("vault://locked"),
 	windowChrome: makeEvent<WindowChromeEvent>("window://chrome"),
 	windowClosePrompt: makeEvent<ClosePromptEvent>("window://close-prompt"),
@@ -1473,6 +1474,11 @@ export type AuthPrompt = {
 	 *  --sudo` (HOST-15), asked like a password; answered with one value.
 	 */
 	sudo: boolean,
+	/**
+	 *  The password that `hatoba hosts add` or `edit --auth password` saves for the host `name`
+	 *  (HOST-15), asked like a password; answered with one value.
+	 */
+	save: boolean,
 	/**  The sudo password given before was wrong. */
 	wrong: boolean,
 	/**  `user@host:port` of the hop that asks. */
@@ -1524,7 +1530,7 @@ export type CliActivity = {
 	kind: CliActivityKind,
 	host_id: string,
 	host_name: string,
-	/**  The command, or the file's source and target. */
+	/**  The command, the file's source and target, or the `hatoba hosts` command and its options. */
 	detail: string,
 	started_at: number,
 	state: CliActivityState,
@@ -1538,7 +1544,7 @@ export type CliActivityEvent = {
 	entries: CliActivity[],
 };
 
-export type CliActivityKind = "exec" | "upload" | "download";
+export type CliActivityKind = "exec" | "upload" | "download" | "host_add" | "host_edit" | "host_delete";
 
 export type CliActivityState = "running" | "done" | "failed";
 
@@ -2983,6 +2989,12 @@ export type UpgradeWorkerAction = "upgrade" |
 "no_vault" | 
 /**  The Worker is newer than the bundled version: the upgrade stops. */
 "newer";
+
+/**
+ *  HOST-15: a program saved, changed or deleted a host through the `hatoba` command, so the
+ *  window reads the vault again, as after a sync pull.
+ */
+export type VaultChangedEvent = null;
 
 export type VaultLockedEvent = {
 	reason: LockReason,

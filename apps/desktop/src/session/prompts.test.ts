@@ -34,6 +34,7 @@ const login = (request_id: string, session_id: string, password: boolean): AuthP
   prompts: [{ prompt: "Password: ", echo: false }],
   password,
   sudo: false,
+  save: false,
   wrong: false,
   target: "root@db:22",
 });
@@ -52,6 +53,23 @@ describe("pushAuthPrompt", () => {
     });
     if (item.kind === "secret") item.resolve("pw");
     expect(answered.auths).toEqual([["sudo1", ["pw"]]]);
+    usePrompts.setState({ items: [] });
+    answered.auths.length = 0;
+  });
+
+  it("asks for a password that hatoba hosts saves as a secret of the host, and answers with it", () => {
+    usePrompts.setState({ items: [] });
+    answered.auths.length = 0;
+    pushAuthPrompt({ ...login("save1", "", false), session_id: null, name: "nas", save: true });
+    const [item] = usePrompts.getState().items;
+    expect(item.kind === "secret" && item.request).toEqual({
+      kind: "save",
+      hostName: "nas",
+      target: "root@db:22",
+      wrong: false,
+    });
+    if (item.kind === "secret") item.resolve("pw");
+    expect(answered.auths).toEqual([["save1", ["pw"]]]);
     usePrompts.setState({ items: [] });
     answered.auths.length = 0;
   });

@@ -2,6 +2,8 @@
 
 use std::ffi::OsString;
 
+use crate::protocol::{AuthKind, EnvVar, HostChanges};
+
 /// The name of the switch in Settings → General, as the English interface writes it.
 pub const SWITCH: &str = "Let other programs use saved hosts";
 
@@ -10,6 +12,10 @@ hatoba: use the hosts saved in Hatoba from the command line
 
 Usage:
   hatoba hosts [--json]                         List the saved SSH hosts
+  hatoba hosts add [options] [user@]<address>[:<port>]
+                                                Save a new SSH host
+  hatoba hosts edit [options] <host>            Change a saved SSH host
+  hatoba hosts delete <host>                    Delete a saved SSH host
   hatoba exec [options] <host> [--] <command>   Run a command on a host
   hatoba cp [options] <source> <target>         Copy a file to or from a host
   hatoba memory --host <host> [--json]          List a host's memories
@@ -34,7 +40,42 @@ Options:
   --sudo         Run the command, or read or write the file on the host, as root
   --mode <mode>  Give the file copied to the host this octal mode, such as 600
   --no-prompt    Fail instead of asking in Hatoba for a host key, password or code
-  --json         Print the hosts as JSON
+  --json         Print the hosts, or the host saved, as JSON
+
+Options of hosts add and edit:
+  --name <name>                 The name; add without it names the host after
+                                its address
+  --address <address>, --port <port>, --user <user>
+                                edit only; add takes them from its target
+  --auth password|key|agent|ask How it signs in; ask asks for the password on
+                                each connection
+  --key <key>                   The key in Hatoba it signs in with (implies
+                                --auth key)
+  --password-stdin              Read the password from stdin (implies --auth
+                                password)
+  --jump <host>, --no-jump      Connect through a saved SSH host, or directly
+  --proxy <proxy>|direct|default
+                                A saved proxy, none, or this device's default
+  --group <group>, --no-group   The group by name; a name no group has creates
+                                the group
+  --tag <tag>, --untag <tag>    Add or remove a tag; both repeat
+  --env NAME=value, --unset-env NAME
+                                Set or remove an environment variable; both
+                                repeat
+  --note <text>, --ai-notes <text>
+                                Replace the note or the AI Notes; \"\" clears them
+  --favorite, --no-favorite     Mark it as a favorite, or not
+
+hosts add saves a host as New Host in Hatoba does, and edit changes only the
+fields its options name. Without user@, add saves this computer's user name,
+which ssh would sign in as. A <key>, a jump <host> and a <proxy> are a name or
+an id, as hosts --json lists them. --auth password without --password-stdin
+asks for the password in the Hatoba window. An edit without --auth keeps the
+saved password, and no command prints one. A change the host editor would
+refuse fails with its message and changes nothing. add and edit print the host
+as hosts lists it. delete deletes the host with its port forwarding rules, and
+hosts that jumped through it connect directly. A change syncs as one made in
+Hatoba does.
 
 exec runs the command with the host's login shell and without a terminal. A
 stdin from a pipe or a file is the command's, as with ssh, so a script or a
@@ -89,6 +130,16 @@ pub enum Command {
     Hosts {
         json: bool,
     },
+    /// `hatoba hosts add`: `changes.address` is set.
+    HostAdd(HostChange),
+    /// `hatoba hosts edit`.
+    HostEdit {
+        host: String,
+        change: HostChange,
+    },
+    HostDelete {
+        host: String,
+    },
     Exec {
         host: String,
         command: String,
@@ -121,6 +172,16 @@ pub enum Command {
     },
     /// Anything else opens Hatoba with these arguments (HOST-13).
     Open(Vec<OsString>),
+}
+
+/// What `hatoba hosts add` or `edit` changes, and how.
+#[derive(Debug, PartialEq, Eq)]
+pub struct HostChange {
+    /// Without the password, which `password_stdin` reads.
+    pub changes: HostChanges,
+    pub password_stdin: bool,
+    pub prompt: bool,
+    pub json: bool,
 }
 
 /// One side of `hatoba cp`.
@@ -162,7 +223,7 @@ pub fn parse(args: Vec<OsString>) -> Result<Command, String> {
         })
         .collect::<Result<Vec<_>, _>>()?;
     match first {
-        "hosts" => hosts(&rest),
+        "hosts" => hosts(rest),
         "exec" => exec(rest),
         "cp" => copy(&rest),
         "memory" => memory(rest),
@@ -196,9 +257,15 @@ fn one_letter_off(a: &str, b: &str) -> bool {
     }
 }
 
-fn hosts(args: &[String]) -> Result<Command, String> {
+/// `hosts [--json]` lists the hosts; `add`, `edit` or `delete` first changes one ([`host_change`]).
+fn hosts(args: Vec<String>) -> Result<Command, String> {
+    if let Some(word) = args.first().map(String::as_str)
+        && matches!(word, "add" | "edit" | "delete")
+    {
+        return host_change(args);
+    }
     let mut json = false;
-    for arg in args {
+    for arg in &args {
         match arg.as_str() {
             "--json" => json = true,
             "-h" | "--help" => return Ok(Command::Help),
@@ -206,6 +273,277 @@ fn hosts(args: &[String]) -> Result<Command, String> {
         }
     }
     Ok(Command::Hosts { json })
+}
+
+/// `hosts add`, `edit` or `delete`, then the options and one other argument, the target or the
+/// host, in any order. `--` ends the options, and an option's value can follow it after `=`.
+fn host_change(args: Vec<String>) -> Result<Command, String> {
+    let mut args = args.into_iter();
+    let word = args.next().unwrap_or_default();
+    let mut changes = HostChanges::default();
+    let (mut password_stdin, mut prompt, mut json) = (false, true, false);
+    // The options given, without their values.
+    let mut given: Vec<String> = Vec::new();
+    let mut positionals = Vec::new();
+    let mut options = true;
+    while let Some(arg) = args.next() {
+        if !options || !arg.starts_with('-') || arg == "-" {
+            positionals.push(arg);
+            continue;
+        }
+        if arg == "--" {
+            options = false;
+            continue;
+        }
+        let (name, inline) = match arg.split_once('=') {
+            Some((name, value)) if name.starts_with("--") => {
+                (name.to_owned(), Some(value.to_owned()))
+            }
+            _ => (arg, None),
+        };
+        let value = if known_option(&name) {
+            match inline.or_else(|| args.next()) {
+                Some(value) => value,
+                None => return Err(format!("{name} needs {}", needs(&name))),
+            }
+        } else if inline.is_some() && HOST_FLAGS.contains(&name.as_str()) {
+            return Err(format!("{name} takes no value"));
+        } else {
+            String::new()
+        };
+        match name.as_str() {
+            "-h" | "--help" => return Ok(Command::Help),
+            "--name" => changes.name = Some(value),
+            "--address" => changes.address = Some(value),
+            "--port" => changes.port = Some(port(&value)?),
+            "--user" => changes.username = Some(value),
+            "--auth" => changes.auth = Some(auth(&value)?),
+            "--key" => changes.key = Some(value),
+            "--jump" => changes.jump = Some(value),
+            "--proxy" => changes.proxy = Some(value),
+            "--group" => changes.group = Some(value),
+            "--tag" => changes.tags.push(value),
+            "--untag" => changes.untags.push(value),
+            "--env" => changes.env.push(env(&value)?),
+            "--unset-env" => changes.unset_env.push(value),
+            "--note" => changes.note = Some(value),
+            "--ai-notes" => changes.ai_notes = Some(value),
+            "--password-stdin" => password_stdin = true,
+            "--no-jump" => changes.no_jump = true,
+            "--no-group" => changes.no_group = true,
+            "--favorite" => changes.favorite = Some(true),
+            "--no-favorite" => changes.favorite = Some(false),
+            "--no-prompt" => prompt = false,
+            "--json" => json = true,
+            other => {
+                return Err(format!(
+                    "hosts {word} does not take {other}; put -- before an argument that starts \
+                     with -"
+                ));
+            }
+        }
+        given.push(name);
+    }
+    let usage = match word.as_str() {
+        "add" => "hatoba hosts add [options] [user@]<address>[:<port>]",
+        "edit" => "hatoba hosts edit [options] <host>",
+        _ => "hatoba hosts delete <host>",
+    };
+    let one = match (word.as_str(), positionals.len()) {
+        (_, 1) => positionals.remove(0),
+        ("add", 0) => return Err(format!("add needs a target: {usage}")),
+        ("add", _) => return Err(format!("add takes one target: {usage}")),
+        (_, 0) => return Err(format!("{word} needs a host: {usage}")),
+        (_, _) => {
+            return Err(format!(
+                "{word} takes one host; put quotes around a name with spaces, such as \"{}\"",
+                positionals.join(" ")
+            ));
+        }
+    };
+    if word == "delete" {
+        if let Some(option) = given.first() {
+            return Err(format!("delete does not take {option}: {usage}"));
+        }
+        return Ok(Command::HostDelete { host: one });
+    }
+    for (a, b) in [
+        ("--jump", "--no-jump"),
+        ("--group", "--no-group"),
+        ("--favorite", "--no-favorite"),
+    ] {
+        if given.iter().any(|g| g == a) && given.iter().any(|g| g == b) {
+            return Err(format!("{a} and {b} can't go together"));
+        }
+    }
+    let implied = match (changes.key.is_some(), password_stdin) {
+        (true, true) => {
+            return Err(
+                "--key and --password-stdin can't go together: a host signs in with a key or \
+                 with a password"
+                    .into(),
+            );
+        }
+        (true, false) => Some((AuthKind::Key, "--key", "a key")),
+        (false, true) => Some((AuthKind::Password, "--password-stdin", "a password")),
+        (false, false) => None,
+    };
+    match (changes.auth, implied) {
+        (Some(auth), Some((kind, option, what))) if auth != kind => {
+            return Err(format!(
+                "{option} signs in with {what}, so it can't go with --auth {}",
+                auth_word(auth)
+            ));
+        }
+        (_, Some((kind, ..))) => changes.auth = Some(kind),
+        _ => {}
+    }
+    if changes.auth == Some(AuthKind::Password) && !password_stdin && !prompt {
+        return Err(
+            "--auth password with --no-prompt needs --password-stdin, since Hatoba can't ask for \
+             the password"
+                .into(),
+        );
+    }
+    let change = |changes| HostChange {
+        changes,
+        password_stdin,
+        prompt,
+        json,
+    };
+    if word == "add" {
+        if let Some(option) = given
+            .iter()
+            .find(|g| matches!(g.as_str(), "--address" | "--port" | "--user"))
+        {
+            return Err(format!(
+                "add takes the address, port and user from its target, not {option}: {usage}"
+            ));
+        }
+        let (username, address, port) = target(&one)?;
+        changes.username = username;
+        changes.address = Some(address);
+        changes.port = port;
+        return Ok(Command::HostAdd(change(changes)));
+    }
+    if changes == HostChanges::default() {
+        return Err(format!(
+            "edit needs an option that changes the host, such as --port 2222: {usage}"
+        ));
+    }
+    Ok(Command::HostEdit {
+        host: one,
+        change: change(changes),
+    })
+}
+
+/// The options of `hosts add` and `edit` that take no value.
+const HOST_FLAGS: &[&str] = &[
+    "--password-stdin",
+    "--no-jump",
+    "--no-group",
+    "--favorite",
+    "--no-favorite",
+    "--no-prompt",
+    "--json",
+];
+
+/// Whether `option` is one of `hosts add` and `edit`'s that take a value.
+fn known_option(option: &str) -> bool {
+    !needs(option).is_empty()
+}
+
+/// What the value of `option` is, for the message when it has none.
+fn needs(option: &str) -> &'static str {
+    match option {
+        "--name" => "a name",
+        "--address" => "an address",
+        "--port" => "a port",
+        "--user" => "a user name",
+        "--auth" => "password, key, agent or ask",
+        "--key" => "a key",
+        "--jump" => "a host",
+        "--proxy" => "a proxy, direct or default",
+        "--group" => "a group",
+        "--tag" | "--untag" => "a tag",
+        "--env" => "NAME=value",
+        "--unset-env" => "the name of a variable",
+        "--note" | "--ai-notes" => "a text, or \"\" to clear it",
+        _ => "",
+    }
+}
+
+fn port(text: &str) -> Result<u16, String> {
+    text.parse()
+        .map_err(|_| format!("--port takes a port from 1 to 65535, not {text}"))
+}
+
+fn auth(text: &str) -> Result<AuthKind, String> {
+    Ok(match text {
+        "password" => AuthKind::Password,
+        "key" => AuthKind::Key,
+        "agent" => AuthKind::Agent,
+        "ask" => AuthKind::Ask,
+        _ => {
+            return Err(format!(
+                "--auth takes password, key, agent or ask, not {text}"
+            ));
+        }
+    })
+}
+
+fn auth_word(auth: AuthKind) -> &'static str {
+    match auth {
+        AuthKind::Password => "password",
+        AuthKind::Key => "key",
+        AuthKind::Agent => "agent",
+        AuthKind::Ask => "ask",
+    }
+}
+
+fn env(text: &str) -> Result<EnvVar, String> {
+    let (name, value) = text
+        .split_once('=')
+        .ok_or_else(|| format!("--env takes NAME=value, not {text}"))?;
+    Ok(EnvVar {
+        name: name.to_owned(),
+        value: value.to_owned(),
+    })
+}
+
+/// The user, address and port of `[user@]address[:port]`, `[user@][address]:port` for an IPv6
+/// address, or either after `ssh://`, as quick connect reads them (HOST-12). The last `@` ends
+/// the user, which may hold one itself, as with `ssh`, and an address with several `:` is IPv6.
+fn target(text: &str) -> Result<(Option<String>, String, Option<u16>), String> {
+    let invalid = || format!("{text} is not [user@]<address>[:<port>]");
+    let rest = match text.get(..6) {
+        Some(scheme) if scheme.eq_ignore_ascii_case("ssh://") => text[6..].trim_end_matches('/'),
+        _ => text,
+    };
+    let (username, rest) = match rest.rsplit_once('@') {
+        Some(("", _)) => return Err(invalid()),
+        Some((user, rest)) => (Some(user.to_owned()), rest),
+        None => (None, rest),
+    };
+    let (address, port) = if let Some(inside) = rest.strip_prefix('[') {
+        let (address, after) = inside.split_once(']').ok_or_else(invalid)?;
+        match after {
+            "" => (address, None),
+            _ => (address, Some(after.strip_prefix(':').ok_or_else(invalid)?)),
+        }
+    } else {
+        match rest.split_once(':') {
+            Some((address, port)) if !port.contains(':') => (address, Some(port)),
+            _ => (rest, None),
+        }
+    };
+    let port = port
+        .map(|p| {
+            p.parse::<u16>()
+                .map_err(|_| format!("the port of {text} is not a number from 1 to 65535"))
+        })
+        .transpose()?;
+    Ok((username, address.to_owned(), port))
 }
 
 /// Options until the host, and after it until the command, which starts at the first other
@@ -729,6 +1067,250 @@ mod tests {
             parse_words(&["memory", "save", "--help"]),
             Ok(Command::Help)
         );
+    }
+
+    fn change(changes: HostChanges) -> HostChange {
+        HostChange {
+            changes,
+            password_stdin: false,
+            prompt: true,
+            json: false,
+        }
+    }
+
+    #[test]
+    fn hosts_add_takes_a_target_and_the_host_editors_fields() {
+        assert_eq!(
+            parse_words(&[
+                "hosts",
+                "add",
+                "deploy@10.0.0.7",
+                "--name",
+                "web-3",
+                "--key",
+                "ci",
+                "--jump",
+                "bastion",
+                "--group",
+                "prod",
+                "--tag",
+                "tokyo",
+                "--tag=web",
+            ]),
+            Ok(Command::HostAdd(change(HostChanges {
+                name: Some("web-3".into()),
+                address: Some("10.0.0.7".into()),
+                username: Some("deploy".into()),
+                auth: Some(AuthKind::Key),
+                key: Some("ci".into()),
+                jump: Some("bastion".into()),
+                group: Some("prod".into()),
+                tags: vec!["tokyo".into(), "web".into()],
+                ..HostChanges::default()
+            })))
+        );
+        assert_eq!(
+            parse_words(&[
+                "hosts",
+                "add",
+                "--password-stdin",
+                "root@nas.local",
+                "--json"
+            ]),
+            Ok(Command::HostAdd(HostChange {
+                changes: HostChanges {
+                    address: Some("nas.local".into()),
+                    username: Some("root".into()),
+                    auth: Some(AuthKind::Password),
+                    ..HostChanges::default()
+                },
+                password_stdin: true,
+                prompt: true,
+                json: true,
+            }))
+        );
+        // As quick connect reads a target: the last @ ends the user, and an IPv6 address with a
+        // port goes in brackets.
+        for (word, user, address, port) in [
+            ("nas.local", None, "nas.local", None),
+            ("db:2222", None, "db", Some(2222)),
+            ("a@corp@db", Some("a@corp"), "db", None),
+            ("ops@[fe80::1]:2200", Some("ops"), "fe80::1", Some(2200)),
+            ("fe80::1", None, "fe80::1", None),
+            ("SSH://root@db:22/", Some("root"), "db", Some(22)),
+            // The host editor refuses port 0, with its own message.
+            ("db:0", None, "db", Some(0)),
+        ] {
+            let Ok(Command::HostAdd(HostChange { changes, .. })) =
+                parse_words(&["hosts", "add", word])
+            else {
+                panic!("{word}");
+            };
+            assert_eq!(
+                (
+                    changes.username.as_deref(),
+                    changes.address.as_deref(),
+                    changes.port
+                ),
+                (user, Some(address), port),
+                "{word}"
+            );
+        }
+        for words in [
+            &["hosts", "add"][..],
+            &["hosts", "add", "db", "web"],
+            &["hosts", "add", "@db"],
+            &["hosts", "add", "db:http"],
+            &["hosts", "add", "db:70000"],
+            &["hosts", "add", "[fe80::1"],
+            &["hosts", "add", "[fe80::1]2200"],
+            &["hosts", "add", "db", "--port", "2222"],
+            &["hosts", "add", "db", "--user", "root"],
+            &["hosts", "add", "db", "--name"],
+            &["hosts", "add", "db", "--json=yes"],
+            &["hosts", "add", "db", "--colour", "red"],
+            &["hosts", "add", "db", "--auth", "token"],
+            &["hosts", "add", "db", "--env", "TZ"],
+            &["hosts", "add", "db", "--jump", "b", "--no-jump"],
+            &["hosts", "add", "db", "--favorite", "--no-favorite"],
+            &["hosts", "add", "db", "--key", "ci", "--password-stdin"],
+            &["hosts", "add", "db", "--key", "ci", "--auth", "agent"],
+            &["hosts", "add", "db", "--password-stdin", "--auth", "ask"],
+            // Hatoba can't ask for the password.
+            &["hosts", "add", "db", "--auth", "password", "--no-prompt"],
+        ] {
+            assert!(parse_words(words).is_err(), "{words:?}");
+        }
+        assert!(matches!(
+            parse_words(&[
+                "hosts",
+                "add",
+                "db",
+                "--auth",
+                "password",
+                "--no-prompt",
+                "--password-stdin"
+            ]),
+            Ok(Command::HostAdd(HostChange {
+                prompt: false,
+                password_stdin: true,
+                ..
+            }))
+        ));
+        assert_eq!(parse_words(&["hosts", "add", "--help"]), Ok(Command::Help));
+    }
+
+    #[test]
+    fn hosts_edit_changes_what_its_options_name() {
+        assert_eq!(
+            parse_words(&[
+                "hosts",
+                "edit",
+                "web-3",
+                "--port",
+                "2222",
+                "--env",
+                "TZ=Asia/Tokyo",
+                "--env=EMPTY=",
+                "--unset-env",
+                "LANG",
+                "--ai-notes",
+                "Staging; restart with systemctl",
+                "--note=",
+                "--untag",
+                "tokyo",
+                "--no-group",
+                "--no-jump",
+                "--proxy",
+                "direct",
+                "--no-favorite",
+            ]),
+            Ok(Command::HostEdit {
+                host: "web-3".into(),
+                change: change(HostChanges {
+                    port: Some(2222),
+                    env: vec![
+                        EnvVar {
+                            name: "TZ".into(),
+                            value: "Asia/Tokyo".into()
+                        },
+                        EnvVar {
+                            name: "EMPTY".into(),
+                            value: String::new()
+                        },
+                    ],
+                    unset_env: vec!["LANG".into()],
+                    ai_notes: Some("Staging; restart with systemctl".into()),
+                    note: Some(String::new()),
+                    untags: vec!["tokyo".into()],
+                    no_group: true,
+                    no_jump: true,
+                    proxy: Some("direct".into()),
+                    favorite: Some(false),
+                    ..HostChanges::default()
+                }),
+            })
+        );
+        assert_eq!(
+            parse_words(&[
+                "hosts",
+                "edit",
+                "--address",
+                "10.0.0.8",
+                "--user",
+                "ops",
+                "--",
+                "-web"
+            ]),
+            Ok(Command::HostEdit {
+                host: "-web".into(),
+                change: change(HostChanges {
+                    address: Some("10.0.0.8".into()),
+                    username: Some("ops".into()),
+                    ..HostChanges::default()
+                }),
+            })
+        );
+        // An edit with --auth password asks for the password in the window.
+        assert!(matches!(
+            parse_words(&["hosts", "edit", "nas", "--auth", "password"]),
+            Ok(Command::HostEdit {
+                change: HostChange {
+                    password_stdin: false,
+                    prompt: true,
+                    ..
+                },
+                ..
+            })
+        ));
+        for words in [
+            &["hosts", "edit", "web-3"][..],
+            &["hosts", "edit", "web-3", "--json"],
+            &["hosts", "edit", "--port", "22"],
+            &["hosts", "edit", "My", "Server", "--port", "22"],
+            &["hosts", "edit", "web-3", "--port", "-1"],
+            &["hosts", "edit", "web-3", "--group", "a", "--no-group"],
+        ] {
+            assert!(parse_words(words).is_err(), "{words:?}");
+        }
+    }
+
+    #[test]
+    fn hosts_delete_takes_only_the_host() {
+        assert_eq!(
+            parse_words(&["hosts", "delete", "web-3"]),
+            Ok(Command::HostDelete {
+                host: "web-3".into()
+            })
+        );
+        for words in [
+            &["hosts", "delete"][..],
+            &["hosts", "delete", "web-3", "--json"],
+            &["hosts", "delete", "web-3", "--no-prompt"],
+            &["hosts", "delete", "web-3", "db"],
+        ] {
+            assert!(parse_words(words).is_err(), "{words:?}");
+        }
     }
 
     #[test]
