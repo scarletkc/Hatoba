@@ -3,11 +3,12 @@ import { api } from "@/ipc/api";
 import type { AuthBanner, AuthPrompt, AuthPromptClosed, HostKeyPrompt, HostView } from "@/ipc/types";
 
 /**
- * A request for a one-off secret (SSH-03): never stored anywhere, only handed to `ssh_connect`, or
- * a sudo password for `hatoba exec --sudo` and `hatoba cp --sudo` (HOST-15).
+ * A request for a one-off secret (SSH-03): never stored anywhere, only handed to `ssh_connect`; a
+ * sudo password for `hatoba exec --sudo` and `hatoba cp --sudo`; or the password that `hatoba hosts
+ * add` and `edit` save for a host (HOST-15).
  */
 export interface SecretRequest {
-  kind: "password" | "passphrase" | "sudo";
+  kind: "password" | "passphrase" | "sudo" | "save";
   /** Host display name. */
   hostName: string;
   /** `user@address:port`. */
@@ -59,8 +60,13 @@ export function pushHostKeyPrompt(prompt: HostKeyPrompt) {
 }
 
 export function pushAuthPrompt(prompt: AuthPrompt) {
-  if (prompt.sudo) {
-    const request: SecretRequest = { kind: "sudo", hostName: prompt.name, target: prompt.target, wrong: prompt.wrong };
+  if (prompt.sudo || prompt.save) {
+    const request: SecretRequest = {
+      kind: prompt.sudo ? "sudo" : "save",
+      hostName: prompt.name,
+      target: prompt.target,
+      wrong: prompt.wrong,
+    };
     const resolve = (value: string | null) =>
       void api.auth_prompt_respond(prompt.request_id, value === null ? null : [value]).catch(() => {});
     push({ kind: "secret", request, resolve, requestId: prompt.request_id });

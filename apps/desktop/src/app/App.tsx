@@ -244,6 +244,10 @@ function useGlobalEvents() {
           useApp.getState().refreshSynced();
         }
       }),
+      // HOST-15: a program changed the hosts through the hatoba command, with sync on or off.
+      api.listen("vault://changed", () => {
+        if (useApp.getState().phase === "unlocked") void useVaultData.getState().reload();
+      }),
       api.listen("window://zoom", (zoom) => {
         useApp.setState({ zoom });
         applyZoom(zoom.zoom);

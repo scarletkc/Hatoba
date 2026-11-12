@@ -283,6 +283,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         ])
         .events(collect_events![
             dto::VaultLockedEvent,
+            dto::VaultChangedEvent,
             dto::SyncStatus,
             dto::HostKeyPrompt,
             dto::AuthPrompt,

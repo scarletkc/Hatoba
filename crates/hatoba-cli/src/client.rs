@@ -7,9 +7,9 @@ use std::path::PathBuf;
 use std::process::{Command as Process, Stdio};
 
 use crate::App;
-use crate::args::{Command, Place, SWITCH};
+use crate::args::{Command, HostChange, Place, SWITCH};
 use crate::endpoint;
-use crate::protocol::{End, Frame, HostInfo, Op, Request, VERSION};
+use crate::protocol::{End, Frame, HostChanges, HostInfo, Op, Request, VERSION};
 
 /// The exit status of `exec` when Hatoba could not run the command, as `ssh` has it.
 const EXEC_FAILED: i32 = 255;
@@ -27,6 +27,18 @@ pub fn run(app: &App, command: Command) -> i32 {
             0
         }
         Command::Hosts { json } => hosts(app, json),
+        Command::HostAdd(change) => host_change(app, change, |changes, prompt| Op::HostAdd {
+            changes: Box::new(changes),
+            prompt,
+        }),
+        Command::HostEdit { host, change } => {
+            host_change(app, change, |changes, prompt| Op::HostEdit {
+                host,
+                changes: Box::new(changes),
+                prompt,
+            })
+        }
+        Command::HostDelete { host } => printed(app, Op::HostDelete { host }),
         Command::Exec {
             host,
             command,
@@ -51,13 +63,13 @@ pub fn run(app: &App, command: Command) -> i32 {
             sudo,
             mode,
         } => copy(app, source, target, prompt, sudo, mode),
-        Command::Memories { host, json } => memory(app, Op::Memories { host, json }),
+        Command::Memories { host, json } => printed(app, Op::Memories { host, json }),
         Command::MemorySave {
             host,
             name,
             content,
         } => match content.map_or_else(stdin_text, Ok) {
-            Ok(content) => memory(
+            Ok(content) => printed(
                 app,
                 Op::MemorySave {
                     host,
@@ -67,13 +79,13 @@ pub fn run(app: &App, command: Command) -> i32 {
             ),
             Err(message) => fail(&message, FAILED),
         },
-        Command::MemoryDelete { host, name } => memory(app, Op::MemoryDelete { host, name }),
+        Command::MemoryDelete { host, name } => printed(app, Op::MemoryDelete { host, name }),
         Command::Open(args) => open(app, args),
     }
 }
 
-/// A `hatoba memory` request: Hatoba answers with what to print.
-fn memory(app: &App, op: Op) -> i32 {
+/// A request Hatoba answers with what to print: `hatoba memory` and `hatoba hosts delete`.
+fn printed(app: &App, op: Op) -> i32 {
     let mut stream = match request(app, op) {
         Ok(stream) => stream,
         Err(message) => return fail(&message, FAILED),
@@ -151,6 +163,75 @@ fn hosts(app: &App, json: bool) -> i32 {
             Ok(None) | Err(_) => return fail(ENDED_EARLY, FAILED),
         }
     }
+}
+
+/// `hatoba hosts add` or `edit`: the password from stdin with `--password-stdin`, then the request
+/// `op` makes, and the host Hatoba saved, printed as `hatoba hosts` lists it.
+fn host_change(app: &App, change: HostChange, op: impl FnOnce(HostChanges, bool) -> Op) -> i32 {
+    let mut changes = change.changes;
+    if change.password_stdin {
+        match stdin_password() {
+            Ok(password) => changes.password = Some(password),
+            Err(message) => return fail(&message, FAILED),
+        }
+    }
+    let mut stream = match request(app, op(changes, change.prompt)) {
+        Ok(stream) => stream,
+        Err(message) => return fail(&message, FAILED),
+    };
+    loop {
+        match Frame::read(&mut stream) {
+            Ok(Some(Frame::Hosts(hosts))) => {
+                let text = match hosts.first() {
+                    Some(host) if change.json => {
+                        let mut text = serde_json::to_string_pretty(host).unwrap_or_default();
+                        text.push('\n');
+                        text
+                    }
+                    _ => table(&hosts),
+                };
+                if io::stdout().write_all(text.as_bytes()).is_err() {
+                    return FAILED;
+                }
+            }
+            Ok(Some(Frame::Notice(text))) => eprintln!("hatoba: {text}"),
+            Ok(Some(Frame::End(end))) => return ended(end, FAILED),
+            Ok(Some(_)) => {}
+            Ok(None) | Err(_) => return fail(ENDED_EARLY, FAILED),
+        }
+    }
+}
+
+/// The most `--password-stdin` reads.
+const MAX_PASSWORD: usize = 4096;
+
+/// The password on this command's stdin, a pipe or a file as `exec` takes it.
+fn stdin_password() -> Result<String, String> {
+    if !passes_stdin() {
+        return Err("--password-stdin needs the password on stdin, from a pipe or a file".into());
+    }
+    let mut bytes = Vec::new();
+    io::stdin()
+        .lock()
+        .take(MAX_PASSWORD as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("can't read stdin: {e}"))?;
+    password_text(bytes)
+}
+
+/// The password stdin gave, without the line break `echo` puts after it.
+fn password_text(bytes: Vec<u8>) -> Result<String, String> {
+    if bytes.len() > MAX_PASSWORD {
+        return Err("the password on stdin is too long".into());
+    }
+    let text = String::from_utf8(bytes).map_err(|_| "the password on stdin is not UTF-8")?;
+    let text = text.trim_start_matches('\u{feff}');
+    let text = text.strip_suffix('\n').unwrap_or(text);
+    let text = text.strip_suffix('\r').unwrap_or(text);
+    if text.is_empty() {
+        return Err("the password on stdin is empty".into());
+    }
+    Ok(text.to_owned())
 }
 
 const ENDED_EARLY: &str = "Hatoba closed the connection before it answered";
@@ -624,9 +705,14 @@ mod tests {
             port: 22,
             username: "root".into(),
             auth: AuthKind::Key,
+            key: Some("deploy".into()),
             group: group.map(Into::into),
             tags: Vec::new(),
             jump: None,
+            proxy: "default".into(),
+            env: Vec::new(),
+            favorite: false,
+            note: String::new(),
             ai_notes: String::new(),
         }
     }
@@ -696,6 +782,26 @@ mod tests {
             },
         });
         assert!(request.encode().len() < crate::protocol::MAX_FRAME);
+    }
+
+    #[test]
+    fn a_password_from_stdin_loses_only_its_line_break() {
+        assert_eq!(password_text(b"s3cret\n".to_vec()).unwrap(), "s3cret");
+        assert_eq!(password_text(b"s3cret\r\n".to_vec()).unwrap(), "s3cret");
+        assert_eq!(
+            password_text(b" two words ".to_vec()).unwrap(),
+            " two words "
+        );
+        assert_eq!(password_text(b"ends\n\n".to_vec()).unwrap(), "ends\n");
+        assert_eq!(
+            password_text("\u{feff}pw".as_bytes().to_vec()).unwrap(),
+            "pw"
+        );
+        for bad in [&b""[..], b"\n", b"\xff"] {
+            assert!(password_text(bad.to_vec()).is_err(), "{bad:?}");
+        }
+        assert!(password_text(vec![b'x'; MAX_PASSWORD]).is_ok());
+        assert!(password_text(vec![b'x'; MAX_PASSWORD + 1]).is_err());
     }
 
     #[test]

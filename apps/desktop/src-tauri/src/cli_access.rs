@@ -13,8 +13,10 @@
 //! When sudo asks for a password, the one given in the window for the host within the last 15
 //! minutes goes first, then the host's saved password, then the window asks, as for a connection.
 //!
-//! `hatoba memory` lists, saves and deletes the AI assistant's memories of a host ([`memories`]).
+//! `hatoba memory` lists, saves and deletes the AI assistant's memories of a host ([`memories`]),
+//! and `hatoba hosts add`, `edit` and `delete` save, change and delete hosts ([`hosts`]).
 
+mod hosts;
 mod memories;
 mod pool;
 #[cfg(test)]
@@ -30,7 +32,7 @@ use std::time::{Duration, SystemTime};
 use hatoba_ai::tools::MemoryAction;
 use hatoba_cli::SWITCH;
 use hatoba_cli::protocol::{
-    AuthKind, End, Frame, HEADER, HostInfo, Op, Progress, Request, VERSION,
+    End, Frame, HEADER, HostChanges, HostInfo, Op, Progress, Request, VERSION,
 };
 use hatoba_core::model::{Host, HostAuth, Item};
 use hatoba_core::vault::Vault;
@@ -47,6 +49,7 @@ use zeroize::Zeroizing;
 
 use crate::dto::{
     CliActivity, CliActivityEvent, CliActivityKind, CliActivityState, HostKeyPromptKind,
+    VaultChangedEvent,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::ssh::{self, Asking, OnAsk, OnBanner, Overrides, Unattended};
@@ -402,10 +405,13 @@ async fn handle(
         | Op::Stdin { .. }
         | Op::Memories { .. }
         | Op::MemorySave { .. }
-        | Op::MemoryDelete { .. } => false,
-        Op::Exec { prompt, .. } | Op::Upload { prompt, .. } | Op::Download { prompt, .. } => {
-            *prompt
-        }
+        | Op::MemoryDelete { .. }
+        | Op::HostDelete { .. } => false,
+        Op::Exec { prompt, .. }
+        | Op::Upload { prompt, .. }
+        | Op::Download { prompt, .. }
+        | Op::HostAdd { prompt, .. }
+        | Op::HostEdit { prompt, .. } => *prompt,
     };
     let ctx = Ctx {
         app,
@@ -470,7 +476,149 @@ async fn handle(
         Op::MemoryDelete { host, name } => {
             change_memory(&ctx, host, MemoryAction::Delete, name, None).await
         }
+        Op::HostAdd { changes, .. } => change_host(&ctx, None, *changes).await,
+        Op::HostEdit { host, changes, .. } => change_host(&ctx, Some(&host), *changes).await,
+        Op::HostDelete { host } => delete_host(&ctx, &host).await,
     }
+}
+
+/// `hatoba hosts add` and `edit` (HOST-15): the host as the editor would save it, with the
+/// password asked for in the window when it signs in with one the command didn't bring.
+async fn change_host(ctx: &Ctx<'_>, host: Option<&str>, changes: HostChanges) -> End {
+    let (kind, word) = match host {
+        Some(_) => (CliActivityKind::HostEdit, "edit"),
+        None => (CliActivityKind::HostAdd, "add"),
+    };
+    let target = match host {
+        Some(wanted) => match ctx.target(wanted) {
+            Ok(target) => target,
+            Err(message) => return End::error(message),
+        },
+        None => Target {
+            id: String::new(),
+            name: changes
+                .name
+                .as_deref()
+                .map(str::trim)
+                .filter(|n| !n.is_empty())
+                .or(changes.address.as_deref())
+                .unwrap_or_default()
+                .to_owned(),
+            config: String::new(),
+        },
+    };
+    let id = ctx.begin(kind, &target, hosts::describe(word, &changes));
+    let end = run_change_host(ctx, host.map(|_| target.id.as_str()), changes).await;
+    ctx.finish(&id, &end);
+    end
+}
+
+async fn run_change_host(ctx: &Ctx<'_>, edited: Option<&str>, mut changes: HostChanges) -> End {
+    let state = state(ctx.app);
+    let local_user = crate::platform::system::default_user();
+    // Run before the window asks for a password and again after, since the vault may change in
+    // between, as when the key goes.
+    let checked = |v: &Vault, changes: &HostChanges| -> Result<hosts::Plan, String> {
+        let host = match edited {
+            Some(id) => Some(
+                v.get(id)
+                    .and_then(Item::as_host)
+                    .ok_or("the host was deleted in Hatoba before it changed.")?,
+            ),
+            None => None,
+        };
+        let plan = hosts::plan(v, edited.zip(host), changes, &local_user)?;
+        hosts::check(v, &plan)?;
+        Ok(plan)
+    };
+    let plan = match state.with_unlocked(|v| Ok(checked(v, &changes))) {
+        Ok(Ok(plan)) => plan,
+        Ok(Err(refused)) => return End::error(refused),
+        Err(_) => return End::error(LOCKED),
+    };
+    if plan.needs_password {
+        let name = plan.name();
+        if !ctx.prompt {
+            return End::error(format!(
+                "{name} signs in with a password. Pass it with --password-stdin, or run the \
+                 command without --no-prompt to enter it in Hatoba."
+            ));
+        }
+        let label = target_label(
+            &plan.input.username,
+            plan.input.address.trim(),
+            plan.input.port,
+        );
+        crate::platform::window::reopen_main(ctx.app);
+        let _ = ctx.tx.try_send(Frame::Notice(format!(
+            "waiting for you to enter the password for {label} in Hatoba"
+        )));
+        let asked = tokio::select! {
+            asked = ssh::ask_password_to_save(ctx.app, &name, &label) => asked,
+            () = ctx.stopped() => return End::error(ctx.stop_message("the change")),
+        };
+        let Some(password) = asked else {
+            return End::error(format!(
+                "the password for {name} wasn't entered in Hatoba, so nothing changed."
+            ));
+        };
+        changes.password = Some(password.as_str().to_owned());
+    }
+    let saved = state.with_unlocked(|v| {
+        Ok(checked(v, &changes)
+            .and_then(|plan| hosts::save(v, plan))
+            .and_then(|id| {
+                let host = v
+                    .get(&id)
+                    .and_then(Item::as_host)
+                    .cloned()
+                    .ok_or("the host was not saved.")?;
+                Ok(hosts::info(v, id, host))
+            }))
+    });
+    match saved {
+        Ok(Ok(info)) => {
+            crate::sync::local_change(ctx.app);
+            let _ = VaultChangedEvent.emit(ctx.app);
+            let _ = ctx.tx.send(Frame::Hosts(vec![info])).await;
+            End::ok()
+        }
+        Ok(Err(refused)) => End::error(refused),
+        Err(_) => End::error(LOCKED),
+    }
+}
+
+/// `hatoba hosts delete` (HOST-15), as **Delete** on the Hosts page.
+async fn delete_host(ctx: &Ctx<'_>, wanted: &str) -> End {
+    let target = match ctx.target(wanted) {
+        Ok(target) => target,
+        Err(message) => return End::error(message),
+    };
+    let id = ctx.begin(CliActivityKind::HostDelete, &target, "hosts delete".into());
+    let state = state(ctx.app);
+    let forwards = state.with_unlocked(|v| {
+        Ok(v.forwards()
+            .iter()
+            .filter(|(_, f)| f.host_id == target.id)
+            .count())
+    });
+    let end = match forwards
+        .and_then(|n| crate::commands::hosts::delete_host(ctx.app, &state, &target.id).map(|()| n))
+    {
+        Ok(n) => {
+            let _ = VaultChangedEvent.emit(ctx.app);
+            let done = hosts::deleted(&target.name, n);
+            let _ = ctx
+                .tx
+                .send(Frame::Stdout(format!("{done}\n").into_bytes()))
+                .await;
+            End::ok()
+        }
+        Err(e) if e.code == ErrorCode::Locked => End::error(LOCKED),
+        Err(e) => End::error(e.detail),
+    };
+    ctx.finish(&id, &end);
+    end
 }
 
 /// `hatoba memory save` and `delete`: what was done goes to stdout, and the change syncs.
@@ -502,33 +650,7 @@ pub(crate) fn host_list(vault: &Vault) -> Vec<HostInfo> {
     let mut hosts: Vec<HostInfo> = vault
         .hosts()
         .into_iter()
-        .map(|(id, h)| HostInfo {
-            auth: match &h.auth {
-                HostAuth::Password { password } if !password.is_empty() => AuthKind::Password,
-                HostAuth::Password { .. } | HostAuth::Ask => AuthKind::Ask,
-                HostAuth::Key { .. } => AuthKind::Key,
-                HostAuth::Agent => AuthKind::Agent,
-            },
-            group: h
-                .group_id
-                .as_deref()
-                .and_then(|g| vault.get(g))
-                .and_then(Item::as_group)
-                .map(|g| g.name.clone()),
-            jump: h
-                .jump_host_id
-                .as_deref()
-                .and_then(|j| vault.get(j))
-                .and_then(Item::as_host)
-                .map(|j| j.name.clone()),
-            id,
-            name: h.name,
-            address: h.address,
-            port: h.port,
-            username: h.username,
-            tags: h.tags,
-            ai_notes: h.ai_notes,
-        })
+        .map(|(id, h)| hosts::info(vault, id, h))
         .collect();
     hosts.sort_by(|a, b| {
         a.name
@@ -556,8 +678,8 @@ pub(crate) fn find_host(vault: &Vault, wanted: &str) -> Result<(String, Host), S
         1 => Ok(named.remove(0)),
         0 => Err(match telnet_name(vault, wanted, &key) {
             Some(name) => format!(
-                "{wanted} is a Telnet host, and exec, cp and memory work only on SSH hosts. Run \
-                 hatoba {name} to open it in Hatoba."
+                "{wanted} is a Telnet host, and exec, cp, memory and hosts work only on SSH \
+                 hosts. Run hatoba {name} to open it in Hatoba."
             ),
             None => {
                 format!("no saved host is named {wanted}. Run hatoba hosts to see their names.")

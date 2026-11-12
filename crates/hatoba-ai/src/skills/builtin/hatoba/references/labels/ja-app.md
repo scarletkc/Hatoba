@@ -274,6 +274,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | en | ja |
 |---|---|
 | Let other programs use saved hosts | 他のプログラムに保存済みのホストを使わせる |
+| New Host | 新規ホスト |
 | Skill for coding agents | コーディングエージェント用スキル |
 | Copy Command | コマンドをコピー |
 | Recent use | 最近の利用 |
