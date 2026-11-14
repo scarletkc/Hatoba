@@ -352,3 +352,26 @@ async fn a_connection_closed_before_it_is_accepted_is_still_the_users() {
     std::fs::remove_dir_all(&dir).unwrap();
     assert_eq!(uid.unwrap(), owner);
 }
+
+/// HOST-15: a command's stdin reaches it as its connection brings it, and ends where that does.
+#[tokio::test]
+async fn a_stdin_connection_passes_what_it_brings() {
+    let (give, take) = oneshot::channel::<Input>();
+    let (input, mut stdin) = mpsc::channel(4);
+    assert!(give.send(Box::new(&b"echo ok\n"[..])).is_ok());
+    assert!(pass_stdin(take, input).await);
+    assert_eq!(stdin.recv().await.unwrap(), b"echo ok\n");
+    assert!(stdin.recv().await.is_none());
+}
+
+/// HOST-15: a stdin whose connection does not come in time is not an empty one, which would run
+/// the command on input it was not given.
+#[tokio::test(start_paused = true)]
+async fn a_stdin_connection_that_does_not_come_is_not_an_empty_stdin() {
+    let (_give, take) = oneshot::channel::<Input>();
+    let (input, mut stdin) = mpsc::channel(4);
+    let started = tokio::time::Instant::now();
+    assert!(!pass_stdin(take, input).await);
+    assert_eq!(started.elapsed(), REQUEST_WAIT);
+    assert!(stdin.recv().await.is_none());
+}

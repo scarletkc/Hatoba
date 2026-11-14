@@ -54,6 +54,9 @@ use crate::state::{now_ms, state};
 
 /// How long the command may take to send its request once connected.
 const REQUEST_WAIT: Duration = Duration::from_secs(10);
+/// Why a command stopped when its stdin did not come within [`REQUEST_WAIT`].
+const NO_STDIN: &str =
+    "the hatoba command didn't pass its stdin within 10 seconds, which stopped the command.";
 /// How often idle connections are looked for.
 const IDLE_CHECK: Duration = Duration::from_secs(60);
 /// How many uses Settings lists.
@@ -609,6 +612,25 @@ fn telnet_name(vault: &Vault, wanted: &str, key: &str) -> Option<String> {
         .find(|name| name.to_lowercase() == key)
 }
 
+/// Passes what the connection from `take` brings to `input` as it comes, until its end. `false`
+/// when none came in time, so the command got no stdin at all.
+async fn pass_stdin(take: oneshot::Receiver<Input>, input: mpsc::Sender<Vec<u8>>) -> bool {
+    let Ok(Ok(mut stdin)) = tokio::time::timeout(REQUEST_WAIT, take).await else {
+        return false;
+    };
+    let mut buf = vec![0u8; 32 * 1024];
+    loop {
+        match stdin.read(&mut buf).await {
+            Ok(0) | Err(_) => return true,
+            Ok(n) => {
+                if input.send(buf[..n].to_vec()).await.is_err() {
+                    return true;
+                }
+            }
+        }
+    }
+}
+
 /// The host a request is for.
 struct Target {
     id: String,
@@ -648,6 +670,10 @@ impl Ctx<'_> {
         }
     }
 
+    fn is_stopped(&self) -> bool {
+        self.epoch.is_cancelled() || self.gone.is_cancelled()
+    }
+
     /// Why `what` stopped before its end.
     fn stop_message(&self, what: &str) -> String {
         if !self.epoch.is_cancelled() {
@@ -662,33 +688,21 @@ impl Ctx<'_> {
         }
     }
 
-    /// Asks the command for its stdin under `token`, and passes it to `input` as it comes. Its end,
-    /// or a connection for it that does not come in time, ends the command's stdin.
-    async fn take_stdin(&self, token: &str, input: mpsc::Sender<Vec<u8>>) {
+    /// Asks the command for its stdin under `token`, and passes it to `input` as it comes, until
+    /// its end. `false` when no connection brought it in time.
+    async fn take_stdin(&self, token: &str, input: mpsc::Sender<Vec<u8>>) -> bool {
         let (give, take) = oneshot::channel();
         lock(&state(self.app).cli.stdin).insert(token.to_owned(), give);
+        // Without a reader the hatoba command is gone, which stops the command it ran.
         if self
             .tx
             .send(Frame::SendStdin(token.to_owned()))
             .await
             .is_err()
         {
-            return;
+            return true;
         }
-        let Ok(Ok(mut stdin)) = tokio::time::timeout(REQUEST_WAIT, take).await else {
-            return;
-        };
-        let mut buf = vec![0u8; 32 * 1024];
-        loop {
-            match stdin.read(&mut buf).await {
-                Ok(0) | Err(_) => return,
-                Ok(n) => {
-                    if input.send(buf[..n].to_vec()).await.is_err() {
-                        return;
-                    }
-                }
-            }
-        }
+        pass_stdin(take, input).await
     }
 
     fn begin(&self, kind: CliActivityKind, target: &Target, detail: String) -> String {
@@ -1052,6 +1066,9 @@ async fn run_exec(
         false => (None, None),
     };
     let token = uuid::Uuid::new_v4().simple().to_string();
+    // The command's stdin did not come, and an empty one in its place would run it on input it
+    // was not given.
+    let no_stdin = CancellationToken::new();
     let (output, mut pieces) = mpsc::channel(16);
     let run = remote_command::run_streaming_as(
         &lease.session,
@@ -1059,7 +1076,12 @@ async fn run_exec(
         cwd,
         &run_as,
         stdin,
-        ctx.stopped(),
+        async {
+            tokio::select! {
+                () = ctx.stopped() => {}
+                () = no_stdin.cancelled() => {}
+            }
+        },
         output,
     );
     let pass_on = async {
@@ -1073,8 +1095,10 @@ async fn run_exec(
         }
     };
     let pass_in = async {
-        if let Some(input) = input {
-            ctx.take_stdin(&token, input).await;
+        if let Some(input) = input
+            && !ctx.take_stdin(&token, input).await
+        {
+            no_stdin.cancel();
         }
         std::future::pending::<()>().await;
     };
@@ -1090,7 +1114,11 @@ async fn run_exec(
                 End::error("the command ended without an exit status, as when a signal ends it")
             }
             (Some(stopped), _) => {
-                let mut message = ctx.stop_message("the command");
+                let mut message = if ctx.is_stopped() {
+                    ctx.stop_message("the command")
+                } else {
+                    NO_STDIN.to_owned()
+                };
                 if stopped == Stopped::MayRun {
                     message.push_str(" It may still be running on the host.");
                 }
