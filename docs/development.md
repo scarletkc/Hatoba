@@ -192,7 +192,7 @@ pnpm --filter @hatoba/desktop exec vitest run -u src/i18n/hatobaSkill.test.ts
 - what agents do anyway, such as asking when several hosts fit, or passing a server's message on to the user;
 - general shell knowledge, such as quoting or batch flags. A Hatoba bug that agents trip over is fixed in Hatoba, not worked around in the skill.
 
-DeepSeek Harness gets the skill from `dsh-hatoba` on npm, a bundle whose source is [`packaging/dsh`](../packaging/dsh): `dsh.bundle` in its `package.json` names `cordis.patch.yml`, which mounts `index.mjs`, a skill provider for the package's `skills/`, by the package's name. [`scripts/release/dsh-package.mjs`](../scripts/release/dsh-package.mjs) writes the package with `skills/hatoba-cli` and the release's version, and each stable release publishes it, as [Package managers](releasing.md#package-managers) describes.
+DeepSeek Harness gets the skill from `hatoba-agent-plugin` on npm, a bundle whose source is [`packaging/agent-plugin`](../packaging/agent-plugin): `dsh.bundle` in its `package.json` names `cordis.patch.yml`, which mounts `index.mjs`, a skill provider for the package's `skills/`, by the package's name. [`scripts/release/agent-plugin.mjs`](../scripts/release/agent-plugin.mjs) writes the package with `skills/hatoba-cli` and the release's version, and each stable release publishes it, as [Package managers](releasing.md#package-managers) describes.
 
 ## Website
 

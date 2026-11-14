@@ -1,4 +1,4 @@
-# dsh-hatoba
+# hatoba-agent-plugin
 
 Lets [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) work on the SSH hosts saved in
 [Hatoba](https://hatoba.fog.moe), an open-source desktop SSH client. It adds the hatoba-cli skill, which has the agent
@@ -7,7 +7,7 @@ run commands and copy files on those hosts with the `hatoba` command, signed in 
 ## Install
 
 ```sh
-dsh plugin --profile web add dsh-hatoba
+dsh plugin --profile web add hatoba-agent-plugin
 ```
 
 If the harness is running, restart it.
@@ -25,7 +25,7 @@ Each stable Hatoba release publishes this package with the
 latest version, then restart the harness:
 
 ```sh
-dsh plugin --profile web add dsh-hatoba@latest
+dsh plugin --profile web add hatoba-agent-plugin@latest
 ```
 
 `dsh plugin --profile web update` stays within the version range saved at install, so it doesn't reach a new minor

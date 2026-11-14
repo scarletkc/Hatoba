@@ -298,6 +298,6 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      - run: node scripts/release/dsh-package.mjs target/dsh-hatoba
+      - run: node scripts/release/agent-plugin.mjs target/hatoba-agent-plugin
       - run: npm publish --provenance
-        working-directory: target/dsh-hatoba
+        working-directory: target/hatoba-agent-plugin
