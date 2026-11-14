@@ -10,4 +10,3 @@
 *.ppk -text
 crates/hatoba-ssh/tests/fixtures/** -text
 *.pk8 binary
-docs/media/*.mp4 export-ignore

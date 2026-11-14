@@ -192,7 +192,7 @@ pnpm --filter @hatoba/desktop exec vitest run -u src/i18n/hatobaSkill.test.ts
 - what agents do anyway, such as asking when several hosts fit, or passing a server's message on to the user;
 - general shell knowledge, such as quoting or batch flags. A Hatoba bug that agents trip over is fixed in Hatoba, not worked around in the skill.
 
-The repository is also `dsh-hatoba`, a DeepSeek Harness bundle: `dsh.bundle` in the root `package.json` names [`.dsh-plugin/cordis.patch.yml`](../.dsh-plugin/cordis.patch.yml), which mounts [`.dsh-plugin/index.mjs`](../.dsh-plugin/index.mjs), a skill provider for `skills/`, by the package's name. Each stable release publishes it to npm with [`scripts/release/dsh-package.mjs`](../scripts/release/dsh-package.mjs), as [Package managers](releasing.md#package-managers) describes, and `dsh plugin --profile web add github:scarletkc/Hatoba` installs it from `main`. That install downloads the repository's archive, so `.gitattributes` leaves the promo films in `docs/media` out of archives.
+DeepSeek Harness gets the skill from `dsh-hatoba` on npm, a bundle whose source is [`packaging/dsh`](../packaging/dsh): `dsh.bundle` in its `package.json` names `cordis.patch.yml`, which mounts `index.mjs`, a skill provider for the package's `skills/`, by the package's name. [`scripts/release/dsh-package.mjs`](../scripts/release/dsh-package.mjs) writes the package with `skills/hatoba-cli` and the release's version, and each stable release publishes it, as [Package managers](releasing.md#package-managers) describes.
 
 ## Website
 

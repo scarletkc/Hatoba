@@ -1,5 +1,5 @@
 {
-  "name": "dsh-hatoba",
+  "name": "hatoba",
   "private": true,
   "version": "0.8.5",
   "description": "Open-source desktop SSH client with an AI assistant and end-to-end encrypted sync through your own Cloudflare account",
@@ -15,11 +15,6 @@
     "format:check": "prettier --check .",
     "test": "pnpm -r test",
     "worker:bundle": "node scripts/worker/bundle.mjs"
-  },
-  "dsh": {
-    "bundle": {
-      "patch": "./.dsh-plugin/cordis.patch.yml"
-    }
   },
   "devDependencies": {
     "prettier": "3.9.10",

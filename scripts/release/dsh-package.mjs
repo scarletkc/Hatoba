@@ -3,26 +3,20 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ROOT } from "./version.mjs";
 
-export const BUNDLE_FILES = [".dsh-plugin/index.mjs", ".dsh-plugin/cordis.patch.yml", "skills/hatoba-cli", "LICENSE"];
+export const PACKAGE_DIR = "packaging/dsh";
+export const PACKAGE_FILES = ["cordis.patch.yml", "index.mjs", "README.md"];
 
 export function bundleManifest(root) {
-  const { name, version, license, dsh } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-  return {
-    name,
-    version,
-    description: "Lets DeepSeek Harness run commands and copy files on the SSH hosts saved in Hatoba",
-    keywords: ["dsh-plugin", "deepseek-harness", "hatoba", "ssh", "skill"],
-    homepage: "https://hatoba.fog.moe",
-    repository: { type: "git", url: "git+https://github.com/scarletkc/Hatoba.git" },
-    license,
-    dsh,
-  };
+  const { name, ...fields } = JSON.parse(readFileSync(join(root, PACKAGE_DIR, "package.json"), "utf8"));
+  const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  return { name, version, ...fields };
 }
 
 export function writeBundle(root, output) {
   if (existsSync(output) && readdirSync(output).length > 0) throw new Error(`${output} is not empty.`);
-  for (const path of BUNDLE_FILES) cpSync(join(root, path), join(output, path), { recursive: true });
-  cpSync(join(root, ".dsh-plugin/README.md"), join(output, "README.md"));
+  for (const file of PACKAGE_FILES) cpSync(join(root, PACKAGE_DIR, file), join(output, file));
+  cpSync(join(root, "skills/hatoba-cli"), join(output, "skills/hatoba-cli"), { recursive: true });
+  cpSync(join(root, "LICENSE"), join(output, "LICENSE"));
   writeFileSync(join(output, "package.json"), `${JSON.stringify(bundleManifest(root), null, 2)}\n`);
 }
 

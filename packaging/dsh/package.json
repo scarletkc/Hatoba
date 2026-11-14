@@ -1,0 +1,23 @@
+{
+  "name": "dsh-hatoba",
+  "description": "Lets DeepSeek Harness run commands and copy files on the SSH hosts saved in Hatoba",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "hatoba",
+    "ssh",
+    "skill"
+  ],
+  "homepage": "https://hatoba.fog.moe",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/scarletkc/Hatoba.git",
+    "directory": "packaging/dsh"
+  },
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
