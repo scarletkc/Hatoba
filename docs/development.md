@@ -192,6 +192,8 @@ pnpm --filter @hatoba/desktop exec vitest run -u src/i18n/hatobaSkill.test.ts
 - what agents do anyway, such as asking when several hosts fit, or passing a server's message on to the user;
 - general shell knowledge, such as quoting or batch flags. A Hatoba bug that agents trip over is fixed in Hatoba, not worked around in the skill.
 
+The repository is also a DeepSeek Harness bundle, which `dsh plugin --profile web add github:scarletkc/Hatoba` installs: `dsh.bundle` in the root `package.json` names [`.dsh-plugin/cordis.patch.yml`](../.dsh-plugin/cordis.patch.yml), which mounts [`.dsh-plugin/index.mjs`](../.dsh-plugin/index.mjs), a skill provider for `skills/`. The harness downloads the repository's archive of `main`, so `.gitattributes` leaves the promo films in `docs/media` out of archives.
+
 ## Website
 
 The website at https://hatoba.fog.moe is an Astro site in [`apps/site`](../apps/site), in English, Simplified and Traditional Chinese, and Japanese. Its text is in `apps/site/src/i18n`, where `en.ts` holds the English that the other files translate. The scripts in [`scripts/media`](../scripts/media/README.md) make its screenshots, the README's promo film, and the repository's social preview. The [Site workflow](../.github/workflows/site.yml) builds it for pull requests that touch it or the desktop frontend, and deploys it to GitHub Pages from `main` and after each release.

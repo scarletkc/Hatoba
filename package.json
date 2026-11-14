@@ -16,6 +16,11 @@
     "test": "pnpm -r test",
     "worker:bundle": "node scripts/worker/bundle.mjs"
   },
+  "dsh": {
+    "bundle": {
+      "patch": "./.dsh-plugin/cordis.patch.yml"
+    }
+  },
   "devDependencies": {
     "prettier": "3.9.10",
     "prettier-plugin-astro": "1.1.1"
