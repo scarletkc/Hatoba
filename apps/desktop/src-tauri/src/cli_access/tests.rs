@@ -330,3 +330,48 @@ fn requests_for_one_host_find_its_sudo_password_one_at_a_time() {
     drop(first);
     assert!(cli.sudo_turn("h1\nv1").try_lock_owned().is_ok());
 }
+
+/// HOST-15: a connection whose command has already closed its end, as `hatoba exec` does once it
+/// sent a short stdin, still counts as this user's.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_connection_closed_before_it_is_accepted_is_still_the_users() {
+    use std::io::Write;
+    use std::os::unix::fs::MetadataExt;
+
+    let dir = std::env::temp_dir().join(format!("hatoba-peer-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("cli.sock");
+    let listener = tokio::net::UnixListener::bind(&path).unwrap();
+    let owner = std::fs::metadata(&path).unwrap().uid();
+    let mut command = std::os::unix::net::UnixStream::connect(&path).unwrap();
+    command.write_all(b"request and stdin").unwrap();
+    drop(command);
+    let (stream, _) = listener.accept().await.unwrap();
+    let uid = peer_uid(&stream);
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(uid.unwrap(), owner);
+}
+
+/// HOST-15: a command's stdin reaches it as its connection brings it, and ends where that does.
+#[tokio::test]
+async fn a_stdin_connection_passes_what_it_brings() {
+    let (give, take) = oneshot::channel::<Input>();
+    let (input, mut stdin) = mpsc::channel(4);
+    assert!(give.send(Box::new(&b"echo ok\n"[..])).is_ok());
+    assert!(pass_stdin(take, input).await);
+    assert_eq!(stdin.recv().await.unwrap(), b"echo ok\n");
+    assert!(stdin.recv().await.is_none());
+}
+
+/// HOST-15: a stdin whose connection does not come in time is not an empty one, which would run
+/// the command on input it was not given.
+#[tokio::test(start_paused = true)]
+async fn a_stdin_connection_that_does_not_come_is_not_an_empty_stdin() {
+    let (_give, take) = oneshot::channel::<Input>();
+    let (input, mut stdin) = mpsc::channel(4);
+    let started = tokio::time::Instant::now();
+    assert!(!pass_stdin(take, input).await);
+    assert_eq!(started.elapsed(), REQUEST_WAIT);
+    assert!(stdin.recv().await.is_none());
+}

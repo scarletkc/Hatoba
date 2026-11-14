@@ -80,6 +80,8 @@ hatoba-core = { workspace = true, features = ["test-util"] }
 wiremock = "0.6"
 # The update tests run the updater plugin in a mock app.
 tauri = { version = "2.12", features = ["test"] }
+# The stdin test waits out a time limit on a paused clock.
+tokio = { workspace = true, features = ["test-util"] }
 
 [target.'cfg(windows)'.dependencies]
 window-vibrancy = "0.8"
