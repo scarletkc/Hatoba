@@ -1,5 +1,5 @@
 {
-  "name": "hatoba",
+  "name": "dsh-hatoba",
   "private": true,
   "version": "0.8.5",
   "description": "Open-source desktop SSH client with an AI assistant and end-to-end encrypted sync through your own Cloudflare account",

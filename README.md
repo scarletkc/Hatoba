@@ -49,8 +49,7 @@ between your devices, and puts an AI assistant beside each terminal.
   commands and copy files on your saved hosts with the `hatoba` command, while
   passwords and keys stay in Hatoba. The
   [hatoba-cli skill](skills/hatoba-cli/SKILL.md) shows agents how, and
-  `dsh plugin --profile web add github:scarletkc/Hatoba` adds it to DeepSeek
-  Harness.
+  `dsh plugin --profile web add dsh-hatoba` adds it to DeepSeek Harness.
 - **Resource usage**: the CPU, memory, disks, and network of every saved host,
   read over SSH with nothing to install on the servers.
 - **Terminal**: tabs, truecolor, CJK input methods, search, and clickable

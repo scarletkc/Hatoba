@@ -278,3 +278,26 @@ jobs:
           commit_email: i@scarletkc.com
           commit_message: Update to ${{ needs.preflight.outputs.version }}
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+
+  npm:
+    name: npm
+    needs: [preflight, publish]
+    if: needs.preflight.outputs.prerelease == 'false' && vars.NPM_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: packages
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preflight.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: node scripts/release/dsh-package.mjs target/dsh-hatoba
+      - run: npm publish --provenance
+        working-directory: target/dsh-hatoba
