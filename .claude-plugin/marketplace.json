@@ -1,0 +1,14 @@
+{
+  "name": "hatoba",
+  "owner": { "name": "ScarletKc", "url": "https://github.com/scarletkc" },
+  "plugins": [
+    {
+      "name": "hatoba",
+      "source": { "source": "npm", "package": "hatoba-agent-plugin" },
+      "description": "Run commands and copy files on the SSH hosts saved in Hatoba, signed in with the credentials Hatoba keeps",
+      "homepage": "https://hatoba.fog.moe",
+      "repository": "https://github.com/scarletkc/Hatoba",
+      "license": "MIT"
+    }
+  ]
+}

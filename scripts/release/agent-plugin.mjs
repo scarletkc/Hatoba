@@ -1,13 +1,14 @@
-import { cpSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ROOT } from "./version.mjs";
 
 export const PACKAGE_DIR = "packaging/agent-plugin";
 export const PACKAGE_FILES = ["cordis.patch.yml", "index.mjs", "README.md"];
+export const MANIFESTS = ["package.json", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json"];
 
-export function packageManifest(root) {
-  const { name, ...fields } = JSON.parse(readFileSync(join(root, PACKAGE_DIR, "package.json"), "utf8"));
+export function versionedManifest(root, manifest) {
+  const { name, ...fields } = JSON.parse(readFileSync(join(root, PACKAGE_DIR, manifest), "utf8"));
   const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   return { name, version, ...fields };
 }
@@ -15,9 +16,12 @@ export function packageManifest(root) {
 export function writePackage(root, output) {
   if (existsSync(output) && readdirSync(output).length > 0) throw new Error(`${output} is not empty.`);
   for (const file of PACKAGE_FILES) cpSync(join(root, PACKAGE_DIR, file), join(output, file));
+  for (const manifest of MANIFESTS) {
+    mkdirSync(dirname(join(output, manifest)), { recursive: true });
+    writeFileSync(join(output, manifest), `${JSON.stringify(versionedManifest(root, manifest), null, 2)}\n`);
+  }
   cpSync(join(root, "skills/hatoba-cli"), join(output, "skills/hatoba-cli"), { recursive: true });
   cpSync(join(root, "LICENSE"), join(output, "LICENSE"));
-  writeFileSync(join(output, "package.json"), `${JSON.stringify(packageManifest(root), null, 2)}\n`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

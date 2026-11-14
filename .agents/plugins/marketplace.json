@@ -1,0 +1,12 @@
+{
+  "name": "hatoba",
+  "interface": { "displayName": "Hatoba" },
+  "plugins": [
+    {
+      "name": "hatoba",
+      "source": { "source": "npm", "package": "hatoba-agent-plugin" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Developer Tools"
+    }
+  ]
+}

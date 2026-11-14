@@ -1,7 +1,9 @@
 {
   "name": "hatoba-agent-plugin",
-  "description": "Lets coding agents run commands and copy files on the SSH hosts saved in Hatoba, as a DeepSeek Harness plugin",
+  "description": "Lets Claude Code, Codex, and DeepSeek Harness run commands and copy files on the SSH hosts saved in Hatoba",
   "keywords": [
+    "claude-code",
+    "codex",
     "dsh-plugin",
     "deepseek-harness",
     "hatoba",

@@ -11,6 +11,22 @@ stable Hatoba release publishes this package with the skill of that release.
 - In Hatoba's **Settings → General**, **Use the hatoba command in terminals** and **Let other programs use saved
   hosts** turned on.
 
+## Claude Code
+
+In Claude Code, add Hatoba's marketplace and install the plugin:
+
+```
+/plugin marketplace add https://raw.githubusercontent.com/scarletkc/Hatoba/main/.claude-plugin/marketplace.json
+/plugin install hatoba@hatoba
+```
+
+## Codex
+
+```sh
+codex plugin marketplace add scarletkc/Hatoba
+codex plugin add hatoba@hatoba
+```
+
 ## DeepSeek Harness
 
 Install the plugin in [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), then restart the harness if
