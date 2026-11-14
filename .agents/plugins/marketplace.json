@@ -1,5 +1,5 @@
 {
-  "name": "hatoba",
+  "name": "hatoba-marketplace",
   "interface": { "displayName": "Hatoba" },
   "plugins": [
     {

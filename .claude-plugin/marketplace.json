@@ -1,5 +1,8 @@
 {
-  "name": "hatoba",
+  "name": "hatoba-marketplace",
+  "metadata": {
+    "description": "Marketplace for the Hatoba Claude Code plugin (a skill for the SSH hosts saved in Hatoba)."
+  },
   "owner": { "name": "ScarletKc", "url": "https://github.com/scarletkc" },
   "plugins": [
     {
@@ -8,7 +11,9 @@
       "description": "Run commands and copy files on the SSH hosts saved in Hatoba, signed in with the credentials Hatoba keeps",
       "homepage": "https://hatoba.fog.moe",
       "repository": "https://github.com/scarletkc/Hatoba",
-      "license": "MIT"
+      "license": "MIT",
+      "category": "developer-tools",
+      "tags": ["ssh", "remote", "cli"]
     }
   ]
 }

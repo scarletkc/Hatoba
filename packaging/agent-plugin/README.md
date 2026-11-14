@@ -17,14 +17,14 @@ In Claude Code, add Hatoba's marketplace and install the plugin:
 
 ```
 /plugin marketplace add https://raw.githubusercontent.com/scarletkc/Hatoba/main/.claude-plugin/marketplace.json
-/plugin install hatoba@hatoba
+/plugin install hatoba@hatoba-marketplace
 ```
 
 ## Codex
 
 ```sh
 codex plugin marketplace add scarletkc/Hatoba
-codex plugin add hatoba@hatoba
+codex plugin add hatoba@hatoba-marketplace
 ```
 
 ## DeepSeek Harness
