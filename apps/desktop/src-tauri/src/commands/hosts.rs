@@ -112,6 +112,14 @@ pub fn host_from_input(
         if vault.get(jump).and_then(Item::as_host).is_none() {
             return Err(AppError::invalid("jump_host_id", "jump host not found"));
         }
+        if let Some(id) = &input.id
+            && jump_chain_reaches(vault, jump, id)
+        {
+            return Err(AppError::invalid(
+                "jump_host_id",
+                "the jump host chain can't loop back on itself",
+            ));
+        }
     }
     if let Some(group) = &input.group_id
         && vault.get(group).and_then(Item::as_group).is_none()
@@ -171,6 +179,42 @@ pub fn host_from_input(
     })
 }
 
+/// Whether the jump host chain that starts at `start` passes through `target`, as the host
+/// editor checks before it saves.
+fn jump_chain_reaches(vault: &Vault, start: &str, target: &str) -> bool {
+    let mut seen = HashSet::new();
+    let mut current = Some(start.to_owned());
+    while let Some(id) = current {
+        if id == target {
+            return true;
+        }
+        if !seen.insert(id.clone()) {
+            return false;
+        }
+        current = vault
+            .get(&id)
+            .and_then(Item::as_host)
+            .and_then(|h| h.jump_host_id.clone());
+    }
+    false
+}
+
+/// Saves the host the form or `hatoba hosts add` and `edit` describe (HOST-15), new when
+/// `input.id` is `None`, and returns its id.
+pub(crate) fn save_host(vault: &mut Vault, input: &HostInput) -> AppResult<String> {
+    let existing = match &input.id {
+        Some(id) => Some(find_host(vault, id)?),
+        None => None,
+    };
+    let mut host = host_from_input(input, existing.as_ref(), vault)?;
+    if existing.is_none() {
+        host.sort = vault.place_new_host(None)?;
+    }
+    let item = Item::Host(host);
+    check_item_size(vault, &item)?;
+    Ok(vault.put(input.id.as_deref(), item)?)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn hosts_list(state: State<'_, AppState>) -> AppResult<Vec<HostView>> {
@@ -199,17 +243,7 @@ pub fn host_save(
     input: HostInput,
 ) -> AppResult<HostView> {
     let view = state.with_unlocked(|v| {
-        let existing = match &input.id {
-            Some(id) => Some(find_host(v, id)?),
-            None => None,
-        };
-        let mut host = host_from_input(&input, existing.as_ref(), v)?;
-        if existing.is_none() {
-            host.sort = v.place_new_host(None)?;
-        }
-        let item = Item::Host(host);
-        check_item_size(v, &item)?;
-        let id = v.put(input.id.as_deref(), item)?;
+        let id = save_host(v, &input)?;
         Ok(host_view(&id, &find_host(v, &id)?, v))
     })?;
     sync::local_change(&app);
@@ -251,15 +285,20 @@ pub(crate) fn too_large_to_sync(vault: &Vault, item: &Item) -> AppResult<bool> {
 #[tauri::command]
 #[specta::specta]
 pub fn host_delete(app: AppHandle, state: State<'_, AppState>, id: String) -> AppResult<()> {
+    delete_host(&app, &state, &id)
+}
+
+/// Deletes a host, from the Hosts page or `hatoba hosts delete` (HOST-15).
+pub(crate) fn delete_host(app: &AppHandle, state: &AppState, id: &str) -> AppResult<()> {
     state.with_unlocked(|v| {
-        find_host(v, &id)?;
+        find_host(v, id)?;
         // Hosts that jumped through this one now connect directly; its forwards go with it.
-        v.delete_host(&id)?;
+        v.delete_host(id)?;
         Ok(())
     })?;
-    sync::local_change(&app);
+    sync::local_change(app);
     // FWD-05: and stop where they run.
-    crate::connection::forget_host(&app, &id);
+    crate::connection::forget_host(app, id);
     Ok(())
 }
 
@@ -358,30 +397,7 @@ pub fn group_save(
     input: GroupInput,
 ) -> AppResult<GroupView> {
     let view = state.with_unlocked(|v| {
-        let name = input.name.trim();
-        if name.is_empty() {
-            return Err(AppError::invalid("name", "name is required"));
-        }
-        // MVP: one level of nesting (HOST-02).
-        if let Some(parent) = &input.parent_id {
-            let parent_group = v
-                .get(parent)
-                .and_then(Item::as_group)
-                .ok_or_else(|| AppError::invalid("parent_id", "group not found"))?;
-            if parent_group.parent_id.is_some() || input.id.as_deref() == Some(parent.as_str()) {
-                return Err(AppError::invalid(
-                    "parent_id",
-                    "groups can only be nested one level",
-                ));
-            }
-        }
-        let group = Group {
-            name: name.to_owned(),
-            parent_id: input.parent_id.clone(),
-            sort: input.sort.into(),
-            updated_at: 0,
-        };
-        let id = v.put(input.id.as_deref(), Item::Group(group))?;
+        let id = save_group(v, &input)?;
         let saved = v
             .get(&id)
             .and_then(Item::as_group)
@@ -391,6 +407,35 @@ pub fn group_save(
     })?;
     sync::local_change(&app);
     Ok(view)
+}
+
+/// Saves a group from its dialog, or one that `hatoba hosts add` and `edit` name and no group has
+/// (HOST-15), and returns its id.
+pub(crate) fn save_group(vault: &mut Vault, input: &GroupInput) -> AppResult<String> {
+    let name = input.name.trim();
+    if name.is_empty() {
+        return Err(AppError::invalid("name", "name is required"));
+    }
+    // MVP: one level of nesting (HOST-02).
+    if let Some(parent) = &input.parent_id {
+        let parent_group = vault
+            .get(parent)
+            .and_then(Item::as_group)
+            .ok_or_else(|| AppError::invalid("parent_id", "group not found"))?;
+        if parent_group.parent_id.is_some() || input.id.as_deref() == Some(parent.as_str()) {
+            return Err(AppError::invalid(
+                "parent_id",
+                "groups can only be nested one level",
+            ));
+        }
+    }
+    let group = Group {
+        name: name.to_owned(),
+        parent_id: input.parent_id.clone(),
+        sort: input.sort.into(),
+        updated_at: 0,
+    };
+    Ok(vault.put(input.id.as_deref(), Item::Group(group))?)
 }
 
 #[tauri::command]

@@ -10,14 +10,17 @@
 //! output, and its end still stops the command.
 //!
 //! The memory requests are answered with what the command prints: the memories or what was done
-//! as [`Frame::Stdout`], and a line for the person as [`Frame::Notice`].
+//! as [`Frame::Stdout`], and a line for the person as [`Frame::Notice`]. A host that
+//! [`Op::HostAdd`] or [`Op::HostEdit`] saved comes back as [`Frame::Hosts`], and what
+//! [`Op::HostDelete`] did as [`Frame::Stdout`].
 
+use std::fmt;
 use std::io::{self, Read};
 
 use serde::{Deserialize, Serialize};
 
 /// Changes when a request or a frame changes in a way the other side cannot read.
-pub const VERSION: u32 = 3;
+pub const VERSION: u32 = 4;
 
 /// The largest payload either side sends or takes.
 pub const MAX_FRAME: usize = 1 << 20;
@@ -90,6 +93,95 @@ pub enum Op {
         host: String,
         name: String,
     },
+    /// Saves a new host as **New Host** does (HOST-01), with `changes` in its fields;
+    /// `changes.address` is needed. `prompt` asks in the window for the password of a host that
+    /// signs in with one when `changes` holds none. Boxed, as the largest request.
+    HostAdd {
+        changes: Box<HostChanges>,
+        prompt: bool,
+    },
+    /// Changes the fields of `host` that `changes` names, and leaves the others as they are.
+    HostEdit {
+        host: String,
+        changes: Box<HostChanges>,
+        prompt: bool,
+    },
+    /// Deletes `host` with its forwarding rules, as **Delete** on the Hosts page does.
+    HostDelete {
+        host: String,
+    },
+}
+
+/// The fields `hatoba hosts add` and `edit` set. `None`, `false` and an empty list leave a field
+/// as it is, or for a new host as the host editor starts it. A key, a jump host and a proxy are
+/// named by their id or their name, a group by its name or its id.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HostChanges {
+    pub name: Option<String>,
+    pub address: Option<String>,
+    pub port: Option<u16>,
+    pub username: Option<String>,
+    pub auth: Option<AuthKind>,
+    /// The key the host signs in with.
+    pub key: Option<String>,
+    /// The password `--password-stdin` read, which the host signs in with.
+    pub password: Option<String>,
+    pub jump: Option<String>,
+    /// Connects directly, without a jump host.
+    pub no_jump: bool,
+    /// A saved proxy, `direct` or `default` (SSH-13).
+    pub proxy: Option<String>,
+    /// A name no group has creates the group.
+    pub group: Option<String>,
+    pub no_group: bool,
+    /// Tags to add.
+    pub tags: Vec<String>,
+    /// Tags to remove.
+    pub untags: Vec<String>,
+    /// Environment variables to set (SSH-14), in place of those of the same name.
+    pub env: Vec<EnvVar>,
+    /// The names of environment variables to remove.
+    pub unset_env: Vec<String>,
+    /// Replaces the note; empty clears it.
+    pub note: Option<String>,
+    /// Replaces the AI Notes (AI-37); empty clears them.
+    pub ai_notes: Option<String>,
+    pub favorite: Option<bool>,
+}
+
+/// Leaves the password out, so a request logged by mistake holds none.
+impl fmt::Debug for HostChanges {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HostChanges")
+            .field("name", &self.name)
+            .field("address", &self.address)
+            .field("port", &self.port)
+            .field("username", &self.username)
+            .field("auth", &self.auth)
+            .field("key", &self.key)
+            .field("password", &self.password.as_ref().map(|_| "…"))
+            .field("jump", &self.jump)
+            .field("no_jump", &self.no_jump)
+            .field("proxy", &self.proxy)
+            .field("group", &self.group)
+            .field("no_group", &self.no_group)
+            .field("tags", &self.tags)
+            .field("untags", &self.untags)
+            .field("env", &self.env)
+            .field("unset_env", &self.unset_env)
+            .field("note", &self.note)
+            .field("ai_notes", &self.ai_notes)
+            .field("favorite", &self.favorite)
+            .finish()
+    }
+}
+
+/// One of a host's environment variables (SSH-14).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EnvVar {
+    pub name: String,
+    pub value: String,
 }
 
 /// A saved host, without its credentials.
@@ -101,11 +193,22 @@ pub struct HostInfo {
     pub port: u16,
     pub username: String,
     pub auth: AuthKind,
+    /// The name of the key it signs in with.
+    #[serde(default)]
+    pub key: Option<String>,
     /// The group's name.
     pub group: Option<String>,
     pub tags: Vec<String>,
     /// The jump host's name.
     pub jump: Option<String>,
+    /// `default` for this device's default proxy, `direct`, or the saved proxy's name (SSH-13).
+    pub proxy: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub env: Vec<EnvVar>,
+    #[serde(default)]
+    pub favorite: bool,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub note: String,
     /// What the host's settings tell AI assistants about it (AI-37).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub ai_notes: String,
@@ -296,6 +399,48 @@ mod tests {
                     name: "sudo".into(),
                 },
             }),
+            Frame::Request(Request {
+                version: VERSION,
+                op: Op::HostAdd {
+                    changes: Box::new(HostChanges {
+                        name: Some("web-3".into()),
+                        address: Some("10.0.0.7".into()),
+                        username: Some("deploy".into()),
+                        key: Some("ci".into()),
+                        jump: Some("bastion".into()),
+                        tags: vec!["tokyo".into()],
+                        env: vec![EnvVar {
+                            name: "TZ".into(),
+                            value: "Asia/Tokyo".into(),
+                        }],
+                        ..HostChanges::default()
+                    }),
+                    prompt: true,
+                },
+            }),
+            Frame::Request(Request {
+                version: VERSION,
+                op: Op::HostEdit {
+                    host: "web-3".into(),
+                    changes: Box::new(HostChanges {
+                        port: Some(2222),
+                        password: Some("pw".into()),
+                        no_group: true,
+                        untags: vec!["tokyo".into()],
+                        unset_env: vec!["TZ".into()],
+                        ai_notes: Some(String::new()),
+                        favorite: Some(false),
+                        ..HostChanges::default()
+                    }),
+                    prompt: false,
+                },
+            }),
+            Frame::Request(Request {
+                version: VERSION,
+                op: Op::HostDelete {
+                    host: "web-3".into(),
+                },
+            }),
             Frame::Stdout(b"out\n".to_vec()),
             Frame::Stderr(Vec::new()),
             Frame::Notice("waiting".into()),
@@ -308,9 +453,14 @@ mod tests {
                 port: 22,
                 username: "deploy".into(),
                 auth: AuthKind::Ask,
+                key: None,
                 group: None,
                 tags: vec!["prod".into()],
                 jump: Some("bastion".into()),
+                proxy: "default".into(),
+                env: Vec::new(),
+                favorite: true,
+                note: "Primary.".into(),
                 ai_notes: String::new(),
             }]),
             Frame::End(End::status(3)),
@@ -345,6 +495,17 @@ mod tests {
         .unwrap();
         assert_eq!(request.version, 1);
         assert!(matches!(request.op, Op::Exec { sudo: false, .. }));
+    }
+
+    #[test]
+    fn a_host_change_shows_no_password_when_debugged() {
+        let changes = HostChanges {
+            password: Some("PASSWORD-SECRET".into()),
+            ..HostChanges::default()
+        };
+        let text = format!("{changes:?}");
+        assert!(!text.contains("PASSWORD-SECRET"), "{text}");
+        assert!(text.contains("password: Some"), "{text}");
     }
 
     #[test]

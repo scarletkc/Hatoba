@@ -1117,6 +1117,7 @@ export function createMockApi(): HatobaApi {
             prompts: [{ prompt: "Password: ", echo: false }],
             password: true,
             sudo: false,
+            save: false,
             wrong: false,
             target: `${target.username}@${host}:${target.port}`,
           });

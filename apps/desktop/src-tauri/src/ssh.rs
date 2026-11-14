@@ -500,6 +500,7 @@ impl KeyboardInteractive for Interactive {
                 .collect(),
             password: request.password,
             sudo: false,
+            save: false,
             wrong: false,
             target: target_label(&request.username, &request.host, request.port),
         };
@@ -559,6 +560,28 @@ pub async fn ask_sudo_password(
     target: &str,
     wrong: bool,
 ) -> Option<Zeroizing<String>> {
+    ask_cli_password(app, name, target, true, wrong).await
+}
+
+/// Asks in the window for the password that `hatoba hosts add` or `edit --auth password` saves
+/// for the host `name` at `target` (HOST-15). `None` when the user cancels, or gives no answer
+/// within [`PROMPT_TIMEOUT`].
+pub async fn ask_password_to_save(
+    app: &AppHandle,
+    name: &str,
+    target: &str,
+) -> Option<Zeroizing<String>> {
+    ask_cli_password(app, name, target, false, false).await
+}
+
+/// A password for the `hatoba` command: sudo's with `sudo`, otherwise one to save.
+async fn ask_cli_password(
+    app: &AppHandle,
+    name: &str,
+    target: &str,
+    sudo: bool,
+    wrong: bool,
+) -> Option<Zeroizing<String>> {
     let request_id = uuid::Uuid::now_v7().to_string();
     let (tx, rx) = oneshot::channel();
     lock(&state(app).ssh.auth_waiters).insert(request_id.clone(), tx);
@@ -577,7 +600,8 @@ pub async fn ask_sudo_password(
             echo: false,
         }],
         password: false,
-        sudo: true,
+        sudo,
+        save: !sudo,
         wrong,
         target: target.to_owned(),
     };

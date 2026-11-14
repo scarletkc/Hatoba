@@ -463,6 +463,9 @@ pub struct AuthPrompt {
     /// The sudo password of the saved host `name`, for `hatoba exec --sudo` or `hatoba cp
     /// --sudo` (HOST-15), asked like a password; answered with one value.
     pub sudo: bool,
+    /// The password that `hatoba hosts add` or `edit --auth password` saves for the host `name`
+    /// (HOST-15), asked like a password; answered with one value.
+    pub save: bool,
     /// The sudo password given before was wrong.
     pub wrong: bool,
     /// `user@host:port` of the hop that asks.
@@ -1467,7 +1470,7 @@ pub struct CliActivity {
     pub kind: CliActivityKind,
     pub host_id: String,
     pub host_name: String,
-    /// The command, or the file's source and target.
+    /// The command, the file's source and target, or the `hatoba hosts` command and its options.
     pub detail: String,
     pub started_at: i64,
     pub state: CliActivityState,
@@ -1482,6 +1485,9 @@ pub enum CliActivityKind {
     Exec,
     Upload,
     Download,
+    HostAdd,
+    HostEdit,
+    HostDelete,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
@@ -1534,6 +1540,12 @@ pub enum UpdateProgress {
 pub struct VaultLockedEvent {
     pub reason: LockReason,
 }
+
+/// HOST-15: a program saved, changed or deleted a host through the `hatoba` command, so the
+/// window reads the vault again, as after a sync pull.
+#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "vault://changed")]
+pub struct VaultChangedEvent;
 
 #[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
