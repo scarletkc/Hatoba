@@ -18,5 +18,15 @@ If the harness is running, restart it.
 - In Hatoba's **Settings → General**, **Use the hatoba command in terminals** and **Let other programs use saved
   hosts** turned on.
 
+## Update
+
 Each stable Hatoba release publishes this package with the
-[hatoba-cli skill](https://github.com/scarletkc/Hatoba/tree/main/skills/hatoba-cli) of that release.
+[hatoba-cli skill](https://github.com/scarletkc/Hatoba/tree/main/skills/hatoba-cli) of that release. To update, add the
+latest version, then restart the harness:
+
+```sh
+dsh plugin --profile web add dsh-hatoba@latest
+```
+
+`dsh plugin --profile web update` stays within the version range saved at install, so it doesn't reach a new minor
+version.
