@@ -45,10 +45,13 @@ between your devices, and puts an AI assistant beside each terminal.
   proxies, plus `~/.ssh/config` import and ProxyJump for SSH. Type
   `ssh user@host` or `telnet host` in the search box to connect without saving
   a host.
-- **Coding agents**: Claude Code, Codex, and scripts run commands and copy
-  files on your saved hosts with the `hatoba` command, while passwords and keys
-  stay in Hatoba. The [hatoba-cli skill](skills/hatoba-cli/SKILL.md) shows
-  agents how.
+- **Coding agents**: Claude Code, Codex, DeepSeek Harness, and scripts run
+  commands and copy files on your saved hosts with the `hatoba` command, while
+  passwords and keys stay in Hatoba. The
+  [hatoba-cli skill](skills/hatoba-cli/SKILL.md) shows agents how, and
+  [hatoba-agent-plugin](packaging/agent-plugin/README.md) adds it to Claude
+  Code, Codex, and DeepSeek Harness as a plugin, such as with
+  `dsh plugin --profile web add hatoba-agent-plugin`.
 - **Resource usage**: the CPU, memory, disks, and network of every saved host,
   read over SSH with nothing to install on the servers.
 - **Terminal**: tabs, truecolor, CJK input methods, search, and clickable

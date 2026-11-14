@@ -78,7 +78,7 @@ Publishing writes `SHA256SUMS.txt` with the checksum of each installer and `late
 
 Last, the **Site** job runs the [Site workflow](../.github/workflows/site.yml), which rebuilds the website: its download page offers the newest stable release, or the newest prerelease while there is no stable one, and its docs and the demo on its home page become the built-in skill and the frontend as of that release. The workflow opens the demo before it deploys and stops if the demo doesn't reach its first approval card. `INSTALL_STEPS` in `release.mjs` holds the install steps that both the release notes and the download page give; the website's translations of them are in [`apps/site/src/i18n/install.ts`](../apps/site/src/i18n/install.ts), whose test fails until they follow a change to the English.
 
-For a stable release, the **winget** and **AUR** jobs then update Hatoba's packages, as [Package managers](#package-managers) describes.
+For a stable release, the **winget**, **AUR**, and **npm** jobs then update Hatoba's packages, as [Package managers](#package-managers) describes.
 
 ## Release notes
 
@@ -94,17 +94,18 @@ The previous release is the highest `vX.Y.Z` tag that the release commit contain
 
 ## Package managers
 
-Each stable release reaches winget, Scoop, and the AUR once it is published. Prereleases are not submitted.
+Each stable release reaches winget, Scoop, the AUR, and npm once it is published. Prereleases are not submitted.
 
 - **winget.** The **winget** job runs [WinGet Releaser](https://github.com/vedantmgoyal9/winget-releaser), which takes the manifests of the newest `ScarletKc.Hatoba` version in [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs), points them at the release's Windows installer, and opens a pull request there from your fork. A winget moderator merges it.
 - **Scoop.** The `hatoba` manifest in the [Extras bucket](https://github.com/ScoopInstaller/Extras) has `checkver` and `autoupdate`: the bucket's Excavator workflow checks the latest stable release every four hours and updates the manifest's version and hash from `SHA256SUMS.txt`. Nothing runs in this repository.
 - **AUR.** While the repository variable `AUR_PUBLISH` is `true`, the **AUR** job sets `pkgver` in [`packaging/aur/PKGBUILD`](../packaging/aur/PKGBUILD) to the release's version, fills in the checksums from the release, builds the package to check it, and pushes it with its `.SRCINFO` to [`hatoba-bin`](https://aur.archlinux.org/packages/hatoba-bin).
+- **npm.** While the repository variable `NPM_PUBLISH` is `true`, the **npm** job writes the coding agents' plugin in [`packaging/agent-plugin`](../packaging/agent-plugin) with the skill and the release's version, using [`scripts/release/agent-plugin.mjs`](../scripts/release/agent-plugin.mjs), and publishes it to npm as [`hatoba-agent-plugin`](https://www.npmjs.com/package/hatoba-agent-plugin), with provenance. It publishes through trusted publishing, where npm accepts the job's GitHub identity in place of a token, so it runs on Node.js 24, whose npm supports it.
 
-They find the files by their names in the release (`INSTALLERS` in `release.mjs`). Renaming the Windows installer also needs a change to `installers-regex` of the winget job and to the `autoupdate` URL of the Scoop manifest. Renaming the deb package needs a change to the URL in `source` of the PKGBUILD.
+winget, Scoop, and the AUR find the files by their names in the release (`INSTALLERS` in `release.mjs`). Renaming the Windows installer also needs a change to `installers-regex` of the winget job and to the `autoupdate` URL of the Scoop manifest. Renaming the deb package needs a change to the URL in `source` of the PKGBUILD.
 
 ### Set up the package managers
 
-Do this once. Until winget-pkgs has the package, the winget job leaves winget alone with a notice, and until `AUR_PUBLISH` is set, the AUR job is skipped.
+Do this once. Until winget-pkgs has the package, the winget job leaves winget alone with a notice, and until `AUR_PUBLISH` and `NPM_PUBLISH` are set, the AUR and npm jobs are skipped.
 
 1. In the repository's **Settings → Environments**, create an environment named `packages`. Leave **Required reviewers** off. Under **Deployment branches and tags**, choose **Selected branches and tags** and add `main`.
 2. For winget:
@@ -122,6 +123,18 @@ Do this once. Until winget-pkgs has the package, the winget job leaves winget al
    2. Generate an SSH key without a passphrase with `ssh-keygen -t ed25519 -N '' -C hatoba-bin -f <a folder outside the repository>/aur`. Add `aur.pub` under **My Account → SSH Public Key** on the AUR, and add the contents of `aur` to the `packages` environment as the secret `AUR_SSH_PRIVATE_KEY`. The key can push to every package of your AUR account.
    3. Once the account can push to `hatoba-bin`, add the repository variable `AUR_PUBLISH` with the value `true` under **Settings → Secrets and variables → Actions → Variables**.
 4. For Scoop, open a package request issue in [ScoopInstaller/Extras](https://github.com/ScoopInstaller/Extras/issues/new/choose), then a pull request that adds `bucket/hatoba.json` and closes the issue.
+5. For npm:
+   1. Publish the first version by hand, because npm sets up trusted publishing only for a package it already has. With an npm account that has two-factor authentication on, run:
+
+      ```sh
+      node scripts/release/agent-plugin.mjs target/hatoba-agent-plugin
+      cd target/hatoba-agent-plugin
+      npm login
+      npm publish
+      ```
+
+   2. On npmjs.com, in the package's **Settings**, add a trusted publisher: choose **GitHub Actions**, and enter `scarletkc`, `Hatoba`, the workflow `release.yml`, and the environment `packages`. Allow `npm publish`, which a new trusted publisher does not allow until you choose it. Then, under **Publishing access**, require two-factor authentication and disallow tokens, so that only the workflow and you can publish.
+   3. Add the repository variable `NPM_PUBLISH` with the value `true`, as for `AUR_PUBLISH`.
 
 ### When a submission fails
 
@@ -129,6 +142,7 @@ Do this once. Until winget-pkgs has the package, the winget job leaves winget al
 - **winget, after its pull request.** Once the pull request exists, don't rerun the job: follow the bot's comments on the pull request, and push fixes to its branch in your fork. When an antivirus engine flags the installer, submit it to [Microsoft's file submission](https://www.microsoft.com/wdsi/filesubmission) as a false positive, then ask on the pull request for validation to run again.
 - **AUR.** A rerun uses the release commit, so it cannot pick up a fix to the PKGBUILD. When the test build fails, for example because the package needs a new dependency, fix `packaging/aur/PKGBUILD` on `main`, then push the fixed version by hand: clone `ssh://aur@aur.archlinux.org/hatoba-bin.git`, copy the PKGBUILD in, set `pkgver` (and raise `pkgrel` when the AUR already has that version), run `updpkgsums` and `makepkg --printsrcinfo > .SRCINFO`, and commit and push both files. When the push was refused, check the SSH key and the co-maintainer access, then rerun the job.
 - **Scoop.** When the manifest stops updating, fix it with a pull request to the Extras bucket.
+- **npm.** When the job fails, for example because the trusted publisher on npmjs.com names another workflow or environment, fix the setting and choose **Re-run failed jobs**.
 
 ## Retry a failed release
 
