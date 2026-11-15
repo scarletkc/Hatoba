@@ -38,6 +38,7 @@ import {
   setServerLists,
 } from "./history";
 import { clearInfo, getInfo, patchInfo } from "./info";
+import { osc52Text } from "./osc52";
 import { confirmMultilinePaste } from "./paste";
 import { PathLister } from "./pathSuggest";
 import { askPassword, askSecret, cancelSessionPrompts, pushAuthBanner, stopWaiting } from "./prompts";
@@ -233,6 +234,8 @@ export class LiveSession {
       allowProposedApi: true, // search decorations
       scrollOnUserInput: true,
       macOptionIsMeta: true,
+      // xterm takes Shift elsewhere: the drag selects here, not in a program that tracks the mouse.
+      macOptionClickForcesSelection: true,
     });
     this.term.loadAddon(this.fit);
     this.term.loadAddon(this.search);
@@ -243,6 +246,12 @@ export class LiveSession {
       }),
     );
     this.term.attachCustomKeyEventHandler(this.handleKey);
+    // TERM-04: a program copies with OSC 52 where it cannot reach this computer's clipboard.
+    this.term.parser.registerOscHandler(52, (data) => {
+      const text = osc52Text(data);
+      if (text !== null) void writeClipboard(text).catch(() => toast(t("terminal.clipboardDenied"), "error"));
+      return true;
+    });
     this.term.onData((data) => this.write(data));
     this.term.onBinary((data) => this.writeBinary(data));
     this.term.onResize(() => {
