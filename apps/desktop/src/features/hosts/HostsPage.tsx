@@ -891,7 +891,7 @@ export function HostsPage({ group: requested }: { group: string | null }) {
     <>
       <Button
         ref={importButton}
-        icon="file-arrow-down"
+        icon="download-simple"
         trailingIcon="caret-down"
         aria-haspopup="menu"
         aria-expanded={!!importMenu.anchor}
