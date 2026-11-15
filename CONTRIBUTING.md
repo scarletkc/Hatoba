@@ -190,9 +190,8 @@ Before requesting review:
   same pull request, as the
   [development guide](docs/development.md#raise-the-worker-version) describes.
 
-Open the pull request as a draft while the work is in progress. Merging
-requires approval from a maintainer, and new commits dismiss an earlier
-approval.
+Open the pull request as a draft while the work is in progress. A maintainer
+reviews it and merges it once the checks pass.
 
 You are responsible for every line in your pull request, including lines an AI
 tool wrote, so read the whole diff before requesting review. A pull request
