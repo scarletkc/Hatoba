@@ -52,7 +52,7 @@ Other labels: **Memory**, **Swap**, **No swap**, **Network**, **Disk**, **Readin
 
 ## Menus
 
-The tab menu (**More actions**) and the right-click menu share most entries. Right-click shows the menu when **Right-Click in Terminal** is set to **Show context menu** (see Settings below), the default on macOS; elsewhere right-click by default copies the selection, or pastes when nothing is selected. A program that tracks the mouse (vim, tmux) gets the right click itself unless Shift is held.
+The tab menu (**More actions**) and the right-click menu share most entries. Right-click shows the menu when **Right-Click in Terminal** is set to **Show context menu** (see Settings below), the default on macOS; elsewhere right-click by default copies the selection, or pastes when nothing is selected. A program that tracks the mouse (vim, tmux) gets the right click itself unless Shift is held. It gets drags too: hold Shift (⌥ on macOS) to select text.
 
 - Right-click menu: Copy, Paste, Select All, Ask AI, Clear Scrollback, Find…
 - **More actions** menu: Reconnect, Disconnect, Copy, Paste, Clear Scrollback, Select All, Find…, Ask AI, Edit Host. A quick connection (see `references/hosts-and-connecting.md`) has **Save as Host** instead of Edit Host.
@@ -69,6 +69,7 @@ Plain Ctrl+letter always reaches the remote shell (Ctrl+L, Ctrl+W, Ctrl+K and so
 | Find in the terminal | Ctrl+Shift+F | ⌘F |
 
 - Pasting a single line drops its trailing line breaks, so a copied command waits for Enter instead of running. Text with line breaks inside is pasted unchanged, after **Paste multiple lines?** with a preview; **Paste** confirms. The check can be turned off in Settings → Terminal (**Confirm before pasting multiple lines**). Pasting needs a connected tab.
+- A program can copy text to the clipboard with OSC 52, as Codex and tmux do on a server. It cannot read the clipboard.
 - The find bar searches the visible screen and the scrollback. Enter goes to the next match, Shift+Enter to the previous one, Esc closes the bar. It shows "No results" or the position as i/n.
 - HTTP and HTTPS links in the output open in the default browser with Ctrl+click (⌘+click on macOS), including local HTTP services. Other schemes are not opened. A plain click only selects text.
 
@@ -107,8 +108,8 @@ Other labels: **Decrease font size**, **Increase font size**.
   - Light schemes darken colors that would be hard to read on a light background, such as white or yellow text from programs written for dark terminals.
   - There are no custom schemes and no import from other terminals.
 - **Right-Click in Terminal**: **Copy if selected, otherwise paste** (default, except on macOS) or **Show context menu** (default on macOS).
-- **Confirm before pasting multiple lines**: on by default. Pasting text that contains line breaks shows a preview first.
-- **Suggest commands**: on by default. Shows the rest of a command you ran before as you type; see "Command suggestions" above.
+- **Confirm before pasting multiple lines**: on by default.
+- **Suggest commands**: on by default; see "Command suggestions" above.
 - **Command history** → **Clear Command History**: deletes the command history of every host and local shell on this device, after **Clear the command history?**.
 - **Scrollback**: 1,000, 5,000, 10,000 (default), or 50,000 lines.
 - **Local Terminal Shell**: the shell new local tabs run, kept on this device only (not synced); see "Local terminal tabs" above.

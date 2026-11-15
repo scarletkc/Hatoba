@@ -19,6 +19,7 @@ vi.mock("@xterm/xterm", () => ({
   Terminal: class {
     loadAddon = vi.fn();
     attachCustomKeyEventHandler = vi.fn();
+    parser = { registerOscHandler: vi.fn() };
     onData = vi.fn();
     onBinary = vi.fn();
     onResize = vi.fn();
@@ -33,6 +34,13 @@ vi.mock("@xterm/xterm", () => ({
   },
 }));
 vi.mock("./paste", () => ({ confirmMultilinePaste: vi.fn(async () => true) }));
+const writeClipboard = vi.hoisted(() => vi.fn(async (_text: string) => {}));
+vi.mock("@/lib/clipboard", async (importActual) => ({
+  ...(await importActual<typeof import("@/lib/clipboard")>()),
+  writeClipboard,
+}));
+const toast = vi.hoisted(() => vi.fn());
+vi.mock("@hatoba/ui", async (importActual) => ({ ...(await importActual<typeof import("@hatoba/ui")>()), toast }));
 const writeBytes = vi.hoisted(() => vi.fn(async () => {}));
 const suggestions = vi.hoisted(() => vi.fn());
 vi.mock("@/ipc/api", async (importActual) => {
@@ -118,6 +126,31 @@ describe("terminal paste", () => {
     });
     await session.paste("echo one\necho two");
     expect(session.term.paste).not.toHaveBeenCalled();
+  });
+});
+
+describe("a program's clipboard request (TERM-04)", () => {
+  const osc52 = (data: string) => {
+    const [id, handler] = vi.mocked(session.term.parser.registerOscHandler).mock.calls[0]!;
+    expect(id).toBe(52);
+    return handler(data);
+  };
+
+  it("copies the text the program sends", () => {
+    expect(osc52("c;aGVsbG8=")).toBe(true);
+    expect(writeClipboard).toHaveBeenCalledWith("hello");
+  });
+
+  it("takes a query without touching the clipboard", () => {
+    expect(osc52("c;?")).toBe(true);
+    expect(writeClipboard).not.toHaveBeenCalled();
+    expect(writeBytes).not.toHaveBeenCalled();
+  });
+
+  it("says so when the clipboard refuses the text", async () => {
+    writeClipboard.mockRejectedValueOnce(new Error("denied"));
+    void osc52("c;aGVsbG8=");
+    await vi.waitFor(() => expect(toast).toHaveBeenCalledWith(expect.any(String), "error"));
   });
 });
 
