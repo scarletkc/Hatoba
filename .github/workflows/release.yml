@@ -299,5 +299,15 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
       - run: node scripts/release/agent-plugin.mjs target/hatoba-agent-plugin
-      - run: npm publish --provenance
+      # npm refuses to publish a version again, so a version already there, published by hand or by
+      # an earlier run, is left as it is.
+      - name: Publish to npm
         working-directory: target/hatoba-agent-plugin
+        run: |
+          if npm view "hatoba-agent-plugin@$VERSION" version > /dev/null 2>&1; then
+            echo "::notice::npm already has hatoba-agent-plugin@$VERSION, so it is not published again."
+          else
+            npm publish --provenance
+          fi
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
