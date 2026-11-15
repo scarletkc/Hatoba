@@ -1,0 +1,17 @@
+{
+  "name": "hatoba",
+  "description": "Run commands and copy files on the SSH hosts saved in Hatoba, signed in with the credentials Hatoba keeps",
+  "author": { "name": "ScarletKc", "url": "https://github.com/scarletkc" },
+  "homepage": "https://hatoba.fog.moe",
+  "repository": "https://github.com/scarletkc/Hatoba",
+  "license": "MIT",
+  "keywords": ["hatoba", "ssh", "servers"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Hatoba",
+    "shortDescription": "Work on the SSH hosts saved in Hatoba",
+    "developerName": "ScarletKc",
+    "category": "Developer Tools",
+    "websiteURL": "https://hatoba.fog.moe"
+  }
+}

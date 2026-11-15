@@ -1,0 +1,25 @@
+{
+  "name": "hatoba-agent-plugin",
+  "description": "Lets Claude Code, Codex, and DeepSeek Harness run commands and copy files on the SSH hosts saved in Hatoba",
+  "keywords": [
+    "claude-code",
+    "codex",
+    "dsh-plugin",
+    "deepseek-harness",
+    "hatoba",
+    "ssh",
+    "skill"
+  ],
+  "homepage": "https://hatoba.fog.moe",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/scarletkc/Hatoba.git",
+    "directory": "packaging/agent-plugin"
+  },
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
