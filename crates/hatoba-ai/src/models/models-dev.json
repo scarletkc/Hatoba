@@ -1302,7 +1302,7 @@
       "gemini-3.5-live-translate-preview": {
         "limit": {
           "context": 16384,
-          "output": 32768
+          "output": 16384
         },
         "reasoning": false
       },
@@ -1371,6 +1371,41 @@
               "low",
               "medium",
               "high"
+            ]
+          }
+        ]
+      },
+      "gemini-4-carbon": {
+        "limit": {
+          "context": 1048576,
+          "output": 32768
+        },
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ]
+      },
+      "gemini-4-hydrogen": {
+        "limit": {
+          "context": 1048576,
+          "output": 65536
+        },
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh"
             ]
           }
         ]
@@ -1575,7 +1610,7 @@
       "ministral-3b-2512": {
         "limit": {
           "context": 131072,
-          "output": 262144
+          "output": 131072
         },
         "reasoning": false
       },
@@ -1650,10 +1685,20 @@
       },
       "mistral-large-latest": {
         "limit": {
-          "context": 262144,
+          "context": 1048576,
           "output": 262144
         },
-        "reasoning": false
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ]
       },
       "mistral-medium-2505": {
         "limit": {
