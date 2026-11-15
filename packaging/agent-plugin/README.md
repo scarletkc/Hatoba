@@ -23,24 +23,26 @@ In Claude Code, add Hatoba's marketplace and install the plugin:
 ## Codex
 
 ```sh
-codex plugin marketplace add scarletkc/Hatoba
+codex plugin marketplace add scarletkc/Hatoba --sparse .agents/plugins
 codex plugin add hatoba@hatoba-marketplace
 ```
 
 ## DeepSeek Harness
 
-Install the plugin in [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), then restart the harness if
-it is running:
+Install the plugin into the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) profile you run, then
+restart the harness if it is running. The desktop app runs the `desktop` profile, and `dsh web` runs `web`:
 
 ```sh
+# For the desktop app
+dsh plugin --profile desktop add hatoba-agent-plugin
+# For dsh web
 dsh plugin --profile web add hatoba-agent-plugin
 ```
 
-To update, add the latest version, then restart the harness:
+To update, add the latest version to the same profile, then restart the harness:
 
 ```sh
-dsh plugin --profile web add hatoba-agent-plugin@latest
+dsh plugin --profile desktop add hatoba-agent-plugin@latest
 ```
 
-`dsh plugin --profile web update` stays within the version range saved at install, so it doesn't reach a new minor
-version.
+`update` in place of `add` stays within the version range saved at install, so it doesn't reach a new minor version.

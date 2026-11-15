@@ -50,8 +50,7 @@ between your devices, and puts an AI assistant beside each terminal.
   passwords and keys stay in Hatoba. The
   [hatoba-cli skill](skills/hatoba-cli/SKILL.md) shows agents how, and
   [hatoba-agent-plugin](packaging/agent-plugin/README.md) adds it to Claude
-  Code, Codex, and DeepSeek Harness as a plugin, such as with
-  `dsh plugin --profile web add hatoba-agent-plugin`.
+  Code, Codex, and DeepSeek Harness as a plugin.
 - **Resource usage**: the CPU, memory, disks, and network of every saved host,
   read over SSH with nothing to install on the servers.
 - **Terminal**: tabs, truecolor, CJK input methods, search, and clickable
