@@ -133,8 +133,9 @@ Do this once. Until winget-pkgs has the package, the winget job leaves winget al
       npm publish
       ```
 
-   2. On npmjs.com, in the package's **Settings**, add a trusted publisher: choose **GitHub Actions**, and enter `scarletkc`, `Hatoba`, the workflow `release.yml`, and the environment `packages`. Under **Allowed actions**, allow `npm publish`: a new trusted publisher allows only `npm stage publish`, and the npm job runs `npm publish`. A trusted publisher can't be edited once added; to correct one, delete it and add it again. Then, under **Publishing access**, choose **Require two-factor authentication and disallow bypass 2fa tokens**, so that only the workflow and maintainers who pass two-factor authentication can publish.
+   2. On npmjs.com, in the package's **Settings**, under **Publishing access**, choose **Require two-factor authentication and disallow bypass 2fa tokens**, so that only trusted publishers and maintainers who pass two-factor authentication can publish.
    3. Add the repository variable `NPM_PUBLISH` with the value `true`, as for `AUR_PUBLISH`.
+   4. At most two days before you approve the first release that publishes the package, add a trusted publisher in the package's **Settings**: choose **GitHub Actions**, and enter `scarletkc`, `Hatoba`, the workflow `release.yml`, and the environment `packages`. Under **Allowed actions**, allow `npm publish`: a new trusted publisher allows only `npm stage publish`, and the npm job runs `npm publish`. npm expires a trusted publisher that hasn't published within two days of being added, and the version published by hand doesn't count; the npm job publishes right after **Publish** is approved, and from then on the trusted publisher doesn't expire. A trusted publisher can't be edited once added; to correct one, or to replace one that expired, delete it and add it again.
 
 ### When a submission fails
 
@@ -142,7 +143,7 @@ Do this once. Until winget-pkgs has the package, the winget job leaves winget al
 - **winget, after its pull request.** Once the pull request exists, don't rerun the job: follow the bot's comments on the pull request, and push fixes to its branch in your fork. When an antivirus engine flags the installer, submit it to [Microsoft's file submission](https://www.microsoft.com/wdsi/filesubmission) as a false positive, then ask on the pull request for validation to run again.
 - **AUR.** A rerun uses the release commit, so it cannot pick up a fix to the PKGBUILD. When the test build fails, for example because the package needs a new dependency, fix `packaging/aur/PKGBUILD` on `main`, then push the fixed version by hand: clone `ssh://aur@aur.archlinux.org/hatoba-bin.git`, copy the PKGBUILD in, set `pkgver` (and raise `pkgrel` when the AUR already has that version), run `updpkgsums` and `makepkg --printsrcinfo > .SRCINFO`, and commit and push both files. When the push was refused, check the SSH key and the co-maintainer access, then rerun the job.
 - **Scoop.** When the manifest stops updating, fix it with a pull request to the Extras bucket.
-- **npm.** When the job fails, for example because the trusted publisher on npmjs.com names another workflow or environment, or doesn't allow `npm publish`, delete the trusted publisher, add it again as in [Set up the package managers](#set-up-the-package-managers), and choose **Re-run failed jobs**.
+- **npm.** When the job fails, for example because the trusted publisher on npmjs.com names another workflow or environment, doesn't allow `npm publish`, or expired before its first publish, delete the trusted publisher, add it again as in [Set up the package managers](#set-up-the-package-managers), and choose **Re-run failed jobs**.
 
 ## Retry a failed release
 
