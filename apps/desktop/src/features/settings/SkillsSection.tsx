@@ -149,6 +149,7 @@ export function SkillsSection({ builtin }: { builtin: BuiltinSwitch | null }) {
               ref={importButton}
               size="sm"
               icon="download-simple"
+              trailingIcon="caret-down"
               aria-haspopup="menu"
               aria-expanded={!!importMenu.anchor}
               onClick={() => importButton.current && importMenu.openBelow(importButton.current, true)}
