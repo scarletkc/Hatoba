@@ -69,7 +69,7 @@ Plain Ctrl+letter always reaches the remote shell (Ctrl+L, Ctrl+W, Ctrl+K and so
 | Find in the terminal | Ctrl+Shift+F | ⌘F |
 
 - Pasting a single line drops its trailing line breaks, so a copied command waits for Enter instead of running. Text with line breaks inside is pasted unchanged, after **Paste multiple lines?** with a preview; **Paste** confirms. The check can be turned off in Settings → Terminal (**Confirm before pasting multiple lines**). Pasting needs a connected tab.
-- A program can copy text to the clipboard with OSC 52, as Codex and tmux do on a server. It cannot read the clipboard.
+- A program can copy text to the clipboard with OSC 52, as Codex and tmux do on a server. An OSC 52 request to read it gets no answer.
 - The find bar searches the visible screen and the scrollback. Enter goes to the next match, Shift+Enter to the previous one, Esc closes the bar. It shows "No results" or the position as i/n.
 - HTTP and HTTPS links in the output open in the default browser with Ctrl+click (⌘+click on macOS), including local HTTP services. Other schemes are not opened. A plain click only selects text.
 
