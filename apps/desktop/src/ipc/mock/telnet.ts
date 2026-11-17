@@ -1,4 +1,8 @@
-import type { TelnetHostView } from "../types";
+import { byteCount, HOST_NOTES_MAX_BYTES } from "@/lib/ai/instructions";
+import type { FrameHandler, HatobaApi } from "../api";
+import { FRAME_CLOSED, FRAME_DATA, type TelnetHostView } from "../types";
+import * as D from "./data";
+import { delay, fail, frame, type MockDeps } from "./shared";
 
 /**
  * A switch's console over Telnet (mock only): it asks for a user name and a password, which a
@@ -114,4 +118,152 @@ export class FakeTelnet {
     } else if (line) this.write(`% Invalid input detected at '^' marker.\r\n`);
     this.prompt();
   }
+}
+
+type TelnetApi = Pick<
+  HatobaApi,
+  | "telnet_hosts_list"
+  | "telnet_host_save"
+  | "telnet_host_delete"
+  | "telnet_host_duplicate"
+  | "telnet_host_set_favorite"
+  | "telnet_host_copy_password"
+  | "telnet_open_target"
+  | "telnet_open"
+  | "telnet_write"
+  | "telnet_write_bytes"
+  | "telnet_resize"
+  | "telnet_close"
+>;
+
+export function createTelnetMock(ctx: MockDeps): TelnetApi {
+  const { state } = ctx;
+  const telnets = new Map<string, FakeTelnet>();
+
+  /** TELNET-02 in the mock: a fake switch console; a host refused by the probe refuses the connection too. */
+  async function openTelnet(host: TelnetHostView, hostId: string | null, onFrame: FrameHandler): Promise<string> {
+    ctx.needUnlocked();
+    await delay(300);
+    // The vault may have locked while connecting.
+    ctx.needUnlocked();
+    if (hostId && D.PROBE[hostId] === false)
+      fail("ssh", `connect to ${host.address}:${host.port}: connection refused`, { ssh_kind: "refused" });
+    const sid = ctx.id("t");
+    const fake = new FakeTelnet(host, (bytes) => onFrame(frame(FRAME_DATA, bytes)));
+    telnets.set(sid, fake);
+    if (hostId)
+      state.telnetHosts = state.telnetHosts.map((h) => (h.id === hostId ? { ...h, last_connected_at: Date.now() } : h));
+    setTimeout(() => {
+      ctx.emit("ssh://state", {
+        session_id: sid,
+        host_id: hostId,
+        state: "connected",
+        latency_ms: null,
+        error: null,
+        exit_status: null,
+      });
+      fake.start();
+    }, 0);
+    fake.onExit = () => {
+      onFrame(frame(FRAME_CLOSED, new Uint8Array()));
+      ctx.emit("ssh://state", {
+        session_id: sid,
+        host_id: hostId,
+        state: "disconnected",
+        latency_ms: null,
+        error: null,
+        exit_status: null,
+      });
+      telnets.delete(sid);
+    };
+    return sid;
+  }
+
+  return {
+    telnet_hosts_list: async () => {
+      ctx.needUnlocked();
+      return state.telnetHosts.map((h) => ({ ...h }));
+    },
+    telnet_host_save: async (input) => {
+      ctx.needUnlocked();
+      if (!input.address.trim()) fail("invalid_input", "address is required", { field: "address" });
+      if (byteCount(input.ai_notes) > HOST_NOTES_MAX_BYTES)
+        fail("invalid_input", "AI notes are limited to 16 KB", { field: "ai_notes" });
+      if (input.proxy_mode === "proxy" && !state.proxies.some((p) => p.id === input.proxy_id))
+        fail("invalid_input", "proxy not found", { field: "proxy_id" });
+      const existing = input.id ? state.telnetHosts.find((h) => h.id === input.id) : undefined;
+      const view: TelnetHostView = {
+        id: existing?.id ?? ctx.id("t"),
+        name: input.name.trim() || Array.from(input.address.trim()).slice(0, 128).join(""),
+        address: input.address.trim(),
+        port: input.port || 23,
+        username: input.username.trim(),
+        has_password: input.password !== null ? input.password.length > 0 : !!existing?.has_password,
+        group_id: input.group_id,
+        tags: input.tags,
+        favorite: input.favorite,
+        sort: existing?.sort ?? ctx.placeNewHost(),
+        proxy_mode: input.proxy_mode,
+        proxy_id: input.proxy_mode === "proxy" ? input.proxy_id : null,
+        note: input.note,
+        ai_notes: input.ai_notes,
+        updated_at: Date.now(),
+        last_connected_at: existing?.last_connected_at ?? null,
+      };
+      state.telnetHosts = existing
+        ? state.telnetHosts.map((h) => (h.id === view.id ? view : h))
+        : [...state.telnetHosts, view];
+      ctx.touch();
+      return view;
+    },
+    telnet_host_delete: async (hid) => {
+      state.telnetHosts = state.telnetHosts.filter((h) => h.id !== hid);
+      ctx.touch();
+    },
+    telnet_host_duplicate: async (hid) => {
+      const h = state.telnetHosts.find((x) => x.id === hid) ?? fail("not_found");
+      const copy = {
+        ...h,
+        id: ctx.id("t"),
+        name: `${h.name}-copy`,
+        favorite: false,
+        sort: ctx.placeNewHost(hid),
+        last_connected_at: null,
+      };
+      state.telnetHosts = [...state.telnetHosts, copy];
+      ctx.touch();
+      return copy;
+    },
+    telnet_host_set_favorite: async (hid, favorite) => {
+      state.telnetHosts = state.telnetHosts.map((h) => (h.id === hid ? { ...h, favorite } : h));
+      ctx.touch();
+    },
+    telnet_host_copy_password: async () => {},
+    telnet_open_target: async (address, port, _options, onFrame) => {
+      const host: TelnetHostView = {
+        ...D.TELNET_HOSTS[1],
+        id: "",
+        name: address,
+        address,
+        port,
+        username: "",
+        has_password: false,
+      };
+      return openTelnet(host, null, onFrame);
+    },
+    telnet_open: async (hostId, _options, onFrame) => {
+      ctx.needUnlocked();
+      const host = state.telnetHosts.find((h) => h.id === hostId) ?? fail("not_found", "host not found");
+      return openTelnet(host, hostId, onFrame);
+    },
+    telnet_write: async (sid, data) => {
+      telnets.get(sid)?.input(data);
+    },
+    telnet_write_bytes: async () => {},
+    telnet_resize: async () => {},
+    telnet_close: async (sid) => {
+      telnets.get(sid)?.stop();
+      telnets.delete(sid);
+    },
+  };
 }
