@@ -86,6 +86,34 @@ pub struct ItemRow {
     pub updated_at: i64,
 }
 
+impl ItemRow {
+    /// A dirty live item row ready to store and upload.
+    #[must_use]
+    pub fn live(id: String, envelope: String, revision: u64, updated_at: i64) -> Self {
+        Self {
+            id,
+            envelope: Some(envelope),
+            revision,
+            deleted: false,
+            dirty: true,
+            updated_at,
+        }
+    }
+
+    /// A dirty tombstone row ready to store and upload.
+    #[must_use]
+    pub fn tombstone(id: String, revision: u64, updated_at: i64) -> Self {
+        Self {
+            id,
+            envelope: None,
+            revision,
+            deleted: true,
+            dirty: true,
+            updated_at,
+        }
+    }
+}
+
 /// A row of the local-only `conflict_log` table.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConflictRow {

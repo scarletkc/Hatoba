@@ -277,6 +277,12 @@ pub(crate) fn seal_item(key: &[u8; 32], id: &str, item: &Item) -> Result<crypto:
     seal(key, item_aad(id).as_bytes(), &plain)
 }
 
+/// Monotonic `updated_at` for a local write: `now`, or one millisecond past `previous` when the
+/// local clock is at or behind it.
+pub(crate) fn next_updated_at(previous: Option<&ItemRow>, now: i64) -> i64 {
+    previous.map_or(now, |p| now.max(p.updated_at.saturating_add(1)))
+}
+
 /// Whether `remote` is a live settings item that `vault_key` opens.
 fn opens_as_settings(vault_key: &[u8; 32], remote: &RemoteItem) -> bool {
     remote
@@ -884,19 +890,16 @@ impl Vault {
         let now = self.clock.now_ms();
         let unlocked = self.unlocked.as_mut().ok_or(Error::Locked)?;
 
-        let updated_at = previous
-            .as_ref()
-            .map_or(now, |p| now.max(p.updated_at.saturating_add(1)));
+        let updated_at = next_updated_at(previous.as_ref(), now);
         item.set_updated_at(updated_at);
         let envelope = seal_item(&unlocked.vault_key, &id, &item)?;
-        self.store.upsert_item_row(&ItemRow {
-            id: id.clone(),
-            envelope: Some(envelope.to_json()),
-            revision: previous.map_or(0, |p| p.revision),
-            deleted: false,
-            dirty: true,
+        let revision = previous.map_or(0, |p| p.revision);
+        self.store.upsert_item_row(&ItemRow::live(
+            id.clone(),
+            envelope.to_json(),
+            revision,
             updated_at,
-        })?;
+        ))?;
         // A message part keeps only its header in memory.
         item.strip_message_data();
         unlocked.items.insert(id.clone(), item);
@@ -920,14 +923,11 @@ impl Vault {
             .item_row(id)?
             .filter(|r| !r.deleted)
             .ok_or_else(|| Error::ItemNotFound(id.to_owned()))?;
-        self.store.upsert_item_row(&ItemRow {
-            id: id.to_owned(),
-            envelope: None,
-            revision: row.revision,
-            deleted: true,
-            dirty: true,
-            updated_at: now.max(row.updated_at.saturating_add(1)),
-        })?;
+        self.store.upsert_item_row(&ItemRow::tombstone(
+            id.to_owned(),
+            row.revision,
+            next_updated_at(Some(&row), now),
+        ))?;
         unlocked.items.remove(id);
         Ok(())
     }
@@ -2489,5 +2489,170 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn raw_rows_after_item_writes_preserve_revision_dirty_and_updated_at() {
+        use crate::model::AiConversation;
+
+        let (mut vault, clock, _) = created();
+        let t0 = clock.now_ms();
+
+        let mark_synced = |vault: &Vault, id: &str, revision: u64, updated_at: i64| {
+            let mut row = vault.store.item_row(id).unwrap().unwrap();
+            row.revision = revision;
+            row.dirty = false;
+            row.updated_at = updated_at;
+            vault.store.upsert_item_row(&row).unwrap();
+        };
+
+        // 1. Vault::put (insert, then update with clock behind previous.updated_at).
+        let put_id = vault.put(None, host("put-host")).unwrap();
+        let row = vault.store.item_row(&put_id).unwrap().unwrap();
+        assert_eq!(
+            (row.revision, row.dirty, row.deleted, row.updated_at),
+            (0, true, false, t0)
+        );
+        assert!(row.envelope.is_some());
+
+        mark_synced(&vault, &put_id, 5, t0 + 500);
+        vault.put(Some(&put_id), host("put-host-v2")).unwrap();
+        let row = vault.store.item_row(&put_id).unwrap().unwrap();
+        assert_eq!(
+            (row.revision, row.dirty, row.deleted, row.updated_at),
+            (5, true, false, t0 + 501)
+        );
+        assert!(row.envelope.is_some());
+
+        // 2. Vault::delete (clock behind, then clock ahead).
+        vault.delete(&put_id).unwrap();
+        let row = vault.store.item_row(&put_id).unwrap().unwrap();
+        assert_eq!(
+            (row.revision, row.dirty, row.deleted, row.updated_at),
+            (5, true, true, t0 + 502)
+        );
+        assert!(row.envelope.is_none());
+
+        clock.set(t0 + 2_000);
+        let del_ahead = vault.put(None, host("del-ahead")).unwrap();
+        mark_synced(&vault, &del_ahead, 3, t0 + 1_000);
+        vault.delete(&del_ahead).unwrap();
+        let row = vault.store.item_row(&del_ahead).unwrap().unwrap();
+        assert_eq!(
+            (row.revision, row.dirty, row.deleted, row.updated_at),
+            (3, true, true, t0 + 2_000)
+        );
+        assert!(row.envelope.is_none());
+
+        // 3. commit_cascade (puts + deletes, clock behind, and ItemNotFound on missing delete).
+        let cascade_put = vault.put(None, host("cascade-put")).unwrap();
+        let cascade_del = vault.put(None, host("cascade-del")).unwrap();
+        mark_synced(&vault, &cascade_put, 7, t0 + 5_000);
+        mark_synced(&vault, &cascade_del, 8, t0 + 6_000);
+        vault
+            .commit_cascade(
+                vec![(cascade_put.clone(), host("cascade-put-v2"))],
+                std::slice::from_ref(&cascade_del),
+            )
+            .unwrap();
+        let put_row = vault.store.item_row(&cascade_put).unwrap().unwrap();
+        assert_eq!(
+            (
+                put_row.revision,
+                put_row.dirty,
+                put_row.deleted,
+                put_row.updated_at
+            ),
+            (7, true, false, t0 + 5_001)
+        );
+        assert!(put_row.envelope.is_some());
+        let del_row = vault.store.item_row(&cascade_del).unwrap().unwrap();
+        assert_eq!(
+            (
+                del_row.revision,
+                del_row.dirty,
+                del_row.deleted,
+                del_row.updated_at
+            ),
+            (8, true, true, t0 + 6_001)
+        );
+        assert!(del_row.envelope.is_none());
+        assert!(matches!(
+            vault.commit_cascade(Vec::new(), &["missing-id".into()]),
+            Err(Error::ItemNotFound(_))
+        ));
+
+        // 4 & 5. ai_create_conversation + seal_entry.
+        clock.set(t0 + 10_000);
+        let (conv_id, _entries) = vault
+            .ai_create_conversation(
+                AiConversation {
+                    title: "conv".into(),
+                    ..AiConversation::default()
+                },
+                &[r#"{"role":"user","content":"hi"}"#],
+                Some(0),
+            )
+            .unwrap();
+        let conv_row = vault.store.item_row(&conv_id).unwrap().unwrap();
+        assert_eq!(
+            (
+                conv_row.revision,
+                conv_row.dirty,
+                conv_row.deleted,
+                conv_row.updated_at
+            ),
+            (0, true, false, t0 + 10_000)
+        );
+        assert!(conv_row.envelope.is_some());
+        let msg_ids: Vec<String> = vault
+            .items()
+            .filter_map(|(id, item)| {
+                item.as_ai_message()
+                    .filter(|m| m.conversation_id == conv_id)
+                    .map(|_| id.to_owned())
+            })
+            .collect();
+        assert_eq!(msg_ids.len(), 1);
+        let msg_row = vault.store.item_row(&msg_ids[0]).unwrap().unwrap();
+        assert_eq!(
+            (
+                msg_row.revision,
+                msg_row.dirty,
+                msg_row.deleted,
+                msg_row.updated_at
+            ),
+            (0, true, false, t0 + 10_000)
+        );
+        assert!(msg_row.envelope.is_some());
+
+        // 6. vault_ai::tombstone (preserves revision, bumps past updated_at, skips missing).
+        mark_synced(&vault, &conv_id, 9, t0 + 12_000);
+        mark_synced(&vault, &msg_ids[0], 10, t0 + 12_500);
+        vault
+            .tombstone(&[conv_id.clone(), msg_ids[0].clone(), "missing-id".into()])
+            .unwrap();
+        let conv_tomb = vault.store.item_row(&conv_id).unwrap().unwrap();
+        assert_eq!(
+            (
+                conv_tomb.revision,
+                conv_tomb.dirty,
+                conv_tomb.deleted,
+                conv_tomb.updated_at
+            ),
+            (9, true, true, t0 + 12_001)
+        );
+        assert!(conv_tomb.envelope.is_none());
+        let msg_tomb = vault.store.item_row(&msg_ids[0]).unwrap().unwrap();
+        assert_eq!(
+            (
+                msg_tomb.revision,
+                msg_tomb.dirty,
+                msg_tomb.deleted,
+                msg_tomb.updated_at
+            ),
+            (10, true, true, t0 + 12_501)
+        );
+        assert!(msg_tomb.envelope.is_none());
     }
 }

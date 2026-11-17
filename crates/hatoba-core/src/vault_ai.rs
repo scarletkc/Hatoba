@@ -33,7 +33,7 @@ use crate::model::{
     SkillFile, new_id,
 };
 use crate::store::{ItemRow, StoreOps};
-use crate::vault::{Vault, decode_envelope};
+use crate::vault::{Vault, decode_envelope, next_updated_at};
 
 /// The most plaintext bytes one `ai_message` item may hold: the whole item JSON, with the
 /// escaped `data`. The envelope adds 16 bytes of tag and base64, about 55 KB in all.
@@ -332,14 +332,7 @@ impl Vault {
         let item = Item::AiConversation(conversation);
         let envelope = seal(key, item_aad(&id).as_bytes(), &item.to_plaintext()?)?;
         store.transaction(|tx| {
-            tx.upsert_item_row(&ItemRow {
-                id: id.clone(),
-                envelope: Some(envelope.to_json()),
-                revision: 0,
-                deleted: false,
-                dirty: true,
-                updated_at: now,
-            })?;
+            tx.upsert_item_row(&ItemRow::live(id.clone(), envelope.to_json(), 0, now))?;
             for (row, _) in &parts {
                 tx.upsert_item_row(row)?;
             }
@@ -546,7 +539,7 @@ impl Vault {
     }
 
     /// Tombstones the given items in one transaction and drops them (wiped) from the item map.
-    fn tombstone(&mut self, ids: &[String]) -> Result<()> {
+    pub(crate) fn tombstone(&mut self, ids: &[String]) -> Result<()> {
         let now = self.clock.now_ms();
         let Self {
             store, unlocked, ..
@@ -557,14 +550,11 @@ impl Vault {
                 let Some(row) = tx.item_row(id)?.filter(|r| !r.deleted) else {
                     continue;
                 };
-                tx.upsert_item_row(&ItemRow {
-                    id: id.clone(),
-                    envelope: None,
-                    revision: row.revision,
-                    deleted: true,
-                    dirty: true,
-                    updated_at: now.max(row.updated_at.saturating_add(1)),
-                })?;
+                tx.upsert_item_row(&ItemRow::tombstone(
+                    id.clone(),
+                    row.revision,
+                    next_updated_at(Some(&row), now),
+                ))?;
             }
             Ok(())
         })?;
@@ -656,17 +646,7 @@ fn seal_entry(
         }
         let envelope = seal(key, item_aad(&id).as_bytes(), &plain)?;
         item.strip_message_data();
-        parts.push((
-            ItemRow {
-                id,
-                envelope: Some(envelope.to_json()),
-                revision: 0,
-                deleted: false,
-                dirty: true,
-                updated_at: now,
-            },
-            item,
-        ));
+        parts.push((ItemRow::live(id, envelope.to_json(), 0, now), item));
     }
     Ok(parts)
 }
