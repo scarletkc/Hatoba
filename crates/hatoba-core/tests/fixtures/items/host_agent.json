@@ -1,0 +1,16 @@
+{
+  "type": "host",
+  "name": "bastion",
+  "address": "bastion.example.org",
+  "port": 22,
+  "username": "ops",
+  "auth": {
+    "kind": "agent"
+  },
+  "group_id": null,
+  "tags": ["jump"],
+  "favorite": false,
+  "jump_host_id": null,
+  "note": "",
+  "updated_at": 1700000000002
+}

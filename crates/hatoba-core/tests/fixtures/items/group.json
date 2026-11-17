@@ -1,0 +1,7 @@
+{
+  "type": "group",
+  "name": "Production",
+  "parent_id": "grp-root",
+  "sort": 1000,
+  "updated_at": 1700000000005
+}

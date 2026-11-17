@@ -714,27 +714,13 @@ fn split_entry<'a>(conversation_id: &str, entry_id: &str, json: &'a str) -> Resu
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
-    use std::sync::Arc;
-
+mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::crypto::{KdfParams, open_json};
+    use crate::crypto::open_json;
     use crate::model::{AiAuthHeader, AiModel, AiProtocol, McpTransport, SETTINGS_ID, SearchKind};
-    use crate::vault::ManualClock;
-
-    const PW: &str = "ai-vault-test-password";
-
-    /// An unlocked vault on a manual clock, for the tests of the AI items and file snapshots.
-    pub(crate) fn vault() -> (Vault, Arc<ManualClock>) {
-        let clock = Arc::new(ManualClock::new(1_700_000_000_000));
-        let mut vault = Vault::open_in_memory().unwrap().with_clock(clock.clone());
-        vault
-            .create_with_params(PW, KdfParams::for_tests())
-            .unwrap();
-        (vault, clock)
-    }
+    use crate::test_support::{TEST_PASSWORD as PW, unlocked_vault as vault};
 
     fn conversation(vault: &mut Vault, title: &str) -> String {
         vault

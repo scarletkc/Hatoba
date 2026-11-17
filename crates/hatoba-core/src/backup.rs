@@ -192,23 +192,18 @@ impl Vault {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypto::KdfParams;
     use crate::model::{Host, HostAuth, Item};
+    use crate::test_support::{host_item_with, unlocked_vault_at};
 
     const PW: &str = "backup-test-password";
 
     fn populated() -> (Vault, String, String) {
-        let mut vault = Vault::open_in_memory().unwrap();
-        vault
-            .create_with_params(PW, KdfParams::for_tests())
-            .unwrap();
+        let (mut vault, _, _) = unlocked_vault_at(1_700_000_000_000, PW);
         let host = vault
             .put(
                 None,
-                Item::Host(Host {
-                    name: "backup-host-name".into(),
-                    auth: HostAuth::password("backup-pass"),
-                    ..Host::default()
+                host_item_with("backup-host-name", |h| {
+                    h.auth = HostAuth::password("backup-pass");
                 }),
             )
             .unwrap();

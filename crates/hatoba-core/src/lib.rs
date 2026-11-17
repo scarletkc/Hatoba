@@ -48,6 +48,8 @@ pub mod platform;
 pub mod recovery;
 pub mod store;
 pub mod sync;
+#[cfg(test)]
+pub(crate) mod test_support;
 pub mod vault;
 mod vault_ai;
 mod vault_cascade;

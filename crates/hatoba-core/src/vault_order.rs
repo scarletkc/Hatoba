@@ -179,12 +179,9 @@ impl Vault {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use super::*;
-    use crate::crypto::KdfParams;
-    use crate::model::{Host, TelnetHost};
-    use crate::vault::ManualClock;
+    use crate::model::TelnetHost;
+    use crate::test_support::{host_item_with, unlocked_vault as vault};
 
     const STEP: i64 = PLACE_STEP;
 
@@ -234,23 +231,10 @@ mod tests {
         assert_eq!(arrange(&[i64::MAX, 0]), vec![STEP, 2 * STEP]);
     }
 
-    fn vault() -> (Vault, Arc<ManualClock>) {
-        let clock = Arc::new(ManualClock::new(1_000_000));
-        let mut vault = Vault::open_in_memory().unwrap().with_clock(clock.clone());
-        vault
-            .create_with_params("correct horse battery staple", KdfParams::for_tests())
-            .unwrap();
-        (vault, clock)
-    }
-
     fn add(vault: &mut Vault, name: &str, sort: i64) -> String {
-        let host = Host {
-            name: name.into(),
-            address: format!("{name}.example.org"),
-            sort,
-            ..Host::default()
-        };
-        vault.put(None, Item::Host(host)).unwrap()
+        vault
+            .put(None, host_item_with(name, |h| h.sort = sort))
+            .unwrap()
     }
 
     fn place(vault: &Vault, id: &str) -> i64 {

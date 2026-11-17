@@ -1,0 +1,14 @@
+{
+  "type": "skill",
+  "name": "nginx-ops",
+  "description": "Operate nginx",
+  "frontmatter": {
+    "license": "MIT",
+    "metadata": {
+      "author": "alice",
+      "tags": [1, 2]
+    }
+  },
+  "enabled": true,
+  "updated_at": 1700000000025
+}

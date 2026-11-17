@@ -1,0 +1,10 @@
+{
+  "type": "proxy",
+  "name": "Corporate HTTP",
+  "kind": "http",
+  "address": "proxy.example.org",
+  "port": 3128,
+  "username": "",
+  "password": "",
+  "updated_at": 1700000000015
+}

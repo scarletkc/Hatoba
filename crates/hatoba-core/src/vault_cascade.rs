@@ -198,32 +198,16 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::sync::Arc;
 
-    use zeroize::Zeroizing;
-
     use super::*;
-    use crate::crypto::KdfParams;
-    use crate::model::{AiMemory, Group, Host, PortForward, SshKey, TelnetHost};
+    use crate::model::{AiMemory, Group, PortForward, TelnetHost};
+    use crate::test_support::{
+        TEST_PASSWORD as PW, host_item_with as host, key_item, unlocked_vault_at,
+    };
     use crate::vault::ManualClock;
 
-    const PW: &str = "correct horse battery staple";
-
     fn vault() -> (Vault, Arc<ManualClock>) {
-        let clock = Arc::new(ManualClock::new(1_000_000));
-        let mut vault = Vault::open_in_memory().unwrap().with_clock(clock.clone());
-        vault
-            .create_with_params(PW, KdfParams::for_tests())
-            .unwrap();
-        (vault, clock)
-    }
-
-    fn host(name: &str, edit: impl FnOnce(&mut Host)) -> Item {
-        let mut host = Host {
-            name: name.into(),
-            address: format!("{name}.example.org"),
-            ..Host::default()
-        };
-        edit(&mut host);
-        Item::Host(host)
+        let (v, clock, _) = unlocked_vault_at(1_000_000, PW);
+        (v, clock)
     }
 
     fn group(name: &str, parent_id: Option<&str>) -> Item {
@@ -255,11 +239,7 @@ mod tests {
     }
 
     fn key(name: &str) -> Item {
-        Item::Key(SshKey {
-            name: name.into(),
-            private_key: Zeroizing::new("PRIVATE-KEY-BODY".into()),
-            ..SshKey::default()
-        })
+        key_item(name, "PRIVATE-KEY-BODY")
     }
 
     fn rows(vault: &Vault) -> BTreeMap<String, ItemRow> {

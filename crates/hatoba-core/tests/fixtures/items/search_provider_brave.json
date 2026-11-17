@@ -1,0 +1,7 @@
+{
+  "type": "search_provider",
+  "kind": "brave",
+  "base_url": null,
+  "api_key": "brave-key",
+  "updated_at": 1700000000020
+}

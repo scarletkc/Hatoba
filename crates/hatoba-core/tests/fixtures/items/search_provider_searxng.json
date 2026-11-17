@@ -1,0 +1,7 @@
+{
+  "type": "search_provider",
+  "kind": "searxng",
+  "base_url": "https://searx.example.org",
+  "api_key": "",
+  "updated_at": 1700000000022
+}

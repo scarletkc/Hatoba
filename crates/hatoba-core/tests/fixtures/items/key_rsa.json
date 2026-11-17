@@ -1,0 +1,12 @@
+{
+  "type": "key",
+  "name": "legacy-rsa",
+  "algorithm": "rsa",
+  "private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\nRSA\n-----END OPENSSH PRIVATE KEY-----",
+  "passphrase": null,
+  "public_key": "ssh-rsa AAAATest",
+  "fingerprint": "SHA256:rsa123456",
+  "comment": "legacy",
+  "created_at": 1700000000000,
+  "updated_at": 1700000000008
+}

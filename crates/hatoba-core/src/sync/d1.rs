@@ -52,7 +52,7 @@ const FAR_FUTURE_MS: i64 = 253_402_300_799_000;
 /// Marker for "the table does not exist yet".
 const NO_SUCH_TABLE: &str = "d1 no such table";
 
-const SCHEMA: [&str; 3] = [
+pub(super) const SCHEMA: [&str; 3] = [
     "CREATE TABLE IF NOT EXISTS meta (
         id                  INTEGER PRIMARY KEY CHECK (id = 1),
         schema_version      INTEGER NOT NULL,

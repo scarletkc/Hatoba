@@ -1,0 +1,12 @@
+{
+  "type": "forward",
+  "host_id": "host-1",
+  "name": "Webhook",
+  "kind": "remote",
+  "bind_address": "0.0.0.0",
+  "bind_port": 8080,
+  "dest_host": "127.0.0.1",
+  "dest_port": 3000,
+  "auto_start": false,
+  "updated_at": 1700000000011
+}

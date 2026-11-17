@@ -1,0 +1,15 @@
+{
+  "type": "ai_provider",
+  "name": "ChatGPT",
+  "protocol": "responses",
+  "base_url": "https://api.openai.com/v1",
+  "api_key": "",
+  "auth_header": "x-api-key",
+  "models": [],
+  "chatgpt": {
+    "client_id": "oaiapp_1",
+    "subject": "user-1",
+    "email": "user@example.com"
+  },
+  "updated_at": 1700000000017
+}

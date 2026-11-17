@@ -1,0 +1,13 @@
+{
+  "type": "mcp_server",
+  "name": "remote",
+  "transport": {
+    "kind": "http",
+    "url": "https://mcp.example.org/mcp",
+    "headers": {
+      "Authorization": "Bearer secret"
+    }
+  },
+  "always_ask": false,
+  "updated_at": 1700000000028
+}

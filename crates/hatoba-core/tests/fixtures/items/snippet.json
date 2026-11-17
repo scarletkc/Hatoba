@@ -1,0 +1,7 @@
+{
+  "type": "snippet",
+  "name": "Check disk",
+  "command": "df -h",
+  "tags": ["linux", "disk"],
+  "updated_at": 1700000000013
+}

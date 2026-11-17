@@ -1,0 +1,20 @@
+{
+  "type": "host",
+  "name": "staging-web",
+  "address": "10.0.1.8",
+  "port": 2222,
+  "username": "ubuntu",
+  "auth": {
+    "kind": "key",
+    "key_id": "key-1"
+  },
+  "group_id": null,
+  "tags": [],
+  "favorite": false,
+  "jump_host_id": null,
+  "proxy": {
+    "kind": "direct"
+  },
+  "note": "",
+  "updated_at": 1700000000001
+}

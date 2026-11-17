@@ -192,22 +192,15 @@ pub struct ConflictEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Group, Host, SshKey};
+    use crate::model::Group;
+    use crate::test_support::{host_item_with, key_item_with};
 
     fn host(name: &str, at: i64) -> Item {
-        Item::Host(Host {
-            name: name.into(),
-            updated_at: at,
-            ..Host::default()
-        })
+        host_item_with(name, |h| h.updated_at = at)
     }
 
     fn key(name: &str, at: i64) -> Item {
-        Item::Key(SshKey {
-            name: name.into(),
-            updated_at: at,
-            ..SshKey::default()
-        })
+        key_item_with(name, "", |k| k.updated_at = at)
     }
 
     #[test]

@@ -1683,29 +1683,17 @@ fn open_vault_check(vault_key: &[u8; 32], json: &str) -> bool {
 mod tests {
     use super::*;
     use crate::model::HostAuth;
-
-    const PW: &str = "correct horse battery staple";
+    use crate::test_support::{
+        TEST_PASSWORD as PW, host_item as host, unlocked_vault_at, vault_on,
+    };
 
     fn test_vault() -> (Vault, Arc<ManualClock>) {
         let clock = Arc::new(ManualClock::new(1_000_000));
-        let vault = Vault::open_in_memory().unwrap().with_clock(clock.clone());
-        (vault, clock)
+        (vault_on(&clock), clock)
     }
 
     fn created() -> (Vault, Arc<ManualClock>, RecoveryCode) {
-        let (mut vault, clock) = test_vault();
-        let code = vault
-            .create_with_params(PW, KdfParams::for_tests())
-            .unwrap();
-        (vault, clock, code)
-    }
-
-    fn host(name: &str) -> Item {
-        Item::Host(Host {
-            name: name.into(),
-            address: format!("{name}.example.org"),
-            ..Host::default()
-        })
+        unlocked_vault_at(1_000_000, PW)
     }
 
     #[test]

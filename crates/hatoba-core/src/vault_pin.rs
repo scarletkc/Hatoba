@@ -232,23 +232,14 @@ impl Vault {
 mod tests {
     use super::*;
     use crate::crypto::random_key;
-    use crate::vault::ManualClock;
-    use std::sync::Arc;
-
-    const PW: &str = "correct horse battery staple";
+    use crate::test_support::{TEST_PASSWORD as PW, unlocked_vault};
 
     fn foreign_key() -> Key32 {
         random_key().expect("rng")
     }
 
     fn unlocked() -> Vault {
-        let mut vault = Vault::open_in_memory()
-            .unwrap()
-            .with_clock(Arc::new(ManualClock::new(1_700_000_000_000)));
-        vault
-            .create_with_params(PW, KdfParams::for_tests())
-            .unwrap();
-        vault
+        unlocked_vault().0
     }
 
     #[test]

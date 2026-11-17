@@ -1,0 +1,34 @@
+{
+  "type": "settings",
+  "terminal": {
+    "font_family": "Cascadia Mono",
+    "font_size": 13,
+    "theme": "dark",
+    "dark_scheme": "dracula",
+    "light_scheme": "github-light",
+    "cursor_style": "bar",
+    "scrollback": 10000,
+    "right_click": "menu",
+    "confirm_multiline_paste": true,
+    "suggest_commands": false
+  },
+  "ai": {
+    "default_model": {
+      "provider_id": "p1",
+      "model_id": "m1"
+    },
+    "default_effort": "high",
+    "search_provider_id": "sp1",
+    "native_search": true,
+    "builtin_skill_enabled": true,
+    "custom_instructions": "Answer in English.",
+    "send_terminal_screen": true,
+    "judge_model": {
+      "provider_id": "p2",
+      "model_id": "jev-latest"
+    },
+    "memory": true,
+    "text_size": 13
+  },
+  "updated_at": 1700000000030
+}

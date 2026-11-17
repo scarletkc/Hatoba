@@ -12,16 +12,16 @@ use crate::crypto::{KdfParams, random_key, seal};
 use crate::error::Error;
 use crate::model::{
     AiConversation, AiEffort, AiMessage, Group, Host, HostAuth, Item, PortForward, RightClick,
-    SETTINGS_ID, SshKey, new_id,
+    SETTINGS_ID, new_id,
 };
 use crate::platform::DeviceInfo;
 use crate::recovery::RecoveryCode;
 use crate::store::StoreOps;
 use crate::sync::engine::{SyncOptions, sync_round};
+use crate::test_support::{T0, host_item as host, key_item as key, unlocked_vault_on, vault_on};
 use crate::vault::{ManualClock, Vault};
 
 const PW: &str = "sync-test-password";
-const T0: i64 = 1_700_000_000_000;
 
 struct Dev {
     vault: SharedVault,
@@ -106,34 +106,17 @@ impl Dev {
     }
 }
 
-fn host(name: &str) -> Item {
-    Item::Host(Host {
-        name: name.into(),
-        address: format!("{name}.example.org"),
-        ..Host::default()
-    })
-}
-
-fn key(name: &str, body: &str) -> Item {
-    Item::Key(SshKey {
-        name: name.into(),
-        private_key: Zeroizing::new(body.into()),
-        ..SshKey::default()
-    })
-}
-
 fn device(
     server: &Arc<FakeServer>,
     clock: &Arc<ManualClock>,
     name: &'static str,
     created: bool,
 ) -> Dev {
-    let mut vault = Vault::open_in_memory().unwrap().with_clock(clock.clone());
-    if created {
-        vault
-            .create_with_params(PW, KdfParams::for_tests())
-            .unwrap();
-    }
+    let vault = if created {
+        unlocked_vault_on(clock, PW).0
+    } else {
+        vault_on(clock)
+    };
     Dev {
         vault: share(vault),
         backend: FakeBackend::new(server),
@@ -431,11 +414,13 @@ const LOCAL_PW: &str = "this device's own password";
 
 /// A device whose vault was created on its own, with another password.
 fn own_vault_device(server: &Arc<FakeServer>, clock: &Arc<ManualClock>) -> Dev {
-    let dev = device(server, clock, "device-c", false);
-    dev.v()
-        .create_with_params(LOCAL_PW, KdfParams::for_tests())
-        .unwrap();
-    dev
+    let (vault, _) = unlocked_vault_on(clock, LOCAL_PW);
+    Dev {
+        vault: share(vault),
+        backend: FakeBackend::new(server),
+        clock: clock.clone(),
+        name: "device-c",
+    }
 }
 
 /// Flow C followed by the first sync round, as the app runs them.
@@ -2045,10 +2030,7 @@ async fn failed_remote_password_change_leaves_both_sides_on_the_old_password() {
 async fn recovery_code_resets_the_password_on_an_existing_device() {
     let server = FakeServer::new();
     let clock = Arc::new(ManualClock::new(T0));
-    let mut vault = Vault::open_in_memory().unwrap().with_clock(clock.clone());
-    let code = vault
-        .create_with_params(PW, KdfParams::for_tests())
-        .unwrap();
+    let (vault, code) = unlocked_vault_on(&clock, PW);
     let a = Dev {
         vault: share(vault),
         backend: FakeBackend::new(&server),
@@ -2104,10 +2086,7 @@ async fn recovery_code_resets_the_password_on_an_existing_device() {
 async fn recovery_code_restores_a_vault_on_a_fresh_device() {
     let server = FakeServer::new();
     let clock = Arc::new(ManualClock::new(T0));
-    let mut vault = Vault::open_in_memory().unwrap().with_clock(clock.clone());
-    let code = vault
-        .create_with_params(PW, KdfParams::for_tests())
-        .unwrap();
+    let (vault, code) = unlocked_vault_on(&clock, PW);
     let a = Dev {
         vault: share(vault),
         backend: FakeBackend::new(&server),
@@ -2137,10 +2116,7 @@ async fn recovery_code_restores_a_vault_on_a_fresh_device() {
 async fn recovery_code_for_a_different_vault_is_refused() {
     let (server, clock, a, _b) = two_devices().await;
     // A second, unrelated local vault tries to "recover" using A's cloud vault code.
-    let mut other = Vault::open_in_memory().unwrap().with_clock(clock.clone());
-    let other_code = other
-        .create_with_params("other-pw", KdfParams::for_tests())
-        .unwrap();
+    let (other, other_code) = unlocked_vault_on(&clock, "other-pw");
     let dev = Dev {
         vault: share(other),
         backend: FakeBackend::new(&server),
@@ -2166,10 +2142,7 @@ async fn recovery_code_for_a_different_vault_is_refused() {
 async fn rotating_the_recovery_code_invalidates_the_old_one_remotely() {
     let server = FakeServer::new();
     let clock = Arc::new(ManualClock::new(T0));
-    let mut vault = Vault::open_in_memory().unwrap().with_clock(clock.clone());
-    let old_code = vault
-        .create_with_params(PW, KdfParams::for_tests())
-        .unwrap();
+    let (vault, old_code) = unlocked_vault_on(&clock, PW);
     let a = Dev {
         vault: share(vault),
         backend: FakeBackend::new(&server),
