@@ -76,12 +76,7 @@ jobs:
           persist-credentials: false
       # No Rust cache: the installer is built from a clean target directory.
       - uses: dtolnay/rust-toolchain@stable
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-node-pnpm
       - run: pnpm tauri build --bundles nsis
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -107,18 +102,10 @@ jobs:
         with:
           ref: ${{ needs.preflight.outputs.sha }}
           persist-credentials: false
-      - name: System dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libdbus-1-dev
+      - uses: ./.github/actions/setup-tauri-linux
       # No Rust cache: the packages are built from a clean target directory.
       - uses: dtolnay/rust-toolchain@stable
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-node-pnpm
       - run: pnpm tauri build --bundles deb,appimage
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -145,12 +132,7 @@ jobs:
           persist-credentials: false
       # No Rust cache: the app is built from a clean target directory.
       - uses: dtolnay/rust-toolchain@stable
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-node-pnpm
       # Without --no-sign, so the app keeps the ad-hoc code signature that tauri.conf.json asks for;
       # Apple Silicon Macs report an unsigned download as damaged. The CI environment variable makes
       # the DMG step skip the Finder window layout, which fails on a runner without a desktop session.
