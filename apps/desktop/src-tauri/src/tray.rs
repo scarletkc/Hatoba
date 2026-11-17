@@ -31,7 +31,7 @@ mod imp {
         CloseAction, ClosePromptEvent, ForwardKind, HostConnectionView, LocalPrefs, LockReason,
         RemoteEditQuitEvent, RunningForwardView, TrayMenuInput, TrayUpdateEvent,
     };
-    use crate::state::AppState;
+    use crate::state::{AppState, MutexExt};
     use crate::{lock, platform};
 
     /// Sharp at the tray's size: 16 px at 100% on Windows; Linux panels scale the larger one.
@@ -224,7 +224,7 @@ mod imp {
             let Some(tray) = handle.try_state::<Tray>() else {
                 return;
             };
-            let mut shown = tray.shown.lock().unwrap_or_else(|p| p.into_inner());
+            let mut shown = tray.shown.lock_unpoisoned();
             change(&mut shown);
             if let Err(e) = refresh(&handle, &tray, &mut shown) {
                 tracing::warn!("tray menu not updated: {e}");

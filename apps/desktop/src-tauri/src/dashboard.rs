@@ -14,7 +14,7 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use hatoba_core::model::{Host, HostAuth, Item};
@@ -28,7 +28,7 @@ use crate::convert::stats_view;
 use crate::dto::{DashboardEvent, DashboardHold, HostKeyPromptKind};
 use crate::error::{AppError, KeyParseErrorKind, SshErrorKind};
 use crate::ssh::{Unattended, build_config, connect_unattended, known_host_keys};
-use crate::state::state;
+use crate::state::{MutexExt, state};
 
 /// Connections being set up at the same time, from the TCP connection to the end of sign-in.
 /// OpenSSH's default `MaxStartups` starts dropping unauthenticated connections past 10, which
@@ -150,10 +150,6 @@ struct Probe {
     online: OnceCell<bool>,
 }
 
-fn lock(inner: &Mutex<Inner>) -> MutexGuard<'_, Inner> {
-    inner.lock().unwrap_or_else(|p| p.into_inner())
-}
-
 /// Closes a connection without waiting for it.
 fn close(session: SshSession) {
     tauri::async_runtime::spawn(async move { session.disconnect().await });
@@ -172,7 +168,7 @@ impl Dashboard {
     ) -> u64 {
         let interval = Duration::from_secs(u64::from(interval_secs.clamp(1, 60)));
         let wanted: HashSet<&str> = host_ids.iter().map(String::as_str).collect();
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         inner.next_watch += 1;
         let id = inner.next_watch;
         let restart = inner.watch.as_ref().is_some_and(|w| w.interval != interval);
@@ -222,7 +218,7 @@ impl Dashboard {
 
     /// Stops the watch `id`: every reader stops, and the connections close a minute later.
     pub fn unwatch(&self, id: u64) {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         if inner.watch.as_ref().is_none_or(|w| w.id != id) {
             return;
         }
@@ -237,7 +233,9 @@ impl Dashboard {
     /// A terminal tab on the host connected: its reader looks at once, so a held host is read
     /// over the tab without waiting for the next minute.
     pub fn wake(&self, host_id: &str) {
-        if let Some(reader) = lock(&self.inner)
+        if let Some(reader) = self
+            .inner
+            .lock_unpoisoned()
             .hosts
             .get(host_id)
             .and_then(|e| e.reader.as_ref())
@@ -248,7 +246,7 @@ impl Dashboard {
 
     /// **Retry**: signs in to a held host again, and looks at an offline or failed one now.
     pub fn retry(&self, host_id: &str) {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         let Some(entry) = inner.hosts.get_mut(host_id) else {
             return;
         };
@@ -277,7 +275,7 @@ impl Dashboard {
     /// lock ([`forget_secret_hashes`]), so a held host is tried once more after the unlock.
     pub fn stop_all(&self) {
         let sessions: Vec<SshSession> = {
-            let mut inner = lock(&self.inner);
+            let mut inner = self.inner.lock_unpoisoned();
             inner.watch = None;
             inner.probes.clear();
             inner.hop_gates.clear();
@@ -304,7 +302,7 @@ impl Dashboard {
     /// open and was made for the host as it is now (`config` is [`Versions::config`]). The
     /// dashboard then reads over the tab's connection like any other.
     pub fn take_connection(&self, host_id: &str, config: &str) -> Option<SshSession> {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         let entry = inner.hosts.get_mut(host_id)?;
         let own = entry.own.take()?;
         if own.config == config && !own.session.is_closed() {
@@ -316,7 +314,9 @@ impl Dashboard {
     }
 
     fn emit(&self, event: DashboardEvent) {
-        let Some((id, sink)) = lock(&self.inner)
+        let Some((id, sink)) = self
+            .inner
+            .lock_unpoisoned()
             .watch
             .as_ref()
             .map(|w| (w.id, Arc::clone(&w.sink)))
@@ -331,7 +331,7 @@ impl Dashboard {
 
     /// The dashboard's open connection to the host, made for the host as it is now.
     fn own(&self, host_id: &str, config: &str) -> Option<SshSession> {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         let entry = inner.hosts.get_mut(host_id)?;
         let fresh = entry
             .own
@@ -355,7 +355,7 @@ impl Dashboard {
         config: String,
         cancel: &CancellationToken,
     ) -> bool {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         // Checked under the lock that `unwatch` and `stop_all` cancel under.
         if cancel.is_cancelled() {
             close(session);
@@ -370,7 +370,8 @@ impl Dashboard {
 
     /// Whether the dashboard still holds its own connection to the host.
     fn owns(&self, host_id: &str) -> bool {
-        lock(&self.inner)
+        self.inner
+            .lock_unpoisoned()
             .hosts
             .get(host_id)
             .is_some_and(|e| e.own.is_some())
@@ -379,7 +380,7 @@ impl Dashboard {
     /// Whether the page's readings of the host came from a connection made for other settings
     /// (another server, perhaps), and are to be dropped. Once.
     fn settings_changed(&self, host_id: &str, config: &str) -> bool {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         let Some(entry) = inner.hosts.get_mut(host_id) else {
             return false;
         };
@@ -391,14 +392,16 @@ impl Dashboard {
     }
 
     fn reading_with(&self, host_id: &str, config: &str) {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         let entry = inner.hosts.entry(host_id.to_owned()).or_default();
         entry.read_with = Some(config.to_owned());
     }
 
     /// Closes the dashboard's own connection to the host, now that a tab's serves it.
     fn drop_own(&self, host_id: &str) {
-        let own = lock(&self.inner)
+        let own = self
+            .inner
+            .lock_unpoisoned()
             .hosts
             .get_mut(host_id)
             .and_then(|e| e.own.take());
@@ -410,7 +413,7 @@ impl Dashboard {
     /// The reader `reader_id` of the host ended: it is forgotten, so a later watch starts
     /// another, and the connection lingers.
     fn reader_ended(&self, host_id: &str, reader_id: u64) {
-        if let Some(entry) = lock(&self.inner).hosts.get_mut(host_id)
+        if let Some(entry) = self.inner.lock_unpoisoned().hosts.get_mut(host_id)
             && entry.reader.as_ref().is_some_and(|r| r.id == reader_id)
         {
             entry.reader = None;
@@ -422,7 +425,7 @@ impl Dashboard {
     /// again before then or a tab took the connection over.
     fn release(&self, host_id: &str) {
         let generation = {
-            let mut inner = lock(&self.inner);
+            let mut inner = self.inner.lock_unpoisoned();
             inner.next_release += 1;
             let generation = inner.next_release;
             let Some(entry) = inner.hosts.get_mut(host_id) else {
@@ -439,7 +442,7 @@ impl Dashboard {
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(LINGER).await;
             let own = {
-                let mut inner = lock(&inner);
+                let mut inner = inner.lock_unpoisoned();
                 inner.hosts.get_mut(&host_id).and_then(|entry| {
                     (entry.reader.is_none() && entry.released == generation)
                         .then(|| entry.own.take())
@@ -453,7 +456,7 @@ impl Dashboard {
     }
 
     fn held(&self, host_id: &str, version: &str) -> Option<(DashboardHold, Option<AppError>)> {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         let entry = inner.hosts.get_mut(host_id)?;
         if entry.hold.as_ref().is_some_and(|h| h.version != version) {
             entry.hold = None;
@@ -469,7 +472,7 @@ impl Dashboard {
         version: String,
         hop: Option<&JumpVersion>,
     ) {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         if let Some(jump) = hop {
             if let Some(gate) = inner.hop_gates.get_mut(&jump.id) {
                 gate.passed = None;
@@ -498,7 +501,7 @@ impl Dashboard {
     /// the one whose connection failed at them included, and those hosts no longer try them
     /// one at a time.
     fn passed(&self, jumps: &[JumpVersion]) {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         for jump in jumps {
             inner
                 .hop_gates
@@ -539,7 +542,7 @@ impl Dashboard {
         order.dedup_by(|a, b| a.id == b.id);
         for jump in order {
             let gate = {
-                let mut inner = lock(&self.inner);
+                let mut inner = self.inner.lock_unpoisoned();
                 let entry = inner
                     .hop_gates
                     .entry(jump.id.clone())
@@ -551,7 +554,9 @@ impl Dashboard {
             };
             let permit = gate.acquire_owned().await.ok()?;
             // The connection before this one may have got through.
-            let passed = lock(&self.inner)
+            let passed = self
+                .inner
+                .lock_unpoisoned()
                 .hop_gates
                 .get(&jump.id)
                 .and_then(|g| g.passed.as_deref())
@@ -570,7 +575,7 @@ impl Dashboard {
         host_id: &str,
         jumps: &[JumpVersion],
     ) -> Option<(DashboardHold, Option<AppError>)> {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         let mut found = None;
         for jump in jumps {
             match inner.hop_holds.get(&jump.id) {
@@ -593,14 +598,14 @@ impl Dashboard {
     }
 
     fn unsupported(&self, host_id: &str, config: &str) -> Option<String> {
-        let inner = lock(&self.inner);
+        let inner = self.inner.lock_unpoisoned();
         let (version, system) = inner.hosts.get(host_id)?.unsupported.as_ref()?;
         (version == config).then(|| system.clone())
     }
 
     fn set_unsupported(&self, host_id: &str, config: String, system: String) {
         let own = {
-            let mut inner = lock(&self.inner);
+            let mut inner = self.inner.lock_unpoisoned();
             let entry = inner.hosts.entry(host_id.to_owned()).or_default();
             entry.unsupported = Some((config, system));
             entry.own.take()
@@ -615,7 +620,7 @@ impl Dashboard {
     /// [`PROBE_FRESH`] for every host it is the first hop of, and again after **Retry**.
     async fn probe(&self, host_id: &str, target: &ProbeTarget) -> bool {
         let probe = {
-            let mut inner = lock(&self.inner);
+            let mut inner = self.inner.lock_unpoisoned();
             let reprobe = inner
                 .hosts
                 .get_mut(host_id)

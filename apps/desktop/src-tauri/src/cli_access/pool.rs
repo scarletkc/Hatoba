@@ -12,6 +12,7 @@ use hatoba_ssh::SshSession;
 use tokio_util::sync::CancellationToken;
 
 use crate::error::{AppError, AppResult};
+use crate::state::MutexExt;
 
 /// How long a connection stays open without a command or a copy on it.
 pub const IDLE: Duration = Duration::from_secs(10 * 60);
@@ -62,7 +63,7 @@ impl Lease {
 impl Drop for Lease {
     fn drop(&mut self) {
         if let Some(use_) = &self.use_ {
-            let mut state = lock(&use_.state);
+            let mut state = use_.state.lock_unpoisoned();
             state.last = Some(Instant::now());
             state.leases -= 1;
             if state.retired && state.leases == 0 {
@@ -74,7 +75,7 @@ impl Drop for Lease {
 
 impl Pooled {
     fn lease(&self) -> Lease {
-        lock(&self.use_.state).leases += 1;
+        self.use_.state.lock_unpoisoned().leases += 1;
         Lease {
             session: self.session.clone(),
             use_: Some(Arc::clone(&self.use_)),
@@ -82,7 +83,7 @@ impl Pooled {
     }
 
     fn idle_for(&self) -> Duration {
-        let state = lock(&self.use_.state);
+        let state = self.use_.state.lock_unpoisoned();
         if state.leases > 0 {
             return Duration::ZERO;
         }
@@ -91,17 +92,13 @@ impl Pooled {
 
     /// Closes the connection once no command or copy runs on it.
     fn retire(self) {
-        let mut state = lock(&self.use_.state);
+        let mut state = self.use_.state.lock_unpoisoned();
         if state.leases == 0 {
             close(self.session);
         } else {
             state.retired = true;
         }
     }
-}
-
-fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|p| p.into_inner())
 }
 
 fn close(session: SshSession) {
@@ -123,7 +120,12 @@ impl Pool {
         F: FnOnce() -> Fut,
         Fut: Future<Output = AppResult<SshSession>>,
     {
-        let slot = Arc::clone(lock(&self.slots).entry(host_id.to_owned()).or_default());
+        let slot = Arc::clone(
+            self.slots
+                .lock_unpoisoned()
+                .entry(host_id.to_owned())
+                .or_default(),
+        );
         let mut slot = slot.lock().await;
         if let Some(pooled) = slot
             .as_ref()
@@ -151,7 +153,7 @@ impl Pool {
 
     /// Lets go of the host's connection, which closes once no command or copy runs on it.
     pub fn release(&self, host_id: &str) {
-        let slots = lock(&self.slots);
+        let slots = self.slots.lock_unpoisoned();
         let Some(slot) = slots.get(host_id) else {
             return;
         };
@@ -165,7 +167,7 @@ impl Pool {
 
     /// Closes the connections unused for `idle`, and those that closed on their own.
     pub fn close_idle(&self, idle: Duration) {
-        let mut slots = lock(&self.slots);
+        let mut slots = self.slots.lock_unpoisoned();
         slots.retain(|_, slot| {
             // A slot in use is making its connection.
             let Ok(mut slot) = slot.try_lock() else {
@@ -184,7 +186,12 @@ impl Pool {
 
     /// Closes every connection. One being made now is closed once it is, by its epoch.
     pub fn close_all(&self) {
-        let slots: Vec<_> = lock(&self.slots).drain().map(|(_, slot)| slot).collect();
+        let slots: Vec<_> = self
+            .slots
+            .lock_unpoisoned()
+            .drain()
+            .map(|(_, slot)| slot)
+            .collect();
         for slot in slots {
             if let Ok(mut slot) = slot.try_lock()
                 && let Some(pooled) = slot.take()

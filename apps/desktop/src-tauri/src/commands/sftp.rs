@@ -13,7 +13,7 @@ use crate::dto::{
 };
 use crate::error::{AppError, AppResult};
 use crate::remote_edit;
-use crate::state::{AppState, state as app_state};
+use crate::state::{AppState, MutexExt, state as app_state};
 
 /// The session's SFTP client. SEC-03: sessions stay connected behind the lock screen, but take no
 /// input until unlocked, so every SFTP command fails while locked.
@@ -177,12 +177,12 @@ impl Transfer {
     }
 
     fn progress(&self, p: TransferProgress) {
-        *self.last.lock().unwrap_or_else(|e| e.into_inner()) = p;
+        *self.last.lock_unpoisoned() = p;
         self.emit(p, TransferState::Running, None);
     }
 
     fn finish(&self, state: TransferState, error: Option<String>) {
-        let p = *self.last.lock().unwrap_or_else(|e| e.into_inner());
+        let p = *self.last.lock_unpoisoned();
         self.emit(p, state, error);
     }
 

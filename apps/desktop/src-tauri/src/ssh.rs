@@ -23,7 +23,7 @@ use crate::dto::{
     AuthBanner, AuthPrompt, AuthPromptClosed, AuthPromptField, HostKeyPrompt, HostKeyPromptKind,
 };
 use crate::error::{AppError, AppResult, SshErrorKind};
-use crate::state::{AppState, now_ms, state};
+use crate::state::{AppState, MutexExt, now_ms, state};
 use crate::{connection, sync};
 
 /// How long a host-key or 2FA prompt may stay unanswered before the connection gives up.
@@ -72,7 +72,7 @@ impl LiveSession {
     /// Keeps the sampling started as `id` in place of an earlier one, which stops. Starts can
     /// finish out of order: one that a later start already replaced is dropped, and so stops.
     pub fn set_stats(&self, id: u64, handle: StatsHandle) {
-        let mut stats = lock(&self.stats);
+        let mut stats = self.stats.lock_unpoisoned();
         if stats.as_ref().is_none_or(|(current, _)| *current < id) {
             *stats = Some((id, handle));
         }
@@ -80,7 +80,7 @@ impl LiveSession {
 
     /// Stops the sampling started as `id`, unless a later one replaced it.
     pub fn stop_stats(&self, id: u64) {
-        let mut stats = lock(&self.stats);
+        let mut stats = self.stats.lock_unpoisoned();
         if stats.as_ref().is_some_and(|(current, _)| *current == id) {
             *stats = None;
         }
@@ -89,14 +89,14 @@ impl LiveSession {
     /// Stops sampling and closes the shell and SFTP, which ends the tab's transfers. Its own
     /// connection closes too; a shared one closes once nothing else is left on it.
     pub async fn close(&self) {
-        lock(&self.stats).take();
+        self.stats.lock_unpoisoned().take();
         if let Some(sftp) = self.sftp.get() {
             sftp.close().await;
         }
         self.shell.close().await;
         match &self.link {
             Link::Own => self.session.disconnect().await,
-            Link::Shared(tab) => drop(lock(tab).take()),
+            Link::Shared(tab) => drop(tab.lock_unpoisoned().take()),
         }
     }
 }
@@ -109,17 +109,14 @@ pub struct SshManager {
     transfers: Mutex<HashMap<String, CancellationToken>>,
 }
 
-fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|p| p.into_inner())
-}
-
 impl SshManager {
     pub fn insert(&self, id: String, session: Arc<LiveSession>) {
-        lock(&self.sessions).insert(id, session);
+        self.sessions.lock_unpoisoned().insert(id, session);
     }
 
     pub fn get(&self, id: &str) -> AppResult<Arc<LiveSession>> {
-        lock(&self.sessions)
+        self.sessions
+            .lock_unpoisoned()
             .get(id)
             .cloned()
             .ok_or_else(|| AppError::not_found("session"))
@@ -128,7 +125,7 @@ impl SshManager {
     /// Removes the session only if it is still the given instance (a reconnect may have replaced
     /// it). `false` when something else removed it first.
     pub fn remove_if_same(&self, id: &str, live: &Arc<LiveSession>) -> bool {
-        let mut sessions = lock(&self.sessions);
+        let mut sessions = self.sessions.lock_unpoisoned();
         if sessions.get(id).is_some_and(|s| Arc::ptr_eq(s, live)) {
             sessions.remove(id);
             true
@@ -138,36 +135,36 @@ impl SshManager {
     }
 
     pub fn take(&self, id: &str) -> Option<Arc<LiveSession>> {
-        lock(&self.sessions).remove(id)
+        self.sessions.lock_unpoisoned().remove(id)
     }
 
     /// SEC-03 "lock disconnects sessions": takes every session out, by id, for the lock to close.
     pub fn take_all(&self) -> Vec<(String, Arc<LiveSession>)> {
-        lock(&self.sessions).drain().collect()
+        self.sessions.lock_unpoisoned().drain().collect()
     }
 
     pub fn answer_hostkey(&self, request_id: &str, accept: bool) {
-        if let Some(tx) = lock(&self.hostkey_waiters).remove(request_id) {
+        if let Some(tx) = self.hostkey_waiters.lock_unpoisoned().remove(request_id) {
             let _ = tx.send(accept);
         }
     }
 
     pub fn answer_auth(&self, request_id: &str, answers: Option<Vec<String>>) {
-        if let Some(tx) = lock(&self.auth_waiters).remove(request_id) {
+        if let Some(tx) = self.auth_waiters.lock_unpoisoned().remove(request_id) {
             let _ = tx.send(answers);
         }
     }
 
     pub fn add_transfer(&self, id: String, token: CancellationToken) {
-        lock(&self.transfers).insert(id, token);
+        self.transfers.lock_unpoisoned().insert(id, token);
     }
 
     pub fn finish_transfer(&self, id: &str) {
-        lock(&self.transfers).remove(id);
+        self.transfers.lock_unpoisoned().remove(id);
     }
 
     pub fn cancel_transfer(&self, id: &str) {
-        if let Some(token) = lock(&self.transfers).get(id) {
+        if let Some(token) = self.transfers.lock_unpoisoned().get(id) {
             token.cancel();
         }
     }
@@ -425,7 +422,11 @@ impl HostKeyVerifier for Verifier {
         let (kind, previous) = host_key_status(&known, key);
         let request_id = uuid::Uuid::now_v7().to_string();
         let (tx, rx) = oneshot::channel();
-        lock(&state.ssh.hostkey_waiters).insert(request_id.clone(), tx);
+        state
+            .ssh
+            .hostkey_waiters
+            .lock_unpoisoned()
+            .insert(request_id.clone(), tx);
         let prompt = HostKeyPrompt {
             request_id: request_id.clone(),
             session_id: self.session_id.clone(),
@@ -446,11 +447,19 @@ impl HostKeyVerifier for Verifier {
             on_ask(Asking::HostKey { target });
         }
         if prompt.emit(&self.app).is_err() {
-            lock(&state.ssh.hostkey_waiters).remove(&request_id);
+            state
+                .ssh
+                .hostkey_waiters
+                .lock_unpoisoned()
+                .remove(&request_id);
             return false;
         }
         let accepted = matches!(tokio::time::timeout(PROMPT_TIMEOUT, rx).await, Ok(Ok(true)));
-        lock(&state.ssh.hostkey_waiters).remove(&request_id);
+        state
+            .ssh
+            .hostkey_waiters
+            .lock_unpoisoned()
+            .remove(&request_id);
         if accepted {
             let saved = state.with_unlocked(|v| save_host_key(v, host, port, key));
             match saved {
@@ -476,7 +485,11 @@ impl KeyboardInteractive for Interactive {
     async fn respond(&self, request: PromptRequest) -> Option<Vec<Zeroizing<String>>> {
         let request_id = uuid::Uuid::now_v7().to_string();
         let (tx, rx) = oneshot::channel();
-        lock(&state(&self.app).ssh.auth_waiters).insert(request_id.clone(), tx);
+        state(&self.app)
+            .ssh
+            .auth_waiters
+            .lock_unpoisoned()
+            .insert(request_id.clone(), tx);
         let _open = OpenPrompt {
             app: self.app.clone(),
             request_id: request_id.clone(),
@@ -531,7 +544,11 @@ impl KeyboardInteractive for Interactive {
         }
         let request_id = uuid::Uuid::now_v7().to_string();
         let (tx, rx) = oneshot::channel();
-        lock(&state(&self.app).ssh.auth_waiters).insert(request_id.clone(), tx);
+        state(&self.app)
+            .ssh
+            .auth_waiters
+            .lock_unpoisoned()
+            .insert(request_id.clone(), tx);
         let open = OpenPrompt {
             app: self.app.clone(),
             request_id: request_id.clone(),
@@ -561,7 +578,11 @@ pub async fn ask_sudo_password(
 ) -> Option<Zeroizing<String>> {
     let request_id = uuid::Uuid::now_v7().to_string();
     let (tx, rx) = oneshot::channel();
-    lock(&state(app).ssh.auth_waiters).insert(request_id.clone(), tx);
+    state(app)
+        .ssh
+        .auth_waiters
+        .lock_unpoisoned()
+        .insert(request_id.clone(), tx);
     // Dropped with this future too, when the `hatoba` request stops while it waits.
     let _open = OpenPrompt {
         app: app.clone(),
@@ -605,7 +626,11 @@ struct OpenPrompt {
 
 impl Drop for OpenPrompt {
     fn drop(&mut self) {
-        let waiting = lock(&state(&self.app).ssh.auth_waiters).remove(&self.request_id);
+        let waiting = state(&self.app)
+            .ssh
+            .auth_waiters
+            .lock_unpoisoned()
+            .remove(&self.request_id);
         if waiting.is_some() {
             let request_id = std::mem::take(&mut self.request_id);
             let _ = AuthPromptClosed { request_id }.emit(&self.app);
@@ -634,7 +659,7 @@ pub struct Unattended {
 impl Unattended {
     /// The host key was not trusted yet (`New`) or differs from the trusted one (`Changed`).
     pub fn host_key(&self) -> Option<HostKeyPromptKind> {
-        *lock(&self.host_key)
+        *self.host_key.lock_unpoisoned()
     }
 
     /// The server asked for keyboard-interactive answers beyond the saved password (2FA).
@@ -713,7 +738,7 @@ impl HostKeyVerifier for UnattendedVerifier {
             return true;
         }
         let (kind, _) = host_key_status(&known, key);
-        *lock(&self.outcome.host_key) = Some(kind);
+        *self.outcome.host_key.lock_unpoisoned() = Some(kind);
         false
     }
 }

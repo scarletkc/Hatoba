@@ -24,7 +24,7 @@ use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 use hatoba_ai::tools::MemoryAction;
@@ -50,7 +50,7 @@ use crate::dto::{
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::ssh::{self, Asking, OnAsk, OnBanner, Overrides, Unattended};
-use crate::state::{now_ms, state};
+use crate::state::{MutexExt, now_ms, state};
 
 /// How long the command may take to send its request once connected.
 const REQUEST_WAIT: Duration = Duration::from_secs(10);
@@ -97,26 +97,23 @@ struct KeptPassword {
     used: SystemTime,
 }
 
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|p| p.into_inner())
-}
-
 impl CliAccess {
     fn epoch(&self) -> CancellationToken {
-        lock(&self.epoch).clone()
+        self.epoch.lock_unpoisoned().clone()
     }
 
     /// Stops every command and copy, closes the connections, and forgets the sudo passwords.
     fn end_epoch(&self) {
-        std::mem::take(&mut *lock(&self.epoch)).cancel();
+        std::mem::take(&mut *self.epoch.lock_unpoisoned()).cancel();
         self.pool.close_all();
-        lock(&self.sudo).clear();
-        lock(&self.sudo_turns).clear();
-        lock(&self.stdin).clear();
+        self.sudo.lock_unpoisoned().clear();
+        self.sudo_turns.lock_unpoisoned().clear();
+        self.stdin.lock_unpoisoned().clear();
     }
 
     fn sudo_turn(&self, key: &str) -> Arc<tokio::sync::Mutex<()>> {
-        lock(&self.sudo_turns)
+        self.sudo_turns
+            .lock_unpoisoned()
             .entry(key.to_owned())
             .or_default()
             .clone()
@@ -125,13 +122,13 @@ impl CliAccess {
     /// The sudo password given in the window for `key`, unless [`SUDO_KEPT`] has passed since it
     /// was last used, or the clock went back.
     fn kept_sudo(&self, key: &str) -> Option<Zeroizing<String>> {
-        let mut kept = lock(&self.sudo);
+        let mut kept = self.sudo.lock_unpoisoned();
         kept.retain(|_, k| k.used.elapsed().is_ok_and(|e| e < SUDO_KEPT));
         kept.get(key).map(|k| k.password.clone())
     }
 
     fn keep_sudo(&self, key: String, password: Zeroizing<String>) {
-        lock(&self.sudo).insert(
+        self.sudo.lock_unpoisoned().insert(
             key,
             KeptPassword {
                 password,
@@ -141,19 +138,19 @@ impl CliAccess {
     }
 
     fn forget_sudo(&self, key: &str) {
-        lock(&self.sudo).remove(key);
+        self.sudo.lock_unpoisoned().remove(key);
     }
 
     /// SEC-03: nothing runs behind the lock screen, no connection stays, and the list of what ran
     /// is forgotten.
     pub fn lock(&self, app: &AppHandle) {
         self.end_epoch();
-        lock(&self.activity).clear();
+        self.activity.lock_unpoisoned().clear();
         self.emit(app);
     }
 
     pub fn activity(&self) -> Vec<CliActivity> {
-        lock(&self.activity).iter().cloned().collect()
+        self.activity.lock_unpoisoned().iter().cloned().collect()
     }
 
     fn emit(&self, app: &AppHandle) {
@@ -172,7 +169,7 @@ impl CliAccess {
     ) -> String {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed).to_string();
         {
-            let mut activity = lock(&self.activity);
+            let mut activity = self.activity.lock_unpoisoned();
             activity.push_front(CliActivity {
                 id: id.clone(),
                 kind,
@@ -192,7 +189,7 @@ impl CliAccess {
 
     fn finish(&self, app: &AppHandle, id: &str, end: &End) {
         {
-            let mut activity = lock(&self.activity);
+            let mut activity = self.activity.lock_unpoisoned();
             // Gone after a lock.
             let Some(entry) = activity.iter_mut().find(|e| e.id == id) else {
                 return;
@@ -213,7 +210,7 @@ impl CliAccess {
 pub fn sync(app: &AppHandle) {
     let state = state(app);
     let on = crate::commands::cli::access_on(&state.vault());
-    let mut listener = lock(&state.cli.listener);
+    let mut listener = state.cli.listener.lock_unpoisoned();
     if on == listener.is_some() {
         return;
     }
@@ -233,7 +230,7 @@ pub fn sync(app: &AppHandle) {
             tracing::warn!("the hatoba command cannot reach Hatoba: listening failed: {e}");
             // `sync` cancels the token under this lock before it starts another listener.
             let state = crate::state::state(&app);
-            let mut listener = lock(&state.cli.listener);
+            let mut listener = state.cli.listener.lock_unpoisoned();
             if !stop.is_cancelled() {
                 listener.take();
             }
@@ -350,7 +347,7 @@ where
     };
     // The rest of this connection is the stdin of the command that asked for it.
     if let Op::Stdin { token } = &request.op {
-        let waiting = lock(&state(&app).cli.stdin).remove(token);
+        let waiting = state(&app).cli.stdin.lock_unpoisoned().remove(token);
         if let Some(waiting) = waiting
             && request.version == VERSION
         {
@@ -692,7 +689,11 @@ impl Ctx<'_> {
     /// its end. `false` when no connection brought it in time.
     async fn take_stdin(&self, token: &str, input: mpsc::Sender<Vec<u8>>) -> bool {
         let (give, take) = oneshot::channel();
-        lock(&state(self.app).cli.stdin).insert(token.to_owned(), give);
+        state(self.app)
+            .cli
+            .stdin
+            .lock_unpoisoned()
+            .insert(token.to_owned(), give);
         // Without a reader the hatoba command is gone, which stops the command it ran.
         if self
             .tx
@@ -1106,7 +1107,7 @@ async fn run_exec(
         ran = async { tokio::join!(run, pass_on) } => ran,
         () = pass_in => unreachable!("passing the stdin never ends"),
     };
-    lock(&state(ctx.app).cli.stdin).remove(&token);
+    state(ctx.app).cli.stdin.lock_unpoisoned().remove(&token);
     match ran {
         Ok(run) => match (run.stopped, run.output.exit_status) {
             (None, Some(status)) => End::status(i32::try_from(status).unwrap_or(i32::MAX)),

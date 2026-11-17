@@ -1,6 +1,6 @@
 //! Process-wide state managed by Tauri. Secrets only ever live here, in Rust (spec §3.2).
 
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use std::time::Instant;
 
@@ -98,7 +98,7 @@ impl AppState {
     /// Locks the vault mutex. Poisoning only happens after a panic while holding it; the vault's
     /// own invariants are transactional, so recovering the guard is safe.
     pub fn vault(&self) -> MutexGuard<'_, Vault> {
-        self.vault.lock().unwrap_or_else(|p| p.into_inner())
+        self.vault.lock_unpoisoned()
     }
 
     /// Runs `f` with the vault, requiring it to be unlocked.
@@ -111,14 +111,23 @@ impl AppState {
     }
 
     pub fn touch_activity(&self) {
-        *self.last_activity.lock().unwrap_or_else(|p| p.into_inner()) = Instant::now();
+        *self.last_activity.lock_unpoisoned() = Instant::now();
     }
 
     pub fn idle_for(&self) -> std::time::Duration {
-        self.last_activity
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .elapsed()
+        self.last_activity.lock_unpoisoned().elapsed()
+    }
+}
+
+/// Extension trait for [`Mutex`] that acquires the lock even if a previous holder panicked.
+pub trait MutexExt<T: ?Sized> {
+    /// Locks the mutex, recovering the guard if it was poisoned.
+    fn lock_unpoisoned(&self) -> MutexGuard<'_, T>;
+}
+
+impl<T: ?Sized> MutexExt<T> for Mutex<T> {
+    fn lock_unpoisoned(&self) -> MutexGuard<'_, T> {
+        self.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
