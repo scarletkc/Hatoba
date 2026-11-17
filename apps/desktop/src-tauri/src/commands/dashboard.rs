@@ -6,7 +6,7 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
 
 use crate::dto::DashboardEvent;
-use crate::error::{AppError, AppResult};
+use crate::error::AppResult;
 use crate::state::AppState;
 
 /// Reads the resource usage of `host_ids` every `interval_secs` (1 to 60) in the background,
@@ -22,9 +22,7 @@ pub fn dashboard_watch(
     interval_secs: u32,
     channel: Channel<DashboardEvent>,
 ) -> AppResult<u64> {
-    if !state.vault().is_unlocked() {
-        return Err(AppError::locked());
-    }
+    drop(state.require_unlocked()?);
     let sink = Arc::new(move |event| channel.send(event).is_ok());
     Ok(state.dashboard.watch(&app, &host_ids, interval_secs, sink))
 }
