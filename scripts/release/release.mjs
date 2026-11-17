@@ -24,9 +24,10 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFi
 import { basename, dirname, extname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import { ROOT, git } from "../lib/git.mjs";
+import { githubClient } from "../lib/github.mjs";
 import {
   NOTES_DIR,
-  ROOT,
   VERSION,
   VERSION_FILES,
   compareVersions,
@@ -34,6 +35,8 @@ import {
   onlyVersionChanged,
   readVersion,
 } from "./version.mjs";
+
+export { git };
 
 /** Keep in sync with the environment of the publish job in release.yml. */
 export const ENVIRONMENT = "release";
@@ -176,10 +179,6 @@ export function verifyUpdaterSignature(data, signature, pubkey) {
       .find((field) => field.startsWith("version:"))
       ?.slice("version:".length) ?? null
   );
-}
-
-export function git(args, root = ROOT) {
-  return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
 }
 
 /** Returns the release tag and HEAD, and refuses a tag that already points to another commit. */
@@ -396,18 +395,9 @@ export function ciCovers(tested, sha, root = ROOT) {
 async function github(path, { allowMissing = false } = {}) {
   const token = process.env.GH_TOKEN;
   if (!token) throw new Error("Set GH_TOKEN to a GitHub token that can read this repository.");
-  const response = await fetch(`https://api.github.com/repos/${path}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "hatoba-release",
-    },
+  return githubClient(token, { userAgent: "hatoba-release" }).request("GET", `/repos/${path}`, undefined, {
+    missingOk: allowMissing,
   });
-  if (response.status === 404 && allowMissing) return null;
-  if (!response.ok)
-    throw new Error(`GitHub API request for ${path} failed with HTTP ${response.status}: ${await response.text()}`);
-  return response.json();
 }
 
 /** How long the gate waits for CI that would cover the release commit. Keep below the Preflight job's timeout. */

@@ -2,12 +2,12 @@
 // Versions). `node scripts/release/bump.mjs --worker` raises it.
 // Usage: node scripts/ci/worker-version.mjs [BASE]
 // Compares the working tree with the commit where HEAD branched from BASE, origin/main by default.
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { ROOT, WORKER_VERSION_FILES, compareVersions, nextVersion, readVersion } from "../release/version.mjs";
+import { ROOT, git, gitRaw, lsFiles, nulSeparated } from "../lib/git.mjs";
+import { WORKER_VERSION_FILES, compareVersions, nextVersion, readVersion } from "../release/version.mjs";
 
 const WORKER = "workers/sync";
 /** Every file in these goes into the bundle or the migrations. */
@@ -37,32 +37,18 @@ const BUNDLING_OPTIONS = [
   "verbatimModuleSyntax",
 ];
 
-function git(args, root) {
-  return execFileSync("git", args, {
-    cwd: root,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    maxBuffer: 64 * 1024 * 1024,
-  });
-}
-
-const nulSeparated = (output) => output.split("\0").filter(Boolean);
-
 /** The files in the working tree that git tracks or would track. */
 function workingTree(root) {
   const read = (path) => (existsSync(join(root, path)) ? readFileSync(join(root, path), "utf8") : null);
-  const list = (dir) =>
-    nulSeparated(git(["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", dir], root)).filter(
-      (path) => existsSync(join(root, path)),
-    );
+  const list = (dir) => lsFiles(dir, root);
   return { read, list };
 }
 
 /** The files in a commit. */
 function commitTree(root, commit) {
-  const list = (dir) => nulSeparated(git(["ls-tree", "-r", "-z", "--name-only", commit, "--", dir], root));
+  const list = (dir) => nulSeparated(gitRaw(["ls-tree", "-r", "-z", "--name-only", commit, "--", dir], root));
   const files = new Set(list(WORKER));
-  const read = (path) => (files.has(path) ? git(["show", `${commit}:${path}`], root) : null);
+  const read = (path) => (files.has(path) ? gitRaw(["show", `${commit}:${path}`], root) : null);
   return { read, list };
 }
 
@@ -128,7 +114,7 @@ function changedInputs(before, after) {
 export function checkWorkerVersion(root, base) {
   let commit;
   try {
-    commit = git(["merge-base", "HEAD", base], root).trim();
+    commit = git(["merge-base", "HEAD", base], root);
   } catch {
     throw new Error(
       `Cannot find where HEAD branched from ${base}. Fetch ${base}, or pass the branch or commit to compare with, such as upstream/main.`,
