@@ -24,6 +24,7 @@ use crate::dto::{
 };
 use crate::error::{AppError, AppResult, SshErrorKind};
 use crate::state::{AppState, MutexExt, now_ms, state};
+use crate::terminal::SessionRegistry;
 use crate::{connection, sync};
 
 /// How long a host-key or 2FA prompt may stay unanswered before the connection gives up.
@@ -103,7 +104,7 @@ impl LiveSession {
 
 #[derive(Default)]
 pub struct SshManager {
-    sessions: Mutex<HashMap<String, Arc<LiveSession>>>,
+    sessions: SessionRegistry<LiveSession>,
     hostkey_waiters: Mutex<HashMap<String, oneshot::Sender<bool>>>,
     auth_waiters: Mutex<HashMap<String, oneshot::Sender<Option<Vec<String>>>>>,
     transfers: Mutex<HashMap<String, CancellationToken>>,
@@ -111,36 +112,26 @@ pub struct SshManager {
 
 impl SshManager {
     pub fn insert(&self, id: String, session: Arc<LiveSession>) {
-        self.sessions.lock_unpoisoned().insert(id, session);
+        self.sessions.insert(id, session);
     }
 
     pub fn get(&self, id: &str) -> AppResult<Arc<LiveSession>> {
-        self.sessions
-            .lock_unpoisoned()
-            .get(id)
-            .cloned()
-            .ok_or_else(|| AppError::not_found("session"))
+        self.sessions.get(id)
     }
 
     /// Removes the session only if it is still the given instance (a reconnect may have replaced
     /// it). `false` when something else removed it first.
     pub fn remove_if_same(&self, id: &str, live: &Arc<LiveSession>) -> bool {
-        let mut sessions = self.sessions.lock_unpoisoned();
-        if sessions.get(id).is_some_and(|s| Arc::ptr_eq(s, live)) {
-            sessions.remove(id);
-            true
-        } else {
-            false
-        }
+        self.sessions.remove_if_same(id, live)
     }
 
     pub fn take(&self, id: &str) -> Option<Arc<LiveSession>> {
-        self.sessions.lock_unpoisoned().remove(id)
+        self.sessions.take(id)
     }
 
     /// SEC-03 "lock disconnects sessions": takes every session out, by id, for the lock to close.
     pub fn take_all(&self) -> Vec<(String, Arc<LiveSession>)> {
-        self.sessions.lock_unpoisoned().drain().collect()
+        self.sessions.take_all()
     }
 
     pub fn answer_hostkey(&self, request_id: &str, accept: bool) {

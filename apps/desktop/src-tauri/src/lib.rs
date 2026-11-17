@@ -23,6 +23,7 @@ mod ssh_agent;
 mod state;
 mod sync;
 mod telnet;
+mod terminal;
 mod tray;
 mod update;
 

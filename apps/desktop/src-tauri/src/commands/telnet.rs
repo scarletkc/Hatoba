@@ -14,13 +14,13 @@ use tokio::sync::mpsc;
 use zeroize::Zeroizing;
 
 use crate::commands::hosts::{MAX_NAME_CHARS, check_item_size, proxy_from_input, tags_from_input};
-use crate::commands::ssh::{FRAME_CLOSED, FRAME_DATA, FRAME_ERROR, TermFrame, emit_state};
 use crate::convert::telnet_host_view;
 use crate::dto::{LocalOpenOptions, SessionState, TelnetHostInput, TelnetHostView};
 use crate::error::{AppError, AppResult, SshErrorKind};
 use crate::state::{AppState, now_ms};
 use crate::sync;
 use crate::telnet::TelnetLive;
+use crate::terminal::{FRAME_CLOSED, FRAME_DATA, FRAME_ERROR, TermFrame, clamp_size, emit_state};
 
 /// How long name resolution and the connect may take, as for SSH (SSH-01).
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -323,8 +323,7 @@ async fn open(
     )
     .await
     .map_err(AppError::from)?;
-    let cols = u16::try_from(options.cols.clamp(10, 1000)).unwrap_or(80);
-    let rows = u16::try_from(options.rows.clamp(2, 500)).unwrap_or(24);
+    let (cols, rows) = clamp_size(options.cols, options.rows);
     let session_id = uuid::Uuid::now_v7().to_string();
     let (live, events) = {
         // SEC-03: the vault may have locked while dialing. Under its guard, a lock either comes
@@ -451,10 +450,8 @@ pub async fn telnet_resize(
     rows: u32,
 ) -> AppResult<()> {
     let live = state.telnet.get(&session_id)?;
-    live.session.resize(
-        u16::try_from(cols.clamp(10, 1000)).unwrap_or(80),
-        u16::try_from(rows.clamp(2, 500)).unwrap_or(24),
-    );
+    let (cols, rows) = clamp_size(cols, rows);
+    live.session.resize(cols, rows);
     Ok(())
 }
 
