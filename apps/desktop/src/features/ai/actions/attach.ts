@@ -28,8 +28,8 @@ import {
   type FileRefusal,
   type PasteAttachment,
   type SelectionAttachment,
-} from "../attachments";
-import { localName } from "../place";
+} from "@/lib/ai/attachments";
+import { localName } from "@/lib/ai/place";
 import { pickInput } from "../queue";
 import {
   getSlot,

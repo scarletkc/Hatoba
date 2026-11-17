@@ -21,8 +21,8 @@ import type {
   TelnetHostView,
   VaultStatus,
 } from "../types";
-import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
-import { ENV_MAX_VARS, envRows, envTooLarge, validateEnvRows } from "@/features/hosts/envVars";
+import { byteCount, HOST_NOTES_MAX_BYTES } from "@/lib/ai/instructions";
+import { ENV_MAX_VARS, envRows, envTooLarge, validateEnvRows } from "@/lib/envVars";
 import { defaultRightClick, defaultTerminalFont } from "@/lib/platform";
 import { ZOOM_STEPS, zoomStep } from "@/lib/zoom";
 import { FRAME_CLOSED, FRAME_DATA, FRAME_SESSION } from "../types";

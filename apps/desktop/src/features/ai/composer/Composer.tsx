@@ -26,11 +26,18 @@ import { attachCommand } from "./commandActions";
 import { useCommandMenu } from "./CommandMenu";
 import { commandDraft, findBuiltin, leadingCommand, type BuiltinCommand } from "./commands";
 import { ComposerAttachments, QueuedAttachments, usePendingAttachments, useTerminalSelection } from "./AttachmentChips";
-import { composeMessage, isLongPaste } from "../attachments";
-import { chosenEffort, effectiveEffort, effortKey, modelEfforts } from "../effort";
-import { AUTO_COMPACT_RATIO, contextUsage, estimateTokens, formatTokens, messageFit, type MeterState } from "../meter";
+import { composeMessage, isLongPaste } from "@/lib/ai/attachments";
+import { chosenEffort, effectiveEffort, effortKey, modelEfforts } from "@/lib/ai/effort";
+import {
+  AUTO_COMPACT_RATIO,
+  contextUsage,
+  estimateTokens,
+  formatTokens,
+  messageFit,
+  type MeterState,
+} from "@/lib/ai/meter";
 import { failedServers, loadMcp, toolsMenuRows, useMcp } from "../mcp";
-import { chats, findModel, judgeChosen, sameModel } from "../models";
+import { chats, findModel, judgeChosen, sameModel } from "@/lib/ai/models";
 import { messageAttachments, messageText, takenBeside } from "../queue";
 import { canAskSide } from "../side";
 import { getSlot, patchSlot, slotGeneration, useAi, type QueuedMessage, type Slot } from "../store";

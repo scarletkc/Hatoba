@@ -1,5 +1,5 @@
-import { EFFORTS, sortEfforts } from "@/features/ai/effort";
-import { chats } from "@/features/ai/models";
+import { EFFORTS, sortEfforts } from "@/lib/ai/effort";
+import { chats } from "@/lib/ai/models";
 import type {
   AiEffort,
   AiModel,

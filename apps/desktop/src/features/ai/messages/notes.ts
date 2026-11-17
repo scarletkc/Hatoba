@@ -1,6 +1,6 @@
 import type { MessageKey, Params } from "@/i18n";
-import { modelName, type Note } from "../attachments";
-import { placeLabel } from "../place";
+import { modelName, type Note } from "@/lib/ai/attachments";
+import { placeLabel } from "@/lib/ai/place";
 
 type Tr = (key: MessageKey, params?: Params) => string;
 

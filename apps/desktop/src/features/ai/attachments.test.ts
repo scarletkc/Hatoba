@@ -35,7 +35,7 @@ import {
   type Note,
   type PasteAttachment,
   type SelectionAttachment,
-} from "./attachments";
+} from "@/lib/ai/attachments";
 import blockCases from "./blocks.fixtures.json";
 
 const att = (text: string, host = "prod-api"): SelectionAttachment => makeAttachment(host, text)!;

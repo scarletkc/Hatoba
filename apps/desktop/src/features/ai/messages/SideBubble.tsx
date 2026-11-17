@@ -3,7 +3,7 @@ import { Button, Chip, Icon, IconButton, StatusLine } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { dismissSideQuestion, retrySideQuestion, stopSideQuestion } from "../actions/sideQuestions";
-import { parseMessage } from "../attachments";
+import { parseMessage } from "@/lib/ai/attachments";
 import { AttachmentCardFor } from "../composer/AttachmentChips";
 import { sideRunning, type SideQuestion } from "../side";
 import { EmptyReply, PendingLine } from "./AssistantMessage";

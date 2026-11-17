@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { translate, type Locale, type MessageKey, type Params } from "@/i18n";
-import { composeMessage, fileRevertNote, parseMessage } from "../attachments";
+import { composeMessage, fileRevertNote, parseMessage } from "@/lib/ai/attachments";
 import { noteLabel, noteTitle } from "./notes";
 
 const tr = (locale: Locale) => (key: MessageKey, params?: Params) => translate(locale, key, params);

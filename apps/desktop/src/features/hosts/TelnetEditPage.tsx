@@ -23,13 +23,14 @@ import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { InstructionsField } from "@/features/ai/InstructionsField";
-import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
+import { byteCount, HOST_NOTES_MAX_BYTES } from "@/lib/ai/instructions";
+import type { HostDraft } from "@/lib/hostDraft";
 import { proxySummary } from "@/features/settings/proxyLogic";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { ProxyMode, TelnetHostInput, TelnetHostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { ProtocolRow, type HostDraft } from "./ProtocolRow";
+import { ProtocolRow } from "./ProtocolRow";
 import { useHostsUi } from "./ui";
 import s from "./HostEditPage.module.css";
 

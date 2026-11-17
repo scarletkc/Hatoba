@@ -8,7 +8,7 @@ import type {
   AiSideEvent,
   AiSideQuestionInput,
 } from "@/ipc/types";
-import type { PasteAttachment } from "./attachments";
+import type { PasteAttachment } from "@/lib/ai/attachments";
 import { newTurn } from "./turn";
 
 /** The calls the actions make, answered by each test. */

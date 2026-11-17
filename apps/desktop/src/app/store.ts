@@ -10,7 +10,7 @@ import type {
   ZoomView,
 } from "@/ipc/types";
 import { detectLocale, setLocale, type Locale } from "@/i18n";
-import type { HostDraft } from "@/features/hosts/ProtocolRow";
+import type { HostDraft } from "@/lib/hostDraft";
 import { setWindowTheme } from "@/lib/native";
 import { applyZoom } from "@/lib/zoom";
 
