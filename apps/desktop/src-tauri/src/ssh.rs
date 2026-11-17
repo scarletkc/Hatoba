@@ -265,21 +265,7 @@ pub fn resolve_proxy(vault: &Vault, choice: &HostProxy) -> AppResult<Option<Prox
     }))
 }
 
-/// The first hop of a connection to `host`: its outermost jump host, or the host itself without
-/// one. A broken jump chain ends where it breaks.
-pub fn first_hop<'a>(vault: &'a Vault, host: &'a Host) -> &'a Host {
-    let mut first = host;
-    let mut seen = HashSet::new();
-    while let Some(jump) = first
-        .jump_host_id
-        .as_deref()
-        .filter(|id| seen.insert(id.to_owned()) && seen.len() <= 8)
-        .and_then(|id| vault.get(id).and_then(Item::as_host))
-    {
-        first = jump;
-    }
-    first
-}
+pub use crate::host_chain::first_hop;
 
 /// The proxy of a connection to `host`: the choice of its first hop.
 pub fn connection_proxy(vault: &Vault, host: &Host) -> AppResult<Option<ProxyConfig>> {

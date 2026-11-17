@@ -632,7 +632,7 @@ async fn pass_stdin(take: oneshot::Receiver<Input>, input: mpsc::Sender<Vec<u8>>
 struct Target {
     id: String,
     name: String,
-    /// How it connects now (`dashboard::config_version`).
+    /// How it connects now (`host_chain::config_version`).
     config: String,
 }
 
@@ -652,7 +652,7 @@ impl Ctx<'_> {
         state(self.app)
             .with_unlocked(|v| {
                 Ok(find_host(v, wanted).map(|(id, host)| Target {
-                    config: crate::dashboard::config_version(v, &host),
+                    config: crate::host_chain::config_version(v, &host),
                     name: host.name,
                     id,
                 }))

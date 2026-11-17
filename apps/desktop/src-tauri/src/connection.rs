@@ -41,7 +41,7 @@ pub const JOIN_TIMEOUT: Duration = Duration::from_secs(10);
 pub struct Connection {
     pub session: SshSession,
     pub host_id: String,
-    /// `dashboard::config_version` when it connected: tabs and forwards join it only while the
+    /// `host_chain::config_version` when it connected: tabs and forwards join it only while the
     /// host connects that way. The lock starts the version's hashes over, so the unlock stamps it
     /// again ([`Connections::restamp`]).
     config: Mutex<String>,
@@ -306,7 +306,7 @@ impl Connections {
                 .get(&conn.host_id)
                 .and_then(Item::as_host)
                 .is_some_and(|h| {
-                    crate::dashboard::config_version(vault, h) == *conn.config.lock_unpoisoned()
+                    crate::host_chain::config_version(vault, h) == *conn.config.lock_unpoisoned()
                 });
             conn.current_at_lock.store(current, Ordering::Relaxed);
         }
@@ -321,7 +321,7 @@ impl Connections {
                 continue;
             }
             if let Some(host) = vault.get(&conn.host_id).and_then(Item::as_host) {
-                *conn.config.lock_unpoisoned() = crate::dashboard::config_version(vault, host);
+                *conn.config.lock_unpoisoned() = crate::host_chain::config_version(vault, host);
             }
         }
     }
@@ -366,7 +366,7 @@ fn config_of(state: &AppState, host_id: &str) -> AppResult<String> {
             .get(host_id)
             .and_then(Item::as_host)
             .ok_or_else(|| AppError::not_found("host"))?;
-        Ok(crate::dashboard::config_version(v, host))
+        Ok(crate::host_chain::config_version(v, host))
     })
 }
 
@@ -761,7 +761,7 @@ async fn open(
             .and_then(Item::as_host)
             .cloned()
             .ok_or_else(|| AppError::not_found("host"))?;
-        let config = crate::dashboard::config_version(v, &host);
+        let config = crate::host_chain::config_version(v, &host);
         let via = match state.dashboard.take_connection(host_id, &config) {
             Some(session) => Via::Dashboard(session),
             None => Via::Connect(Box::new(build_config(

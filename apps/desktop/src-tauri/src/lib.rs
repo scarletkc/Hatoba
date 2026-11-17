@@ -10,6 +10,7 @@ mod convert;
 mod dashboard;
 mod deploy;
 mod dto;
+mod host_chain;
 mod import;
 mod launch;
 mod local;
