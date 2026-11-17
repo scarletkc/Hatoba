@@ -1494,6 +1494,71 @@ mod tests {
     }
 
     #[test]
+    fn chain_characterization_loop_missing_and_over_eight() {
+        let mut v = vault();
+        // Cycle back to self (b -> a -> b): `chain` visits `b` once as a jump before stopping.
+        let a = v.put(None, host("a", password("pw"), None)).unwrap();
+        let b = v.put(None, host("b", password("pw"), Some(&a))).unwrap();
+        let mut ha = get(&v, &a);
+        ha.jump_host_id = Some(b.clone());
+        v.put(Some(&a), Item::Host(ha)).unwrap();
+        let hb = get(&v, &b);
+        let addrs: Vec<_> = chain(&v, &hb)
+            .into_iter()
+            .map(|(id, h)| (id.map(str::to_owned), h.address.clone()))
+            .collect();
+        assert_eq!(
+            addrs,
+            vec![
+                (None, "b".to_owned()),
+                (Some(a.clone()), "a".to_owned()),
+                (Some(b.clone()), "b".to_owned()),
+            ]
+        );
+
+        // Missing jump host: `chain` stops at the missing hop without error.
+        let j1 = v
+            .put(None, host("j1", password("pw"), Some("missing-jump")))
+            .unwrap();
+        let h_missing = v
+            .put(None, host("target", password("pw"), Some(&j1)))
+            .unwrap();
+        let ht = get(&v, &h_missing);
+        let addrs: Vec<_> = chain(&v, &ht)
+            .into_iter()
+            .map(|(id, h)| (id.map(str::to_owned), h.address.clone()))
+            .collect();
+        assert_eq!(
+            addrs,
+            vec![(None, "target".to_owned()), (Some(j1), "j1".to_owned()),]
+        );
+
+        // Chain more than 8 deep: `chain` keeps the host plus 8 jump hosts (9 entries).
+        let mut prev: Option<String> = None;
+        for i in (1..=9).rev() {
+            let id = v
+                .put(
+                    None,
+                    host(&format!("j{i}"), password("pw"), prev.as_deref()),
+                )
+                .unwrap();
+            prev = Some(id);
+        }
+        let deep = v
+            .put(None, host("leaf", password("pw"), prev.as_deref()))
+            .unwrap();
+        let hd = get(&v, &deep);
+        let addrs: Vec<_> = hops(&v, &hd)
+            .into_iter()
+            .map(|h| h.address.clone())
+            .collect();
+        assert_eq!(
+            addrs,
+            vec!["leaf", "j1", "j2", "j3", "j4", "j5", "j6", "j7", "j8"]
+        );
+    }
+
+    #[test]
     fn failures_that_need_the_user_hold_the_host() {
         let quiet = Unattended::default();
         let ssh = |kind| AppError::ssh(kind, "detail");
