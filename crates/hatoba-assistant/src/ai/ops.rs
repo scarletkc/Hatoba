@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use hatoba_ai::entry::{AiEntry, EntryBody, ToolStatus};
-use hatoba_ai::tools;
+use hatoba_ai::tools::{self, BuiltinTool};
 use hatoba_core::Vault;
 use hatoba_core::sync::SharedVault;
 use hatoba_ssh::remote_command;
@@ -352,7 +352,12 @@ impl AiManager {
         newest.map_or_else(Vec::new, |a| {
             a.tool_calls
                 .iter()
-                .filter(|c| matches!(c.name.as_str(), tools::EDIT_FILE | tools::WRITE_FILE))
+                .filter(|c| {
+                    matches!(
+                        BuiltinTool::from_name(&c.name),
+                        Some(BuiltinTool::EditFile | BuiltinTool::WriteFile)
+                    )
+                })
                 .filter(|c| self.call_running(conversation_id, &c.id))
                 .map(|c| (c.id.clone(), files::WRITE_STOPPED))
                 .collect()

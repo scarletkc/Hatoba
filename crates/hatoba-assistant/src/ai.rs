@@ -65,7 +65,7 @@ pub use skills::{skill_commands, skill_text};
 pub use view::{conversation_view, conversation_view_at, error_kind};
 
 /// What every MCP tool name starts with (AI-30).
-const MCP_PREFIX: &str = "mcp__";
+use hatoba_ai::mcp::MCP_PREFIX;
 
 /// The most characters a conversation's title holds (AI-23): a rename longer is refused and a
 /// fork's title is cut to it.

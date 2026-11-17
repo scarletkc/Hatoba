@@ -64,8 +64,10 @@ use crate::decision::{self, Question, SharedStart};
 use crate::entry::{AutoDecision, AutoVerdict};
 use crate::error::AiError;
 use crate::provider::{ModelSpec, Protocol, ProviderConfig};
+#[cfg(test)]
+use crate::tools::WRITE_FILE;
 use crate::tools::{
-    EDIT_FILE, FETCH_URL, READ_TERMINAL, RUN_COMMAND, SEND_INPUT, WRITE_FILE, truncate_result_to,
+    BuiltinTool, EDIT_FILE, FETCH_URL, READ_TERMINAL, RUN_COMMAND, SEND_INPUT, truncate_result_to,
 };
 
 /// How long a System One judge may take, a retry included, before the call asks.
@@ -162,12 +164,7 @@ impl CallKind {
     /// The kind of a call of `tool`.
     #[must_use]
     pub fn of(tool: &str) -> Self {
-        match tool {
-            EDIT_FILE | WRITE_FILE => Self::File,
-            FETCH_URL => Self::Fetch,
-            // `run_command`, `send_input` and every MCP tool.
-            _ => Self::Command,
-        }
+        BuiltinTool::from_name(tool).map_or(Self::Command, BuiltinTool::call_kind)
     }
 }
 
@@ -371,31 +368,7 @@ pub fn questions_for(tool: &str) -> BTreeMap<String, Question> {
 /// but the state. `None` for any other tool, such as an MCP tool, which its server describes.
 #[must_use]
 pub fn builtin_description(tool: &str) -> Option<&'static str> {
-    Some(match tool {
-        RUN_COMMAND => {
-            "Runs `command` in a shell on `host`, apart from the terminal, and returns its \
-             output. It starts in `workdir` when given, else in the user's home directory."
-        }
-        SEND_INPUT => {
-            "Types `text` into a terminal connected to `host`, as the keyboard does, then \
-             presses each of `keys` in order; a key that is a single character types it. The \
-             program reading the terminal, which `screen_tail` shows, decides what that does: at a \
-             shell prompt, text sent with Enter runs as a command line."
-        }
-        EDIT_FILE => {
-            "Replaces `old_string` with `new_string` in the text file at `path` on `host`, every \
-             occurrence when `replace_all` is true."
-        }
-        WRITE_FILE => {
-            "Creates the text file at `path` on `host` with `content`, or replaces all of its \
-             content."
-        }
-        FETCH_URL => {
-            "Fetches `url` with GET from the user's own computer, not from `host`, without \
-             cookies or credentials, and returns the page as text."
-        }
-        _ => return None,
-    })
+    BuiltinTool::from_name(tool).and_then(BuiltinTool::judge_description)
 }
 
 /// The call the judge decides about, or one of the conversation's earlier calls.
