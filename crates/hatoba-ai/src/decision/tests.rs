@@ -3,21 +3,14 @@
 use serde_json::{Value, json};
 use wiremock::matchers::{body_partial_json, header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-use zeroize::Zeroizing;
 
 use super::*;
-use crate::provider::{AuthHeader, http_client};
+use crate::provider::http_client;
 
 const KEY: &str = "sk-decision-secret";
 
 fn provider(base_url: String, protocol: Protocol) -> ProviderConfig {
-    ProviderConfig {
-        protocol,
-        base_url,
-        api_key: Zeroizing::new(KEY.into()),
-        auth_header: AuthHeader::XApiKey,
-        chatgpt: None,
-    }
+    crate::test_support::provider(protocol, base_url, KEY)
 }
 
 /// Two yes-or-no questions.
@@ -51,13 +44,7 @@ fn system_one_answers() -> Value {
 }
 
 async fn bodies(server: &MockServer) -> Vec<Value> {
-    server
-        .received_requests()
-        .await
-        .unwrap()
-        .iter()
-        .map(|r| serde_json::from_slice(&r.body).unwrap())
-        .collect()
+    crate::test_support::bodies(server).await
 }
 
 async fn raw_bodies(server: &MockServer) -> Vec<String> {

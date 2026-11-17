@@ -6,18 +6,12 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use zeroize::Zeroizing;
 
 use super::*;
-use crate::provider::{AuthHeader, http_client};
+use crate::provider::http_client;
 
 const KEY: &str = "sk-models-secret";
 
 fn provider(base_url: String, protocol: Protocol) -> ProviderConfig {
-    ProviderConfig {
-        protocol,
-        base_url,
-        api_key: Zeroizing::new(KEY.into()),
-        auth_header: AuthHeader::XApiKey,
-        chatgpt: None,
-    }
+    crate::test_support::provider(protocol, base_url, KEY)
 }
 
 fn cc(server: &MockServer) -> ProviderConfig {

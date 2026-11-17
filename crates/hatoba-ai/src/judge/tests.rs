@@ -7,20 +7,13 @@ use serde_json::json;
 use tokio::io::AsyncReadExt;
 use wiremock::matchers::method;
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
-use zeroize::Zeroizing;
 
 use super::*;
-use crate::provider::{AuthHeader, http_client};
+use crate::provider::http_client;
 use crate::tools::SEND_INPUT;
 
 fn provider(base_url: String, protocol: Protocol) -> ProviderConfig {
-    ProviderConfig {
-        protocol,
-        base_url,
-        api_key: Zeroizing::new("sk-judge-secret".into()),
-        auth_header: AuthHeader::XApiKey,
-        chatgpt: None,
-    }
+    crate::test_support::provider(protocol, base_url, "sk-judge-secret")
 }
 
 fn answers(pairs: &[(&str, f64)]) -> BTreeMap<String, f64> {

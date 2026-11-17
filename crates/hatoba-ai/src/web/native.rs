@@ -582,19 +582,12 @@ pub fn format_native_results(found: &NativeResults) -> String {
 mod tests {
     use wiremock::matchers::{body_partial_json, header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
-    use zeroize::Zeroizing;
 
     use super::*;
-    use crate::provider::{AuthHeader, http_client};
+    use crate::provider::http_client;
 
     fn provider(protocol: Protocol, base_url: &str) -> ProviderConfig {
-        ProviderConfig {
-            protocol,
-            base_url: base_url.into(),
-            api_key: Zeroizing::new("sk-test".into()),
-            auth_header: AuthHeader::XApiKey,
-            chatgpt: None,
-        }
+        crate::test_support::provider(protocol, base_url, "sk-test")
     }
 
     async fn run(
