@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use crate::crypto::{self, AAD_RECOVERY_AUTH, Key32, item_aad, seal, unwrap_key};
 use crate::error::{Error, Result};
 use crate::model::{Item, SETTINGS_ID};
-use crate::store::{ItemRow, Store, StoreOps, meta};
+use crate::store::{ItemRow, KeyMeta, Store, StoreOps, meta};
 use crate::sync::SyncConfig;
 use crate::sync::backend::{RemoteItem, VaultMeta};
 use crate::sync::engine::remote_row;
@@ -112,6 +112,16 @@ fn drop_stale_recovery_auth(tx: &impl StoreOps, recovery_vault_key: &str) -> Res
     Ok(())
 }
 
+fn write_remote_key_meta(tx: &impl StoreOps, remote: &VaultMeta) -> Result<()> {
+    KeyMeta::write_fields(
+        tx,
+        &remote.kdf_salt,
+        &remote.kdf_params,
+        &remote.protected_vault_key,
+        &remote.recovery_vault_key,
+    )
+}
+
 impl Vault {
     /// The configured sync backend (no secrets), if any.
     ///
@@ -172,16 +182,16 @@ impl Vault {
     /// # Errors
     /// [`Error::VaultNotInitialized`] and storage errors.
     pub fn local_meta(&self) -> Result<LocalMeta> {
-        let get = |key: &str| self.store.get_meta(key)?.ok_or(Error::VaultNotInitialized);
+        let keys = KeyMeta::read(&self.store)?;
         Ok(LocalMeta {
             schema_version: u32::try_from(
                 self.store.get_meta_i64(meta::SCHEMA_VERSION)?.unwrap_or(1),
             )
             .unwrap_or(1),
-            kdf_salt: get(meta::KDF_SALT)?,
-            kdf_params: get(meta::KDF_PARAMS)?,
-            protected_vault_key: get(meta::PROTECTED_VAULT_KEY)?,
-            recovery_vault_key: get(meta::RECOVERY_VAULT_KEY)?,
+            kdf_salt: keys.kdf_salt,
+            kdf_params: keys.kdf_params,
+            protected_vault_key: keys.protected_vault_key,
+            recovery_vault_key: keys.recovery_vault_key,
         })
     }
 
@@ -245,10 +255,7 @@ impl Vault {
                     .max(remote.schema_version)
                     .to_string(),
             )?;
-            tx.set_meta(meta::KDF_SALT, &remote.kdf_salt)?;
-            tx.set_meta(meta::KDF_PARAMS, &remote.kdf_params)?;
-            tx.set_meta(meta::PROTECTED_VAULT_KEY, &remote.protected_vault_key)?;
-            tx.set_meta(meta::RECOVERY_VAULT_KEY, &remote.recovery_vault_key)?;
+            write_remote_key_meta(tx, remote)?;
             tx.set_meta(meta::VAULT_CHECK, &check)?;
             tx.set_meta(meta::DEVICE_ID, device_id)?;
             if let Some(config) = &config {
@@ -267,10 +274,7 @@ impl Vault {
     pub(crate) fn adopt_remote_meta(&mut self, remote: &VaultMeta) -> Result<()> {
         self.store.transaction(|tx| {
             drop_stale_recovery_auth(tx, &remote.recovery_vault_key)?;
-            tx.set_meta(meta::KDF_SALT, &remote.kdf_salt)?;
-            tx.set_meta(meta::KDF_PARAMS, &remote.kdf_params)?;
-            tx.set_meta(meta::PROTECTED_VAULT_KEY, &remote.protected_vault_key)?;
-            tx.set_meta(meta::RECOVERY_VAULT_KEY, &remote.recovery_vault_key)
+            write_remote_key_meta(tx, remote)
         })
     }
 
@@ -377,10 +381,7 @@ impl Vault {
                     .max(remote.schema_version)
                     .to_string(),
             )?;
-            tx.set_meta(meta::KDF_SALT, &remote.kdf_salt)?;
-            tx.set_meta(meta::KDF_PARAMS, &remote.kdf_params)?;
-            tx.set_meta(meta::PROTECTED_VAULT_KEY, &remote.protected_vault_key)?;
-            tx.set_meta(meta::RECOVERY_VAULT_KEY, &remote.recovery_vault_key)?;
+            write_remote_key_meta(tx, remote)?;
             tx.set_meta(meta::VAULT_CHECK, &check)?;
             tx.delete_meta(meta::UNLOCK_FAILURES)?;
             tx.delete_meta(meta::UNLOCK_LAST_FAILURE_AT)?;
