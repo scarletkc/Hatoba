@@ -1,0 +1,7 @@
+---
+source: crates/hatoba-ai/tests/tools_snapshots.rs
+expression: "model_change_block(\"Claude Sonnet 5.5 (claude-sonnet-5-5)\",\n\"Claude Opus 5.5 (claude-opus-5-5)\")"
+---
+<model_change from="Claude Sonnet 5.5 (claude-sonnet-5-5)" to="Claude Opus 5.5 (claude-opus-5-5)">
+Earlier replies in this conversation came from another model.
+</model_change>

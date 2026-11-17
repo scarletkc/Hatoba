@@ -1,0 +1,7 @@
+---
+source: crates/hatoba-ai/tests/tools_snapshots.rs
+expression: "shell_change_block(\"Ubuntu\", \"PowerShell\")"
+---
+<shell_change from="Ubuntu" to="PowerShell">
+The conversation moved to another local terminal on the same computer, which runs "PowerShell". Screens and command output before this message came from "Ubuntu".
+</shell_change>

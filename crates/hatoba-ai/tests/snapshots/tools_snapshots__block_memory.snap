@@ -1,0 +1,13 @@
+---
+source: crates/hatoba-ai/tests/tools_snapshots.rs
+expression: "memory_block(Some(\"prod-db\"),\n&[MemoryEntry\n{\n    name: \"Replies language\", updated: \"\", host: None, content:\n    \"Answer in English.\",\n}, MemoryEntry\n{\n    name: \"sudo\", updated: \"2026-10-03\", host: Some(\"prod-db\"), content:\n    \"Uses doas.\",\n},])"
+---
+<memory entries="2" conversation_host="prod-db">
+<entry name="Replies language" scope="global">
+Answer in English.
+</entry>
+
+<entry name="sudo" scope="host" host="prod-db" updated="2026-10-03">
+Uses doas.
+</entry>
+</memory>

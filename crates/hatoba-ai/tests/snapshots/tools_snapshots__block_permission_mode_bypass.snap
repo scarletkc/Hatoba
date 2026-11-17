@@ -1,0 +1,7 @@
+---
+source: crates/hatoba-ai/tests/tools_snapshots.rs
+expression: "permission_mode_block(PermissionMode::Bypass)"
+---
+<permission_mode mode="bypass">
+From this message on, the permission mode is bypass.
+</permission_mode>

@@ -1,0 +1,7 @@
+---
+source: crates/hatoba-ai/tests/tools_snapshots.rs
+expression: "permission_mode_block(PermissionMode::Auto)"
+---
+<permission_mode mode="auto">
+From this message on, the permission mode is auto.
+</permission_mode>
