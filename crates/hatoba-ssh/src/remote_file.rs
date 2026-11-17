@@ -652,18 +652,39 @@ mod tests {
             write_request("", b"", Expect::Any, None),
             Err(RemoteFileError::InvalidPath)
         ));
-        let (_, stdin) =
+        let (cmd, stdin) = read_request("/tmp/a b", 1024).unwrap();
+        assert_eq!(cmd, format!("sh -c '{READ_SCRIPT}' sh 1024"));
+        assert_eq!(stdin, b"/tmp/a b\n");
+
+        let (cmd, stdin) = lines_request("/tmp/a b", 5, 200).unwrap();
+        assert_eq!(cmd, format!("sh -c '{LINES_SCRIPT}' sh 5 201"));
+        assert_eq!(stdin, b"/tmp/a b\n");
+        let (cmd, stdin) = lines_request("/tmp/a b", 0, 200).unwrap();
+        assert_eq!(cmd, format!("sh -c '{LINES_SCRIPT}' sh 1 201"));
+        assert_eq!(stdin, b"/tmp/a b\n");
+
+        let (cmd, stdin) = list_request("/tmp/a b", 50).unwrap();
+        assert_eq!(cmd, format!("sh -c '{LIST_SCRIPT}' sh 51"));
+        assert_eq!(stdin, b"/tmp/a b\n");
+
+        let (cmd, stdin) = write_request("/tmp/x", b"hi", Expect::Any, None).unwrap();
+        assert_eq!(cmd, format!("sh -c '{WRITE_SCRIPT}' sh"));
+        assert_eq!(stdin, b"/tmp/x\nany\nnone\n2\nhi");
+        let (cmd, stdin) =
             write_request("/tmp/x", b"body", Expect::Content(b"123456789"), None).unwrap();
+        assert_eq!(cmd, format!("sh -c '{WRITE_SCRIPT}' sh"));
         // The content's size follows the state and the mode.
         assert_eq!(stdin, b"/tmp/x\n930766865 9\nnone\n4\nbody");
         // Permission bits only, in octal.
-        let (_, stdin) = write_request("/tmp/x", b"", Expect::Missing, Some(0o4640)).unwrap();
+        let (cmd, stdin) = write_request("/tmp/x", b"", Expect::Missing, Some(0o4640)).unwrap();
+        assert_eq!(cmd, format!("sh -c '{WRITE_SCRIPT}' sh"));
         assert_eq!(stdin, b"/tmp/x\nmissing\n640\n0\n");
         assert!(matches!(
             delete_request("a\rb", b""),
             Err(RemoteFileError::InvalidPath)
         ));
-        let (_, stdin) = delete_request("~/new.txt", b"123456789").unwrap();
+        let (cmd, stdin) = delete_request("~/new.txt", b"123456789").unwrap();
+        assert_eq!(cmd, format!("sh -c '{DELETE_SCRIPT}' sh"));
         assert_eq!(stdin, b"~/new.txt\n930766865 9\n");
     }
 
