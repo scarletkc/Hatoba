@@ -14,11 +14,8 @@ use std::fmt;
 
 use crate::error::SshError;
 use crate::exec::Exec;
+use crate::script::{after_marker, check_line, command, last_line};
 use crate::session::ExecOutput;
-
-/// The line both scripts print before the resolved path (and the read script before the file),
-/// so that anything the login shell's startup files print to stdout is told apart from them.
-const MARKER: &[u8] = b"hatoba-file\n";
 
 /// Reads the file named on stdin, `$1` bytes at most, and prints the marker, the path as resolved,
 /// the file's mode as the first ten characters of `ls -l` (empty when `ls` fails) and the file. A
@@ -320,21 +317,10 @@ pub async fn delete(
     parse_delete(&out)
 }
 
-/// `sh -c '<script>' sh [arg]`: a command line every common login shell reads the same way.
-pub(crate) fn command(script: &str, arg: Option<&str>) -> String {
-    debug_assert!(!script.contains(['\'', '\\', '\n']));
-    match arg {
-        Some(arg) => format!("sh -c '{script}' sh {arg}"),
-        None => format!("sh -c '{script}' sh"),
-    }
-}
-
 fn check_path(path: &str) -> Result<(), RemoteFileError> {
-    if path.is_empty() || path.contains(['\n', '\r', '\0']) {
-        Err(RemoteFileError::InvalidPath)
-    } else {
-        Ok(())
-    }
+    check_line(path, false)
+        .map(|_| ())
+        .ok_or(RemoteFileError::InvalidPath)
 }
 
 /// The command and stdin of a read.
@@ -401,39 +387,11 @@ fn delete_request(path: &str, expect: &[u8]) -> Result<(String, Vec<u8>), Remote
     ))
 }
 
-pub(crate) fn last_line(stderr: &[u8]) -> String {
-    String::from_utf8_lossy(stderr)
-        .lines()
-        .rev()
-        .map(str::trim)
-        .find(|l| !l.is_empty())
-        .unwrap_or_default()
-        .to_owned()
-}
-
 fn failed(out: &ExecOutput) -> RemoteFileError {
     RemoteFileError::Failed {
         status: out.exit_status,
         stderr: last_line(&out.stderr),
     }
-}
-
-/// What follows the marker line in a script's stdout: the resolved path and the rest. `None`
-/// without a marker and a path line after it. Lines a startup file printed come before the
-/// marker.
-pub(crate) fn after_marker(stdout: &[u8]) -> Option<(String, &[u8])> {
-    let start = if stdout.starts_with(MARKER) {
-        0
-    } else {
-        stdout
-            .windows(MARKER.len() + 1)
-            .position(|w| w[0] == b'\n' && &w[1..] == MARKER)?
-            + 1
-    };
-    let rest = &stdout[start + MARKER.len()..];
-    let end = rest.iter().position(|&b| b == b'\n')?;
-    let path = String::from_utf8_lossy(&rest[..end]).into_owned();
-    Some((path, &rest[end + 1..]))
 }
 
 /// The permission bits in the first ten characters of `ls -l` for a regular file, such as

@@ -31,7 +31,7 @@ use std::time::Duration;
 
 use crate::error::SshError;
 use crate::exec::Exec;
-use crate::remote_file::{after_marker, command, last_line};
+use crate::script::{after_marker, check_line, command, last_line};
 use crate::session::ExecOutput;
 
 /// Reads the path, and the directories below it to search instead, from the variables `f` and `s`,
@@ -306,11 +306,7 @@ pub async fn grep(
 
 /// One line of stdin, without a line break or NUL; not empty unless `empty` allows it.
 fn line(value: &str, empty: bool) -> Result<&str, RemoteSearchError> {
-    if (value.is_empty() && !empty) || value.contains(['\n', '\r', '\0']) {
-        Err(RemoteSearchError::InvalidArgument)
-    } else {
-        Ok(value)
-    }
+    check_line(value, empty).ok_or(RemoteSearchError::InvalidArgument)
 }
 
 /// The scope's path, directories below and depth, a line each.
