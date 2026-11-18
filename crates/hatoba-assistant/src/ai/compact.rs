@@ -541,5 +541,5 @@ fn entry_text(entry: &AiEntry) -> std::borrow::Cow<'_, str> {
 
 /// Tokens from text length, rounded up, counting UTF-16 units like the WebView's `length`.
 pub(super) fn estimate_tokens(text: &str) -> u64 {
-    text.encode_utf16().count().div_ceil(CHARS_PER_TOKEN) as u64
+    hatoba_ai::images::estimated_chars(text).div_ceil(CHARS_PER_TOKEN) as u64
 }

@@ -481,7 +481,10 @@ pub(crate) fn chat_completions(
     }
     for turn in turns {
         match turn {
-            Turn::User(text) => messages.push(json!({"role": "user", "content": text})),
+            Turn::User(text) => messages.push(json!({
+                "role": "user",
+                "content": crate::images::user_content(&text, Protocol::ChatCompletions),
+            })),
             Turn::Assistant { entry, raw: true } => {
                 let mut message = entry.raw.clone();
                 if let Value::Object(map) = &mut message {
@@ -622,7 +625,11 @@ pub(crate) fn responses(
         match turn {
             Turn::User(text) => {
                 if !text.trim().is_empty() {
-                    input.push(json!({"type": "message", "role": "user", "content": text}));
+                    input.push(json!({
+                        "type": "message",
+                        "role": "user",
+                        "content": crate::images::user_content(&text, Protocol::Responses),
+                    }));
                 }
             }
             Turn::Assistant { entry, raw: true } => input.extend(responses_items(&entry.raw)),
@@ -763,7 +770,10 @@ pub(crate) fn anthropic(
                     push_blocks(
                         &mut messages,
                         Role::User,
-                        vec![json!({"type": "text", "text": text})],
+                        crate::images::user_content(&text, Protocol::Anthropic)
+                            .as_array()
+                            .cloned()
+                            .unwrap_or_default(),
                     );
                 }
             }

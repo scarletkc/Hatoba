@@ -63,6 +63,18 @@ const entries: AiEntryView[] = [
 ];
 
 describe("Markdown export (AI-25)", () => {
+  it("exports images as embedded Markdown rather than fenced base64", () => {
+    const text = composeMessage("What is wrong?", [
+      { kind: "image", name: "screen.png", mime: "image/png", text: "aGk=" },
+    ]);
+    const md = conversationMarkdown(
+      { conversation, entries: [{ role: "user", entry_id: "u1", created_at: 1, text }], host: null },
+      { t, time },
+    );
+    expect(md).toContain("![image](data:image/png;base64,aGk=)");
+    expect(md).toContain("What is wrong?");
+    expect(md).not.toContain("```\naGk=");
+  });
   const md = conversationMarkdown(
     { conversation, entries, host: { name: "prod-api", target: "deploy@10.0.0.4:22" } },
     { t, time },

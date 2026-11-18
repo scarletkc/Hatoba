@@ -32,6 +32,7 @@ pub mod decision;
 pub mod entry;
 pub mod error;
 pub mod files;
+pub mod images;
 pub mod judge;
 pub mod mcp;
 pub mod models;

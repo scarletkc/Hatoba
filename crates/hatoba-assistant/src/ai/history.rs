@@ -54,7 +54,7 @@ pub fn search(vault: &SharedVault, query: &str) -> AppResult<Vec<AiSearchHit>> {
                             text = Cow::Owned(text.replacen(block, "", 1));
                         }
                     }
-                    text
+                    Cow::Owned(hatoba_ai::images::searchable_text(&text))
                 }
                 EntryBody::Summary { text } => {
                     let summary = tools::split_permission_note(text).1;

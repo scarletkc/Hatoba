@@ -4,6 +4,16 @@
 use super::*;
 
 #[test]
+fn image_blocks_are_attachments_for_conversation_titles() {
+    let image = "<image name=\"screen.png\" mime=\"image/png\">\naGk=\n</image>";
+    assert_eq!(title_of(image), "screen.png");
+    assert_eq!(
+        title_of(&format!("{image}\n\nWhy did this fail?")),
+        "Why did this fail?"
+    );
+}
+
+#[test]
 fn titles_skip_the_attachment_blocks_a_message_starts_with() {
     // AI-23: the first line of the first message, cut to 60 characters.
     assert_eq!(title_of("  check the disk\nplease"), "check the disk");

@@ -1,4 +1,5 @@
 import type { AiEntryView, AiModelRef } from "@/ipc/types";
+import { estimatedImageText } from "./images";
 
 /** The rough text-to-token ratio used for estimates (AI-20). */
 export const CHARS_PER_TOKEN = 4;
@@ -10,7 +11,7 @@ export const WARN_RATIO = 0.8;
 export const AUTO_COMPACT_RATIO = 0.9;
 
 export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / CHARS_PER_TOKEN);
+  return Math.ceil(estimatedImageText(text).length / CHARS_PER_TOKEN);
 }
 
 function entryText(e: AiEntryView): string {

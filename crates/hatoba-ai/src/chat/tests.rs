@@ -22,6 +22,25 @@ use crate::provider::{AuthHeader, http_client};
 use crate::tools::{ToolSet, builtin_tools};
 
 const KEY: &str = "sk-test-0123456789-secret";
+
+#[test]
+fn user_images_reach_all_three_request_adapters() {
+    let model = ModelSpec::new("vision-model");
+    let entries = vec![AiEntry::user(
+        1,
+        "<image name=\"screen.png\" mime=\"image/png\">\naGk=\n</image>\n\nExplain",
+    )];
+    let req = request(&model, &entries, &[]);
+    let chat = request::chat_completions(&req, true, true);
+    assert_eq!(chat.body["messages"][1]["content"][0]["type"], "image_url");
+    let responses = request::responses(&req, true, true, None);
+    assert_eq!(
+        responses.body["input"][0]["content"][0]["type"],
+        "input_image"
+    );
+    let anthropic = request::anthropic(&req, true, true, true);
+    assert_eq!(anthropic.body["messages"][0]["content"][0]["type"], "image");
+}
 const PROVIDER_ID: &str = "0192aaaa-bbbb-7ccc-8ddd-000000000001";
 
 const OPENAI_TEXT: &str = include_str!("../../tests/fixtures/openai_text.sse");
