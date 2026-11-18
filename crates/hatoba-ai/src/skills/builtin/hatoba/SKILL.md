@@ -5,7 +5,7 @@ description: "How Hatoba works: its windows, menus, settings and features, and w
 
 # Hatoba
 
-Hatoba is a desktop SSH client (Tauri 2: a Rust backend with a React interface). It keeps hosts, SSH keys and settings in an encrypted vault on the device, and offers terminal tabs for SSH sessions and for the shells of this computer, an SFTP file panel, port forwarding (local, remote and SOCKS), optional end-to-end encrypted sync, and an AI assistant panel. Windows is the first platform; macOS and Linux follow. The interface is available in Simplified Chinese (zh-CN), Traditional Chinese (zh-TW), English (en) and Japanese (ja).
+Hatoba is a desktop SSH client (Tauri 2: a Rust backend with a React interface). It keeps hosts, SSH keys and settings in an encrypted vault on the device, and offers terminal tabs for SSH sessions and for the shells of this computer, an SFTP file panel, port forwarding (local, remote and SOCKS), optional end-to-end encrypted sync, and an AI assistant panel. The interface is available in Simplified Chinese (zh-CN), Traditional Chinese (zh-TW), English (en) and Japanese (ja).
 
 - Local first: everything works offline. Hatoba runs no server and collects no telemetry.
 - Sync is optional. It goes through a Worker and a D1 database in the user's own Cloudflare account, or straight to D1. The cloud holds only ciphertext.
@@ -96,6 +96,8 @@ Hatoba is open source: https://github.com/scarletkc/Hatoba (README, docs, releas
 - https://raw.githubusercontent.com/scarletkc/Hatoba/main/README.md
 
 The `main` branch can be ahead of the latest release and of the user's version, so say where a statement comes from. Compare the latest release with {{HATOBA_VERSION}}. If a newer release exists, point to **Check for Updates** in Settings → About, or to the dot on the gear in the title bar (**Settings (update available)**), which opens About. Once a check finds the newer version, **Download and Install** there downloads it, checks its signature, then closes Hatoba to install it and opens it again; see `references/settings.md`.
+
+`references/zmodem.md`: sz/rz transfers.
 
 ## Not in Hatoba (current version)
 

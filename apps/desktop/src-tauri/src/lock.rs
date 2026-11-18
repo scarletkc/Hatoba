@@ -83,6 +83,7 @@ pub async fn lock_vault(app: &AppHandle, reason: LockReason) {
             state.connections.note_current(&vault);
         }
         vault.lock();
+        state.zmodem.clear();
         // TELNET-03: under the same guard, a Telnet tab kept open types no saved login behind
         // the lock screen. A tab that connects later fails, as `telnet_open` checks the vault
         // where it registers the session.

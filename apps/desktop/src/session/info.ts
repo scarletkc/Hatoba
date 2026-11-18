@@ -3,6 +3,7 @@ import type { AppError } from "@/ipc/types";
 
 /** UI-facing state of one terminal tab that doesn't belong in `useTabs` (status/sessionId live there). */
 export interface SessionInfo {
+  zmodem: import("./zmodem").ZmodemView | null;
   latencyMs: number | null;
   /** Why the last connection attempt failed. */
   error: AppError | null;
@@ -21,6 +22,7 @@ export interface SessionInfo {
 }
 
 export const EMPTY_INFO: SessionInfo = {
+  zmodem: null,
   latencyMs: null,
   error: null,
   errorAt: null,

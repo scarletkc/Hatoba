@@ -25,6 +25,7 @@ mod sync;
 mod telnet;
 mod tray;
 mod update;
+mod zmodem_files;
 
 use commands::{
     ai as ai_cmd, allowances, app, cli, dashboard as dashboard_cmd, deploy as deploy_cmd, forwards,
@@ -52,6 +53,10 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         // i64 timestamps (Unix ms) and u64 sizes stay far below 2^53.
         .dangerously_cast_bigints_to_number()
         .commands(collect_commands![
+            commands::zmodem::zmodem_directory,
+            commands::zmodem::zmodem_download_begin,
+            commands::zmodem::zmodem_download_write,
+            commands::zmodem::zmodem_download_finish,
             app::app_info,
             app::window_snap_overlay,
             app::window_zoom,
