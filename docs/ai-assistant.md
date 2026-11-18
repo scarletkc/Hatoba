@@ -82,6 +82,8 @@ Chat Completions covers OpenAI, Gemini through Google's OpenAI-compatible endpoi
 What does this error mean?
 ```
 
+Pasting a screenshot or image into the input attaches it with a removable preview. PNG, JPEG, GIF and WebP are accepted, at most 4 MB each and 4 images totaling 8 MB per message, separately from text attachments. Images are stored in `image` blocks, restored when editing or resending, and exported as embedded Markdown images. The adapters replace these blocks with native image content: Chat Completions `image_url`, Responses (including ChatGPT) `input_image`, and Anthropic `image` with a base64 source. Base64 is never sent as question text. The model must support image input; the context meter uses a rough image-token estimate. History search skips the image data.
+
 | Block | Written by | Attributes, in this order | Body |
 |---|---|---|---|
 | `interrupted` | Hatoba | None | That the user stopped the previous reply before it was finished, that it ends where it was cut off, and that what it was still writing, tool calls included, was not kept |
@@ -99,6 +101,7 @@ What does this error mean?
 | `connection_diagnostics` | The panel | `host`, the host's display name | The diagnostics of a connection error. They reach the provider only when the user attaches them |
 | `pasted_text` | The panel | `lines`, the paste's line count | The pasted text, whole |
 | `file` | The panel | `name`, the file's base name, never a path; `lines`, its line count | The file's text, whole |
+| `image` | The panel | `name`, the image's base name; `mime`, one of `image/png`, `image/jpeg`, `image/gif`, `image/webp` | The image bytes as base64, without a data URL prefix |
 | `host_file` | The panel | `host`, the tab host's display name; `path`, the file's path as the host resolved it; `lines`, its line count | The text of a file on the tab's host that the user picked after `@` (AI-51), whole |
 | `host_directory` | The panel | `host`; `path`, the directory's path as the host resolved it; `entries`, the number of entries listed; `truncated="true"` only when some were left out | The entries of a directory on the tab's host that the user picked after `@` (AI-51), one per line, sorted by name, each directory followed by `/` |
 | `mcp_resource` | The panel | `server`, the MCP server's name; `uri`, the resource's URI; `lines`, the line count | The text content of an MCP resource the user picked after `@` (AI-51), one content a line apart, and a line naming each binary content |

@@ -56,6 +56,8 @@ function attachmentLabel(t: Tr, a: Attachment): string {
       return `**${t("ai.paste", { n: a.lines })}**`;
     case "file":
       return `**${t("ai.file", { name: a.name, n: a.lines })}**`;
+    case "image":
+      return `**${t("ai.image", { name: a.name })}**`;
     case "host_file":
       return `**${t("ai.file", { name: pathName(a.path), n: a.lines })}** · \`${placeLabel(t, a.host)}\` · \`${a.path}\``;
     case "host_directory":
@@ -135,7 +137,11 @@ export function conversationMarkdown({ conversation, entries, host }: ExportSour
           blocks.push(label.filter(Boolean).join(" · "), fenced(n.body));
         }
         // AI-10, AI-35: what was attached to the message, each as a labelled fenced block.
-        for (const a of attachments) blocks.push(attachmentLabel(t, a), fenced(a.text));
+        for (const a of attachments)
+          blocks.push(
+            attachmentLabel(t, a),
+            a.kind === "image" ? `![image](data:${a.mime};base64,${a.text})` : fenced(a.text),
+          );
         blocks.push(typed);
         break;
       }

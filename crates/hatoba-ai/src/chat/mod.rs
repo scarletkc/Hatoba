@@ -482,7 +482,7 @@ async fn post(
 ) -> Result<(reqwest::Response, usize), AiError> {
     let body = serde_json::to_string(&built.body)
         .map_err(|_| AiError::Protocol("the request could not be encoded".into()))?;
-    let request_chars = body.chars().count();
+    let request_chars = crate::images::request_chars(&built.body);
     let response = provider
         .send(cancel, |mut headers| {
             if let Some(beta) = built.beta {

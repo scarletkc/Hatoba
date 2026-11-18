@@ -53,11 +53,15 @@ Other labels: **Preview the pasted text**.
 
 **Add Text Files** in the input area's + menu (the + button, **Add Files and More**) opens a file picker for one or more files. Files can also be attached by copying them in a file manager and pasting into the input box, or by dropping them on the panel (a "Drop text files to attach them" overlay shows while dragging; it works in the desktop app too, which reads the dropped paths itself). Dropping needs a provider with a model to be set up. Each file becomes a chip "name · N lines" with a preview and ×.
 
-- Only UTF-8 text files are accepted: source code, configs, logs, Markdown, JSON. A file with NUL bytes or invalid UTF-8 is refused as not a text file. Images (PNG, JPEG, GIF, WebP, SVG and so on) are not supported yet. Documents such as PDF or Word files are binary and are refused too.
+- The file picker and file drops accept UTF-8 text files: source code, configs, logs, Markdown, JSON. A file with NUL bytes or invalid UTF-8 is refused as not a text file. To attach an image, copy it and paste it into the input box instead. Documents such as PDF or Word files are binary and are refused too.
 - A file over 256 KB is refused. All attachments of one message together (diagnostics, selection, pastes and files) may not pass 512 KB; the one that would pass it is refused. Each refusal shows a message naming the file, for example "<name> is larger than 256 KB, so it can’t be attached." or "A message’s attachments can’t exceed 512 KB in total."
 - Only the file's base name is sent, never its folder path, which could reveal a local username. The text is kept whole, never cut.
 
 Other labels: **Preview the file**.
+
+## Pasted images
+
+Copy a screenshot or image and paste it into the input box, then type your question and send. PNG, JPEG, GIF and WebP are supported. Each image can be at most 4 MB; a message can carry at most 4 images totaling 8 MB, separately from its text attachment limit. Images appear as removable chips with previews before sending and as images in the sent message. They are stored and synced with the conversation, retained when editing or resending, and included in Markdown exports. Sending requires a model and provider that accept image input; a text-only model cannot answer questions about the image. The context meter uses a rough image-token estimate, not the base64 text length.
 
 ## The terminal's screen
 

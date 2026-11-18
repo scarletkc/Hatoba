@@ -212,6 +212,32 @@ const ATTACHMENTS: &[AttachmentKind] = &[
         attributes: |attrs| matches!(attrs, [("name", _), ("lines", lines)] if is_count(lines)),
     },
     AttachmentKind {
+        tag: "image",
+        note: false,
+        title: |attrs| {
+            attrs
+                .first()
+                .map(|(_, name)| attribute_text(name))
+                .unwrap_or_default()
+        },
+        placeholder: |attrs| {
+            let name = attrs.first().map(|(_, name)| attribute_text(name));
+            format!("[image {}]", name.unwrap_or_default())
+        },
+        attributes: |attrs| {
+            matches!(
+                attrs,
+                [
+                    ("name", _),
+                    (
+                        "mime",
+                        "image/png" | "image/jpeg" | "image/gif" | "image/webp"
+                    )
+                ]
+            )
+        },
+    },
+    AttachmentKind {
         tag: "host_file",
         note: false,
         title: |attrs| {

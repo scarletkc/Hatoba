@@ -17,6 +17,7 @@ import {
   droppedFile,
   FILE_MAX_BYTES,
   fitsMessage,
+  isImage,
   makeAttachment,
   makeDiagnostics,
   makePaste,
@@ -30,6 +31,7 @@ import {
   type SelectionAttachment,
 } from "../attachments";
 import { localName } from "../place";
+import { IMAGE_MAX_BYTES, imageBase64, imageMime } from "../images";
 import { pickInput } from "../queue";
 import {
   getSlot,
@@ -157,7 +159,7 @@ export function addAttachment(slotId: string, attachment: Exclude<Attachment, In
   const others = command ? getSlot(slotId).extras.filter((x) => x.command !== command) : getSlot(slotId).extras;
   const pending = [...pickInput(liveChips(slotId), others).chips, ...others.map((x) => x.attachment)];
   if (!fitsMessage(pending, attachment)) {
-    toast(tooMuchMessage(), "error");
+    toast(attachment.kind === "image" ? t("ai.image.limit") : tooMuchMessage(), "error");
     return false;
   }
   const added: PendingAttachment = { id: extraId(), attachment, ...(command ? { command } : {}) };
@@ -215,6 +217,32 @@ export async function readTextFiles(files: readonly File[]): Promise<FileAttachm
 /** Add Text Files in the + menu, or files dropped on the panel: they go with the slot's next message. */
 export async function attachFiles(slotId: string, files: readonly File[]) {
   for (const file of await readTextFiles(files)) if (!addExtra(slotId, file)) break;
+  focusInput();
+}
+
+export async function attachPastedFiles(slotId: string, files: readonly File[]) {
+  for (const file of files) {
+    if (!isImage(file.name, file.type)) {
+      await attachFiles(slotId, [file]);
+      continue;
+    }
+    const name = baseName(file.name) || "clipboard.png";
+    if (file.size > IMAGE_MAX_BYTES) {
+      toast(t("ai.attach.tooLarge", { name, size: kb(IMAGE_MAX_BYTES) }), "error");
+      continue;
+    }
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const mime = imageMime(bytes);
+      if (!mime) {
+        toast(t("ai.image.unsupported", { name }), "error");
+        continue;
+      }
+      if (!addAttachment(slotId, { kind: "image", name, mime, text: imageBase64(bytes) })) break;
+    } catch {
+      toast(t("ai.attach.readFailed", { name }), "error");
+    }
+  }
   focusInput();
 }
 

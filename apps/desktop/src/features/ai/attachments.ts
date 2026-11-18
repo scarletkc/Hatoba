@@ -27,6 +27,7 @@
 
 import type { AiEntryView, AiPermissionMode, DroppedFile } from "@/ipc/types";
 import { estimateTokens } from "./meter";
+import { IMAGE_MAX_BYTES, IMAGE_TOKENS, IMAGES_MAX_BYTES, IMAGES_MAX_COUNT } from "./images";
 
 /** As for tool results (§13.4): over this many characters, the first 7,500 and the last 22,500 are kept. */
 export const SELECTION_MAX_CHARS = 30_000;
@@ -38,7 +39,7 @@ export const LONG_PASTE_CHARS = 2_000;
 export const LONG_PASTE_LINES = 30;
 /** Text files over this size are refused (AI-35). */
 export const FILE_MAX_BYTES = 256 * 1024;
-/** All attachments of one message together, in UTF-8 bytes (AI-35). */
+/** Text attachments of one message together, in UTF-8 bytes (AI-35). */
 export const MESSAGE_MAX_BYTES = 512 * 1024;
 
 /** The diagnostics of a failed connection, attached from the terminal's error card (AI-10). */
@@ -65,6 +66,13 @@ export interface SelectionAttachment {
 export interface PasteAttachment {
   kind: "paste";
   lines: number;
+  text: string;
+}
+
+export interface ImageAttachment {
+  kind: "image";
+  name: string;
+  mime: string;
   text: string;
 }
 
@@ -130,6 +138,7 @@ export type Attachment =
   | SelectionAttachment
   | PasteAttachment
   | FileAttachment
+  | ImageAttachment
   | HostFileAttachment
   | HostDirectoryAttachment
   | McpResourceAttachment
@@ -201,7 +210,7 @@ export type FileRefusal = "image" | "too_large" | "binary" | "unreadable";
 
 export type FileCheck = { ok: true; file: FileAttachment } | { ok: false; reason: Exclude<FileRefusal, "unreadable"> };
 
-/** Whether a file is an image, by its type or name; images are not supported yet. */
+/** Whether a file is an image, by its type or name. */
 export function isImage(name: string, type: string): boolean {
   return type.startsWith("image/") || IMAGE_EXT.test(name);
 }
@@ -246,19 +255,32 @@ export function droppedFile(
   return { ok: true, file: fileAttachment(name, result.text) };
 }
 
-/** The UTF-8 size of an attachment's text, which counts toward the per-message cap. */
+/** An attachment's byte size: decoded bytes for images, UTF-8 bytes for text. */
 export function attachmentBytes(a: Attachment): number {
+  if (a.kind === "image") return (a.text.length / 4) * 3 - (a.text.endsWith("==") ? 2 : a.text.endsWith("=") ? 1 : 0);
   return new TextEncoder().encode(a.text).length;
 }
 
 /** Whether adding `next` keeps the message's attachments within the cap. */
 export function fitsMessage(current: readonly Attachment[], next: Attachment): boolean {
-  return current.reduce((n, a) => n + attachmentBytes(a), 0) + attachmentBytes(next) <= MESSAGE_MAX_BYTES;
+  return withinAttachmentLimits([...current, next]);
+}
+
+export function withinAttachmentLimits(all: readonly Attachment[]): boolean {
+  const images = all.filter((attachment) => attachment.kind === "image");
+  return (
+    images.length <= IMAGES_MAX_COUNT &&
+    images.every((attachment) => attachmentBytes(attachment) <= IMAGE_MAX_BYTES) &&
+    images.reduce((bytes, attachment) => bytes + attachmentBytes(attachment), 0) <= IMAGES_MAX_BYTES &&
+    all
+      .filter((attachment) => attachment.kind !== "image")
+      .reduce((bytes, attachment) => bytes + attachmentBytes(attachment), 0) <= MESSAGE_MAX_BYTES
+  );
 }
 
 /** The context meter's estimate for an attachment (AI-20). */
 export function attachmentTokens(a: Attachment): number {
-  return estimateTokens(a.text);
+  return a.kind === "image" ? IMAGE_TOKENS : estimateTokens(a.text);
 }
 
 /** The last part of a path: what follows its last `/`, ignoring a trailing one. */
@@ -282,6 +304,7 @@ export function blockTitle(a: Attachment): string {
     case "paste":
       return "Pasted text";
     case "file":
+    case "image":
       return a.name;
     case "host_file":
       return pathName(a.path);
@@ -363,6 +386,7 @@ const TAGS = {
   selection: "terminal_selection",
   paste: "pasted_text",
   file: "file",
+  image: "image",
   host_file: "host_file",
   host_directory: "host_directory",
   mcp_resource: "mcp_resource",
@@ -395,6 +419,11 @@ function attributes(a: Attachment): [string, string][] {
       return [
         ["name", a.name],
         ["lines", String(a.lines)],
+      ];
+    case "image":
+      return [
+        ["name", a.name],
+        ["mime", a.mime],
       ];
     case "host_file":
       return [
@@ -608,7 +637,7 @@ export interface MessageParts {
 }
 
 const OPEN =
-  /^<(interrupted|host_change|terminal_change|shell_change|model_change|permission_mode|memory|file_revert|terminal_state|mcp_tools|mcp_change|terminal_selection|connection_diagnostics|pasted_text|file|host_file|host_directory|mcp_resource|skill|mcp_prompt)((?: [a-z_]+="[^"]*")*)>\n/;
+  /^<(interrupted|host_change|terminal_change|shell_change|model_change|permission_mode|memory|file_revert|terminal_state|mcp_tools|mcp_change|terminal_selection|connection_diagnostics|pasted_text|file|image|host_file|host_directory|mcp_resource|skill|mcp_prompt)((?: [a-z_]+="[^"]*")*)>\n/;
 const DIGITS = /^\d+$/;
 
 type Block = { kind: "note"; note: Note } | { kind: "attachment"; attachment: Attachment };
@@ -685,6 +714,10 @@ function blockOf(tag: string, attrs: [string, string][], body: string): Block | 
     case TAGS.file:
       return names === "name,lines" && DIGITS.test(value(1))
         ? attachment({ kind: "file", name: value(0), lines: Number(value(1)), text: body })
+        : null;
+    case TAGS.image:
+      return names === "name,mime" && /^image\/(png|jpeg|gif|webp)$/.test(value(1))
+        ? attachment({ kind: "image", name: value(0), mime: value(1), text: body })
         : null;
     case TAGS.host_file:
       return names === "host,path,lines" && DIGITS.test(value(2))

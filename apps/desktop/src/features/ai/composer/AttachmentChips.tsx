@@ -20,6 +20,7 @@ import {
   type SelectionAttachment,
 } from "../attachments";
 import { formatTokens } from "../meter";
+import { imageUrl } from "../images";
 import { localName, placeLabel } from "../place";
 import { pickInput } from "../queue";
 import { HOME_SLOT, NO_SELECTION, useAi } from "../store";
@@ -199,6 +200,7 @@ function AttachmentChip({
   removeLabel,
   head,
   body,
+  image,
   more,
   wrap,
   action,
@@ -214,6 +216,7 @@ function AttachmentChip({
   removeLabel: string;
   head: string;
   body: string;
+  image?: string;
   more?: string;
   /** Wrap long lines in the preview instead of cutting them. */
   wrap?: boolean;
@@ -263,7 +266,11 @@ function AttachmentChip({
       {(hover || pinned) && (
         <div className={s.preview} role={action ? "group" : "tooltip"} aria-label={action ? previewTitle : undefined}>
           {head && <div className={s.previewHead}>{head}</div>}
-          <pre className={cx(s.previewBody, wrap && s.previewWrap)}>{body}</pre>
+          {image ? (
+            <img className={s.imagePreview} src={image} alt={label} />
+          ) : (
+            <pre className={cx(s.previewBody, wrap && s.previewWrap)}>{body}</pre>
+          )}
           {(more || action) && (
             <div className={s.previewFoot}>
               {more && <span className={s.previewMore}>{more}</span>}
@@ -314,6 +321,19 @@ export function AttachmentChipFor({
   const moreText = more > 0 ? t("ai.selection.more", { n: more }) : undefined;
   const size = t("ai.attach.tokens", { n: formatTokens(attachmentTokens(a)) });
   switch (a.kind) {
+    case "image":
+      return (
+        <AttachmentChip
+          icon="image"
+          label={t("ai.image", { name: a.name })}
+          previewTitle={t("ai.image.preview")}
+          removeLabel={t("ai.file.remove", { name: a.name })}
+          head=""
+          body=""
+          image={imageUrl(a)}
+          onRemove={onRemove}
+        />
+      );
     case "diagnostics":
       // The preview shows all of what will be sent.
       return (
@@ -409,7 +429,7 @@ type Tr = ReturnType<typeof useT>;
  */
 export function shownAttachment(
   t: (key: Parameters<Tr>[0], params?: Parameters<Tr>[1]) => string,
-  a: Exclude<Attachment, { kind: "diagnostics" | "selection" | "paste" | "file" }>,
+  a: Exclude<Attachment, { kind: "diagnostics" | "selection" | "paste" | "file" | "image" }>,
 ): { icon: string; title: string; name: string; from: string; badge?: string } {
   switch (a.kind) {
     case "host_file":
@@ -492,6 +512,8 @@ export function ScreenCard({ note }: { note: Extract<Note, { kind: "terminal_sta
 export function AttachmentCardFor({ attachment: a }: { attachment: Attachment }) {
   const t = useT();
   switch (a.kind) {
+    case "image":
+      return <img className={s.imagePreview} src={imageUrl(a)} alt={t("ai.image", { name: a.name })} />;
     case "diagnostics":
       return <AttachmentCard icon="plugs" title={t("ai.diagnostics", { host: a.host })} body={a.text} />;
     case "selection":

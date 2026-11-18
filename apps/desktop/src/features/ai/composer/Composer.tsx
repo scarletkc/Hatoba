@@ -17,7 +17,7 @@ import { readClipboard } from "@/lib/clipboard";
 import { cx } from "@/lib/cx";
 import { shortcutLabel } from "@/lib/platform";
 import { AddButton, McpPopover } from "./AddMenu";
-import { addPaste, attachFiles, pendingAttachments, removeExtra } from "../actions/attach";
+import { addPaste, attachFiles, attachPastedFiles, pendingAttachments, removeExtra } from "../actions/attach";
 import { discardQueued, editQueued, queueMessage, removeQueuedAttachment } from "../actions/queued";
 import { askSideQuestion } from "../actions/sideQuestions";
 import { newConversation, setSlotEffort, setSlotMode, setSlotModel } from "../actions/slots";
@@ -26,7 +26,7 @@ import { attachCommand } from "./commandActions";
 import { useCommandMenu } from "./CommandMenu";
 import { commandDraft, findBuiltin, leadingCommand, type BuiltinCommand } from "./commands";
 import { ComposerAttachments, QueuedAttachments, usePendingAttachments, useTerminalSelection } from "./AttachmentChips";
-import { composeMessage, isLongPaste } from "../attachments";
+import { composeMessage, isImage, isLongPaste } from "../attachments";
 import { chosenEffort, effectiveEffort, effortKey, modelEfforts } from "../effort";
 import { AUTO_COMPACT_RATIO, contextUsage, estimateTokens, formatTokens, messageFit, type MeterState } from "../meter";
 import { failedServers, loadMcp, toolsMenuRows, useMcp } from "../mcp";
@@ -350,9 +350,11 @@ export function Composer({
   // AI-35: a long paste becomes an attachment, and pasted files are attached like picked ones.
   const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
     const text = e.clipboardData.getData("text/plain");
-    if (!text && e.clipboardData.files.length > 0) {
+    const files = Array.from(e.clipboardData.files);
+    if (files.some((file) => isImage(file.name, file.type)) || (!text && files.length > 0)) {
       e.preventDefault();
-      void attachFiles(slotId, Array.from(e.clipboardData.files));
+      if (text) insertText(text);
+      void attachPastedFiles(slotId, files);
       return;
     }
     if (!isLongPaste(text)) return;

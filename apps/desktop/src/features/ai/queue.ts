@@ -1,5 +1,5 @@
 import type { AiTurnEndReason } from "@/ipc/types";
-import { attachmentBytes, composeMessage, MESSAGE_MAX_BYTES, type Attachment } from "./attachments";
+import { composeMessage, withinAttachmentLimits, type Attachment } from "./attachments";
 import type { InputChip, PendingAttachment, QueuedMessage, Slot } from "./store";
 
 /** What a message attaches, in the order it is stored (AI-10, AI-35). */
@@ -14,7 +14,7 @@ export function messageText(m: QueuedMessage): string {
 
 /** Whether the message's attachments stay within the per-message cap (AI-35). */
 export function withinCap(m: QueuedMessage): boolean {
-  return messageAttachments(m).reduce((n, a) => n + attachmentBytes(a), 0) <= MESSAGE_MAX_BYTES;
+  return withinAttachmentLimits(messageAttachments(m));
 }
 
 /**
