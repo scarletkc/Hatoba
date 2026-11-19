@@ -59,7 +59,7 @@ Commit the changes, open a pull request titled `chore(release): prepare vX.Y.Z`,
 
 ## Publish
 
-1. The [Start release workflow](../.github/workflows/start-release.yml) runs the Release workflow on `main` when a push to `main` raises the version to one without a release tag. To run it yourself, choose `main` in **Actions → Release → Run workflow**. The workflow releases the release pull request's commit, where `main` got the version it records, or a later commit that changed that version's release note, such as a fix to it (`releaseCommit` in `release.mjs`). It does not release the latest commit: what is merged after them goes into the next release. The installers are built from that commit, and the release tags it.
+1. The [Start release workflow](../.github/workflows/start-release.yml) runs the Release workflow on `main` when a push to `main` raises the version to one without a release tag. To run it yourself, choose `main` in **Actions → Release → Run workflow**. The workflow releases the release pull request's commit, where `main` got the version it records, or a later commit that changed that version's release note, such as a fix to it (`releaseCommit` in [`scripts/release/target.mjs`](../scripts/release/target.mjs)). It does not release the latest commit: what is merged after them goes into the next release. The installers are built from that commit, and the release tags it.
 2. **Preflight** runs the script tests and checks that:
    - the version files agree, and `vX.Y.Z` does not point to another commit
    - the release note is valid, or an earlier release exists to list changes from
@@ -68,7 +68,7 @@ Commit the changes, open a pull request titled `chore(release): prepare vX.Y.Z`,
    - the `release` environment requires a reviewer, and the `release-signing` environment allows deployments only from `main`
 
    It then writes the release notes to the run summary.
-3. Three jobs build the installers, sign the ones that installed apps update from with the update signing key, and check each signature against the public key in `tauri.conf.json`. Each job uploads its installers and their `.sig` signatures as an artifact. `INSTALLERS` in [`scripts/release/release.mjs`](../scripts/release/release.mjs) names the files.
+3. Three jobs build the installers, sign the ones that installed apps update from with the update signing key, and check each signature against the public key in `tauri.conf.json`. Each job uploads its installers and their `.sig` signatures as an artifact. `INSTALLERS` in [`scripts/release/installers.mjs`](../scripts/release/installers.mjs) names the files.
    - **Build (Windows)** uploads `Hatoba_X.Y.Z_windows-x64-setup.exe` as the `hatoba-windows` artifact.
    - **Build (Linux)** builds on Ubuntu 22.04, so that the packages run on systems with glibc 2.35 or later, and uploads `Hatoba_X.Y.Z_linux-x64.deb` and `Hatoba_X.Y.Z_linux-x64.AppImage` as the `hatoba-linux` artifact.
    - **Build (macOS)** builds for Apple Silicon and uploads `Hatoba_X.Y.Z_macos-apple-silicon.dmg`, which people download, and `Hatoba_X.Y.Z_macos-apple-silicon-update.app.tar.gz`, which installed apps update from, as the `hatoba-macos` artifact. The app is ad-hoc signed and not notarized.
@@ -76,13 +76,13 @@ Commit the changes, open a pull request titled `chore(release): prepare vX.Y.Z`,
 
 Publishing writes `SHA256SUMS.txt` with the checksum of each installer and `latest.json`, which tells installed apps the version, the release notes, and where to download the installer for their platform and package type. It then tags the commit `vX.Y.Z` and creates the release **Hatoba vX.Y.Z** with the installers, their signatures, and those two files. A prerelease is marked as a pre-release and never becomes the latest release. Installed apps find the release as soon as it is published, as [Distribution in §11](hatoba-spec.md#11-non-functional-requirements) describes.
 
-Last, the **Site** job runs the [Site workflow](../.github/workflows/site.yml), which rebuilds the website: its download page offers the newest stable release, or the newest prerelease while there is no stable one, and its docs and the demo on its home page become the built-in skill and the frontend as of that release. The workflow opens the demo before it deploys and stops if the demo doesn't reach its first approval card. `INSTALL_STEPS` in `release.mjs` holds the install steps that both the release notes and the download page give; the website's translations of them are in [`apps/site/src/i18n/install.ts`](../apps/site/src/i18n/install.ts), whose test fails until they follow a change to the English.
+Last, the **Site** job runs the [Site workflow](../.github/workflows/site.yml), which rebuilds the website: its download page offers the newest stable release, or the newest prerelease while there is no stable one, and its docs and the demo on its home page become the built-in skill and the frontend as of that release. The workflow opens the demo before it deploys and stops if the demo doesn't reach its first approval card. `INSTALL_STEPS` in [`scripts/release/notes.mjs`](../scripts/release/notes.mjs) holds the install steps that both the release notes and the download page give; the website's translations of them are in [`apps/site/src/i18n/install.ts`](../apps/site/src/i18n/install.ts), whose test fails until they follow a change to the English.
 
 For a stable release, the **winget**, **AUR**, and **npm** jobs then update Hatoba's packages, as [Package managers](#package-managers) describes.
 
 ## Release notes
 
-`composeNotes` in [`scripts/release/release.mjs`](../scripts/release/release.mjs) builds the release notes from:
+`composeNotes` in [`scripts/release/notes.mjs`](../scripts/release/notes.mjs) builds the release notes from:
 
 1. The note in `docs/release-notes/X.Y.Z.md`, when there is one.
 2. Install instructions for each installer.
@@ -101,7 +101,7 @@ Each stable release reaches winget, Scoop, the AUR, and npm once it is published
 - **AUR.** While the repository variable `AUR_PUBLISH` is `true`, the **AUR** job sets `pkgver` in [`packaging/aur/PKGBUILD`](../packaging/aur/PKGBUILD) to the release's version, fills in the checksums from the release, builds the package to check it, and pushes it with its `.SRCINFO` to [`hatoba-bin`](https://aur.archlinux.org/packages/hatoba-bin).
 - **npm.** While the repository variable `NPM_PUBLISH` is `true`, the **npm** job writes the coding agents' plugin in [`packaging/agent-plugin`](../packaging/agent-plugin) with the skill and the release's version, using [`scripts/release/agent-plugin.mjs`](../scripts/release/agent-plugin.mjs), and publishes it to npm as [`hatoba-agent-plugin`](https://www.npmjs.com/package/hatoba-agent-plugin), with provenance, unless npm already has that version, for example because it was published by hand. It publishes through trusted publishing, where npm accepts the job's GitHub identity in place of a token, so it runs on Node.js 24, whose npm supports it.
 
-winget, Scoop, and the AUR find the files by their names in the release (`INSTALLERS` in `release.mjs`). Renaming the Windows installer also needs a change to `installers-regex` of the winget job and to the `autoupdate` URL of the Scoop manifest. Renaming the deb package needs a change to the URL in `source` of the PKGBUILD.
+winget, Scoop, and the AUR find the files by their names in the release (`INSTALLERS` in [`scripts/release/installers.mjs`](../scripts/release/installers.mjs)). Renaming the Windows installer also needs a change to `installers-regex` of the winget job and to the `autoupdate` URL of the Scoop manifest. Renaming the deb package needs a change to the URL in `source` of the PKGBUILD.
 
 ### Set up the package managers
 
