@@ -24,6 +24,7 @@ import { FindBar } from "./FindBar";
 import { ConnectingOverlay, DisconnectedBanner, ErrorCard, LocalErrorCard, TelnetErrorCard } from "./Overlays";
 import { clearStats, startStats, stopStats, useSessionStats } from "./stats";
 import { StatsPopover } from "./StatsPopover";
+import { ZmodemBar } from "./ZmodemBar";
 import { StatusBar } from "./StatusBar";
 import { SuggestionGhost, SuggestionList } from "./Suggestions";
 import s from "./TerminalView.module.css";
@@ -325,6 +326,7 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
           menu.openBelow(button, true);
         }}
       />
+      <ZmodemBar session={session} />
       <div className={s.main}>
         <div ref={areaRef} className={s.termArea} style={{ background: chrome.background }}>
           <div ref={containerRef} className={s.term} onContextMenu={onContextMenu} />

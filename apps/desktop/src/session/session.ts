@@ -47,6 +47,7 @@ import { searchColors } from "./schemes";
 import { InputTracker, commandNameFor, nextWord, suggestionFor } from "./suggest";
 import { resolveScheme, terminalOptions, useTermSettings } from "./theme";
 import { useTransfers } from "./transfers";
+import { ZmodemTerminal } from "./zmodem";
 
 /** TERM-14: the dimmed rest of a command after the cursor, at the cursor's cell of the view. */
 export interface Suggestion {
@@ -209,6 +210,8 @@ export class LiveSession {
   private fitTimer: number | undefined;
   private readonly outputListeners = new Set<(text: string) => void>();
   private readonly outputDecoder = new TextDecoder();
+  readonly zmodem: ZmodemTerminal;
+  private readonly stopZmodemLock: () => void;
   /** TERM-14, TERM-15: where the input starts on the current prompt. */
   private readonly tracker = new InputTracker();
   /** The suggestion showing after the cursor; null while none does. */
@@ -236,6 +239,30 @@ export class LiveSession {
       macOptionIsMeta: true,
       // xterm takes Shift elsewhere: the drag selects here, not in a program that tracks the mouse.
       macOptionClickForcesSelection: true,
+    });
+    this.zmodem = new ZmodemTerminal({
+      output: (data) => {
+        if (this.outputListeners.size > 0) {
+          const text = this.outputDecoder.decode(data, { stream: true });
+          this.outputListeners.forEach((listener) => listener(text));
+        }
+        this.term.write(data);
+      },
+      send: async (data) => {
+        const sid = this.sessionId;
+        if (!sid || this.status !== "connected") throw new Error("Terminal disconnected");
+        await this.io.writeBytes(sid, data);
+      },
+      allowed: () => useApp.getState().phase === "unlocked" && this.status === "connected",
+      view: (zmodem) => patchInfo(this.tabId, { zmodem }),
+      begin: (name) => api.zmodem_download_begin(name),
+      write: (id, bytes) => api.zmodem_download_write(id, bytes),
+      finish: (id, commit) => api.zmodem_download_finish(id, commit),
+      saved: (path) => toast(t("terminal.zmodem.saved", { path })),
+      error: (error) => toast(t("terminal.zmodem.failed", { error: errorMessage(t, error) }), "error"),
+    });
+    this.stopZmodemLock = useApp.subscribe((state) => {
+      if (state.phase !== "unlocked" && this.zmodem.busy) this.zmodem.cancel();
     });
     this.term.loadAddon(this.fit);
     this.term.loadAddon(this.search);
@@ -610,6 +637,7 @@ export class LiveSession {
 
   /** Connection ended (remote closed, network drop, or the user disconnected). */
   private markDisconnected(reason: string | null, weak = false) {
+    this.zmodem.cancel();
     if (this.status === "disconnected") {
       // A later state event may know better than the bare "closed" frame.
       if (reason && !weak) patchInfo(this.tabId, { reason });
@@ -654,11 +682,7 @@ export class LiveSession {
       case FRAME_DATA:
         if (frame.length > 1) {
           const data = frame.subarray(1);
-          if (this.outputListeners.size > 0) {
-            const text = this.outputDecoder.decode(data, { stream: true });
-            this.outputListeners.forEach((listener) => listener(text));
-          }
-          this.term.write(data);
+          this.zmodem.consume(data);
         }
         break;
       case FRAME_CLOSED:
@@ -719,6 +743,8 @@ export class LiveSession {
 
   /** Close everything: backend session, xterm, listeners. */
   async dispose() {
+    this.zmodem.cancel();
+    this.stopZmodemLock();
     if (this.disposed) return;
     this.disposed = true;
     // Host-key and login prompts of an attempt still in progress would outlive the tab.
@@ -747,6 +773,10 @@ export class LiveSession {
   // ───────────── input, resize, clipboard ─────────────
 
   private write(data: string) {
+    if (this.zmodem.busy) {
+      if (data.includes("\x03")) this.zmodem.cancel();
+      return;
+    }
     const sid = this.sessionId;
     if (!sid || this.status !== "connected") return;
     // TERM-15: Enter at a prompt adds the command, read from the screen before the shell answers.
@@ -768,6 +798,7 @@ export class LiveSession {
    * 0x7F, so they are sent as bytes rather than as text, which would be UTF-8 encoded.
    */
   private writeBinary(data: string) {
+    if (this.zmodem.busy) return;
     const sid = this.sessionId;
     if (!sid || this.status !== "connected") return;
     const bytes = Array.from({ length: data.length }, (_, i) => data.charCodeAt(i) & 0xff);
@@ -776,6 +807,7 @@ export class LiveSession {
 
   /** Types `data` into the shell through the same path as the keyboard (AI-13). Rejects when not connected. */
   async sendInput(data: string): Promise<void> {
+    if (this.zmodem.busy) throw new Error("ZMODEM transfer is using the terminal; wait or cancel it first.");
     const sid = this.sessionId;
     if (!sid || this.status !== "connected") throw toAppError(new Error("the session is not connected"));
     this.term.scrollToBottom();

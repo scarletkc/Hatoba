@@ -1,3 +1,6 @@
 packages:
   - apps/*
   - packages/*
+
+patchedDependencies:
+  zmodem.js@0.1.10: patches/zmodem.js@0.1.10.patch

@@ -56,6 +56,7 @@ pub struct AppState {
     pub app_proxy: AppProxy,
     /// Remote files edited in a local editor (SFTP-05).
     pub edits: RemoteEdits,
+    pub zmodem: crate::zmodem_files::Downloads,
     pub mica: bool,
     pub lock_policy: LockPolicy,
     last_activity: Mutex<Instant>,
@@ -89,6 +90,7 @@ impl AppState {
             updates: Updates::default(),
             app_proxy: AppProxy::default(),
             edits: RemoteEdits::default(),
+            zmodem: crate::zmodem_files::Downloads::default(),
             mica,
             lock_policy: LockPolicy::default(),
             last_activity: Mutex::new(Instant::now()),
