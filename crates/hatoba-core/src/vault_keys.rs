@@ -13,7 +13,7 @@ use crate::crypto::{
 use crate::error::{Error, Result};
 use crate::model::{Item, SETTINGS_ID, Settings, new_id};
 use crate::recovery::RecoveryCode;
-use crate::store::{ItemRow, StoreOps, meta};
+use crate::store::{ItemRow, KeyMeta, StoreOps, meta};
 use crate::vault::{Unlocked, Vault, decode_row, seal_item};
 
 const VAULT_CHECK_PLAINTEXT: &[u8] = b"hatoba vault check v1";
@@ -207,6 +207,12 @@ impl Vault {
         });
         let settings_envelope = seal_item(&vault_key, SETTINGS_ID, &settings_item)?;
 
+        let key_meta = KeyMeta {
+            kdf_salt: b64_encode(&salt),
+            kdf_params: params.to_json(),
+            protected_vault_key: protected,
+            recovery_vault_key: recovery_wrapped,
+        };
         let device_id = new_id();
         let now = self.clock.now_ms();
         self.store.transaction(|tx| {
@@ -214,10 +220,7 @@ impl Vault {
                 meta::SCHEMA_VERSION,
                 &crate::store::SCHEMA_VERSION.to_string(),
             )?;
-            tx.set_meta(meta::KDF_SALT, &b64_encode(&salt))?;
-            tx.set_meta(meta::KDF_PARAMS, &params.to_json())?;
-            tx.set_meta(meta::PROTECTED_VAULT_KEY, &protected)?;
-            tx.set_meta(meta::RECOVERY_VAULT_KEY, &recovery_wrapped)?;
+            key_meta.write(tx)?;
             tx.set_meta(meta::RECOVERY_AUTH_SEALED, &recovery_auth_sealed)?;
             tx.set_meta(meta::VAULT_CHECK, &check)?;
             tx.set_meta(meta::DEVICE_ID, &device_id)?;
