@@ -329,10 +329,7 @@ async fn open(
         // SEC-03: the vault may have locked while dialing. Under its guard, a lock either comes
         // before this check, and nothing starts or types a saved password, or after the session
         // is registered, which it then counts among the sessions it may close.
-        let mut vault = state.vault();
-        if !vault.is_unlocked() {
-            return Err(AppError::locked());
-        }
+        let mut vault = state.require_unlocked()?;
         // As the `telnet` command does, only the Telnet port opens the option negotiation.
         let negotiate = target.port == TELNET_PORT;
         let (session, events) = TelnetSession::start(stream, cols, rows, negotiate, login);
@@ -429,10 +426,7 @@ pub async fn telnet_write_bytes(
 fn write(state: &AppState, session_id: &str, data: Vec<u8>) -> AppResult<()> {
     // SEC-03: like SSH sessions, Telnet tabs take no input behind the lock screen. The vault's
     // guard is held until the input is queued, so a lock cannot slip in between.
-    let vault = state.vault();
-    if !vault.is_unlocked() {
-        return Err(AppError::locked());
-    }
+    let _vault = state.require_unlocked()?;
     state
         .telnet
         .get(session_id)?

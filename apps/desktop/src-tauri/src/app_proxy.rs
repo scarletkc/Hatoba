@@ -10,7 +10,7 @@ use reqwest::{NoProxy, Url};
 use tauri::{AppHandle, Manager};
 use zeroize::Zeroizing;
 
-use crate::dto::LocalPrefs;
+use crate::prefs::device_prefs;
 use crate::state::{AppState, MutexExt};
 use crate::sync;
 
@@ -63,8 +63,7 @@ pub fn forget(app: &AppHandle) {
 
 /// The saved proxy this device's preferences name, if it still exists.
 fn named(v: &Vault) -> Option<Proxy> {
-    let json = v.local_prefs().ok().flatten()?;
-    let id = LocalPrefs::from_stored(&json).app_proxy_id?;
+    let id = device_prefs(v).ok()?.app_proxy_id?;
     v.get(&id).and_then(Item::as_proxy).cloned()
 }
 

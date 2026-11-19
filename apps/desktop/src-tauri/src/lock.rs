@@ -6,7 +6,8 @@ use std::time::Duration;
 use tauri::AppHandle;
 use tauri_specta::Event;
 
-use crate::dto::{LocalPrefs, LockReason, VaultLockedEvent};
+use crate::dto::{LockReason, VaultLockedEvent};
+use crate::prefs::device_prefs;
 use crate::state::{AppState, state};
 use crate::sync;
 
@@ -22,10 +23,7 @@ pub struct LockPolicy {
 /// Reads the policy from the prefs, which are readable while locked. Runs after unlock and
 /// whenever the prefs are saved.
 pub fn refresh_policy(state: &AppState) {
-    let stored = state.vault().local_prefs().ok().flatten();
-    let prefs = stored
-        .map(|json| LocalPrefs::from_stored(&json))
-        .unwrap_or_default();
+    let prefs = device_prefs(&state.vault()).ok().unwrap_or_default();
     let policy = &state.lock_policy;
     policy
         .auto_lock_minutes

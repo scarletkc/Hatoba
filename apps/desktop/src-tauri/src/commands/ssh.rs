@@ -313,9 +313,7 @@ pub async fn ssh_write_bytes(
 
 async fn write_shell(state: &AppState, session_id: &str, data: Vec<u8>) -> AppResult<()> {
     // SEC-03: sessions stay connected behind the lock screen, but take no input until unlocked.
-    if !state.vault().is_unlocked() {
-        return Err(AppError::locked());
-    }
+    drop(state.require_unlocked()?);
     let live = state.ssh.get(session_id)?;
     live.shell.write(data).await?;
     Ok(())
@@ -347,7 +345,7 @@ pub async fn ssh_stats_start(
     channel: Channel<StatsEvent>,
 ) -> AppResult<u64> {
     // SEC-03: nothing runs on the server behind the lock screen.
-    state.with_unlocked(|_| Ok(()))?;
+    drop(state.require_unlocked()?);
     // Taken before the round trip to the server, so ids follow the order the starts arrived in.
     let id = NEXT_STATS_ID.fetch_add(1, Ordering::Relaxed);
     let live = state.ssh.get(&session_id)?;
@@ -391,7 +389,7 @@ pub async fn ssh_suggestions(
     session_id: String,
 ) -> AppResult<Option<ServerSuggestionsView>> {
     // SEC-03: nothing runs on the server behind the lock screen.
-    state.with_unlocked(|_| Ok(()))?;
+    drop(state.require_unlocked()?);
     let live = state.ssh.get(&session_id)?;
     let found = live.session.suggestions().await?;
     Ok(found.map(|s| ServerSuggestionsView {
