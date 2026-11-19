@@ -47,7 +47,7 @@ pub enum ToolPlace {
 }
 
 impl ToolPlace {
-    pub(super) fn local(self) -> bool {
+    fn local(self) -> bool {
         matches!(self, Self::Local | Self::LocalWindows)
     }
 

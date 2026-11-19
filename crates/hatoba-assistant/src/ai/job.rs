@@ -151,13 +151,13 @@ impl Job {
         };
         match tool {
             BuiltinTool::ReadFile | BuiltinTool::EditFile | BuiltinTool::WriteFile => {
-                match FileJob::parse_tool(tool, arguments) {
+                match FileJob::parse(tool, arguments) {
                     Some(Ok(job)) => Self::File(job, None),
                     Some(Err(message)) => Self::error(message),
                     None => unreachable!("matched file tool variants"),
                 }
             }
-            BuiltinTool::Grep | BuiltinTool::Glob => match SearchJob::parse_tool(tool, arguments) {
+            BuiltinTool::Grep | BuiltinTool::Glob => match SearchJob::parse(tool, arguments) {
                 Some(Ok(job)) => Self::Search(job),
                 Some(Err(message)) => Self::error(message),
                 None => unreachable!("matched search tool variants"),
@@ -197,13 +197,10 @@ impl Job {
                 Ok(args) => Self::Memory(args, None),
                 Err(message) => Self::error(message),
             },
-            t if t.runs_in_frontend() => Self::error(format!(
+            BuiltinTool::ReadTerminal | BuiltinTool::SendInput => Self::error(format!(
                 "{} runs in the terminal tab and cannot run here.",
-                t.name()
+                tool.name()
             )),
-            BuiltinTool::ReadTerminal | BuiltinTool::SendInput => {
-                unreachable!("covered by runs_in_frontend")
-            }
             BuiltinTool::CallMcpTool => Self::error(format!("There is no tool named \"{name}\".")),
         }
     }

@@ -78,7 +78,6 @@ pub fn sse_data(events: &[Value]) -> ResponseTemplate {
     sse(body)
 }
 
-/// Reads one HTTP request from `socket` and returns its body.
 async fn request_body(socket: &mut TcpStream) -> Vec<u8> {
     let mut data = Vec::new();
     let mut buf = vec![0u8; 64 * 1024];

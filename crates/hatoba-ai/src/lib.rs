@@ -26,7 +26,7 @@
 //!
 //! # Cargo features
 //!
-//! * `test-util`: exposes [`test_support`] (`provider()`, `bodies()`, `sse()`,
+//! * `test-util`: exposes `test_support` (`provider()`, `bodies()`, `sse()`,
 //!   `stalling_server()`) for other crates' tests. Never enable it in a shipping build.
 
 #![forbid(unsafe_code)]

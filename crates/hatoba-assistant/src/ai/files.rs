@@ -12,7 +12,7 @@ use super::conn::Conn;
 use hatoba_ai::entry::ToolStatus;
 use hatoba_ai::files::{self, MAX_FILE_BYTES, TextFile};
 #[cfg(test)]
-use hatoba_ai::tools::{self};
+use hatoba_ai::tools;
 use hatoba_ai::tools::{BuiltinTool, EditFileArgs, ReadFileArgs, WriteFileArgs};
 use hatoba_ssh::remote_file::{self, Expect, RemoteFile, RemoteFileError};
 use tokio_util::sync::CancellationToken;
@@ -44,29 +44,14 @@ pub(super) enum FileJob {
 }
 
 impl FileJob {
-    /// `Some` for a file tool's name: its arguments, or the message for arguments that do not
-    /// parse.
-    pub(super) fn parse(name: &str, arguments: &str) -> Option<Result<Self, String>> {
-        BuiltinTool::from_name(name).and_then(|tool| Self::parse_tool(tool, arguments))
-    }
-
-    /// `Some` for a file tool variant: its arguments, or the message for arguments that do not
-    /// parse.
-    pub(super) fn parse_tool(tool: BuiltinTool, arguments: &str) -> Option<Result<Self, String>> {
+    /// `Some` for a file tool: its arguments, or the message for arguments that do not parse.
+    pub(super) fn parse(tool: BuiltinTool, arguments: &str) -> Option<Result<Self, String>> {
         Some(match tool {
             BuiltinTool::ReadFile => parse(arguments).map(Self::Read),
             BuiltinTool::EditFile => parse(arguments).map(Self::Edit),
             BuiltinTool::WriteFile => parse(arguments).map(Self::Write),
             _ => return None,
         })
-    }
-
-    fn tool(&self) -> BuiltinTool {
-        match self {
-            Self::Read(_) => BuiltinTool::ReadFile,
-            Self::Edit(_) => BuiltinTool::EditFile,
-            Self::Write(_) => BuiltinTool::WriteFile,
-        }
     }
 
     fn path(&self) -> &str {
@@ -434,7 +419,7 @@ pub(super) async fn run(
 /// An `edit_file` or `write_file` call for its approval card, with its path, or the preview that
 /// says why there is no diff to show.
 pub(super) fn preview_job(name: &str, arguments: &str) -> Result<(FileJob, String), AiFilePreview> {
-    match FileJob::parse(name, arguments) {
+    match BuiltinTool::from_name(name).and_then(|tool| FileJob::parse(tool, arguments)) {
         Some(Ok(job @ (FileJob::Edit(_) | FileJob::Write(_)))) => {
             let path = job.path().to_owned();
             Ok((job, path))
@@ -468,7 +453,16 @@ pub(super) async fn read_base(
 /// would give, such as for a file the model has not read.
 pub(super) fn preview_of(job: &FileJob, base: &Base, seen: SeenBy<'_>) -> AiFilePreview {
     let path = &base.path;
-    let tool = job.tool().name();
+    let tool = match job {
+        FileJob::Edit(_) => BuiltinTool::EditFile.name(),
+        FileJob::Write(_) => BuiltinTool::WriteFile.name(),
+        FileJob::Read(_) => {
+            return failed_preview(
+                path,
+                format!("{} shows no diff.", BuiltinTool::ReadFile.name()),
+            );
+        }
+    };
     if let Some(file) = &base.file
         && let Err(message) = seen.check(&base.server, file, tool, path)
     {
@@ -489,7 +483,7 @@ pub(super) fn preview_of(job: &FileJob, base: &Base, seen: SeenBy<'_>) -> AiFile
             .ok_or_else(|| missing_for_edit(path))
             .and_then(|file| files::apply_edit(path, file, args).map(|e| e.file)),
         FileJob::Write(args) => new_content(path, before.as_ref(), &args.content),
-        FileJob::Read(_) => Err(format!("{} shows no diff.", BuiltinTool::ReadFile.name())),
+        FileJob::Read(_) => unreachable!("returned above"),
     };
     match after {
         Ok(after) => AiFilePreview {
@@ -1279,6 +1273,14 @@ mod tests {
         let no_diff = |name, arguments| preview_job(name, arguments).err().unwrap().error.unwrap();
         assert!(no_diff(tools::READ_FILE, r#"{"path":"a"}"#).contains("shows no diff"));
         assert!(no_diff(tools::EDIT_FILE, "{").starts_with("The arguments are not valid"));
+        let read = FileJob::parse(BuiltinTool::ReadFile, r#"{"path":"/etc/unread"}"#)
+            .unwrap()
+            .unwrap();
+        let unread = base("/etc/unread", Some(b"secret\n"));
+        assert_eq!(
+            preview_of(&read, &unread, by).error.as_deref(),
+            Some("read_file shows no diff.")
+        );
     }
 
     /// §13.4, "What the model has seen": a file is changed only as the model last saw it.

@@ -8,8 +8,6 @@ use std::time::Duration;
 use super::conn::Conn;
 use hatoba_ai::entry::ToolStatus;
 use hatoba_ai::search::{self, Found, MAX_OUTPUT_BYTES, Search};
-#[cfg(test)]
-use hatoba_ai::tools;
 use hatoba_ai::tools::{BuiltinTool, GlobArgs, GrepArgs, GrepOutput};
 use hatoba_ssh::remote_search::{GrepMode, GrepQuery, RemoteSearchError, Scope, SearchOutput};
 use tokio_util::sync::CancellationToken;
@@ -27,16 +25,8 @@ pub(super) enum SearchJob {
 }
 
 impl SearchJob {
-    /// `Some` for a search tool's name: its arguments, or the message for arguments that do not
-    /// parse.
-    #[cfg_attr(not(test), expect(dead_code))]
-    pub(super) fn parse(name: &str, arguments: &str) -> Option<Result<Self, String>> {
-        BuiltinTool::from_name(name).and_then(|tool| Self::parse_tool(tool, arguments))
-    }
-
-    /// `Some` for a search tool variant: its arguments, or the message for arguments that do not
-    /// parse.
-    pub(super) fn parse_tool(tool: BuiltinTool, arguments: &str) -> Option<Result<Self, String>> {
+    /// `Some` for a search tool: its arguments, or the message for arguments that do not parse.
+    pub(super) fn parse(tool: BuiltinTool, arguments: &str) -> Option<Result<Self, String>> {
         Some(match tool {
             BuiltinTool::Grep => parse(arguments).map(Self::Grep),
             BuiltinTool::Glob => parse(arguments).map(Self::Glob),
@@ -223,14 +213,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn jobs_parse_by_name() {
-        assert!(SearchJob::parse(tools::READ_FILE, "{}").is_none());
+    fn jobs_parse_by_tool() {
+        assert!(SearchJob::parse(BuiltinTool::ReadFile, "{}").is_none());
         assert!(matches!(
-            SearchJob::parse(tools::GREP, r#"{"pattern":"x","path":"/etc"}"#),
+            SearchJob::parse(BuiltinTool::Grep, r#"{"pattern":"x","path":"/etc"}"#),
             Some(Ok(SearchJob::Grep(GrepArgs { .. })))
         ));
         assert!(matches!(
-            SearchJob::parse(tools::GLOB, ""),
+            SearchJob::parse(BuiltinTool::Glob, ""),
             Some(Err(message)) if message.starts_with("The arguments are not valid")
         ));
     }

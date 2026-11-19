@@ -1,5 +1,5 @@
-//! Snapshots of all model-facing text and schemas in `hatoba_ai::tools` so refactors keep them
-//! identical byte for byte.
+//! Snapshots of the model-facing tool definitions, system prompt, and attachment notes in
+//! `hatoba_ai::tools`.
 
 use hatoba_ai::tools::{
     LocalPrompt, MemoryEntry, PermissionMode, PromptContext, PromptModel, PromptTools, ToolPlace,

@@ -16,8 +16,14 @@ pub const MODEL_CHANGE_TAG: &str = "model_change";
 pub const FILE_REVERT_TAG: &str = "file_revert";
 /// The tag of the note that names the conversation's permission mode (AI-16, AI-47).
 pub const PERMISSION_MODE_TAG: &str = "permission_mode";
+macro_rules! memory_tag {
+    () => {
+        "memory"
+    };
+}
+
 /// The tag of the note that shows the memories (AI-53).
-pub const MEMORY_TAG: &str = "memory";
+pub const MEMORY_TAG: &str = memory_tag!();
 /// The tag of the note that shows the attached terminal's screen (AI-46).
 pub const TERMINAL_STATE_TAG: &str = "terminal_state";
 
@@ -307,10 +313,10 @@ pub fn split_permission_note(text: &str) -> (Option<PermissionMode>, &str) {
 /// it. A note stored before [`MEMORY_NOTE_HOST`] names the conversation's host in `host`.
 #[must_use]
 pub fn split_memory_note(text: &str) -> (&str, &str) {
+    const OPEN: &str = concat!("<", memory_tag!(), " entries=\"");
+    const CLOSE: &str = concat!("\n</", memory_tag!(), ">\n\n");
     let opened = text
-        .strip_prefix('<')
-        .and_then(|r| r.strip_prefix(MEMORY_TAG))
-        .and_then(|r| r.strip_prefix(" entries=\""))
+        .strip_prefix(OPEN)
         .and_then(|rest| {
             let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
             let rest = rest[digits..].strip_prefix('"')?;
@@ -328,9 +334,11 @@ pub fn split_memory_note(text: &str) -> (&str, &str) {
             (digits > 0 && rest.starts_with(">\n")).then_some(())
         })
         .is_some();
-    let close = format!("\n</{MEMORY_TAG}>\n\n");
-    match text.find(&close).filter(|_| opened) {
-        Some(at) => text.split_at(at + close.len()),
+    if !opened {
+        return ("", text);
+    }
+    match text.find(CLOSE) {
+        Some(at) => text.split_at(at + CLOSE.len()),
         None => ("", text),
     }
 }

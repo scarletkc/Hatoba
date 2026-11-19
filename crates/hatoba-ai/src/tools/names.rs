@@ -34,39 +34,25 @@ pub const MEMORY: &str = "memory";
 /// Every built-in tool Hatoba offers or handles (spec §13.4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BuiltinTool {
-    /// `read_terminal` (AI-11), run by the frontend.
     ReadTerminal,
-    /// `run_command` (AI-12), run in Rust on a new exec channel.
     RunCommand,
-    /// `send_input` (AI-13), run by the frontend.
     SendInput,
-    /// `read_file` (AI-38), run in Rust on a new exec channel.
     ReadFile,
-    /// `edit_file` (AI-39), run in Rust on a new exec channel.
     EditFile,
-    /// `write_file` (AI-40), run in Rust on a new exec channel.
     WriteFile,
-    /// `grep` (AI-48), run in Rust on a new exec channel.
     Grep,
-    /// `glob` (AI-49), run in Rust on a new exec channel.
     Glob,
-    /// `web_search` (AI-14).
     WebSearch,
-    /// `fetch_url` (AI-15).
     FetchUrl,
-    /// `read_skill` (AI-28).
     ReadSkill,
-    /// `search_tools` (AI-45), offered in place of deferred MCP tools.
     SearchTools,
-    /// `call_mcp_tool` (AI-45), which calls a deferred MCP tool.
     CallMcpTool,
-    /// `memory` (AI-53), run in Rust against the vault.
     Memory,
 }
 
 impl BuiltinTool {
-    /// Every built-in tool variant.
-    pub const ALL: [Self; 14] = [
+    #[cfg(test)]
+    const ALL: [Self; 14] = [
         Self::ReadTerminal,
         Self::RunCommand,
         Self::SendInput,
@@ -104,8 +90,6 @@ impl BuiltinTool {
         }
     }
 
-    /// Parses a built-in tool name; `None` for any other name (such as an MCP tool or unknown
-    /// tool).
     #[must_use]
     pub fn from_name(name: &str) -> Option<Self> {
         Some(match name {
@@ -129,7 +113,7 @@ impl BuiltinTool {
 
     /// The Auto mode judge's [`CallKind`] for this tool (AI-47).
     #[must_use]
-    pub const fn call_kind(self) -> CallKind {
+    pub(crate) const fn call_kind(self) -> CallKind {
         match self {
             Self::EditFile | Self::WriteFile => CallKind::File,
             Self::FetchUrl => CallKind::Fetch,
@@ -150,7 +134,7 @@ impl BuiltinTool {
     /// What this tool does, for the judge of Auto mode (AI-47); `None` for tools the judge never
     /// sees (read-only tools and deferred-MCP wrappers).
     #[must_use]
-    pub const fn judge_description(self) -> Option<&'static str> {
+    pub(crate) const fn judge_description(self) -> Option<&'static str> {
         Some(match self {
             Self::RunCommand => {
                 "Runs `command` in a shell on `host`, apart from the terminal, and returns its \
@@ -185,13 +169,6 @@ impl BuiltinTool {
             | Self::Memory => return None,
         })
     }
-
-    /// Whether calls to this tool execute in the frontend (`ai_tool_result`) rather than in Rust
-    /// (`ai_tool_run`).
-    #[must_use]
-    pub const fn runs_in_frontend(self) -> bool {
-        matches!(self, Self::ReadTerminal | Self::SendInput)
-    }
 }
 
 #[cfg(test)]
@@ -222,10 +199,6 @@ mod tests {
         }
         for tool in BuiltinTool::ALL {
             assert_eq!(BuiltinTool::from_name(tool.name()), Some(tool));
-            assert_eq!(
-                tool.runs_in_frontend(),
-                matches!(tool, BuiltinTool::ReadTerminal | BuiltinTool::SendInput)
-            );
         }
         assert_eq!(BuiltinTool::from_name("mcp__server__tool"), None);
         assert_eq!(BuiltinTool::from_name("unknown"), None);

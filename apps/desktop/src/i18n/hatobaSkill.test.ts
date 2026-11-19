@@ -16,7 +16,7 @@ const SKILL_DIR = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "../../../../crates/hatoba-ai/src/skills/builtin/hatoba",
 );
-/** Each file stays under this, half of `MAX_RESULT_CHARS` (crates/hatoba-ai/src/tools.rs), above which `read_skill` shortens a file. */
+/** Each file stays under this, half of `MAX_RESULT_CHARS` (crates/hatoba-ai/src/tools/results.rs), above which `read_skill` shortens a file. */
 const MAX_CHARS = 15_000;
 /** SKILL.md descriptions are limited to this many characters (spec AI-27). */
 const MAX_DESCRIPTION_CHARS = 1_024;
