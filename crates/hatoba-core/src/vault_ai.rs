@@ -539,7 +539,7 @@ impl Vault {
     }
 
     /// Tombstones the given items in one transaction and drops them (wiped) from the item map.
-    pub(crate) fn tombstone(&mut self, ids: &[String]) -> Result<()> {
+    fn tombstone(&mut self, ids: &[String]) -> Result<()> {
         let now = self.clock.now_ms();
         let Self {
             store, unlocked, ..
@@ -701,6 +701,7 @@ mod tests {
     use crate::crypto::open_json;
     use crate::model::{AiAuthHeader, AiModel, AiProtocol, McpTransport, SETTINGS_ID, SearchKind};
     use crate::test_support::{TEST_PASSWORD as PW, unlocked_vault as vault};
+    use crate::vault::Clock;
 
     fn conversation(vault: &mut Vault, title: &str) -> String {
         vault
@@ -1723,5 +1724,33 @@ mod tests {
         assert_eq!(provider.api_key.as_str(), key);
         let row = vault.store.item_row(&id).unwrap().unwrap();
         assert!(!row.envelope.unwrap().contains("sk-test"));
+    }
+
+    #[test]
+    fn tombstone_skips_missing_and_deleted_rows() {
+        let (mut vault, clock) = vault();
+        let t0 = clock.now_ms();
+        let conv = conversation(&mut vault, "temp");
+        let mut row = vault.store.item_row(&conv).unwrap().unwrap();
+        row.revision = 4;
+        row.dirty = false;
+        row.updated_at = t0 + 500;
+        vault.store.upsert_item_row(&row).unwrap();
+
+        vault
+            .tombstone(&[conv.clone(), "missing-id".into()])
+            .unwrap();
+        let tomb = vault.store.item_row(&conv).unwrap().unwrap();
+        assert_eq!(
+            (tomb.revision, tomb.dirty, tomb.deleted, tomb.updated_at),
+            (4, true, true, t0 + 501)
+        );
+        assert!(tomb.envelope.is_none());
+        assert!(vault.store.item_row("missing-id").unwrap().is_none());
+
+        // Tombstoning an already-deleted row leaves its timestamp untouched.
+        clock.advance(10_000);
+        vault.tombstone(std::slice::from_ref(&conv)).unwrap();
+        assert_eq!(vault.store.item_row(&conv).unwrap().unwrap(), tomb);
     }
 }

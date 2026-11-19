@@ -80,7 +80,6 @@ pub(crate) struct KeyMeta {
 }
 
 impl KeyMeta {
-    /// Reads all four key metadata values from `store`.
     pub(crate) fn read(store: &impl StoreOps) -> Result<Self> {
         let get = |key: &str| store.get_meta(key)?.ok_or(Error::VaultNotInitialized);
         Ok(Self {
@@ -91,29 +90,11 @@ impl KeyMeta {
         })
     }
 
-    /// Writes all four key metadata values to `store`.
     pub(crate) fn write(&self, store: &impl StoreOps) -> Result<()> {
-        Self::write_fields(
-            store,
-            &self.kdf_salt,
-            &self.kdf_params,
-            &self.protected_vault_key,
-            &self.recovery_vault_key,
-        )
-    }
-
-    /// Writes the four key metadata values without allocating a [`KeyMeta`].
-    pub(crate) fn write_fields(
-        store: &impl StoreOps,
-        kdf_salt: &str,
-        kdf_params: &str,
-        protected_vault_key: &str,
-        recovery_vault_key: &str,
-    ) -> Result<()> {
-        store.set_meta(meta::KDF_SALT, kdf_salt)?;
-        store.set_meta(meta::KDF_PARAMS, kdf_params)?;
-        store.set_meta(meta::PROTECTED_VAULT_KEY, protected_vault_key)?;
-        store.set_meta(meta::RECOVERY_VAULT_KEY, recovery_vault_key)
+        store.set_meta(meta::KDF_SALT, &self.kdf_salt)?;
+        store.set_meta(meta::KDF_PARAMS, &self.kdf_params)?;
+        store.set_meta(meta::PROTECTED_VAULT_KEY, &self.protected_vault_key)?;
+        store.set_meta(meta::RECOVERY_VAULT_KEY, &self.recovery_vault_key)
     }
 }
 
@@ -136,7 +117,7 @@ pub struct ItemRow {
 impl ItemRow {
     /// A dirty live item row ready to store and upload.
     #[must_use]
-    pub fn live(id: String, envelope: String, revision: u64, updated_at: i64) -> Self {
+    pub(crate) fn live(id: String, envelope: String, revision: u64, updated_at: i64) -> Self {
         Self {
             id,
             envelope: Some(envelope),
@@ -149,7 +130,7 @@ impl ItemRow {
 
     /// A dirty tombstone row ready to store and upload.
     #[must_use]
-    pub fn tombstone(id: String, revision: u64, updated_at: i64) -> Self {
+    pub(crate) fn tombstone(id: String, revision: u64, updated_at: i64) -> Self {
         Self {
             id,
             envelope: None,
@@ -328,7 +309,7 @@ impl SnapshotState {
     }
 }
 
-/// A row of the device-local `ai_file_snapshots` table (see [`LOCAL_TABLES`]).
+/// A row of the device-local `ai_file_snapshots` table (see `LOCAL_TABLES`).
 #[derive(Clone, PartialEq, Eq)]
 pub struct SnapshotRow {
     /// The conversation whose call made the change.
@@ -364,7 +345,7 @@ impl std::fmt::Debug for SnapshotRow {
 const SNAPSHOT_COLUMNS: &str = "conversation_id, response_id, tool_call_id, meta, content, size, \
      state, created_at";
 
-/// A row of the device-local `command_history` table (see [`LOCAL_TABLES`]).
+/// A row of the device-local `command_history` table (see `LOCAL_TABLES`).
 #[derive(Clone, PartialEq, Eq)]
 pub struct CommandHistoryRow {
     /// The saved host's item id, or `local:` and the local shell's id.
@@ -1514,6 +1495,25 @@ mod tests {
             recovery_vault_key: "recovery-env".into(),
         };
         expected.write(&store).unwrap();
+        assert_eq!(
+            store.get_meta(meta::KDF_SALT).unwrap().as_deref(),
+            Some(expected.kdf_salt.as_str())
+        );
+        assert_eq!(
+            store.get_meta(meta::KDF_PARAMS).unwrap().as_deref(),
+            Some(expected.kdf_params.as_str())
+        );
+        assert_eq!(
+            store
+                .get_meta(meta::PROTECTED_VAULT_KEY)
+                .unwrap()
+                .as_deref(),
+            Some(expected.protected_vault_key.as_str())
+        );
+        assert_eq!(
+            store.get_meta(meta::RECOVERY_VAULT_KEY).unwrap().as_deref(),
+            Some(expected.recovery_vault_key.as_str())
+        );
         assert_eq!(KeyMeta::read(&store).unwrap(), expected);
 
         for key in [

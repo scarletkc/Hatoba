@@ -224,14 +224,12 @@ impl Vault {
             tx.set_meta(meta::RECOVERY_AUTH_SEALED, &recovery_auth_sealed)?;
             tx.set_meta(meta::VAULT_CHECK, &check)?;
             tx.set_meta(meta::DEVICE_ID, &device_id)?;
-            tx.upsert_item_row(&ItemRow {
-                id: SETTINGS_ID.to_owned(),
-                envelope: Some(settings_envelope.to_json()),
-                revision: 0,
-                deleted: false,
-                dirty: true,
-                updated_at: now,
-            })
+            tx.upsert_item_row(&ItemRow::live(
+                SETTINGS_ID.to_owned(),
+                settings_envelope.to_json(),
+                0,
+                now,
+            ))
         })?;
         self.finish_unlock(vault_key)?;
         Ok(recovery)

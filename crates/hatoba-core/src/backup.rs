@@ -21,7 +21,8 @@ use crate::crypto::{AAD_VAULT_KEY, KdfParams, MasterKeys, decode_salt, unwrap_ke
 use crate::error::{Error, Result};
 use crate::model::new_id;
 use crate::store::{ItemRow, KeyMeta, Store, StoreOps, meta};
-use crate::vault::{Vault, seal_vault_check};
+use crate::vault::Vault;
+use crate::vault_keys::seal_vault_check;
 
 /// Value of the `format` field.
 pub const BACKUP_FORMAT: &str = "hatoba-backup";
@@ -167,13 +168,13 @@ impl Vault {
                 meta::SCHEMA_VERSION,
                 &crate::store::SCHEMA_VERSION.to_string(),
             )?;
-            KeyMeta::write_fields(
-                tx,
-                &file.kdf_salt,
-                &file.kdf_params,
-                &file.protected_vault_key,
-                &file.recovery_vault_key,
-            )?;
+            KeyMeta {
+                kdf_salt: file.kdf_salt,
+                kdf_params: file.kdf_params,
+                protected_vault_key: file.protected_vault_key,
+                recovery_vault_key: file.recovery_vault_key,
+            }
+            .write(tx)?;
             tx.set_meta(meta::VAULT_CHECK, &check)?;
             tx.set_meta(meta::DEVICE_ID, &new_id())?;
             for item in &file.items {

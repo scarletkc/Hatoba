@@ -23,7 +23,6 @@ use crate::model::{
 };
 use crate::store::{ItemRow, Store, StoreOps};
 
-pub(crate) use crate::vault_keys::seal_vault_check;
 pub use crate::vault_keys::{
     FREE_UNLOCK_ATTEMPTS, MAX_UNLOCK_DELAY_SECS, PasswordChange, RecoveryChange, VaultStatusInfo,
     unlock_delay_ms,
@@ -555,7 +554,7 @@ mod tests {
         }
         drop(vault);
         // And again after a clean close (checkpointed).
-        for name in ["vault.db-wal", "vault.db"] {
+        for name in ["vault.db", "vault.db-wal"] {
             if let Ok(bytes) = std::fs::read(dir.path().join(name)) {
                 blobs.push((name, bytes));
             }
@@ -605,7 +604,6 @@ mod tests {
             vault.store.upsert_item_row(&row).unwrap();
         };
 
-        // 1. Vault::put (insert, then update with clock behind previous.updated_at).
         let put_id = vault.put(None, host("put-host")).unwrap();
         let row = vault.store.item_row(&put_id).unwrap().unwrap();
         assert_eq!(
@@ -623,7 +621,6 @@ mod tests {
         );
         assert!(row.envelope.is_some());
 
-        // 2. Vault::delete (clock behind, then clock ahead).
         vault.delete(&put_id).unwrap();
         let row = vault.store.item_row(&put_id).unwrap().unwrap();
         assert_eq!(
@@ -643,7 +640,6 @@ mod tests {
         );
         assert!(row.envelope.is_none());
 
-        // 3. commit_cascade (puts + deletes, clock behind, and ItemNotFound on missing delete).
         let cascade_put = vault.put(None, host("cascade-put")).unwrap();
         let cascade_del = vault.put(None, host("cascade-del")).unwrap();
         mark_synced(&vault, &cascade_put, 7, t0 + 5_000);
@@ -681,7 +677,6 @@ mod tests {
             Err(Error::ItemNotFound(_))
         ));
 
-        // 4 & 5. ai_create_conversation + seal_entry.
         clock.set(t0 + 10_000);
         let (conv_id, _entries) = vault
             .ai_create_conversation(
@@ -725,12 +720,9 @@ mod tests {
         );
         assert!(msg_row.envelope.is_some());
 
-        // 6. vault_ai::tombstone (preserves revision, bumps past updated_at, skips missing).
         mark_synced(&vault, &conv_id, 9, t0 + 12_000);
         mark_synced(&vault, &msg_ids[0], 10, t0 + 12_500);
-        vault
-            .tombstone(&[conv_id.clone(), msg_ids[0].clone(), "missing-id".into()])
-            .unwrap();
+        vault.ai_delete_conversation(&conv_id).unwrap();
         let conv_tomb = vault.store.item_row(&conv_id).unwrap().unwrap();
         assert_eq!(
             (

@@ -1,4 +1,4 @@
-//! Sync-facing state and remote vault setup / adoption / joining on [`Vault`].
+//! Sync-facing state and remote vault setup, adoption and joining on [`Vault`].
 
 use std::collections::BTreeMap;
 
@@ -91,14 +91,12 @@ fn opens_as_settings(vault_key: &[u8; 32], remote: &RemoteItem) -> bool {
 fn fallback_settings_row(vault_key: &[u8; 32], settings: &Item) -> Result<ItemRow> {
     let mut item = settings.clone();
     item.set_updated_at(0);
-    Ok(ItemRow {
-        id: SETTINGS_ID.to_owned(),
-        envelope: Some(seal_item(vault_key, SETTINGS_ID, &item)?.to_json()),
-        revision: 0,
-        deleted: false,
-        dirty: true,
-        updated_at: 0,
-    })
+    Ok(ItemRow::live(
+        SETTINGS_ID.to_owned(),
+        seal_item(vault_key, SETTINGS_ID, &item)?.to_json(),
+        0,
+        0,
+    ))
 }
 
 /// Drops this device's sealed recovery secret unless `recovery_vault_key`, the remote's
@@ -113,13 +111,13 @@ fn drop_stale_recovery_auth(tx: &impl StoreOps, recovery_vault_key: &str) -> Res
 }
 
 fn write_remote_key_meta(tx: &impl StoreOps, remote: &VaultMeta) -> Result<()> {
-    KeyMeta::write_fields(
-        tx,
-        &remote.kdf_salt,
-        &remote.kdf_params,
-        &remote.protected_vault_key,
-        &remote.recovery_vault_key,
-    )
+    KeyMeta {
+        kdf_salt: remote.kdf_salt.clone(),
+        kdf_params: remote.kdf_params.clone(),
+        protected_vault_key: remote.protected_vault_key.clone(),
+        recovery_vault_key: remote.recovery_vault_key.clone(),
+    }
+    .write(tx)
 }
 
 impl Vault {
@@ -182,12 +180,11 @@ impl Vault {
     /// # Errors
     /// [`Error::VaultNotInitialized`] and storage errors.
     pub fn local_meta(&self) -> Result<LocalMeta> {
+        let schema_version =
+            u32::try_from(self.store.get_meta_i64(meta::SCHEMA_VERSION)?.unwrap_or(1)).unwrap_or(1);
         let keys = KeyMeta::read(&self.store)?;
         Ok(LocalMeta {
-            schema_version: u32::try_from(
-                self.store.get_meta_i64(meta::SCHEMA_VERSION)?.unwrap_or(1),
-            )
-            .unwrap_or(1),
+            schema_version,
             kdf_salt: keys.kdf_salt,
             kdf_params: keys.kdf_params,
             protected_vault_key: keys.protected_vault_key,

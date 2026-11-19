@@ -18,7 +18,7 @@
 //! | `vault_conflicts` | sync conflict log queries and loser restoration |
 //! | `vault_history` | device-local, sealed command history per host and local shell (TERM-15) |
 //! | `vault_keys` | vault creation, unlock, throttling, password and recovery operations |
-//! | `vault_local` | device-local preferences and [`SealedLocal`](vault_local::SealedLocal) |
+//! | `vault_local` | device-local preferences and `SealedLocal` |
 //! | `vault_pin` | PIN unlock after a lock, device-local (SEC-11) |
 //! | `vault_snapshots` | device-local, sealed snapshots of AI file edits, for Revert (spec AI-41) |
 //! | `vault_sync` | sync-facing state and remote vault setup, adoption and joining |
@@ -53,7 +53,7 @@ pub mod recovery;
 pub mod store;
 pub mod sync;
 #[cfg(test)]
-pub(crate) mod test_support;
+mod test_support;
 pub mod vault;
 mod vault_ai;
 mod vault_cascade;
