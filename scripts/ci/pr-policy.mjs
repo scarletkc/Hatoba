@@ -8,6 +8,7 @@
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import { githubClient } from "../lib/github.mjs";
 
 const GUIDE = "https://github.com/scarletkc/Hatoba/blob/main/CONTRIBUTING.md";
 /** Marks the comment this check writes, so a later run edits it instead of adding another. */
@@ -179,34 +180,6 @@ export function failureComment(found) {
 const passComment = (reopened) =>
   `${PASSED}\nThe pull request now follows the [contribution guide](${GUIDE})${reopened ? ", so it is open again" : ""}.`;
 
-function client(token) {
-  const base = process.env.GITHUB_API_URL ?? "https://api.github.com";
-  async function request(method, path, body, { missingOk = false } = {}) {
-    const res = await fetch(`${base}${path}`, {
-      method,
-      headers: {
-        authorization: `Bearer ${token}`,
-        accept: "application/vnd.github+json",
-        "x-github-api-version": "2022-11-28",
-        ...(body ? { "content-type": "application/json" } : {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    if (missingOk && res.status === 404) return null;
-    if (!res.ok) throw new Error(`${method} ${path}: HTTP ${res.status} ${await res.text()}`);
-    return res.status === 204 ? null : res.json();
-  }
-  async function all(path) {
-    const items = [];
-    for (let page = 1; ; page++) {
-      const batch = await request("GET", `${path}${path.includes("?") ? "&" : "?"}per_page=100&page=${page}`);
-      items.push(...batch);
-      if (batch.length < 100) return items;
-    }
-  }
-  return { request, all };
-}
-
 /** The pull request's number, or null when the event cannot change the result. */
 function eventTarget(name, event) {
   if (name === "issue_comment") {
@@ -232,7 +205,7 @@ const isOurs = (comment) => comment.user.login === BOT && comment.body.includes(
  * again, so the run that finishes last acts on what the pull request is now.
  */
 export async function run({ repo, number, token, dryRun }) {
-  const api = client(token);
+  const api = githubClient(token);
   let checked = null;
   for (let round = 0; round < ROUNDS; round++) {
     const state = await read(api, repo, number);

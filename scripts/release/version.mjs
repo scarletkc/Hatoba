@@ -1,10 +1,9 @@
 // Release versions: their format and order, and the files that record them.
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { ROOT, gitRaw } from "../lib/git.mjs";
 
-export const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+export { ROOT };
 /** Handwritten release notes, one VERSION.md per release. */
 export const NOTES_DIR = "docs/release-notes";
 
@@ -219,12 +218,7 @@ export function changesOnlyVersion(path, before, after) {
 
 /** Whether the file at `path` differs between the commits `from` and `to` only in the release version. */
 export function onlyVersionChanged(path, from, to, root = ROOT) {
-  const show = (rev) =>
-    execFileSync("git", ["show", `${rev}:${path}`], {
-      cwd: root,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
+  const show = (rev) => gitRaw(["show", `${rev}:${path}`], root, { stderr: "ignore" });
   try {
     return changesOnlyVersion(path, show(from), show(to));
   } catch {
