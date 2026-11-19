@@ -503,7 +503,7 @@ pub(crate) fn copy_secret(
 ) -> AppResult<()> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
     let clear_secs = state
-        .with_unlocked(|v| crate::prefs::device_prefs(v))?
+        .with_unlocked(|v| crate::prefs::read(v))?
         .clipboard_clear_secs;
     let app = app.clone();
     app.clipboard()

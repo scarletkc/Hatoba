@@ -395,7 +395,7 @@ pub fn sftp_edit_quit(app: AppHandle, state: State<'_, AppState>) {
 
 /// The program set to edit remote files on this device.
 fn editor(vault: &hatoba_core::vault::Vault) -> Option<String> {
-    crate::prefs::device_prefs(vault).ok()?.sftp_editor
+    crate::prefs::read(vault).ok()?.sftp_editor
 }
 
 #[cfg(test)]

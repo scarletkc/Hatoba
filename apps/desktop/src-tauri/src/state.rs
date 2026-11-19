@@ -101,9 +101,7 @@ impl AppState {
         self.vault.lock_unpoisoned()
     }
 
-    /// Locks the vault mutex and checks that it is unlocked, returning [`AppError::locked`] if
-    /// locked.
-    pub fn require_unlocked(&self) -> AppResult<MutexGuard<'_, Vault>> {
+    pub(crate) fn require_unlocked(&self) -> AppResult<MutexGuard<'_, Vault>> {
         let vault = self.vault();
         if !vault.is_unlocked() {
             return Err(AppError::locked());
@@ -126,9 +124,7 @@ impl AppState {
     }
 }
 
-/// Extension trait for [`Mutex`] that acquires the lock even if a previous holder panicked.
-pub trait MutexExt<T: ?Sized> {
-    /// Locks the mutex, recovering the guard if it was poisoned.
+pub(crate) trait MutexExt<T: ?Sized> {
     fn lock_unpoisoned(&self) -> MutexGuard<'_, T>;
 }
 

@@ -164,7 +164,7 @@ fn is_scheme_id(id: &str) -> bool {
 #[tauri::command]
 #[specta::specta]
 pub fn prefs_get(state: State<'_, AppState>) -> AppResult<LocalPrefs> {
-    crate::prefs::device_prefs(&state.vault())
+    crate::prefs::read(&state.vault())
 }
 
 #[tauri::command]

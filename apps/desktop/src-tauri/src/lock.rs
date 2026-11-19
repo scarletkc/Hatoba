@@ -7,9 +7,8 @@ use tauri::AppHandle;
 use tauri_specta::Event;
 
 use crate::dto::{LockReason, VaultLockedEvent};
-use crate::prefs::device_prefs;
 use crate::state::{AppState, state};
-use crate::sync;
+use crate::{prefs, sync};
 
 /// The device's lock settings (SEC-02/03), copied out of the device-local prefs so that each
 /// decision reads them without the vault's mutex.
@@ -23,7 +22,7 @@ pub struct LockPolicy {
 /// Reads the policy from the prefs, which are readable while locked. Runs after unlock and
 /// whenever the prefs are saved.
 pub fn refresh_policy(state: &AppState) {
-    let prefs = device_prefs(&state.vault()).ok().unwrap_or_default();
+    let prefs = prefs::read(&state.vault()).ok().unwrap_or_default();
     let policy = &state.lock_policy;
     policy
         .auto_lock_minutes

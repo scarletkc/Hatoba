@@ -23,7 +23,7 @@ pub fn core_kind(kind: ProxyKind) -> CoreKind {
 
 /// The id of this device's default proxy, from the device-local preferences.
 pub fn device_default(vault: &Vault) -> Option<String> {
-    crate::prefs::device_prefs(vault).ok()?.default_proxy_id
+    crate::prefs::read(vault).ok()?.default_proxy_id
 }
 
 fn find_proxy(vault: &Vault, id: &str) -> AppResult<Proxy> {

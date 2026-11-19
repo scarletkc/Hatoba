@@ -1,12 +1,12 @@
-//! Device-local preference helpers.
+//! Device-local preferences.
 
 use hatoba_core::vault::Vault;
 
 use crate::dto::LocalPrefs;
 use crate::error::AppResult;
 
-/// Reads this device's preferences from `vault`, returning defaults when none are stored yet.
-pub fn device_prefs(vault: &Vault) -> AppResult<LocalPrefs> {
+/// Readable while the vault is locked; returns defaults when none are stored yet.
+pub(crate) fn read(vault: &Vault) -> AppResult<LocalPrefs> {
     Ok(vault
         .local_prefs()?
         .as_deref()

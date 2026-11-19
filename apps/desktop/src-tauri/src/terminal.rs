@@ -1,5 +1,5 @@
-//! Plumbing shared by SSH, Telnet and local terminal tabs (spec §7.1, §7.5, §7.6, §10.3):
-//! binary output frames, state events, terminal size clamping, and the session registry.
+//! Terminal tab output frames, state events, PTY size bounds and session registry
+//! (spec §7.1, §7.5, §7.6, §10.3).
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -58,7 +58,7 @@ pub(crate) fn emit_state(
     let _ = event.emit(app);
 }
 
-/// Clamps terminal dimensions to safe PTY bounds (`cols` in `10..=1000`, `rows` in `2..=500`).
+/// `cols` in `10..=1000`, `rows` in `2..=500`.
 pub(crate) fn clamp_size(cols: u32, rows: u32) -> (u16, u16) {
     (
         u16::try_from(cols.clamp(10, 1000)).unwrap_or(80),
@@ -66,7 +66,6 @@ pub(crate) fn clamp_size(cols: u32, rows: u32) -> (u16, u16) {
     )
 }
 
-/// Open terminal sessions keyed by session id.
 pub struct SessionRegistry<T> {
     sessions: Mutex<HashMap<String, Arc<T>>>,
     on_remove: fn(&T),
@@ -79,19 +78,19 @@ impl<T> Default for SessionRegistry<T> {
 }
 
 impl<T> SessionRegistry<T> {
-    /// Creates a registry that runs `on_remove` under the lock whenever a session is removed.
-    pub fn new(on_remove: fn(&T)) -> Self {
+    /// Runs `on_remove` under the registry lock whenever a session is removed.
+    pub(crate) fn new(on_remove: fn(&T)) -> Self {
         Self {
             sessions: Mutex::new(HashMap::new()),
             on_remove,
         }
     }
 
-    pub fn insert(&self, id: String, session: Arc<T>) {
+    pub(crate) fn insert(&self, id: String, session: Arc<T>) {
         self.sessions.lock_unpoisoned().insert(id, session);
     }
 
-    pub fn get(&self, id: &str) -> AppResult<Arc<T>> {
+    pub(crate) fn get(&self, id: &str) -> AppResult<Arc<T>> {
         self.sessions
             .lock_unpoisoned()
             .get(id)
@@ -99,13 +98,11 @@ impl<T> SessionRegistry<T> {
             .ok_or_else(|| AppError::not_found("session"))
     }
 
-    /// The session with `id`, when one is open; returns `None` rather than an error if closed.
-    pub fn find(&self, id: &str) -> Option<Arc<T>> {
+    pub(crate) fn find(&self, id: &str) -> Option<Arc<T>> {
         self.sessions.lock_unpoisoned().get(id).cloned()
     }
 
-    /// Removes `id` only if it still points to `live`, returning whether it was removed.
-    pub fn remove_if_same(&self, id: &str, live: &Arc<T>) -> bool {
+    pub(crate) fn remove_if_same(&self, id: &str, live: &Arc<T>) -> bool {
         let mut sessions = self.sessions.lock_unpoisoned();
         if sessions.get(id).is_some_and(|s| Arc::ptr_eq(s, live)) {
             sessions.remove(id);
@@ -116,21 +113,21 @@ impl<T> SessionRegistry<T> {
         }
     }
 
-    pub fn take(&self, id: &str) -> Option<Arc<T>> {
+    pub(crate) fn take(&self, id: &str) -> Option<Arc<T>> {
         let mut sessions = self.sessions.lock_unpoisoned();
         let live = sessions.remove(id)?;
         (self.on_remove)(&live);
         Some(live)
     }
 
-    /// Runs `f` on every currently registered session under the registry lock.
-    pub fn for_each(&self, mut f: impl FnMut(&T)) {
+    /// Holds the registry lock across all calls to `f`.
+    pub(crate) fn for_each(&self, mut f: impl FnMut(&T)) {
         for live in self.sessions.lock_unpoisoned().values() {
             f(live);
         }
     }
 
-    pub fn take_all(&self) -> Vec<(String, Arc<T>)> {
+    pub(crate) fn take_all(&self) -> Vec<(String, Arc<T>)> {
         self.sessions
             .lock_unpoisoned()
             .drain()

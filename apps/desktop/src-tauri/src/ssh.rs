@@ -23,6 +23,7 @@ use crate::dto::{
     AuthBanner, AuthPrompt, AuthPromptClosed, AuthPromptField, HostKeyPrompt, HostKeyPromptKind,
 };
 use crate::error::{AppError, AppResult, SshErrorKind};
+use crate::host_chain::{MAX_JUMP_DEPTH, first_hop};
 use crate::state::{AppState, MutexExt, now_ms, state};
 use crate::terminal::SessionRegistry;
 use crate::{connection, sync};
@@ -265,8 +266,6 @@ pub fn resolve_proxy(vault: &Vault, choice: &HostProxy) -> AppResult<Option<Prox
     }))
 }
 
-pub use crate::host_chain::first_hop;
-
 /// The proxy of a connection to `host`: the choice of its first hop.
 pub fn connection_proxy(vault: &Vault, host: &Host) -> AppResult<Option<ProxyConfig>> {
     resolve_proxy(vault, &first_hop(vault, host).proxy)
@@ -286,7 +285,7 @@ pub fn build_config(
     // The first hop is the last jump host reached, or the host itself.
     let mut first_proxy = &host.proxy;
     while let Some(jump_id) = next {
-        if !seen.insert(jump_id.clone()) || chain.len() >= 8 {
+        if !seen.insert(jump_id.clone()) || chain.len() >= MAX_JUMP_DEPTH {
             return Err(AppError::invalid(
                 "jump_host_id",
                 "the jump host chain loops",
@@ -1129,7 +1128,7 @@ mod tests {
     }
 
     #[test]
-    fn first_hop_characterization_loop_missing_and_over_eight() {
+    fn first_hop_stops_on_loop_missing_jump_or_depth_limit() {
         let mut v = Vault::open_in_memory().unwrap();
         v.create_with_params(&hatoba_core::new_id(), KdfParams::for_tests())
             .unwrap();
@@ -1165,7 +1164,7 @@ mod tests {
             "h-direct-miss"
         );
 
-        // Chain more than 8 deep: stops after 8 jump hosts (j8).
+        // Chain more than 8 deep: stops after 8 jump hosts (d8).
         let mut prev: Option<String> = None;
         for i in (1..=9).rev() {
             let id = v
@@ -1178,7 +1177,7 @@ mod tests {
     }
 
     #[test]
-    fn build_config_characterization_loop_missing_and_over_eight() {
+    fn build_config_rejects_loop_missing_jump_or_depth_limit() {
         let mut v = Vault::open_in_memory().unwrap();
         v.create_with_params(&hatoba_core::new_id(), KdfParams::for_tests())
             .unwrap();

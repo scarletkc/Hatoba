@@ -10,9 +10,8 @@ use reqwest::{NoProxy, Url};
 use tauri::{AppHandle, Manager};
 use zeroize::Zeroizing;
 
-use crate::prefs::device_prefs;
 use crate::state::{AppState, MutexExt};
-use crate::sync;
+use crate::{prefs, sync};
 
 /// The saved proxy that Hatoba's own connections go through now; `None` for the system proxy.
 #[derive(Default)]
@@ -63,7 +62,7 @@ pub fn forget(app: &AppHandle) {
 
 /// The saved proxy this device's preferences name, if it still exists.
 fn named(v: &Vault) -> Option<Proxy> {
-    let id = device_prefs(v).ok()?.app_proxy_id?;
+    let id = prefs::read(v).ok()?.app_proxy_id?;
     v.get(&id).and_then(Item::as_proxy).cloned()
 }
 

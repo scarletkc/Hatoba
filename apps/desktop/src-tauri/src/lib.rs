@@ -354,7 +354,7 @@ pub fn run() {
             // SFTP-05: copies of edited files that a crash left behind go.
             app.state::<state::AppState>().edits.init(&data_dir);
             // TERM-13: the page opens at this device's zoom, before the window shows.
-            let zoom = prefs::device_prefs(&app.state::<state::AppState>().vault())
+            let zoom = prefs::read(&app.state::<state::AppState>().vault())
                 .ok()
                 .map_or(100, |p| p.ui_zoom);
             if let Err(e) = platform::window::apply_zoom(&window, zoom) {
@@ -397,9 +397,7 @@ pub fn run() {
                 };
                 let percent = || {
                     let state = app.state::<state::AppState>();
-                    prefs::device_prefs(&state.vault())
-                        .ok()
-                        .map_or(100, |p| p.ui_zoom)
+                    prefs::read(&state.vault()).ok().map_or(100, |p| p.ui_zoom)
                 };
                 if let Some(zoom) = platform::window::follow_screen(&webview, percent) {
                     let _ = tauri_specta::Event::emit(&zoom, app);

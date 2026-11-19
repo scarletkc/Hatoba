@@ -83,7 +83,7 @@ mod imp {
     /// Reads the pref, which is readable while locked. Runs at startup and whenever the prefs
     /// are saved.
     pub fn refresh_close_action(state: &AppState) {
-        let action = crate::prefs::device_prefs(&state.vault())
+        let action = crate::prefs::read(&state.vault())
             .ok()
             .map_or(CloseAction::Ask, |p| p.close_action);
         CLOSE_ACTION.store(action as u8, Ordering::Relaxed);

@@ -1,4 +1,4 @@
-//! Shared helpers for the single-line `sh -c` scripts run on remote SSH hosts.
+//! Framing and output parsing for the single-line `sh -c` scripts run on remote hosts.
 
 /// Line printed before the resolved path so login-shell startup output is skipped.
 const MARKER: &[u8] = b"hatoba-file\n";
@@ -12,17 +12,14 @@ pub(crate) fn command(script: &str, arg: Option<&str>) -> String {
     }
 }
 
-/// Returns whether `value` contains no line break or NUL (`\n`, `\r`, `\0`).
 pub(crate) fn is_single_line(value: &str) -> bool {
     !value.contains(['\n', '\r', '\0'])
 }
 
-/// Validates a stdin line argument, allowing empty strings only when `allow_empty` is set.
 pub(crate) fn check_line(value: &str, allow_empty: bool) -> Option<&str> {
     ((allow_empty || !value.is_empty()) && is_single_line(value)).then_some(value)
 }
 
-/// Last non-empty trimmed line of `stderr`, or an empty string if none.
 pub(crate) fn last_line(stderr: &[u8]) -> String {
     String::from_utf8_lossy(stderr)
         .lines()

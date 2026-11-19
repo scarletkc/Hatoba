@@ -10,8 +10,9 @@ use hatoba_core::vault::Vault;
 
 use crate::ssh::{known_host_keys, resolve_proxy};
 
-/// Maximum ProxyJump depth allowed before stopping (`chain`) or failing (`build_config`).
-const MAX_JUMP_DEPTH: usize = 8;
+/// Maximum ProxyJump hops: [`chain`] stops here and [`crate::ssh::build_config`] rejects deeper
+/// chains.
+pub(crate) const MAX_JUMP_DEPTH: usize = 8;
 
 /// What a host's connection depends on. A change to `config` (the host or a jump host was
 /// edited) closes the dashboard's connection made before it; a change to either ends a hold.
@@ -19,7 +20,7 @@ const MAX_JUMP_DEPTH: usize = 8;
 pub(crate) struct Versions {
     pub(crate) config: String,
     /// The trusted host keys of every hop: a key accepted in a tab ends a host key hold.
-    pub(crate) trust: String,
+    trust: String,
     /// Each jump host, outwards, with its own part of the two.
     pub(crate) jumps: Vec<JumpVersion>,
 }
@@ -77,21 +78,16 @@ impl Versions {
     pub(crate) fn all(&self) -> String {
         format!("{}|{}", self.config, self.trust)
     }
-
-    /// [`Versions::config`] alone, without reading the trusted keys of every hop.
-    pub(crate) fn config_of(vault: &Vault, host: &Host) -> String {
-        let hops = chain(vault, host);
-        hops.iter()
-            .enumerate()
-            .map(|(i, (_, hop))| hop_config(vault, hop, i + 1 == hops.len()))
-            .collect::<Vec<_>>()
-            .join(";")
-    }
 }
 
-/// The version `take_connection` compares, for `ssh_connect`.
-pub fn config_version(vault: &Vault, host: &Host) -> String {
-    Versions::config_of(vault, host)
+/// [`Versions::config`] alone, without reading the trusted keys of every hop.
+pub(crate) fn config_version(vault: &Vault, host: &Host) -> String {
+    let hops = chain(vault, host);
+    hops.iter()
+        .enumerate()
+        .map(|(i, (_, hop))| hop_config(vault, hop, i + 1 == hops.len()))
+        .collect::<Vec<_>>()
+        .join(";")
 }
 
 /// How one hop of a chain connects: its target, its credentials (hashed) and, on the first
@@ -146,7 +142,7 @@ fn new_salt() -> u64 {
 
 /// The lock (SEC-03): hashes of secrets start over, so none made while the vault was unlocked
 /// stays useful after it locks. Versions made before it no longer match any made after it.
-pub fn forget_secret_hashes() {
+pub(crate) fn forget_secret_hashes() {
     SALT.store(new_salt(), Ordering::Relaxed);
 }
 
@@ -178,7 +174,7 @@ fn salted_hash(salt: u64, parts: &[&str]) -> u64 {
 /// The host, then its jump hosts outwards with their ids, as far as the chain goes without
 /// looping or exceeding [`MAX_JUMP_DEPTH`] jump hosts. Stops silently on a loop or missing jump
 /// host; [`crate::ssh::build_config`] walks the chain separately to report errors instead.
-pub(crate) fn chain<'a>(vault: &'a Vault, host: &'a Host) -> Vec<(Option<&'a str>, &'a Host)> {
+fn chain<'a>(vault: &'a Vault, host: &'a Host) -> Vec<(Option<&'a str>, &'a Host)> {
     let mut hops = vec![(None, host)];
     let mut seen = HashSet::new();
     let mut next = host.jump_host_id.as_deref();
@@ -199,7 +195,7 @@ pub(crate) fn hops<'a>(vault: &'a Vault, host: &'a Host) -> Vec<&'a Host> {
 
 /// The first hop of a connection to `host`: its outermost jump host, or the host itself without
 /// one. A broken or over-deep jump chain ends where it breaks.
-pub fn first_hop<'a>(vault: &'a Vault, host: &'a Host) -> &'a Host {
+pub(crate) fn first_hop<'a>(vault: &'a Vault, host: &'a Host) -> &'a Host {
     chain(vault, host).last().map_or(host, |(_, h)| h)
 }
 
@@ -339,7 +335,7 @@ mod tests {
     }
 
     #[test]
-    fn chain_characterization_loop_missing_and_over_eight() {
+    fn chain_stops_on_loop_missing_jump_or_depth_limit() {
         let mut v = vault();
         // Cycle back to self (b -> a -> b): `chain` visits `b` once as a jump before stopping.
         let a = v.put(None, host("a", password("pw"), None)).unwrap();

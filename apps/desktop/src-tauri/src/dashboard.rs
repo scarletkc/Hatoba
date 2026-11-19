@@ -25,7 +25,7 @@ use tokio_util::sync::CancellationToken;
 use crate::convert::stats_view;
 use crate::dto::{DashboardEvent, DashboardHold, HostKeyPromptKind};
 use crate::error::{AppError, KeyParseErrorKind, SshErrorKind};
-use crate::host_chain::{JumpVersion, Versions, hops};
+use crate::host_chain::{JumpVersion, Versions, config_version, hops};
 use crate::ssh::{Unattended, build_config, connect_unattended};
 use crate::state::{MutexExt, state};
 
@@ -271,7 +271,8 @@ impl Dashboard {
 
     /// The lock (SEC-03): every reader stops and every connection of the dashboard closes now.
     /// The holds go too: they were made with hashes of the credentials, which start over at the
-    /// lock ([`forget_secret_hashes`]), so a held host is tried once more after the unlock.
+    /// lock ([`crate::host_chain::forget_secret_hashes`]), so a held host is tried once more after
+    /// the unlock.
     pub fn stop_all(&self) {
         let sessions: Vec<SshSession> = {
             let mut inner = self.inner.lock_unpoisoned();
@@ -1071,7 +1072,7 @@ async fn read_step(
                     let current = state.with_unlocked(|v| {
                         Ok(v.get(host_id)
                             .and_then(Item::as_host)
-                            .map(|h| Versions::config_of(v, h)))
+                            .map(|h| config_version(v, h)))
                     });
                     if !matches!(current, Ok(Some(c)) if c == config) {
                         break Some(Duration::ZERO);
