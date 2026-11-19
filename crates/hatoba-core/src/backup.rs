@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use crate::crypto::{AAD_VAULT_KEY, KdfParams, MasterKeys, decode_salt, unwrap_key};
 use crate::error::{Error, Result};
 use crate::model::new_id;
-use crate::store::{ItemRow, Store, StoreOps, meta};
+use crate::store::{ItemRow, KeyMeta, Store, StoreOps, meta};
 use crate::vault::{Vault, seal_vault_check};
 
 /// Value of the `format` field.
@@ -62,15 +62,15 @@ pub struct BackupItem {
 
 /// Writes a backup of `store` to `path`, atomically (temp file + rename).
 pub(crate) fn export(store: &Store, path: &Path, now_ms: i64) -> Result<()> {
-    let get = |key: &str| store.get_meta(key)?.ok_or(Error::VaultNotInitialized);
+    let keys = KeyMeta::read(store)?;
     let file = BackupFile {
         format: BACKUP_FORMAT.to_owned(),
         v: BACKUP_VERSION,
         created_at: now_ms,
-        kdf_salt: get(meta::KDF_SALT)?,
-        kdf_params: get(meta::KDF_PARAMS)?,
-        protected_vault_key: get(meta::PROTECTED_VAULT_KEY)?,
-        recovery_vault_key: get(meta::RECOVERY_VAULT_KEY)?,
+        kdf_salt: keys.kdf_salt,
+        kdf_params: keys.kdf_params,
+        protected_vault_key: keys.protected_vault_key,
+        recovery_vault_key: keys.recovery_vault_key,
         items: store
             .item_rows()?
             .into_iter()
@@ -167,10 +167,13 @@ impl Vault {
                 meta::SCHEMA_VERSION,
                 &crate::store::SCHEMA_VERSION.to_string(),
             )?;
-            tx.set_meta(meta::KDF_SALT, &file.kdf_salt)?;
-            tx.set_meta(meta::KDF_PARAMS, &file.kdf_params)?;
-            tx.set_meta(meta::PROTECTED_VAULT_KEY, &file.protected_vault_key)?;
-            tx.set_meta(meta::RECOVERY_VAULT_KEY, &file.recovery_vault_key)?;
+            KeyMeta::write_fields(
+                tx,
+                &file.kdf_salt,
+                &file.kdf_params,
+                &file.protected_vault_key,
+                &file.recovery_vault_key,
+            )?;
             tx.set_meta(meta::VAULT_CHECK, &check)?;
             tx.set_meta(meta::DEVICE_ID, &new_id())?;
             for item in &file.items {
