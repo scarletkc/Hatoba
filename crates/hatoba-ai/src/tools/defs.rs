@@ -661,7 +661,7 @@ fn memory_tool() -> ToolDef {
 }
 
 /// `search_tools` (AI-45).
-fn search_tools_tool() -> ToolDef {
+fn search_tools() -> ToolDef {
     tool(
         SEARCH_TOOLS,
         "Search the MCP tools of this conversation, which the latest <mcp_tools> note \
@@ -691,7 +691,7 @@ fn search_tools_tool() -> ToolDef {
 }
 
 /// `call_mcp_tool` (AI-45).
-fn call_mcp_tool_tool() -> ToolDef {
+fn call_mcp_tool() -> ToolDef {
     tool(
         CALL_MCP_TOOL,
         "Call an MCP tool of this conversation by its name, as the latest <mcp_tools> \
@@ -760,7 +760,7 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
 /// accepted as well.
 #[must_use]
 pub fn deferred_mcp_tools() -> Vec<ToolDef> {
-    vec![search_tools_tool(), call_mcp_tool_tool()]
+    vec![search_tools(), call_mcp_tool()]
 }
 
 #[cfg(test)]
