@@ -23,6 +23,8 @@ const RUST_INPUTS = [
   // scripts here run in other jobs or workflows.
   "scripts/ci/comment-width.mjs",
   "scripts/ci/changes.mjs",
+  "scripts/lib/git.mjs",
+  ".github/actions/",
   ".github/workflows/ci.yml",
 ];
 
