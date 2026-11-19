@@ -9,21 +9,12 @@ import sync from "./sync";
 import terminal from "./terminal";
 import vault from "./vault";
 
-const tables = [common, hosts, dashboard, terminal, keys, sync, vault, settings, ai, aiSettings];
+export const tables = [common, hosts, dashboard, terminal, keys, sync, vault, settings, ai, aiSettings] as const;
 
 export type Locale = "zh-CN" | "zh-TW" | "en" | "ja";
 
-type Zh<T extends { "zh-CN": object }> = T["zh-CN"];
-type AllZh = Zh<typeof common> &
-  Zh<typeof hosts> &
-  Zh<typeof dashboard> &
-  Zh<typeof terminal> &
-  Zh<typeof keys> &
-  Zh<typeof sync> &
-  Zh<typeof vault> &
-  Zh<typeof settings> &
-  Zh<typeof ai> &
-  Zh<typeof aiSettings>;
+type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (k: infer I) => void ? I : never;
+type AllZh = UnionToIntersection<(typeof tables)[number]["zh-CN"]>;
 
 export type MessageKey = keyof AllZh & string;
 
