@@ -7,8 +7,8 @@ use hatoba_ai::entry::ToolStatus;
 use hatoba_ai::mcp::deferred;
 use hatoba_ai::provider::{ModelSpec, ProviderConfig};
 use hatoba_ai::tools::{
-    self, CommandStop, FetchUrlArgs, MemoryArgs, ReadSkillArgs, RunCommandArgs, StoppedCommand,
-    WebSearchArgs,
+    self, BuiltinTool, CommandStop, FetchUrlArgs, MemoryArgs, ReadSkillArgs, RunCommandArgs,
+    StoppedCommand, WebSearchArgs,
 };
 use hatoba_ai::web::{self, NativeSearch, SearchConfig, SearchKind as WebSearchKind};
 use hatoba_core::Vault;
@@ -146,25 +146,28 @@ impl Job {
         version: &str,
         caller: (&str, &str),
     ) -> Self {
-        if let Some(parsed) = FileJob::parse(name, arguments) {
-            return match parsed {
-                Ok(job) => Self::File(job, None),
-                Err(message) => Self::error(message),
-            };
-        }
-        if let Some(parsed) = SearchJob::parse(name, arguments) {
-            return match parsed {
-                Ok(job) => Self::Search(job),
-                Err(message) => Self::error(message),
-            };
-        }
-        match name {
-            tools::RUN_COMMAND => match parse::<RunCommandArgs>(arguments) {
+        let Some(tool) = BuiltinTool::from_name(name) else {
+            return Self::error(format!("There is no tool named \"{name}\"."));
+        };
+        match tool {
+            BuiltinTool::ReadFile | BuiltinTool::EditFile | BuiltinTool::WriteFile => {
+                match FileJob::parse(tool, arguments) {
+                    Some(Ok(job)) => Self::File(job, None),
+                    Some(Err(message)) => Self::error(message),
+                    None => unreachable!("matched file tool variants"),
+                }
+            }
+            BuiltinTool::Grep | BuiltinTool::Glob => match SearchJob::parse(tool, arguments) {
+                Some(Ok(job)) => Self::Search(job),
+                Some(Err(message)) => Self::error(message),
+                None => unreachable!("matched search tool variants"),
+            },
+            BuiltinTool::RunCommand => match parse::<RunCommandArgs>(arguments) {
                 Ok(args) if args.command.trim().is_empty() => Self::error("The command is empty."),
                 Ok(args) => Self::RunCommand(args),
                 Err(message) => Self::error(message),
             },
-            tools::WEB_SEARCH => match web_search_for(v, caller.0, caller.1) {
+            BuiltinTool::WebSearch => match web_search_for(v, caller.0, caller.1) {
                 None => Self::error(no_web_search(v)),
                 Some(search) => match (parse::<WebSearchArgs>(arguments), search) {
                     (Ok(args), WebSearch::Service(config)) => Self::WebSearch(config, args.query),
@@ -174,7 +177,7 @@ impl Job {
                     (Err(message), _) => Self::error(message),
                 },
             },
-            tools::FETCH_URL => match parse::<FetchUrlArgs>(arguments) {
+            BuiltinTool::FetchUrl => match parse::<FetchUrlArgs>(arguments) {
                 Ok(args) => Self::FetchUrl(
                     args.url,
                     args.offset.unwrap_or(0),
@@ -182,22 +185,23 @@ impl Job {
                 ),
                 Err(message) => Self::error(message),
             },
-            tools::READ_SKILL => match parse::<ReadSkillArgs>(arguments) {
+            BuiltinTool::ReadSkill => match parse::<ReadSkillArgs>(arguments) {
                 Ok(args) => read_skill(v, &args, version),
                 Err(message) => Self::error(message),
             },
-            tools::SEARCH_TOOLS => match deferred::parse_search(arguments) {
+            BuiltinTool::SearchTools => match deferred::parse_search(arguments) {
                 Ok(args) => Self::SearchTools(args),
                 Err(message) => Self::error(message),
             },
-            tools::MEMORY => match parse::<MemoryArgs>(arguments) {
+            BuiltinTool::Memory => match parse::<MemoryArgs>(arguments) {
                 Ok(args) => Self::Memory(args, None),
                 Err(message) => Self::error(message),
             },
-            tools::READ_TERMINAL | tools::SEND_INPUT => Self::error(format!(
-                "{name} runs in the terminal tab and cannot run here."
+            BuiltinTool::ReadTerminal | BuiltinTool::SendInput => Self::error(format!(
+                "{} runs in the terminal tab and cannot run here.",
+                tool.name()
             )),
-            _ => Self::error(format!("There is no tool named \"{name}\".")),
+            BuiltinTool::CallMcpTool => Self::error(format!("There is no tool named \"{name}\".")),
         }
     }
 
@@ -369,5 +373,36 @@ async fn run_command(
             ToolStatus::Error,
             format!("The command could not run: {message}"),
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use hatoba_core::{KdfParams, Vault, crypto};
+
+    use super::*;
+
+    #[test]
+    fn unknown_and_frontend_tools_give_expected_errors() {
+        let pw = crypto::hex_encode(&crypto::random_bytes::<16>().unwrap());
+        let mut vault = Vault::open_in_memory().unwrap();
+        vault
+            .create_with_params(&pw, KdfParams::for_tests())
+            .unwrap();
+        for name in ["unknown_tool", tools::CALL_MCP_TOOL] {
+            let job = Job::new(&vault, name, "{}", "0.8.6", ("", ""));
+            assert!(matches!(
+                job,
+                Job::Ready(ToolStatus::Error, msg) if msg == format!("There is no tool named \"{name}\".")
+            ));
+        }
+        for name in [tools::READ_TERMINAL, tools::SEND_INPUT] {
+            let job = Job::new(&vault, name, "{}", "0.8.6", ("", ""));
+            assert!(matches!(
+                job,
+                Job::Ready(ToolStatus::Error, msg)
+                    if msg == format!("{name} runs in the terminal tab and cannot run here.")
+            ));
+        }
     }
 }

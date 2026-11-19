@@ -1,0 +1,104 @@
+---
+source: crates/hatoba-ai/tests/tools_snapshots.rs
+expression: builtin_tools(&no_terminal_all)
+---
+[
+  {
+    "name": "web_search",
+    "description": "Search the web and return up to 10 results with their titles and URLs, and snippets or a summary of what they say. Use it for documentation, error messages, versions and facts you are not sure of, then fetch_url a result to read it. The query is sent to a search service, so keep passwords, keys and tokens out of it.",
+    "input_schema": {
+      "properties": {
+        "query": {
+          "description": "The search query.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "fetch_url",
+    "description": "Fetch an http or https URL with GET, without cookies or credentials, following at most 5 redirects on the same host (a redirect to another host is returned instead: fetch that URL with a new call), and return up to 30,000 characters of its content starting at `offset` (default 0), with the total length. HTML is converted to Markdown: the page's main content without navigation, sidebars and footers, or the whole page with `full_page`. To read on, call it again with the offset the result names. Only text, HTML, JSON and XML are returned, and addresses on loopback, private or link-local networks are refused. Keep passwords, keys and tokens out of the URL.",
+    "input_schema": {
+      "properties": {
+        "full_page": {
+          "description": "Return the whole HTML page instead of its main content (default false), such as when the main content looks incomplete or you need the page's navigation.",
+          "type": "boolean"
+        },
+        "offset": {
+          "description": "Character offset to start from (default 0).",
+          "type": "integer"
+        },
+        "url": {
+          "description": "The http or https URL to fetch.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "read_skill",
+    "description": "Read one of the skills listed in the system prompt: the body of its SKILL.md, or the file at `path` inside the skill (such as references/setup.md). It runs without asking.",
+    "input_schema": {
+      "properties": {
+        "name": {
+          "description": "The skill's name.",
+          "type": "string"
+        },
+        "path": {
+          "description": "A file inside the skill; omit it to read SKILL.md.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "memory",
+    "description": "Save or delete one of your memories: notes for yourself that new conversations of the user start with, in a <memory> note. A global memory shows in every conversation; a host memory only in conversations on its host (a saved host or a computer's local terminal). `save` stores `content` under `name` in `scope`, replacing the memory of that name there if there is one; `delete` removes it. Keep a memory to a few lines on one subject. The global memories, and those of each host, hold at most 16384 bytes of UTF-8, names included. A change shows in new conversations, and in this one after it is compacted. It runs without asking.",
+    "input_schema": {
+      "properties": {
+        "action": {
+          "description": "save creates or replaces the memory `name`; delete removes it.",
+          "enum": [
+            "save",
+            "delete"
+          ],
+          "type": "string"
+        },
+        "content": {
+          "description": "The memory's text, for save.",
+          "type": "string"
+        },
+        "name": {
+          "description": "A short name for the memory's subject, one line of at most 100 characters, such as \"sudo\" or \"reply language\".",
+          "type": "string"
+        },
+        "scope": {
+          "description": "global for what holds in every conversation, such as the user's preferences; host for what holds only on this conversation's host, such as how it is set up.",
+          "enum": [
+            "global",
+            "host"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "scope",
+        "name"
+      ],
+      "type": "object"
+    }
+  }
+]

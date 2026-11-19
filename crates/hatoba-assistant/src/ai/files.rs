@@ -11,7 +11,9 @@ use std::time::Duration;
 use super::conn::Conn;
 use hatoba_ai::entry::ToolStatus;
 use hatoba_ai::files::{self, MAX_FILE_BYTES, TextFile};
-use hatoba_ai::tools::{self, EditFileArgs, ReadFileArgs, WriteFileArgs};
+#[cfg(test)]
+use hatoba_ai::tools;
+use hatoba_ai::tools::{BuiltinTool, EditFileArgs, ReadFileArgs, WriteFileArgs};
 use hatoba_ssh::remote_file::{self, Expect, RemoteFile, RemoteFileError};
 use tokio_util::sync::CancellationToken;
 
@@ -42,13 +44,12 @@ pub(super) enum FileJob {
 }
 
 impl FileJob {
-    /// `Some` for a file tool's name: its arguments, or the message for arguments that do not
-    /// parse.
-    pub(super) fn parse(name: &str, arguments: &str) -> Option<Result<Self, String>> {
-        Some(match name {
-            tools::READ_FILE => parse(arguments).map(Self::Read),
-            tools::EDIT_FILE => parse(arguments).map(Self::Edit),
-            tools::WRITE_FILE => parse(arguments).map(Self::Write),
+    /// `Some` for a file tool: its arguments, or the message for arguments that do not parse.
+    pub(super) fn parse(tool: BuiltinTool, arguments: &str) -> Option<Result<Self, String>> {
+        Some(match tool {
+            BuiltinTool::ReadFile => parse(arguments).map(Self::Read),
+            BuiltinTool::EditFile => parse(arguments).map(Self::Edit),
+            BuiltinTool::WriteFile => parse(arguments).map(Self::Write),
             _ => return None,
         })
     }
@@ -418,7 +419,7 @@ pub(super) async fn run(
 /// An `edit_file` or `write_file` call for its approval card, with its path, or the preview that
 /// says why there is no diff to show.
 pub(super) fn preview_job(name: &str, arguments: &str) -> Result<(FileJob, String), AiFilePreview> {
-    match FileJob::parse(name, arguments) {
+    match BuiltinTool::from_name(name).and_then(|tool| FileJob::parse(tool, arguments)) {
         Some(Ok(job @ (FileJob::Edit(_) | FileJob::Write(_)))) => {
             let path = job.path().to_owned();
             Ok((job, path))
@@ -453,8 +454,14 @@ pub(super) async fn read_base(
 pub(super) fn preview_of(job: &FileJob, base: &Base, seen: SeenBy<'_>) -> AiFilePreview {
     let path = &base.path;
     let tool = match job {
-        FileJob::Edit(_) => tools::EDIT_FILE,
-        _ => tools::WRITE_FILE,
+        FileJob::Edit(_) => BuiltinTool::EditFile.name(),
+        FileJob::Write(_) => BuiltinTool::WriteFile.name(),
+        FileJob::Read(_) => {
+            return failed_preview(
+                path,
+                format!("{} shows no diff.", BuiltinTool::ReadFile.name()),
+            );
+        }
     };
     if let Some(file) = &base.file
         && let Err(message) = seen.check(&base.server, file, tool, path)
@@ -476,7 +483,7 @@ pub(super) fn preview_of(job: &FileJob, base: &Base, seen: SeenBy<'_>) -> AiFile
             .ok_or_else(|| missing_for_edit(path))
             .and_then(|file| files::apply_edit(path, file, args).map(|e| e.file)),
         FileJob::Write(args) => new_content(path, before.as_ref(), &args.content),
-        FileJob::Read(_) => Err(format!("{} shows no diff.", tools::READ_FILE)),
+        FileJob::Read(_) => unreachable!("returned above"),
     };
     match after {
         Ok(after) => AiFilePreview {
@@ -553,24 +560,16 @@ async fn edit(
     cancel: &CancellationToken,
 ) -> Result<String, Stop> {
     let server = session.server();
-    let (file, from_card) = unless_cancelled(
-        cancel,
-        current(session, &server, &args.path, base, tools::EDIT_FILE),
-    )
-    .await?;
+    let tool = BuiltinTool::EditFile.name();
+    let (file, from_card) =
+        unless_cancelled(cancel, current(session, &server, &args.path, base, tool)).await?;
     let file = file.ok_or_else(|| missing_for_edit(&args.path))?;
-    seen.check(&server, &file, tools::EDIT_FILE, &args.path)?;
+    seen.check(&server, &file, tool, &args.path)?;
     let edit = files::apply_edit(&args.path, &decode(&args.path, &file.bytes)?, args)?;
     let new = edit.file.encode();
     let expect = Expect::Content(&file.bytes);
-    let change = Change::new(
-        &server,
-        &file.path,
-        tools::EDIT_FILE,
-        Some(&file.bytes),
-        &new,
-    )
-    .map(|c| c.with_mode(file.mode));
+    let change = Change::new(&server, &file.path, tool, Some(&file.bytes), &new)
+        .map(|c| c.with_mode(file.mode));
     let keep = seen.keep.zip(change.as_ref());
     let path = write_bytes(session, &args.path, &new, expect, from_card, cancel, keep).await?;
     seen.shows(&server, &path, &new);
@@ -585,14 +584,12 @@ async fn write(
     cancel: &CancellationToken,
 ) -> Result<String, Stop> {
     let server = session.server();
-    let (file, from_card) = unless_cancelled(
-        cancel,
-        current(session, &server, &args.path, base, tools::WRITE_FILE),
-    )
-    .await?;
+    let tool = BuiltinTool::WriteFile.name();
+    let (file, from_card) =
+        unless_cancelled(cancel, current(session, &server, &args.path, base, tool)).await?;
     // Replacing a file needs a record of it; creating one does not.
     if let Some(file) = &file {
-        seen.check(&server, file, tools::WRITE_FILE, &args.path)?;
+        seen.check(&server, file, tool, &args.path)?;
     }
     let before = file
         .as_ref()
@@ -608,7 +605,7 @@ async fn write(
         &server,
         file.as_ref()
             .map_or(args.path.as_str(), |f| f.path.as_str()),
-        tools::WRITE_FILE,
+        tool,
         file.as_ref().map(|f| f.bytes.as_slice()),
         &bytes,
     )
@@ -1276,6 +1273,14 @@ mod tests {
         let no_diff = |name, arguments| preview_job(name, arguments).err().unwrap().error.unwrap();
         assert!(no_diff(tools::READ_FILE, r#"{"path":"a"}"#).contains("shows no diff"));
         assert!(no_diff(tools::EDIT_FILE, "{").starts_with("The arguments are not valid"));
+        let read = FileJob::parse(BuiltinTool::ReadFile, r#"{"path":"/etc/unread"}"#)
+            .unwrap()
+            .unwrap();
+        let unread = base("/etc/unread", Some(b"secret\n"));
+        assert_eq!(
+            preview_of(&read, &unread, by).error.as_deref(),
+            Some("read_file shows no diff.")
+        );
     }
 
     /// §13.4, "What the model has seen": a file is changed only as the model last saw it.

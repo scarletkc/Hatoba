@@ -1,0 +1,7 @@
+---
+source: crates/hatoba-ai/tests/tools_snapshots.rs
+expression: "file_revert_block(\"/etc/nginx/new.conf\", \"toolu_02\", \"write_file\", true)"
+---
+<file_revert path="/etc/nginx/new.conf" tool_call_id="toolu_02">
+The user reverted your write_file call toolu_02, which created /etc/nginx/new.conf, so it was deleted.
+</file_revert>

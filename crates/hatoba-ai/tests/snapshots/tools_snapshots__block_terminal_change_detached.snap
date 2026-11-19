@@ -1,0 +1,7 @@
+---
+source: crates/hatoba-ai/tests/tools_snapshots.rs
+expression: terminal_change_block(false)
+---
+<terminal_change to="detached">
+No terminal is attached from this message on. Screens and command output before this message came from the terminal that was attached then.
+</terminal_change>

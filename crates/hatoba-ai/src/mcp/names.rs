@@ -2,6 +2,9 @@
 
 use std::collections::HashSet;
 
+/// What every MCP tool name starts with (AI-30).
+pub const MCP_PREFIX: &str = "mcp__";
+
 /// Longest tool name both protocols accept (`^[A-Za-z0-9_-]{1,64}$`).
 pub const MAX_TOOL_NAME_LEN: usize = 64;
 
@@ -45,7 +48,11 @@ pub fn tool_names(servers: &[(&str, Vec<&str>)]) -> Vec<Vec<String>> {
 
 /// The cleaned, cut name before collisions are resolved.
 fn base_name(server: &str, tool: &str) -> String {
-    let mut name = format!("mcp__{}__{}", clean(server.trim()), clean(tool.trim()));
+    let mut name = format!(
+        "{MCP_PREFIX}{}__{}",
+        clean(server.trim()),
+        clean(tool.trim())
+    );
     // ASCII only after `clean`, so cutting bytes cuts characters.
     name.truncate(MAX_TOOL_NAME_LEN);
     name

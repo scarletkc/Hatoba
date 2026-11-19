@@ -1,0 +1,7 @@
+---
+source: crates/hatoba-ai/tests/tools_snapshots.rs
+expression: "permission_mode_block(PermissionMode::Manual)"
+---
+<permission_mode mode="manual">
+From this message on, the permission mode is manual approval.
+</permission_mode>

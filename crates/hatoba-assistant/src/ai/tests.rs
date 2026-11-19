@@ -20,7 +20,6 @@ use hatoba_core::model::{
 use hatoba_core::sync::SharedVault;
 use hatoba_core::{KdfParams, Vault};
 use serde_json::{Value, json};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 use wiremock::matchers::{body_partial_json, method, path, query_param};
@@ -192,14 +191,7 @@ impl Respond for Script {
 }
 
 fn sse(events: &[Value]) -> ResponseTemplate {
-    let mut body = String::new();
-    for event in events {
-        body.push_str(&format!("data: {event}\n\n"));
-    }
-    body.push_str("data: [DONE]\n\n");
-    ResponseTemplate::new(200)
-        .insert_header("content-type", "text/event-stream")
-        .set_body_string(body)
+    hatoba_ai::test_support::sse_data(events)
 }
 
 /// A response without tool calls. `provider_note` is a field only `raw` keeps.
@@ -237,70 +229,7 @@ fn text_delta(text: &str) -> Value {
 /// open), and whose later responses answer "Done.". Returns its base URL and the body of every
 /// request it received.
 async fn stalling_server(events: &[Value]) -> (String, Arc<Mutex<Vec<Value>>>) {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let bodies = Arc::new(Mutex::new(Vec::new()));
-    let received = bodies.clone();
-    let first: String = events.iter().map(|e| format!("data: {e}\n\n")).collect();
-    tokio::spawn(async move {
-        let mut stalled = Vec::new();
-        loop {
-            let (mut socket, _) = listener.accept().await.unwrap();
-            let body = request_body(&mut socket).await;
-            received
-                .lock()
-                .unwrap()
-                .push(serde_json::from_slice::<Value>(&body).unwrap());
-            if stalled.is_empty() {
-                let mut head = "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\n\
-                                transfer-encoding: chunked\r\n\r\n"
-                    .to_owned();
-                if !first.is_empty() {
-                    head.push_str(&format!("{:x}\r\n{first}\r\n", first.len()));
-                }
-                socket.write_all(head.as_bytes()).await.unwrap();
-                stalled.push(socket);
-            } else {
-                let sse = [
-                    text_delta("Done."),
-                    json!({"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}),
-                ]
-                .iter()
-                .map(|e| format!("data: {e}\n\n"))
-                .collect::<String>()
-                    + "data: [DONE]\n\n";
-                let response = format!(
-                    "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ncontent-length: {}\r\n\
-                     connection: close\r\n\r\n{sse}",
-                    sse.len()
-                );
-                socket.write_all(response.as_bytes()).await.unwrap();
-            }
-        }
-    });
-    (format!("http://{addr}/v1"), bodies)
-}
-
-/// Reads one HTTP request from `socket` and returns its body.
-async fn request_body(socket: &mut tokio::net::TcpStream) -> Vec<u8> {
-    let mut data = Vec::new();
-    let mut buf = vec![0u8; 64 * 1024];
-    loop {
-        let n = socket.read(&mut buf).await.unwrap();
-        assert!(n > 0, "the request ended early");
-        data.extend_from_slice(&buf[..n]);
-        let Some(end) = data.windows(4).position(|w| w == b"\r\n\r\n") else {
-            continue;
-        };
-        let head = String::from_utf8_lossy(&data[..end]).to_ascii_lowercase();
-        let length: usize = head
-            .lines()
-            .find_map(|line| line.strip_prefix("content-length:"))
-            .map_or(0, |value| value.trim().parse().unwrap());
-        if data.len() >= end + 4 + length {
-            return data[end + 4..end + 4 + length].to_vec();
-        }
-    }
+    hatoba_ai::test_support::stalling_server(events).await
 }
 
 struct Fixture {
