@@ -13,8 +13,7 @@ use zeroize::Zeroizing;
 
 use crate::convert::{group_view, host_view};
 use crate::dto::{
-    AuthKind, GroupInput, GroupView, HostInput, HostView, LocalPrefs, ProbeResult, ProxyMode,
-    TagCount,
+    AuthKind, GroupInput, GroupView, HostInput, HostView, ProbeResult, ProxyMode, TagCount,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
@@ -503,12 +502,10 @@ pub(crate) fn copy_secret(
     password: Zeroizing<String>,
 ) -> AppResult<()> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
-    let prefs = state.with_unlocked(|v| Ok(v.local_prefs()?))?;
-    let app = app.clone();
-    let clear_secs = prefs
-        .map(|json| LocalPrefs::from_stored(&json))
-        .unwrap_or_default()
+    let clear_secs = state
+        .with_unlocked(|v| crate::prefs::device_prefs(v))?
         .clipboard_clear_secs;
+    let app = app.clone();
     app.clipboard()
         .write_text(password.as_str())
         .map_err(|e| AppError::internal(e.to_string()))?;

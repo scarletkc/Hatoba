@@ -24,6 +24,7 @@ use crate::dto::{
 };
 use crate::error::{AppError, AppResult, SshErrorKind};
 use crate::state::{AppState, MutexExt, now_ms, state};
+use crate::terminal::SessionRegistry;
 use crate::{connection, sync};
 
 /// How long a host-key or 2FA prompt may stay unanswered before the connection gives up.
@@ -103,7 +104,7 @@ impl LiveSession {
 
 #[derive(Default)]
 pub struct SshManager {
-    sessions: Mutex<HashMap<String, Arc<LiveSession>>>,
+    sessions: SessionRegistry<LiveSession>,
     hostkey_waiters: Mutex<HashMap<String, oneshot::Sender<bool>>>,
     auth_waiters: Mutex<HashMap<String, oneshot::Sender<Option<Vec<String>>>>>,
     transfers: Mutex<HashMap<String, CancellationToken>>,
@@ -111,36 +112,26 @@ pub struct SshManager {
 
 impl SshManager {
     pub fn insert(&self, id: String, session: Arc<LiveSession>) {
-        self.sessions.lock_unpoisoned().insert(id, session);
+        self.sessions.insert(id, session);
     }
 
     pub fn get(&self, id: &str) -> AppResult<Arc<LiveSession>> {
-        self.sessions
-            .lock_unpoisoned()
-            .get(id)
-            .cloned()
-            .ok_or_else(|| AppError::not_found("session"))
+        self.sessions.get(id)
     }
 
     /// Removes the session only if it is still the given instance (a reconnect may have replaced
     /// it). `false` when something else removed it first.
     pub fn remove_if_same(&self, id: &str, live: &Arc<LiveSession>) -> bool {
-        let mut sessions = self.sessions.lock_unpoisoned();
-        if sessions.get(id).is_some_and(|s| Arc::ptr_eq(s, live)) {
-            sessions.remove(id);
-            true
-        } else {
-            false
-        }
+        self.sessions.remove_if_same(id, live)
     }
 
     pub fn take(&self, id: &str) -> Option<Arc<LiveSession>> {
-        self.sessions.lock_unpoisoned().remove(id)
+        self.sessions.take(id)
     }
 
     /// SEC-03 "lock disconnects sessions": takes every session out, by id, for the lock to close.
     pub fn take_all(&self) -> Vec<(String, Arc<LiveSession>)> {
-        self.sessions.lock_unpoisoned().drain().collect()
+        self.sessions.take_all()
     }
 
     pub fn answer_hostkey(&self, request_id: &str, accept: bool) {
@@ -274,21 +265,7 @@ pub fn resolve_proxy(vault: &Vault, choice: &HostProxy) -> AppResult<Option<Prox
     }))
 }
 
-/// The first hop of a connection to `host`: its outermost jump host, or the host itself without
-/// one. A broken jump chain ends where it breaks.
-pub fn first_hop<'a>(vault: &'a Vault, host: &'a Host) -> &'a Host {
-    let mut first = host;
-    let mut seen = HashSet::new();
-    while let Some(jump) = first
-        .jump_host_id
-        .as_deref()
-        .filter(|id| seen.insert(id.to_owned()) && seen.len() <= 8)
-        .and_then(|id| vault.get(id).and_then(Item::as_host))
-    {
-        first = jump;
-    }
-    first
-}
+pub use crate::host_chain::first_hop;
 
 /// The proxy of a connection to `host`: the choice of its first hop.
 pub fn connection_proxy(vault: &Vault, host: &Host) -> AppResult<Option<ProxyConfig>> {
@@ -1130,5 +1107,119 @@ mod tests {
             .respond(request())
             .await;
         assert!(at_key.prompted() && !at_key.password_prompted());
+    }
+
+    fn jump_host(address: &str, jump: Option<&str>) -> Item {
+        Item::Host(Host {
+            name: address.to_owned(),
+            address: address.to_owned(),
+            port: 22,
+            username: "deploy".to_owned(),
+            auth: HostAuth::Password {
+                password: Zeroizing::new("pw".to_owned()),
+            },
+            jump_host_id: jump.map(str::to_owned),
+            proxy: HostProxy::Direct,
+            ..Host::default()
+        })
+    }
+
+    fn host_by_id(v: &Vault, id: &str) -> Host {
+        v.get(id).and_then(Item::as_host).cloned().unwrap()
+    }
+
+    #[test]
+    fn first_hop_characterization_loop_missing_and_over_eight() {
+        let mut v = Vault::open_in_memory().unwrap();
+        v.create_with_params(&hatoba_core::new_id(), KdfParams::for_tests())
+            .unwrap();
+
+        // Cycle b -> a -> b: `first_hop` follows `a` then `b`, then stops at `b`.
+        let a = v.put(None, jump_host("a", None)).unwrap();
+        let b = v.put(None, jump_host("b", Some(&a))).unwrap();
+        let mut ha = host_by_id(&v, &a);
+        ha.jump_host_id = Some(b.clone());
+        v.put(Some(&a), Item::Host(ha)).unwrap();
+        assert_eq!(first_hop(&v, &host_by_id(&v, &b)).address, "b");
+
+        // Cycle h -> j1 -> j2 -> j1: stops at j2.
+        let j1 = v.put(None, jump_host("j1", None)).unwrap();
+        let j2 = v.put(None, jump_host("j2", Some(&j1))).unwrap();
+        let mut hj1 = host_by_id(&v, &j1);
+        hj1.jump_host_id = Some(j2.clone());
+        v.put(Some(&j1), Item::Host(hj1)).unwrap();
+        let h_cycle = v.put(None, jump_host("leaf", Some(&j1))).unwrap();
+        assert_eq!(first_hop(&v, &host_by_id(&v, &h_cycle)).address, "j2");
+
+        // Missing jump host: stops at the last existing hop.
+        let j_ok = v
+            .put(None, jump_host("j-ok", Some("missing-jump")))
+            .unwrap();
+        let h_miss = v.put(None, jump_host("h-miss", Some(&j_ok))).unwrap();
+        assert_eq!(first_hop(&v, &host_by_id(&v, &h_miss)).address, "j-ok");
+        let h_direct_miss = v
+            .put(None, jump_host("h-direct-miss", Some("missing-jump")))
+            .unwrap();
+        assert_eq!(
+            first_hop(&v, &host_by_id(&v, &h_direct_miss)).address,
+            "h-direct-miss"
+        );
+
+        // Chain more than 8 deep: stops after 8 jump hosts (j8).
+        let mut prev: Option<String> = None;
+        for i in (1..=9).rev() {
+            let id = v
+                .put(None, jump_host(&format!("d{i}"), prev.as_deref()))
+                .unwrap();
+            prev = Some(id);
+        }
+        let deep = v.put(None, jump_host("deep", prev.as_deref())).unwrap();
+        assert_eq!(first_hop(&v, &host_by_id(&v, &deep)).address, "d8");
+    }
+
+    #[test]
+    fn build_config_characterization_loop_missing_and_over_eight() {
+        let mut v = Vault::open_in_memory().unwrap();
+        v.create_with_params(&hatoba_core::new_id(), KdfParams::for_tests())
+            .unwrap();
+
+        // Loop: returns Invalid("jump_host_id", "the jump host chain loops").
+        let a = v.put(None, jump_host("a", None)).unwrap();
+        let b = v.put(None, jump_host("b", Some(&a))).unwrap();
+        let mut ha = host_by_id(&v, &a);
+        ha.jump_host_id = Some(b.clone());
+        v.put(Some(&a), Item::Host(ha)).unwrap();
+        let err = build_config(&v, &host_by_id(&v, &b), Some(&b), None).unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("jump_host_id"));
+        assert!(err.detail.contains("loops"), "{}", err.detail);
+
+        // Missing jump host: returns Invalid("jump_host_id", "jump host not found").
+        let j_ok = v
+            .put(None, jump_host("j-ok", Some("missing-jump")))
+            .unwrap();
+        let h_miss = v.put(None, jump_host("h-miss", Some(&j_ok))).unwrap();
+        let err = build_config(&v, &host_by_id(&v, &h_miss), Some(&h_miss), None).unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("jump_host_id"));
+        assert!(err.detail.contains("not found"), "{}", err.detail);
+
+        // Exactly 8 jump hosts succeeds; 9 jump hosts fails as a loop.
+        let mut prev: Option<String> = None;
+        for i in (1..=9).rev() {
+            let id = v
+                .put(None, jump_host(&format!("c{i}"), prev.as_deref()))
+                .unwrap();
+            prev = Some(id);
+            if i == 2 {
+                let eight = v.put(None, jump_host("eight", prev.as_deref())).unwrap();
+                let cfg = build_config(&v, &host_by_id(&v, &eight), Some(&eight), None).unwrap();
+                assert_eq!(cfg.jump.len(), 8);
+                assert_eq!(cfg.jump[0].host, "c9");
+                assert_eq!(cfg.jump[7].host, "c2");
+            }
+        }
+        let nine = v.put(None, jump_host("nine", prev.as_deref())).unwrap();
+        let err = build_config(&v, &host_by_id(&v, &nine), Some(&nine), None).unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("jump_host_id"));
+        assert!(err.detail.contains("loops"), "{}", err.detail);
     }
 }

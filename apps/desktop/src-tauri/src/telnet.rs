@@ -1,14 +1,13 @@
 //! Telnet terminal tabs (spec §7.6): each tab's connection, by session id. Their ids are UUIDv7
 //! like the SSH and local sessions', so one id never names two kinds of tab.
 
-use std::collections::HashMap;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
 
 use hatoba_telnet::TelnetSession;
 
-use crate::error::{AppError, AppResult};
-use crate::state::MutexExt;
+use crate::error::AppResult;
+use crate::terminal::SessionRegistry;
 
 /// A Telnet tab's connection.
 pub struct TelnetLive {
@@ -41,58 +40,49 @@ impl TelnetLive {
     }
 }
 
-#[derive(Default)]
 pub struct TelnetManager {
-    sessions: Mutex<HashMap<String, Arc<TelnetLive>>>,
+    sessions: SessionRegistry<TelnetLive>,
+}
+
+impl Default for TelnetManager {
+    fn default() -> Self {
+        Self {
+            sessions: SessionRegistry::new(|live| live.session.stop_login()),
+        }
+    }
 }
 
 impl TelnetManager {
     pub fn insert(&self, id: String, live: Arc<TelnetLive>) {
-        self.sessions.lock_unpoisoned().insert(id, live);
+        self.sessions.insert(id, live);
     }
 
     pub fn get(&self, id: &str) -> AppResult<Arc<TelnetLive>> {
-        self.sessions
-            .lock_unpoisoned()
-            .get(id)
-            .cloned()
-            .ok_or_else(|| AppError::not_found("session"))
+        self.sessions.get(id)
     }
 
     /// Removes the session only if it is still the given instance.
     pub fn remove_if_same(&self, id: &str, live: &Arc<TelnetLive>) {
-        let mut sessions = self.sessions.lock_unpoisoned();
-        if sessions.get(id).is_some_and(|s| Arc::ptr_eq(s, live)) {
-            sessions.remove(id);
-            live.session.stop_login();
-        }
+        self.sessions.remove_if_same(id, live);
     }
 
     /// Takes a session out. Its saved login stops before the registry is let go, so a lock that
     /// no longer finds it here has nothing to stop.
     pub fn take(&self, id: &str) -> Option<Arc<TelnetLive>> {
-        let mut sessions = self.sessions.lock_unpoisoned();
-        let live = sessions.remove(id)?;
-        live.session.stop_login();
-        Some(live)
+        self.sessions.take(id)
     }
 
     /// SEC-03: the vault locked, so no tab types its saved login any more, also one kept open.
     pub fn stop_logins(&self) {
-        for live in self.sessions.lock_unpoisoned().values() {
-            live.session.stop_login();
-        }
+        self.sessions.for_each(|live| live.session.stop_login());
     }
 
     /// SEC-03 "lock disconnects sessions", and quitting: takes every session out.
     pub fn take_all(&self) -> Vec<Arc<TelnetLive>> {
         self.sessions
-            .lock_unpoisoned()
-            .drain()
-            .map(|(_, live)| {
-                live.session.stop_login();
-                live
-            })
+            .take_all()
+            .into_iter()
+            .map(|(_, live)| live)
             .collect()
     }
 }

@@ -26,7 +26,7 @@ pub struct Pool {
 
 struct Pooled {
     session: SshSession,
-    /// How the host connected (`dashboard::config_version`).
+    /// How the host connected (`host_chain::config_version`).
     config: String,
     use_: Arc<Use>,
 }

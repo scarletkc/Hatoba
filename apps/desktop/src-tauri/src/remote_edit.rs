@@ -662,9 +662,9 @@ impl Worker {
     async fn upload(&mut self, overwrite: bool) -> (Flow, AppResult<()>) {
         // Nothing uploads behind the lock screen, also before the lock's command arrives: a save
         // made there asks after the unlock.
-        if !app_state(&self.app).vault().is_unlocked() {
+        if let Err(err) = app_state(&self.app).require_unlocked().map(drop) {
             self.locked = true;
-            return (Flow::Go, Err(AppError::locked()));
+            return (Flow::Go, Err(err));
         }
         let Some((session_id, sftp)) = self.client().await else {
             self.set(RemoteEditState::Pending, None);
