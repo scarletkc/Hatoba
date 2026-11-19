@@ -2,6 +2,25 @@
 
 use super::results::truncate_result_to;
 
+/// The tag of the note Hatoba puts before the first message after a stopped reply (§13.1).
+pub const INTERRUPTED_TAG: &str = "interrupted";
+/// The tag of the note Hatoba puts before a message that moves to another host (AI-09).
+pub const HOST_CHANGE_TAG: &str = "host_change";
+/// The tag of the note Hatoba puts when a terminal becomes attached or detached (AI-09).
+pub const TERMINAL_CHANGE_TAG: &str = "terminal_change";
+/// The tag of the note Hatoba puts when a local terminal moves to another shell (§7.5).
+pub const SHELL_CHANGE_TAG: &str = "shell_change";
+/// The tag of the note Hatoba puts before the first message to another model (AI-05).
+pub const MODEL_CHANGE_TAG: &str = "model_change";
+/// The tag of the note Hatoba puts when the user reverts a file tool call (AI-41).
+pub const FILE_REVERT_TAG: &str = "file_revert";
+/// The tag of the note that names the conversation's permission mode (AI-16, AI-47).
+pub const PERMISSION_MODE_TAG: &str = "permission_mode";
+/// The tag of the note that shows the memories (AI-53).
+pub const MEMORY_TAG: &str = "memory";
+/// The tag of the note that shows the attached terminal's screen (AI-46).
+pub const TERMINAL_STATE_TAG: &str = "terminal_state";
+
 /// A conversation's permission mode on the device that sends a message (AI-16, spec §13.5), as a
 /// `permission_mode` note names it. The modes order from the strictest: manual approval, Auto,
 /// bypass.
@@ -84,11 +103,10 @@ pub fn model_label(id: &str, name: &str) -> String {
 /// streamed (spec §13.1, §13.3), with the blank line after it.
 #[must_use]
 pub fn interrupted_block() -> String {
-    const TAG: &str = "interrupted";
     format!(
-        "<{TAG}>\nThe user stopped your previous reply before it was finished. It ends where it \
-         was cut off; anything you were still writing, tool calls included, was not kept.\n\
-         </{TAG}>\n\n"
+        "<{INTERRUPTED_TAG}>\nThe user stopped your previous reply before it was finished. It \
+         ends where it was cut off; anything you were still writing, tool calls included, was not \
+         kept.\n</{INTERRUPTED_TAG}>\n\n"
     )
 }
 
@@ -96,7 +114,6 @@ pub fn interrupted_block() -> String {
 /// line after it. `from` is empty when the earlier host no longer exists.
 #[must_use]
 pub fn host_change_block(from: &str, to: &str) -> String {
-    const TAG: &str = "host_change";
     let came_from = if from.trim().is_empty() {
         "another host".to_owned()
     } else {
@@ -107,10 +124,10 @@ pub fn host_change_block(from: &str, to: &str) -> String {
             "The conversation moved to another host. Screens and command output before this \
              message came from {came_from}."
         ),
-        TAG,
+        HOST_CHANGE_TAG,
     );
     format!(
-        "<{TAG} from=\"{}\" to=\"{}\">\n{body}\n</{TAG}>\n\n",
+        "<{HOST_CHANGE_TAG} from=\"{}\" to=\"{}\">\n{body}\n</{HOST_CHANGE_TAG}>\n\n",
         note_attribute(from),
         note_attribute(to)
     )
@@ -120,7 +137,6 @@ pub fn host_change_block(from: &str, to: &str) -> String {
 /// from this message on (AI-09, spec §13.3), with the blank line after it.
 #[must_use]
 pub fn terminal_change_block(attached: bool) -> String {
-    const TAG: &str = "terminal_change";
     let (to, body) = if attached {
         (
             "attached",
@@ -135,7 +151,7 @@ pub fn terminal_change_block(attached: bool) -> String {
              this message came from the terminal that was attached then.",
         )
     };
-    format!("<{TAG} to=\"{to}\">\n{body}\n</{TAG}>\n\n")
+    format!("<{TERMINAL_CHANGE_TAG} to=\"{to}\">\n{body}\n</{TERMINAL_CHANGE_TAG}>\n\n")
 }
 
 /// The attachment block that notes a move to a local terminal tab (§7.5) of the same computer
@@ -143,7 +159,6 @@ pub fn terminal_change_block(attached: bool) -> String {
 /// blank line after it. `from` and `to` are the shells as the system prompt names them.
 #[must_use]
 pub fn shell_change_block(from: &str, to: &str) -> String {
-    const TAG: &str = "shell_change";
     let body = escape_closing_tag(
         &format!(
             "The conversation moved to another local terminal on the same computer, which runs \
@@ -151,10 +166,10 @@ pub fn shell_change_block(from: &str, to: &str) -> String {
             note_text(to),
             note_text(from)
         ),
-        TAG,
+        SHELL_CHANGE_TAG,
     );
     format!(
-        "<{TAG} from=\"{}\" to=\"{}\">\n{body}\n</{TAG}>\n\n",
+        "<{SHELL_CHANGE_TAG} from=\"{}\" to=\"{}\">\n{body}\n</{SHELL_CHANGE_TAG}>\n\n",
         note_attribute(from),
         note_attribute(to)
     )
@@ -164,10 +179,9 @@ pub fn shell_change_block(from: &str, to: &str) -> String {
 /// line after it. `from` and `to` are [`model_label`]s.
 #[must_use]
 pub fn model_change_block(from: &str, to: &str) -> String {
-    const TAG: &str = "model_change";
     format!(
-        "<{TAG} from=\"{}\" to=\"{}\">\nEarlier replies in this conversation came from another \
-         model.\n</{TAG}>\n\n",
+        "<{MODEL_CHANGE_TAG} from=\"{}\" to=\"{}\">\nEarlier replies in this conversation came \
+         from another model.\n</{MODEL_CHANGE_TAG}>\n\n",
         note_attribute(from),
         note_attribute(to)
     )
@@ -180,7 +194,6 @@ pub fn model_change_block(from: &str, to: &str) -> String {
 /// what it leaves.
 #[must_use]
 pub fn file_revert_block(path: &str, tool_call_id: &str, tool: &str, created: bool) -> String {
-    const TAG: &str = "file_revert";
     let file = note_text(path);
     let call = note_text(tool_call_id);
     let tool = note_text(tool);
@@ -191,9 +204,9 @@ pub fn file_revert_block(path: &str, tool_call_id: &str, tool: &str, created: bo
     } else {
         format!("The user reverted the change your {tool} call {call} made to {file}.")
     };
-    let body = escape_closing_tag(&what, TAG);
+    let body = escape_closing_tag(&what, FILE_REVERT_TAG);
     format!(
-        "<{TAG} path=\"{}\" tool_call_id=\"{}\">\n{body}\n</{TAG}>\n\n",
+        "<{FILE_REVERT_TAG} path=\"{}\" tool_call_id=\"{}\">\n{body}\n</{FILE_REVERT_TAG}>\n\n",
         note_attribute(path),
         note_attribute(tool_call_id)
     )
@@ -204,14 +217,14 @@ pub fn file_revert_block(path: &str, tool_call_id: &str, tool: &str, created: bo
 /// adds a note to the messages rather than change the prompt and lose its cache.
 #[must_use]
 pub fn permission_mode_block(mode: PermissionMode) -> String {
-    const TAG: &str = "permission_mode";
     let (value, name) = match mode {
         PermissionMode::Manual => ("manual", "manual approval"),
         PermissionMode::Auto => ("auto", "auto"),
         PermissionMode::Bypass => ("bypass", "bypass"),
     };
     format!(
-        "<{TAG} mode=\"{value}\">\nFrom this message on, the permission mode is {name}.\n</{TAG}>\n\n"
+        "<{PERMISSION_MODE_TAG} mode=\"{value}\">\nFrom this message on, the permission mode is \
+         {name}.\n</{PERMISSION_MODE_TAG}>\n\n"
     )
 }
 
@@ -241,7 +254,6 @@ pub const MEMORY_NOTE_HOST: &str = "conversation_host";
 /// a host whose memories no note of the context showed.
 #[must_use]
 pub fn memory_block(host: Option<&str>, memories: &[MemoryEntry<'_>]) -> String {
-    const TAG: &str = "memory";
     const ENTRY: &str = "entry";
     if memories.is_empty() {
         return String::new();
@@ -271,9 +283,9 @@ pub fn memory_block(host: Option<&str>, memories: &[MemoryEntry<'_>]) -> String 
         format!(" {MEMORY_NOTE_HOST}=\"{}\"", note_attribute(h))
     });
     format!(
-        "<{TAG} entries=\"{}\"{host}>\n{}\n</{TAG}>\n\n",
+        "<{MEMORY_TAG} entries=\"{}\"{host}>\n{}\n</{MEMORY_TAG}>\n\n",
         memories.len(),
-        escape_closing_tag(&body, TAG)
+        escape_closing_tag(&body, MEMORY_TAG)
     )
 }
 
@@ -295,9 +307,10 @@ pub fn split_permission_note(text: &str) -> (Option<PermissionMode>, &str) {
 /// it. A note stored before [`MEMORY_NOTE_HOST`] names the conversation's host in `host`.
 #[must_use]
 pub fn split_memory_note(text: &str) -> (&str, &str) {
-    const CLOSE: &str = "\n</memory>\n\n";
     let opened = text
-        .strip_prefix("<memory entries=\"")
+        .strip_prefix('<')
+        .and_then(|r| r.strip_prefix(MEMORY_TAG))
+        .and_then(|r| r.strip_prefix(" entries=\""))
         .and_then(|rest| {
             let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
             let rest = rest[digits..].strip_prefix('"')?;
@@ -315,8 +328,9 @@ pub fn split_memory_note(text: &str) -> (&str, &str) {
             (digits > 0 && rest.starts_with(">\n")).then_some(())
         })
         .is_some();
-    match text.find(CLOSE).filter(|_| opened) {
-        Some(at) => text.split_at(at + CLOSE.len()),
+    let close = format!("\n</{MEMORY_TAG}>\n\n");
+    match text.find(&close).filter(|_| opened) {
+        Some(at) => text.split_at(at + close.len()),
         None => ("", text),
     }
 }
@@ -331,7 +345,6 @@ pub const MAX_SCREEN_CHARS: usize = 4_000;
 /// end are left out. Empty when nothing else is left.
 #[must_use]
 pub fn terminal_state_block(host: &str, alternate: bool, screen: &str) -> String {
-    const TAG: &str = "terminal_state";
     let cleaned: String = screen
         .replace("\r\n", "\n")
         .chars()
@@ -353,10 +366,11 @@ pub fn terminal_state_block(host: &str, alternate: bool, screen: &str) -> String
     let shown = &lines[first..=last];
     let body = escape_closing_tag(
         &truncate_result_to(&shown.join("\n"), MAX_SCREEN_CHARS),
-        TAG,
+        TERMINAL_STATE_TAG,
     );
     format!(
-        "<{TAG} host=\"{}\" alternate_screen=\"{alternate}\" lines=\"{}\">\n{body}\n</{TAG}>\n\n",
+        "<{TERMINAL_STATE_TAG} host=\"{}\" alternate_screen=\"{alternate}\" lines=\"{}\">\n\
+         {body}\n</{TERMINAL_STATE_TAG}>\n\n",
         note_attribute(host),
         shown.len()
     )
