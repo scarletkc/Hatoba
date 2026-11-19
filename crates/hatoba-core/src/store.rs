@@ -70,6 +70,53 @@ pub mod meta {
     pub const PIN: &str = "pin";
 }
 
+/// The four key-wrapping metadata values kept in the `meta` table.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct KeyMeta {
+    pub(crate) kdf_salt: String,
+    pub(crate) kdf_params: String,
+    pub(crate) protected_vault_key: String,
+    pub(crate) recovery_vault_key: String,
+}
+
+impl KeyMeta {
+    /// Reads all four key metadata values from `store`.
+    pub(crate) fn read(store: &impl StoreOps) -> Result<Self> {
+        let get = |key: &str| store.get_meta(key)?.ok_or(Error::VaultNotInitialized);
+        Ok(Self {
+            kdf_salt: get(meta::KDF_SALT)?,
+            kdf_params: get(meta::KDF_PARAMS)?,
+            protected_vault_key: get(meta::PROTECTED_VAULT_KEY)?,
+            recovery_vault_key: get(meta::RECOVERY_VAULT_KEY)?,
+        })
+    }
+
+    /// Writes all four key metadata values to `store`.
+    pub(crate) fn write(&self, store: &impl StoreOps) -> Result<()> {
+        Self::write_fields(
+            store,
+            &self.kdf_salt,
+            &self.kdf_params,
+            &self.protected_vault_key,
+            &self.recovery_vault_key,
+        )
+    }
+
+    /// Writes the four key metadata values without allocating a [`KeyMeta`].
+    pub(crate) fn write_fields(
+        store: &impl StoreOps,
+        kdf_salt: &str,
+        kdf_params: &str,
+        protected_vault_key: &str,
+        recovery_vault_key: &str,
+    ) -> Result<()> {
+        store.set_meta(meta::KDF_SALT, kdf_salt)?;
+        store.set_meta(meta::KDF_PARAMS, kdf_params)?;
+        store.set_meta(meta::PROTECTED_VAULT_KEY, protected_vault_key)?;
+        store.set_meta(meta::RECOVERY_VAULT_KEY, recovery_vault_key)
+    }
+}
+
 /// One row of the `items` table.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ItemRow {
@@ -84,6 +131,34 @@ pub struct ItemRow {
     pub dirty: bool,
     /// Plaintext `updated_at`, mirrored from the item (also known to the server).
     pub updated_at: i64,
+}
+
+impl ItemRow {
+    /// A dirty live item row ready to store and upload.
+    #[must_use]
+    pub fn live(id: String, envelope: String, revision: u64, updated_at: i64) -> Self {
+        Self {
+            id,
+            envelope: Some(envelope),
+            revision,
+            deleted: false,
+            dirty: true,
+            updated_at,
+        }
+    }
+
+    /// A dirty tombstone row ready to store and upload.
+    #[must_use]
+    pub fn tombstone(id: String, revision: u64, updated_at: i64) -> Self {
+        Self {
+            id,
+            envelope: None,
+            revision,
+            deleted: true,
+            dirty: true,
+            updated_at,
+        }
+    }
 }
 
 /// A row of the local-only `conflict_log` table.
@@ -1422,5 +1497,35 @@ mod tests {
             std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
             0o600
         );
+    }
+
+    #[test]
+    fn key_meta_round_trip_and_requires_all_four_keys() {
+        let store = Store::open_in_memory().unwrap();
+        assert!(matches!(
+            KeyMeta::read(&store),
+            Err(Error::VaultNotInitialized)
+        ));
+
+        let expected = KeyMeta {
+            kdf_salt: "salt-b64".into(),
+            kdf_params: r#"{"alg":"argon2id"}"#.into(),
+            protected_vault_key: "protected-env".into(),
+            recovery_vault_key: "recovery-env".into(),
+        };
+        expected.write(&store).unwrap();
+        assert_eq!(KeyMeta::read(&store).unwrap(), expected);
+
+        for key in [
+            meta::KDF_SALT,
+            meta::KDF_PARAMS,
+            meta::PROTECTED_VAULT_KEY,
+            meta::RECOVERY_VAULT_KEY,
+        ] {
+            let s = Store::open_in_memory().unwrap();
+            expected.write(&s).unwrap();
+            s.delete_meta(key).unwrap();
+            assert!(matches!(KeyMeta::read(&s), Err(Error::VaultNotInitialized)));
+        }
     }
 }

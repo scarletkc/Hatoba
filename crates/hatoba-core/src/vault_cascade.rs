@@ -15,7 +15,7 @@ use zeroize::Zeroize;
 use crate::error::{Error, Result};
 use crate::model::{HostAuth, Item};
 use crate::store::{ItemRow, StoreOps};
-use crate::vault::{Vault, seal_item};
+use crate::vault::{Vault, next_updated_at, seal_item};
 
 impl Vault {
     /// Deletes a host, clears it as the jump host of other hosts and deletes its port forwards and
@@ -149,33 +149,27 @@ impl Vault {
         store.transaction(|tx| {
             for (id, item) in &mut puts {
                 let previous = tx.item_row(id)?;
-                let updated_at = previous
-                    .as_ref()
-                    .map_or(now, |p| now.max(p.updated_at.saturating_add(1)));
+                let updated_at = next_updated_at(previous.as_ref(), now);
                 item.set_updated_at(updated_at);
                 let envelope = seal_item(vault_key, id, item)?;
-                tx.upsert_item_row(&ItemRow {
-                    id: id.clone(),
-                    envelope: Some(envelope.to_json()),
-                    revision: previous.map_or(0, |p| p.revision),
-                    deleted: false,
-                    dirty: true,
+                let revision = previous.map_or(0, |p| p.revision);
+                tx.upsert_item_row(&ItemRow::live(
+                    id.clone(),
+                    envelope.to_json(),
+                    revision,
                     updated_at,
-                })?;
+                ))?;
             }
             for id in deletes {
                 let row = tx
                     .item_row(id)?
                     .filter(|r| !r.deleted)
                     .ok_or_else(|| Error::ItemNotFound(id.clone()))?;
-                tx.upsert_item_row(&ItemRow {
-                    id: id.clone(),
-                    envelope: None,
-                    revision: row.revision,
-                    deleted: true,
-                    dirty: true,
-                    updated_at: now.max(row.updated_at.saturating_add(1)),
-                })?;
+                tx.upsert_item_row(&ItemRow::tombstone(
+                    id.clone(),
+                    row.revision,
+                    next_updated_at(Some(&row), now),
+                ))?;
             }
             Ok(())
         })?;

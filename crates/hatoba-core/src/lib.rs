@@ -12,12 +12,16 @@
 //! | [`recovery`] | the 128-bit recovery code in Crockford Base32 |
 //! | [`model`] | plaintext item structures (spec §5.1) |
 //! | [`store`] | local SQLite: ciphertext only (spec §5.2) |
-//! | [`vault`] | lock state, password and recovery operations, the decrypted item map |
+//! | [`vault`] | lock state, the decrypted item map, item CRUD and backup export |
 //! | `vault_ai` | AI items on [`Vault`]: providers, skills, MCP servers, conversations (§13.7) |
 //! | `vault_cascade` | deleting a host, group or key and repairing references, in one transaction |
+//! | `vault_conflicts` | sync conflict log queries and loser restoration |
+//! | `vault_history` | device-local, sealed command history per host and local shell (TERM-15) |
+//! | `vault_keys` | vault creation, unlock, throttling, password and recovery operations |
+//! | `vault_local` | device-local preferences and [`SealedLocal`](vault_local::SealedLocal) |
 //! | `vault_pin` | PIN unlock after a lock, device-local (SEC-11) |
 //! | `vault_snapshots` | device-local, sealed snapshots of AI file edits, for Revert (spec AI-41) |
-//! | `vault_history` | device-local, sealed command history per host and local shell (TERM-15) |
+//! | `vault_sync` | sync-facing state and remote vault setup, adoption and joining |
 //! | [`sync`] | backends (Worker / D1), engine, conflict rules, user-facing flows (spec §6) |
 //! | [`backup`] | encrypted backup export / import (VAULT-07) |
 //! | [`platform`] | injected capabilities (`SecretStore`, `DeviceInfo`) |
@@ -53,10 +57,14 @@ pub(crate) mod test_support;
 pub mod vault;
 mod vault_ai;
 mod vault_cascade;
+mod vault_conflicts;
 mod vault_history;
+mod vault_keys;
+mod vault_local;
 pub mod vault_order;
 mod vault_pin;
 mod vault_snapshots;
+mod vault_sync;
 pub mod version;
 
 pub use crypto::{Envelope, KdfParams, Key32};
