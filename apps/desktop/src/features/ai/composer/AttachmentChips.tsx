@@ -18,9 +18,9 @@ import {
   type DiagnosticsAttachment,
   type Note,
   type SelectionAttachment,
-} from "../attachments";
-import { formatTokens } from "../meter";
-import { localName, placeLabel } from "../place";
+} from "@/lib/ai/attachments";
+import { formatTokens } from "@/lib/ai/meter";
+import { localName, placeLabel } from "@/lib/ai/place";
 import { pickInput } from "../queue";
 import { HOME_SLOT, NO_SELECTION, useAi } from "../store";
 import s from "./AttachmentChips.module.css";

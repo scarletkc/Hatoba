@@ -3,7 +3,7 @@ import type { TabSource } from "@/app/tabs";
 import { api } from "@/ipc/api";
 import type { AiAllowance } from "@/ipc/types";
 import { formatTarget, formatTelnetTarget } from "@/session/quickConnect";
-import { recordedTarget } from "../place";
+import { recordedTarget } from "@/lib/ai/place";
 import type { HostRef } from "../tools";
 
 /**

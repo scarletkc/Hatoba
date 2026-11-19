@@ -1,4 +1,4 @@
-import { charCount } from "@/features/ai/instructions";
+import { charCount } from "./ai/instructions";
 import type { HostEnvVar } from "@/ipc/types";
 
 /*

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { translate, type MessageKey, type Params } from "@/i18n";
 import type { AiConversationView, AiEntryView } from "@/ipc/types";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
-import { composeMessage, makeAttachment, makeDiagnostics, makePaste, textFile } from "../attachments";
+import { composeMessage, makeAttachment, makeDiagnostics, makePaste, textFile } from "@/lib/ai/attachments";
 
 const t = (key: MessageKey, params?: Params) => translate("en", key, params);
 const time = (ms: number) => `T${ms}`;

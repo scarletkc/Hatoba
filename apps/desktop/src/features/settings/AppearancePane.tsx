@@ -3,7 +3,7 @@ import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { setAiTextSize } from "@/app/zoomKeys";
 import { useAi } from "@/features/ai/store";
-import { AI_TEXT_SIZE_MAX, AI_TEXT_SIZE_MIN } from "@/features/ai/textSize";
+import { AI_TEXT_SIZE_MAX, AI_TEXT_SIZE_MIN } from "@/lib/ai/textSize";
 import { useT } from "@/i18n";
 import type { LocalPrefs } from "@/ipc/types";
 import { cx } from "@/lib/cx";

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   Button,
   EmptyState,
@@ -16,25 +16,25 @@ import {
   TextArea,
   TextField,
   WarningText,
-  confirm,
   isImeEvent,
-  toast,
   type SelectOption,
 } from "@hatoba/ui";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { InstructionsField } from "@/features/ai/InstructionsField";
-import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
+import { byteCount, HOST_NOTES_MAX_BYTES } from "@/lib/ai/instructions";
+import { envInput, envRows, envTooLarge, validateEnvRows, type EnvRow } from "@/lib/envVars";
+import type { HostDraft } from "@/lib/hostDraft";
 import { useT } from "@/i18n";
-import { api, appError, toAppError } from "@/ipc/api";
+import { api, appError } from "@/ipc/api";
 import type { AuthKind, HostInput, HostView, KeyView, ProxyMode, QuickTarget } from "@/ipc/types";
 import { proxySummary } from "@/features/settings/proxyLogic";
 import { cx } from "@/lib/cx";
 import { ENV_FOCUS_ID, EnvVarsSection } from "./EnvVarsSection";
-import { ProtocolRow, type HostDraft } from "./ProtocolRow";
-import { envInput, envRows, envTooLarge, validateEnvRows, type EnvRow } from "./envVars";
+import { ProtocolRow } from "./ProtocolRow";
 import { useHostsUi } from "./ui";
+import { handleHostSaveError, useDeleteHost, useHostEditorShortcuts, validateAddressAndPort } from "./useHostEditor";
 import s from "./HostEditPage.module.css";
 
 interface Form {
@@ -178,10 +178,7 @@ export function HostEditPage({
   const goBack = () => navigate({ kind: "hosts", group: back });
 
   const validate = (): Errors => {
-    const e: Errors = {};
-    if (!form.address.trim()) e.address = t("hosts.err.addressRequired");
-    const port = Number(form.port);
-    if (!/^\d+$/.test(form.port.trim()) || port < 1 || port > 65535) e.port = t("hosts.err.portInvalid");
+    const e: Errors = validateAddressAndPort(t, form.address, form.port);
     if (form.authKind === "key" && !form.keyId) e.key = t("hosts.err.keyRequired");
     if (form.jumpHostId) {
       if (form.jumpHostId === hostId) e.jump = t("hosts.err.jumpSelf");
@@ -244,11 +241,7 @@ export function HostEditPage({
       useHostsUi.getState().select([saved.id]);
       goBack();
     } catch (err) {
-      const ae = toAppError(err);
-      const field = ae.code === "invalid_input" && ae.field ? BACKEND_FIELDS[ae.field] : undefined;
-      if (field) showErrors({ [field]: errorMessage(t, err) });
-      else if (ae.code === "invalid_input" && ae.field === "host") toast(t("hosts.err.tooLarge"), "error");
-      else toast(errorMessage(t, err, { host: form.address, port: Number(form.port) }), "error");
+      handleHostSaveError(t, err, BACKEND_FIELDS, showErrors, { host: form.address, port: Number(form.port) });
       setSaving(false);
     }
   };
@@ -276,43 +269,9 @@ export function HostEditPage({
     }
   };
 
-  const remove = async () => {
-    if (!host) return;
-    const ok = await confirm({
-      title: t("hosts.deleteTitle", { name: host.name }),
-      body: t("hosts.deleteBody"),
-      confirmLabel: t("btn.delete"),
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      await api.host_delete(host.id);
-      await useVaultData.getState().reload();
-      toast(t("hosts.deleted", { name: host.name }));
-      goBack();
-    } catch (err) {
-      toast(errorMessage(t, err), "error");
-    }
-  };
+  const remove = useDeleteHost(host, (id) => api.host_delete(id), goBack);
 
-  // Ctrl+S saves; Escape leaves an untouched form. Menus and dialogs get the key first.
-  const initialJson = useRef(JSON.stringify(form));
-  const dirty = JSON.stringify(form) !== initialJson.current;
-  const latest = useRef({ save, goBack, dirty });
-  latest.current = { save, goBack, dirty };
-  useEffect(() => {
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.defaultPrevented || document.querySelector('[role="dialog"],[role="alertdialog"],[role="menu"]')) return;
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        void latest.current.save();
-      } else if (e.key === "Escape" && !latest.current.dirty) {
-        latest.current.goBack();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  useHostEditorShortcuts(form, save, goBack);
 
   // Enter in a single-line field saves (tag input handles its own Enter).
   const onKeyDown = (e: KeyboardEvent) => {

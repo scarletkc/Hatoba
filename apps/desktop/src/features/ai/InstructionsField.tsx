@@ -1,7 +1,7 @@
 import { ErrorText, TextArea } from "@hatoba/ui";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
-import { textSize } from "./instructions";
+import { textSize } from "@/lib/ai/instructions";
 import s from "./InstructionsField.module.css";
 
 /**

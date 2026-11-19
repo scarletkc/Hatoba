@@ -4,7 +4,7 @@ import { useT } from "@/i18n";
 import { readClipboard } from "@/lib/clipboard";
 import { cx } from "@/lib/cx";
 import { tooMuchMessage } from "../actions/attach";
-import { composeMessage, fitsMessage, isLongPaste, makePaste, type MessageParts } from "../attachments";
+import { composeMessage, fitsMessage, isLongPaste, makePaste, type MessageParts } from "@/lib/ai/attachments";
 import { AttachmentChipFor } from "../composer/AttachmentChips";
 import { insertAtCaret, isPlainPasteKey } from "../composer/Composer";
 import s from "./Messages.module.css";

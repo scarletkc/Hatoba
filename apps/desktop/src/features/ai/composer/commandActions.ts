@@ -9,7 +9,7 @@ import { api, toAppError } from "@/ipc/api";
 import type { AiHostRefusal } from "@/ipc/types";
 import { addAttachment, selectionHost } from "../actions/attach";
 import { aiErrorMessage } from "../actions/context";
-import { lineCount, pathName } from "../attachments";
+import { lineCount, pathName } from "@/lib/ai/attachments";
 import { listingText, promptArguments, resourceTarget, type PromptCommand, type ResourceItem } from "./commands";
 import { menuSources, useMcp } from "../mcp";
 import { getSlot, slotGeneration } from "../store";

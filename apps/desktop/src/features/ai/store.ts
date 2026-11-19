@@ -9,8 +9,8 @@ import type {
   AiProviderView,
   AiSettingsView,
 } from "@/ipc/types";
-import type { Attachment, DiagnosticsAttachment, SelectionAttachment, SelectionState } from "./attachments";
-import type { EffortPick } from "./effort";
+import type { Attachment, DiagnosticsAttachment, SelectionAttachment, SelectionState } from "@/lib/ai/attachments";
+import type { EffortPick } from "@/lib/ai/effort";
 import type { SideQuestion } from "./side";
 import { approvalOf, type TurnOutcome, type TurnState } from "./turn";
 

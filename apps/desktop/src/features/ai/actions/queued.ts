@@ -1,7 +1,7 @@
 /** The message a slot queues while its turn runs: it goes when the turn ends, or back into the input area (§13.1). */
 
 import { toast } from "@hatoba/ui";
-import type { Attachment } from "../attachments";
+import type { Attachment } from "@/lib/ai/attachments";
 import { joinMessages, messageAttachments, messageBack, pickInput, withinCap } from "../queue";
 import {
   getSlot,

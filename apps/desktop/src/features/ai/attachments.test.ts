@@ -35,7 +35,7 @@ import {
   type Note,
   type PasteAttachment,
   type SelectionAttachment,
-} from "./attachments";
+} from "@/lib/ai/attachments";
 import blockCases from "./blocks.fixtures.json";
 
 const att = (text: string, host = "prod-api"): SelectionAttachment => makeAttachment(host, text)!;
@@ -350,7 +350,7 @@ describe("Hatoba's notes (AI-05, AI-09)", () => {
 
   it("are written exactly as Rust writes them", () => {
     // interrupted_block, host_change_block, terminal_change_block, shell_change_block and
-    // model_change_block in crates/hatoba-ai/src/tools.rs.
+    // model_change_block in crates/hatoba-ai/src/tools/notes.rs.
     expect(noteBlock(stopped)).toBe(
       "<interrupted>\nThe user stopped your previous reply before it was finished. It ends where it was cut off; anything you were still writing, tool calls included, was not kept.\n</interrupted>",
     );
@@ -428,7 +428,7 @@ describe("Hatoba's notes (AI-05, AI-09)", () => {
 
   it("show the terminal's screen as Rust writes it, after the reverts and before the MCP tool list (AI-46)", () => {
     // The cases of the_screen_note_shows_the_screen_without_blank_lines_at_its_ends in
-    // crates/hatoba-ai/src/tools.rs.
+    // crates/hatoba-ai/src/tools/notes.rs.
     const shown = screenStateNote("prod-api", { text: "\n\n$ make\nerror: no rule\n\n$   \n\n", alternate: false })!;
     expect(noteBlock(shown)).toBe(
       '<terminal_state host="prod-api" alternate_screen="false" lines="4">\n$ make\nerror: no rule\n\n$\n</terminal_state>',
@@ -475,7 +475,7 @@ describe("Hatoba's notes (AI-05, AI-09)", () => {
   it("note each reverted file change, as Rust writes them, after the other notes (AI-41)", () => {
     const edited = fileRevertNote("/etc/nginx/nginx.conf", "toolu_01", "edit_file", false);
     const created = fileRevertNote('/srv/a"</file_revert>', "call_9", "write_file", true);
-    // file_revert_block in crates/hatoba-ai/src/tools.rs.
+    // file_revert_block in crates/hatoba-ai/src/tools/notes.rs.
     expect(noteBlock(edited)).toBe(
       '<file_revert path="/etc/nginx/nginx.conf" tool_call_id="toolu_01">\nThe user reverted the change your edit_file call toolu_01 made to /etc/nginx/nginx.conf.\n</file_revert>',
     );

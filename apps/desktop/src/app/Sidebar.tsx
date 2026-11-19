@@ -29,7 +29,9 @@ function pageKey(page: Page): Key {
  */
 export function Sidebar() {
   const t = useT();
-  const { page, navigate, sync } = useApp();
+  const page = useApp((st) => st.page);
+  const navigate = useApp((st) => st.navigate);
+  const sync = useApp((st) => st.sync);
   const active = pageKey(page);
   const status = syncFooterView(t, sync);
 

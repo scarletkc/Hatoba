@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { toast } from "@hatoba/ui";
 import { useAi } from "@/features/ai/store";
-import { AI_TEXT_SIZE_DEFAULT, AI_TEXT_SIZE_MAX, AI_TEXT_SIZE_MIN } from "@/features/ai/textSize";
+import { AI_TEXT_SIZE_DEFAULT, AI_TEXT_SIZE_MAX, AI_TEXT_SIZE_MIN } from "@/lib/ai/textSize";
 import { t } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { Platform } from "@/lib/platform";

@@ -12,7 +12,7 @@ import {
   memoryScope,
   scopeFields,
   type MemoryScope,
-} from "@/features/ai/memory";
+} from "@/lib/ai/memory";
 import { appError, type HatobaApi } from "../api";
 import type { AiMemoryView, AppError } from "../types";
 

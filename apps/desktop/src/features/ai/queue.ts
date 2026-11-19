@@ -1,5 +1,5 @@
 import type { AiTurnEndReason } from "@/ipc/types";
-import { attachmentBytes, composeMessage, MESSAGE_MAX_BYTES, type Attachment } from "./attachments";
+import { attachmentBytes, composeMessage, MESSAGE_MAX_BYTES, type Attachment } from "@/lib/ai/attachments";
 import type { InputChip, PendingAttachment, QueuedMessage, Slot } from "./store";
 
 /** What a message attaches, in the order it is stored (AI-10, AI-35). */

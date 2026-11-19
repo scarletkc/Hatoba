@@ -15,7 +15,7 @@ import type {
   AiTurnEvent,
   McpToolInfo,
 } from "@/ipc/types";
-import { judgeChosen, sameModel } from "../models";
+import { judgeChosen, sameModel } from "@/lib/ai/models";
 import { notifyAi } from "../notify";
 import { addAllowances, hostRefOf, savedAllowances, useAllowances } from "../rules/allowances";
 import { hardRule, type HardRule } from "../rules/autoRules";
