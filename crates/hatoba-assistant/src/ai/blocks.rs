@@ -6,25 +6,25 @@ use hatoba_ai::tools;
 
 /// The tag of the note Hatoba puts before the first message after a reply the user stopped
 /// (§13.1).
-pub(super) const INTERRUPTED: &str = "interrupted";
+pub(super) const INTERRUPTED: &str = tools::INTERRUPTED_TAG;
 /// The tag of the note Hatoba puts before a message that moves the conversation to another
 /// host (AI-09).
-pub(super) const HOST_CHANGE: &str = "host_change";
+pub(super) const HOST_CHANGE: &str = tools::HOST_CHANGE_TAG;
 /// The tag of the note Hatoba puts before a message whose requests offer the terminal tools when
 /// the newest reply's did not, or the other way round (AI-09).
-pub(super) const TERMINAL_CHANGE: &str = "terminal_change";
+pub(super) const TERMINAL_CHANGE: &str = tools::TERMINAL_CHANGE_TAG;
 /// The tag of the note Hatoba puts before a message on a local terminal tab of the same computer
 /// that runs another shell than the newest reply's (§7.5).
-pub(super) const SHELL_CHANGE: &str = "shell_change";
+pub(super) const SHELL_CHANGE: &str = tools::SHELL_CHANGE_TAG;
 /// The tag of the note Hatoba puts before the first message to another model (AI-05).
-pub(super) const MODEL_CHANGE: &str = "model_change";
+pub(super) const MODEL_CHANGE: &str = tools::MODEL_CHANGE_TAG;
 /// The tag of the note Hatoba puts before a message sent in another permission mode than the
 /// model was last told of (AI-16), and before a summary of a conversation in bypass or Auto
 /// (AI-47).
-pub(super) const PERMISSION_MODE: &str = "permission_mode";
+pub(super) const PERMISSION_MODE: &str = tools::PERMISSION_MODE_TAG;
 /// The tag of the note Hatoba puts before the first message after the user reverted a change of
 /// a file tool call (AI-41), one for each call.
-pub(super) const FILE_REVERT: &str = "file_revert";
+pub(super) const FILE_REVERT: &str = tools::FILE_REVERT_TAG;
 /// The tag of the note Hatoba puts before a message that comes with another list of deferred MCP
 /// tools than the model last saw (AI-45). A conversation with one is deferred.
 pub(super) const MCP_TOOLS: &str = deferred::LIST_TAG;
@@ -33,10 +33,10 @@ pub(super) const MCP_TOOLS: &str = deferred::LIST_TAG;
 pub(super) const MCP_CHANGE: &str = change::TAG;
 /// The tag of the note Hatoba puts before a message sent with a connected terminal attached,
 /// which shows its screen (AI-46).
-pub(super) const TERMINAL_STATE: &str = "terminal_state";
+pub(super) const TERMINAL_STATE: &str = tools::TERMINAL_STATE_TAG;
 /// The tag of the note Hatoba puts before a conversation's first message and in a summary, which
 /// shows the memories (AI-53).
-pub(super) const MEMORY: &str = "memory";
+pub(super) const MEMORY: &str = tools::MEMORY_TAG;
 
 /// A kind of block a user entry may start with (spec §13.3, "Attachment blocks").
 pub(super) struct AttachmentKind {

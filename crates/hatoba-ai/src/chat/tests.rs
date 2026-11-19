@@ -7,7 +7,6 @@ mod responses;
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 use wiremock::matchers::{body_partial_json, body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -44,22 +43,15 @@ const ANTHROPIC_CUT: &str = include_str!("../../tests/fixtures/anthropic_cut_off
 // ---------------------------------------------------------------------------------------------
 
 fn provider(server: &MockServer, protocol: Protocol) -> ProviderConfig {
-    ProviderConfig {
-        protocol,
-        base_url: match protocol {
-            Protocol::ChatCompletions | Protocol::Responses => format!("{}/v1", server.uri()),
-            Protocol::Anthropic | Protocol::SystemOne => server.uri(),
-        },
-        api_key: Zeroizing::new(KEY.into()),
-        auth_header: AuthHeader::XApiKey,
-        chatgpt: None,
-    }
+    let base_url = match protocol {
+        Protocol::ChatCompletions | Protocol::Responses => format!("{}/v1", server.uri()),
+        Protocol::Anthropic | Protocol::SystemOne => server.uri(),
+    };
+    crate::test_support::provider(protocol, base_url, KEY)
 }
 
 fn sse(body: &str) -> ResponseTemplate {
-    ResponseTemplate::new(200)
-        .insert_header("content-type", "text/event-stream; charset=utf-8")
-        .set_body_string(body.to_owned())
+    crate::test_support::sse(body)
 }
 
 fn request<'a>(
@@ -94,13 +86,7 @@ async fn run(
 }
 
 async fn bodies(server: &MockServer) -> Vec<Value> {
-    server
-        .received_requests()
-        .await
-        .unwrap()
-        .iter()
-        .map(|r| serde_json::from_slice(&r.body).unwrap())
-        .collect()
+    crate::test_support::bodies(server).await
 }
 
 fn text(s: &str) -> StreamEvent {
@@ -1013,32 +999,16 @@ async fn cancellation_while_waiting_for_the_response() {
 
 /// A server that sends the headers and one event, then nothing (the connection stays open).
 async fn stalling_server() -> String {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        let (mut socket, _) = listener.accept().await.unwrap();
-        let mut buf = vec![0u8; 64 * 1024];
-        let _ = socket.read(&mut buf).await;
-        let event = "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hel\"}}]}\n\n";
-        let head = format!(
-            "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ntransfer-encoding: chunked\r\n\r\n{:x}\r\n{event}\r\n",
-            event.len()
-        );
-        socket.write_all(head.as_bytes()).await.unwrap();
-        tokio::time::sleep(Duration::from_secs(60)).await;
-    });
-    format!("http://{addr}/v1")
+    crate::test_support::stalling_server(&[json!({
+        "choices": [{"index": 0, "delta": {"content": "Hel"}}]
+    })])
+    .await
+    .0
 }
 
 #[tokio::test]
 async fn cancellation_in_the_middle_of_a_stream() {
-    let p = ProviderConfig {
-        protocol: Protocol::ChatCompletions,
-        base_url: stalling_server().await,
-        api_key: Zeroizing::new(KEY.into()),
-        auth_header: AuthHeader::XApiKey,
-        chatgpt: None,
-    };
+    let p = crate::test_support::provider(Protocol::ChatCompletions, stalling_server().await, KEY);
     let model = ModelSpec::new("m");
     let entries = vec![AiEntry::user(1, "hi")];
     let cancel = CancellationToken::new();

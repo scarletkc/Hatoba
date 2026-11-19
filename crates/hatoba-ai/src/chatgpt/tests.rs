@@ -25,7 +25,7 @@ use crate::decision::{self, Answer, Question};
 use crate::entry::{AiEntry, AssistantEntry, Finish, ToolCall};
 use crate::error::AiError;
 use crate::models::{self, TestFailure};
-use crate::provider::{AuthHeader, ModelSpec, Protocol, ProviderConfig, http_client};
+use crate::provider::{ModelSpec, Protocol, ProviderConfig, http_client};
 
 const KEY_PK8: &[u8] = include_bytes!("../../tests/fixtures/chatgpt_test_rsa.pk8");
 const HOST_ID: &str = "urn:uuid:7d444840-9dc0-41d1-b245-6e5a0e5f4b7e";
@@ -154,14 +154,15 @@ async fn setup(initial: Option<Credentials>) -> Setup {
 impl Setup {
     fn provider(&self) -> ProviderConfig {
         ProviderConfig {
-            protocol: Protocol::Responses,
-            base_url: format!("{}/v1", self.server.uri()),
-            api_key: Zeroizing::default(),
-            auth_header: AuthHeader::XApiKey,
             chatgpt: Some(ChatgptAuth {
                 sessions: self.sessions.clone(),
                 id: PROVIDER.into(),
             }),
+            ..crate::test_support::provider(
+                Protocol::Responses,
+                format!("{}/v1", self.server.uri()),
+                "",
+            )
         }
     }
 
@@ -189,13 +190,7 @@ impl Setup {
 }
 
 fn sse(events: &[(&str, Value)]) -> ResponseTemplate {
-    let body: String = events
-        .iter()
-        .map(|(name, data)| format!("event: {name}\ndata: {data}\n\n"))
-        .collect();
-    ResponseTemplate::new(200)
-        .insert_header("content-type", "text/event-stream")
-        .set_body_string(body)
+    crate::test_support::sse_events(events)
 }
 
 fn completed(output: &Value) -> (&'static str, Value) {
@@ -255,14 +250,7 @@ async fn chat(
 }
 
 async fn bodies(server: &MockServer, at: &str) -> Vec<Value> {
-    server
-        .received_requests()
-        .await
-        .unwrap()
-        .iter()
-        .filter(|r| r.url.path() == at)
-        .map(|r| serde_json::from_slice(&r.body).unwrap())
-        .collect()
+    crate::test_support::bodies_at(server, at).await
 }
 
 // ---------------------------------------------------------------------------------------------

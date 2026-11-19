@@ -59,13 +59,7 @@ async fn system_one(pairs: &[(&str, f64)], delay: Duration) -> MockServer {
 
 /// The bodies of the requests `server` received.
 async fn bodies(server: &MockServer) -> Vec<Value> {
-    server
-        .received_requests()
-        .await
-        .unwrap()
-        .iter()
-        .map(|r| r.body_json().unwrap())
-        .collect()
+    hatoba_ai::test_support::bodies(server).await
 }
 
 /// A response that says `text` and makes these calls, `(id, name, arguments as JSON text)`.
