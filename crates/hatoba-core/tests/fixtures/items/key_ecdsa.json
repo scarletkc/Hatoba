@@ -1,0 +1,12 @@
+{
+  "type": "key",
+  "name": "server-ecdsa",
+  "algorithm": "ecdsa",
+  "private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\nECDSA\n-----END OPENSSH PRIVATE KEY-----",
+  "passphrase": null,
+  "public_key": "ecdsa-sha2-nistp256 AAAATest",
+  "fingerprint": "SHA256:ecdsa123456",
+  "comment": "",
+  "created_at": 1700000000000,
+  "updated_at": 1700000000007
+}

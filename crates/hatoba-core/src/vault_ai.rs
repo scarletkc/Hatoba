@@ -33,7 +33,7 @@ use crate::model::{
     SkillFile, new_id,
 };
 use crate::store::{ItemRow, StoreOps};
-use crate::vault::{Vault, decode_envelope};
+use crate::vault::{Vault, decode_envelope, next_updated_at};
 
 /// The most plaintext bytes one `ai_message` item may hold: the whole item JSON, with the
 /// escaped `data`. The envelope adds 16 bytes of tag and base64, about 55 KB in all.
@@ -332,14 +332,7 @@ impl Vault {
         let item = Item::AiConversation(conversation);
         let envelope = seal(key, item_aad(&id).as_bytes(), &item.to_plaintext()?)?;
         store.transaction(|tx| {
-            tx.upsert_item_row(&ItemRow {
-                id: id.clone(),
-                envelope: Some(envelope.to_json()),
-                revision: 0,
-                deleted: false,
-                dirty: true,
-                updated_at: now,
-            })?;
+            tx.upsert_item_row(&ItemRow::live(id.clone(), envelope.to_json(), 0, now))?;
             for (row, _) in &parts {
                 tx.upsert_item_row(row)?;
             }
@@ -557,14 +550,11 @@ impl Vault {
                 let Some(row) = tx.item_row(id)?.filter(|r| !r.deleted) else {
                     continue;
                 };
-                tx.upsert_item_row(&ItemRow {
-                    id: id.clone(),
-                    envelope: None,
-                    revision: row.revision,
-                    deleted: true,
-                    dirty: true,
-                    updated_at: now.max(row.updated_at.saturating_add(1)),
-                })?;
+                tx.upsert_item_row(&ItemRow::tombstone(
+                    id.clone(),
+                    row.revision,
+                    next_updated_at(Some(&row), now),
+                ))?;
             }
             Ok(())
         })?;
@@ -656,17 +646,7 @@ fn seal_entry(
         }
         let envelope = seal(key, item_aad(&id).as_bytes(), &plain)?;
         item.strip_message_data();
-        parts.push((
-            ItemRow {
-                id,
-                envelope: Some(envelope.to_json()),
-                revision: 0,
-                deleted: false,
-                dirty: true,
-                updated_at: now,
-            },
-            item,
-        ));
+        parts.push((ItemRow::live(id, envelope.to_json(), 0, now), item));
     }
     Ok(parts)
 }
@@ -714,27 +694,14 @@ fn split_entry<'a>(conversation_id: &str, entry_id: &str, json: &'a str) -> Resu
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
-    use std::sync::Arc;
-
+mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::crypto::{KdfParams, open_json};
+    use crate::crypto::open_json;
     use crate::model::{AiAuthHeader, AiModel, AiProtocol, McpTransport, SETTINGS_ID, SearchKind};
-    use crate::vault::ManualClock;
-
-    const PW: &str = "ai-vault-test-password";
-
-    /// An unlocked vault on a manual clock, for the tests of the AI items and file snapshots.
-    pub(crate) fn vault() -> (Vault, Arc<ManualClock>) {
-        let clock = Arc::new(ManualClock::new(1_700_000_000_000));
-        let mut vault = Vault::open_in_memory().unwrap().with_clock(clock.clone());
-        vault
-            .create_with_params(PW, KdfParams::for_tests())
-            .unwrap();
-        (vault, clock)
-    }
+    use crate::test_support::{TEST_PASSWORD as PW, unlocked_vault as vault};
+    use crate::vault::Clock;
 
     fn conversation(vault: &mut Vault, title: &str) -> String {
         vault
@@ -1757,5 +1724,33 @@ pub(crate) mod tests {
         assert_eq!(provider.api_key.as_str(), key);
         let row = vault.store.item_row(&id).unwrap().unwrap();
         assert!(!row.envelope.unwrap().contains("sk-test"));
+    }
+
+    #[test]
+    fn tombstone_skips_missing_and_deleted_rows() {
+        let (mut vault, clock) = vault();
+        let t0 = clock.now_ms();
+        let conv = conversation(&mut vault, "temp");
+        let mut row = vault.store.item_row(&conv).unwrap().unwrap();
+        row.revision = 4;
+        row.dirty = false;
+        row.updated_at = t0 + 500;
+        vault.store.upsert_item_row(&row).unwrap();
+
+        vault
+            .tombstone(&[conv.clone(), "missing-id".into()])
+            .unwrap();
+        let tomb = vault.store.item_row(&conv).unwrap().unwrap();
+        assert_eq!(
+            (tomb.revision, tomb.dirty, tomb.deleted, tomb.updated_at),
+            (4, true, true, t0 + 501)
+        );
+        assert!(tomb.envelope.is_none());
+        assert!(vault.store.item_row("missing-id").unwrap().is_none());
+
+        // Tombstoning an already-deleted row leaves its timestamp untouched.
+        clock.advance(10_000);
+        vault.tombstone(std::slice::from_ref(&conv)).unwrap();
+        assert_eq!(vault.store.item_row(&conv).unwrap().unwrap(), tomb);
     }
 }

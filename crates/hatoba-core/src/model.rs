@@ -3035,4 +3035,760 @@ mod tests {
         let message = message.as_ai_message().unwrap();
         assert!(message.data.is_empty() && message.conversation_id.is_empty());
     }
+
+    #[test]
+    fn hand_written_as_str_matches_serde_name_for_every_variant() {
+        for v in [ProxyKind::Socks5, ProxyKind::Http] {
+            match v {
+                ProxyKind::Socks5 | ProxyKind::Http => {}
+            }
+            assert_eq!(serde_json::to_value(v).unwrap(), v.as_str());
+        }
+        for v in [
+            AiProtocol::Anthropic,
+            AiProtocol::Responses,
+            AiProtocol::SystemOne,
+            AiProtocol::ChatCompletions,
+        ] {
+            match v {
+                AiProtocol::Anthropic
+                | AiProtocol::Responses
+                | AiProtocol::SystemOne
+                | AiProtocol::ChatCompletions => {}
+            }
+            assert_eq!(serde_json::to_value(v).unwrap(), v.as_str());
+        }
+        for v in [AiAuthHeader::Authorization, AiAuthHeader::XApiKey] {
+            match v {
+                AiAuthHeader::Authorization | AiAuthHeader::XApiKey => {}
+            }
+            assert_eq!(serde_json::to_value(v).unwrap(), v.as_str());
+        }
+        for v in AiEffort::ALL {
+            match v {
+                AiEffort::Low
+                | AiEffort::Medium
+                | AiEffort::High
+                | AiEffort::Xhigh
+                | AiEffort::Max => {}
+            }
+            assert_eq!(serde_json::to_value(v).unwrap(), v.as_str());
+        }
+        for v in [SearchKind::Brave, SearchKind::Tavily, SearchKind::Searxng] {
+            match v {
+                SearchKind::Brave | SearchKind::Tavily | SearchKind::Searxng => {}
+            }
+            assert_eq!(serde_json::to_value(v).unwrap(), v.as_str());
+        }
+        for v in [
+            McpTransport::Stdio {
+                command: String::new(),
+                args: Vec::new(),
+                env: BTreeMap::new(),
+            },
+            McpTransport::Http {
+                url: String::new(),
+                headers: BTreeMap::new(),
+            },
+        ] {
+            match &v {
+                McpTransport::Stdio { .. } | McpTransport::Http { .. } => {}
+            }
+            assert_eq!(serde_json::to_value(&v).unwrap()["kind"], v.kind_str());
+        }
+        for v in [
+            Item::Host(Host::default()),
+            Item::TelnetHost(TelnetHost::default()),
+            Item::Group(Group::default()),
+            Item::Key(SshKey::default()),
+            Item::KnownHost(KnownHost::default()),
+            Item::Forward(PortForward::default()),
+            Item::Snippet(Snippet::default()),
+            Item::Proxy(Proxy::default()),
+            Item::AiProvider(AiProvider::default()),
+            Item::SearchProvider(SearchProvider::default()),
+            Item::AiConversation(AiConversation::default()),
+            Item::AiMessage(AiMessage::default()),
+            Item::Skill(Skill::default()),
+            Item::SkillFile(SkillFile::default()),
+            Item::McpServer(McpServer::default()),
+            Item::AiMemory(AiMemory::default()),
+            Item::Settings(Settings::default()),
+        ] {
+            match &v {
+                Item::Host(_)
+                | Item::TelnetHost(_)
+                | Item::Group(_)
+                | Item::Key(_)
+                | Item::KnownHost(_)
+                | Item::Forward(_)
+                | Item::Snippet(_)
+                | Item::Proxy(_)
+                | Item::AiProvider(_)
+                | Item::SearchProvider(_)
+                | Item::AiConversation(_)
+                | Item::AiMessage(_)
+                | Item::Skill(_)
+                | Item::SkillFile(_)
+                | Item::McpServer(_)
+                | Item::AiMemory(_)
+                | Item::Settings(_) => {}
+            }
+            assert_eq!(serde_json::to_value(&v).unwrap()["type"], v.kind_str());
+        }
+    }
+
+    #[test]
+    fn golden_json_fixtures_cover_every_item_and_nested_enum() {
+        let mut frontmatter = serde_json::Map::new();
+        frontmatter.insert("license".into(), json!("MIT"));
+        frontmatter.insert(
+            "metadata".into(),
+            json!({"author": "alice", "tags": [1, 2]}),
+        );
+
+        let cases: Vec<(&str, &str, Item)> = vec![
+            (
+                "host_password.json",
+                include_str!("../tests/fixtures/items/host_password.json"),
+                Item::Host(Host {
+                    name: "prod-api-tokyo".into(),
+                    address: "10.0.0.7".into(),
+                    port: 22,
+                    username: "deploy".into(),
+                    auth: HostAuth::password("hunter2"),
+                    group_id: Some("grp-1".into()),
+                    tags: vec!["production".into(), "tokyo".into()],
+                    favorite: true,
+                    sort: 1000,
+                    jump_host_id: Some("bastion-1".into()),
+                    proxy: HostProxy::Proxy {
+                        proxy_id: "proxy-1".into(),
+                    },
+                    note: "Primary API node".into(),
+                    ai_notes: "Debian 12; app lives in /srv/api.".into(),
+                    updated_at: 1_700_000_000_000,
+                    env: vec![EnvVar::new("TZ", "Asia/Tokyo")],
+                }),
+            ),
+            (
+                "host_key.json",
+                include_str!("../tests/fixtures/items/host_key.json"),
+                Item::Host(Host {
+                    name: "staging-web".into(),
+                    address: "10.0.1.8".into(),
+                    port: 2222,
+                    username: "ubuntu".into(),
+                    auth: HostAuth::Key {
+                        key_id: "key-1".into(),
+                    },
+                    proxy: HostProxy::Direct,
+                    updated_at: 1_700_000_000_001,
+                    ..Host::default()
+                }),
+            ),
+            (
+                "host_agent.json",
+                include_str!("../tests/fixtures/items/host_agent.json"),
+                Item::Host(Host {
+                    name: "bastion".into(),
+                    address: "bastion.example.org".into(),
+                    port: 22,
+                    username: "ops".into(),
+                    auth: HostAuth::Agent,
+                    tags: vec!["jump".into()],
+                    proxy: HostProxy::DeviceDefault,
+                    updated_at: 1_700_000_000_002,
+                    ..Host::default()
+                }),
+            ),
+            (
+                "host_ask.json",
+                include_str!("../tests/fixtures/items/host_ask.json"),
+                Item::Host(Host {
+                    name: "sandbox".into(),
+                    address: "192.0.2.10".into(),
+                    port: 22,
+                    username: "alice".into(),
+                    auth: HostAuth::Ask,
+                    updated_at: 1_700_000_000_003,
+                    ..Host::default()
+                }),
+            ),
+            (
+                "telnet_host.json",
+                include_str!("../tests/fixtures/items/telnet_host.json"),
+                Item::TelnetHost(TelnetHost {
+                    name: "core-switch-1".into(),
+                    address: "10.0.0.2".into(),
+                    port: 23,
+                    username: "admin".into(),
+                    password: Zeroizing::new("switch-password".into()),
+                    group_id: Some("grp-1".into()),
+                    tags: vec!["network".into()],
+                    favorite: true,
+                    sort: 2000,
+                    proxy: HostProxy::Proxy {
+                        proxy_id: "proxy-1".into(),
+                    },
+                    note: "Core rack".into(),
+                    ai_notes: "Cisco IOS".into(),
+                    updated_at: 1_700_000_000_004,
+                }),
+            ),
+            (
+                "group.json",
+                include_str!("../tests/fixtures/items/group.json"),
+                Item::Group(Group {
+                    name: "Production".into(),
+                    parent_id: Some("grp-root".into()),
+                    sort: 1000,
+                    updated_at: 1_700_000_000_005,
+                }),
+            ),
+            (
+                "key_ed25519.json",
+                include_str!("../tests/fixtures/items/key_ed25519.json"),
+                Item::Key(SshKey {
+                    name: "laptop-ed25519".into(),
+                    algorithm: KeyAlgorithm::Ed25519,
+                    private_key: Zeroizing::new(
+                        "-----BEGIN OPENSSH PRIVATE KEY-----\nTEST\n-----END OPENSSH PRIVATE KEY-----"
+                            .into(),
+                    ),
+                    passphrase: Some(Zeroizing::new("key-passphrase".into())),
+                    public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest alice@laptop".into(),
+                    fingerprint: "SHA256:abcdef0123456789".into(),
+                    comment: "alice@laptop".into(),
+                    created_at: 1_700_000_000_000,
+                    updated_at: 1_700_000_000_006,
+                }),
+            ),
+            (
+                "key_ecdsa.json",
+                include_str!("../tests/fixtures/items/key_ecdsa.json"),
+                Item::Key(SshKey {
+                    name: "server-ecdsa".into(),
+                    algorithm: KeyAlgorithm::Ecdsa,
+                    private_key: Zeroizing::new(
+                        "-----BEGIN OPENSSH PRIVATE KEY-----\nECDSA\n-----END OPENSSH PRIVATE KEY-----"
+                            .into(),
+                    ),
+                    passphrase: None,
+                    public_key: "ecdsa-sha2-nistp256 AAAATest".into(),
+                    fingerprint: "SHA256:ecdsa123456".into(),
+                    comment: String::new(),
+                    created_at: 1_700_000_000_000,
+                    updated_at: 1_700_000_000_007,
+                }),
+            ),
+            (
+                "key_rsa.json",
+                include_str!("../tests/fixtures/items/key_rsa.json"),
+                Item::Key(SshKey {
+                    name: "legacy-rsa".into(),
+                    algorithm: KeyAlgorithm::Rsa,
+                    private_key: Zeroizing::new(
+                        "-----BEGIN OPENSSH PRIVATE KEY-----\nRSA\n-----END OPENSSH PRIVATE KEY-----"
+                            .into(),
+                    ),
+                    passphrase: None,
+                    public_key: "ssh-rsa AAAATest".into(),
+                    fingerprint: "SHA256:rsa123456".into(),
+                    comment: "legacy".into(),
+                    created_at: 1_700_000_000_000,
+                    updated_at: 1_700_000_000_008,
+                }),
+            ),
+            (
+                "known_host.json",
+                include_str!("../tests/fixtures/items/known_host.json"),
+                Item::KnownHost(KnownHost {
+                    host: "10.0.0.7".into(),
+                    port: 22,
+                    key_type: "ssh-ed25519".into(),
+                    public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestHost".into(),
+                    fingerprint: "SHA256:host123456".into(),
+                    first_seen_at: 1_700_000_000_000,
+                    updated_at: 1_700_000_000_009,
+                }),
+            ),
+            (
+                "forward_local.json",
+                include_str!("../tests/fixtures/items/forward_local.json"),
+                Item::Forward(PortForward {
+                    host_id: "host-1".into(),
+                    name: "Postgres".into(),
+                    kind: ForwardKind::Local,
+                    bind_address: "127.0.0.1".into(),
+                    bind_port: 15432,
+                    dest_host: Some("localhost".into()),
+                    dest_port: Some(5432),
+                    auto_start: true,
+                    updated_at: 1_700_000_000_010,
+                }),
+            ),
+            (
+                "forward_remote.json",
+                include_str!("../tests/fixtures/items/forward_remote.json"),
+                Item::Forward(PortForward {
+                    host_id: "host-1".into(),
+                    name: "Webhook".into(),
+                    kind: ForwardKind::Remote,
+                    bind_address: "0.0.0.0".into(),
+                    bind_port: 8080,
+                    dest_host: Some("127.0.0.1".into()),
+                    dest_port: Some(3000),
+                    auto_start: false,
+                    updated_at: 1_700_000_000_011,
+                }),
+            ),
+            (
+                "forward_dynamic.json",
+                include_str!("../tests/fixtures/items/forward_dynamic.json"),
+                Item::Forward(PortForward {
+                    host_id: "host-1".into(),
+                    name: "SOCKS".into(),
+                    kind: ForwardKind::Dynamic,
+                    bind_address: "127.0.0.1".into(),
+                    bind_port: 1080,
+                    dest_host: None,
+                    dest_port: None,
+                    auto_start: false,
+                    updated_at: 1_700_000_000_012,
+                }),
+            ),
+            (
+                "snippet.json",
+                include_str!("../tests/fixtures/items/snippet.json"),
+                Item::Snippet(Snippet {
+                    name: "Check disk".into(),
+                    command: "df -h".into(),
+                    tags: vec!["linux".into(), "disk".into()],
+                    updated_at: 1_700_000_000_013,
+                }),
+            ),
+            (
+                "proxy_socks5.json",
+                include_str!("../tests/fixtures/items/proxy_socks5.json"),
+                Item::Proxy(Proxy {
+                    name: "Office SOCKS".into(),
+                    kind: ProxyKind::Socks5,
+                    address: "socks.example.org".into(),
+                    port: 1080,
+                    username: "alice".into(),
+                    password: Zeroizing::new("proxy-password".into()),
+                    updated_at: 1_700_000_000_014,
+                }),
+            ),
+            (
+                "proxy_http.json",
+                include_str!("../tests/fixtures/items/proxy_http.json"),
+                Item::Proxy(Proxy {
+                    name: "Corporate HTTP".into(),
+                    kind: ProxyKind::Http,
+                    address: "proxy.example.org".into(),
+                    port: 3128,
+                    username: String::new(),
+                    password: Zeroizing::default(),
+                    updated_at: 1_700_000_000_015,
+                }),
+            ),
+            (
+                "ai_provider_anthropic.json",
+                include_str!("../tests/fixtures/items/ai_provider_anthropic.json"),
+                Item::AiProvider(AiProvider {
+                    name: "Anthropic".into(),
+                    protocol: AiProtocol::Anthropic,
+                    base_url: "https://api.anthropic.com".into(),
+                    api_key: Zeroizing::new("sk-ant-test".into()),
+                    auth_header: AiAuthHeader::Authorization,
+                    models: vec![AiModel {
+                        id: "claude-x".into(),
+                        name: "Claude X".into(),
+                        context_window: Some(200_000),
+                        max_output_tokens: Some(16_384),
+                        efforts: Some(AiEffort::ALL.to_vec()),
+                        adaptive_thinking: Some(true),
+                    }],
+                    chatgpt: None,
+                    updated_at: 1_700_000_000_016,
+                }),
+            ),
+            (
+                "ai_provider_responses.json",
+                include_str!("../tests/fixtures/items/ai_provider_responses.json"),
+                Item::AiProvider(AiProvider {
+                    name: "ChatGPT".into(),
+                    protocol: AiProtocol::Responses,
+                    base_url: "https://api.openai.com/v1".into(),
+                    api_key: Zeroizing::default(),
+                    auth_header: AiAuthHeader::XApiKey,
+                    models: Vec::new(),
+                    chatgpt: Some(AiChatgptAccount {
+                        client_id: "oaiapp_1".into(),
+                        subject: "user-1".into(),
+                        email: "user@example.com".into(),
+                    }),
+                    updated_at: 1_700_000_000_017,
+                }),
+            ),
+            (
+                "ai_provider_system_one.json",
+                include_str!("../tests/fixtures/items/ai_provider_system_one.json"),
+                Item::AiProvider(AiProvider {
+                    name: "System One".into(),
+                    protocol: AiProtocol::SystemOne,
+                    base_url: "https://api.typesafe.ai/v1".into(),
+                    api_key: Zeroizing::new("sys1-key".into()),
+                    auth_header: AiAuthHeader::XApiKey,
+                    models: vec![AiModel {
+                        id: "jev-latest".into(),
+                        name: "Jev Latest".into(),
+                        ..AiModel::default()
+                    }],
+                    chatgpt: None,
+                    updated_at: 1_700_000_000_018,
+                }),
+            ),
+            (
+                "ai_provider_chat_completions.json",
+                include_str!("../tests/fixtures/items/ai_provider_chat_completions.json"),
+                Item::AiProvider(AiProvider {
+                    name: "OpenAI Compat".into(),
+                    protocol: AiProtocol::ChatCompletions,
+                    base_url: "https://api.openai.com/v1".into(),
+                    api_key: Zeroizing::new("sk-openai-test".into()),
+                    auth_header: AiAuthHeader::XApiKey,
+                    models: Vec::new(),
+                    chatgpt: None,
+                    updated_at: 1_700_000_000_019,
+                }),
+            ),
+            (
+                "search_provider_brave.json",
+                include_str!("../tests/fixtures/items/search_provider_brave.json"),
+                Item::SearchProvider(SearchProvider {
+                    kind: SearchKind::Brave,
+                    base_url: None,
+                    api_key: Zeroizing::new("brave-key".into()),
+                    updated_at: 1_700_000_000_020,
+                }),
+            ),
+            (
+                "search_provider_tavily.json",
+                include_str!("../tests/fixtures/items/search_provider_tavily.json"),
+                Item::SearchProvider(SearchProvider {
+                    kind: SearchKind::Tavily,
+                    base_url: None,
+                    api_key: Zeroizing::new("tavily-key".into()),
+                    updated_at: 1_700_000_000_021,
+                }),
+            ),
+            (
+                "search_provider_searxng.json",
+                include_str!("../tests/fixtures/items/search_provider_searxng.json"),
+                Item::SearchProvider(SearchProvider {
+                    kind: SearchKind::Searxng,
+                    base_url: Some("https://searx.example.org".into()),
+                    api_key: Zeroizing::default(),
+                    updated_at: 1_700_000_000_022,
+                }),
+            ),
+            (
+                "ai_conversation.json",
+                include_str!("../tests/fixtures/items/ai_conversation.json"),
+                Item::AiConversation(AiConversation {
+                    title: "Why is nginx down".into(),
+                    host_id: Some("host-1".into()),
+                    quick_target: Some(AiQuickTarget::new("root", "[FE80::1]", 2222)),
+                    origin: Some("prod".into()),
+                    local: Some("workstation".into()),
+                    pinned: true,
+                    context_start: Some("entry-1".into()),
+                    effort: Some(AiEffort::Xhigh),
+                    created_at: 1_700_000_000_000,
+                    updated_at: 1_700_000_000_023,
+                }),
+            ),
+            (
+                "ai_message.json",
+                include_str!("../tests/fixtures/items/ai_message.json"),
+                Item::AiMessage(AiMessage {
+                    conversation_id: "conv-1".into(),
+                    entry_id: "entry-1".into(),
+                    part: 0,
+                    part_count: 1,
+                    data: r#"{"role":"user","content":"hello"}"#.into(),
+                    updated_at: 1_700_000_000_024,
+                }),
+            ),
+            (
+                "skill.json",
+                include_str!("../tests/fixtures/items/skill.json"),
+                Item::Skill(Skill {
+                    name: "nginx-ops".into(),
+                    description: "Operate nginx".into(),
+                    frontmatter,
+                    enabled: true,
+                    updated_at: 1_700_000_000_025,
+                }),
+            ),
+            (
+                "skill_file.json",
+                include_str!("../tests/fixtures/items/skill_file.json"),
+                Item::SkillFile(SkillFile {
+                    skill_id: "skill-1".into(),
+                    path: "references/nginx.md".into(),
+                    content: "# nginx".into(),
+                    updated_at: 1_700_000_000_026,
+                }),
+            ),
+            (
+                "mcp_server_stdio.json",
+                include_str!("../tests/fixtures/items/mcp_server_stdio.json"),
+                Item::McpServer(McpServer {
+                    name: "fs".into(),
+                    transport: McpTransport::Stdio {
+                        command: "npx".into(),
+                        args: vec!["-y".into(), "server-fs".into()],
+                        env: BTreeMap::from([(
+                            "TOKEN".to_owned(),
+                            Zeroizing::new("t0k".to_owned()),
+                        )]),
+                    },
+                    always_ask: true,
+                    updated_at: 1_700_000_000_027,
+                }),
+            ),
+            (
+                "mcp_server_http.json",
+                include_str!("../tests/fixtures/items/mcp_server_http.json"),
+                Item::McpServer(McpServer {
+                    name: "remote".into(),
+                    transport: McpTransport::Http {
+                        url: "https://mcp.example.org/mcp".into(),
+                        headers: BTreeMap::from([(
+                            "Authorization".to_owned(),
+                            Zeroizing::new("Bearer secret".to_owned()),
+                        )]),
+                    },
+                    always_ask: false,
+                    updated_at: 1_700_000_000_028,
+                }),
+            ),
+            (
+                "ai_memory.json",
+                include_str!("../tests/fixtures/items/ai_memory.json"),
+                Item::AiMemory(AiMemory {
+                    name: "sudo".into(),
+                    content: "Uses doas, not sudo.".into(),
+                    host_id: Some("host-1".into()),
+                    local: Some("workstation".into()),
+                    updated_at: 1_700_000_000_029,
+                }),
+            ),
+            (
+                "settings_dark_bar_menu.json",
+                include_str!("../tests/fixtures/items/settings_dark_bar_menu.json"),
+                Item::Settings(Settings {
+                    terminal: TerminalSettings {
+                        font_family: "Cascadia Mono".into(),
+                        font_size: 13,
+                        theme: ThemeMode::Dark,
+                        dark_scheme: Some("dracula".into()),
+                        light_scheme: Some("github-light".into()),
+                        cursor_style: CursorStyle::Bar,
+                        scrollback: 10_000,
+                        right_click: Some(RightClick::Menu),
+                        confirm_multiline_paste: Some(true),
+                        suggest_commands: Some(false),
+                    },
+                    ai: AiSettings {
+                        default_model: Some(AiModelRef {
+                            provider_id: "p1".into(),
+                            model_id: "m1".into(),
+                        }),
+                        default_effort: Some(AiEffort::High),
+                        search_provider_id: Some("sp1".into()),
+                        native_search: true,
+                        builtin_skill_enabled: true,
+                        custom_instructions: "Answer in English.".into(),
+                        send_terminal_screen: true,
+                        judge_model: Some(AiModelRef {
+                            provider_id: "p2".into(),
+                            model_id: "jev-latest".into(),
+                        }),
+                        memory: true,
+                        text_size: 13,
+                    },
+                    updated_at: 1_700_000_000_030,
+                }),
+            ),
+            (
+                "settings_light_underline_copypaste.json",
+                include_str!("../tests/fixtures/items/settings_light_underline_copypaste.json"),
+                Item::Settings(Settings {
+                    terminal: TerminalSettings {
+                        font_family: "Menlo".into(),
+                        font_size: 14,
+                        theme: ThemeMode::Light,
+                        dark_scheme: None,
+                        light_scheme: None,
+                        cursor_style: CursorStyle::Underline,
+                        scrollback: 5_000,
+                        right_click: Some(RightClick::CopyPaste),
+                        confirm_multiline_paste: None,
+                        suggest_commands: None,
+                    },
+                    ai: AiSettings::default(),
+                    updated_at: 1_700_000_000_031,
+                }),
+            ),
+            (
+                "settings_system_block.json",
+                include_str!("../tests/fixtures/items/settings_system_block.json"),
+                Item::Settings(Settings {
+                    terminal: TerminalSettings {
+                        font_family: "Cascadia Mono".into(),
+                        font_size: 13,
+                        theme: ThemeMode::System,
+                        dark_scheme: None,
+                        light_scheme: None,
+                        cursor_style: CursorStyle::Block,
+                        scrollback: 10_000,
+                        right_click: None,
+                        confirm_multiline_paste: None,
+                        suggest_commands: None,
+                    },
+                    ai: AiSettings::default(),
+                    updated_at: 1_700_000_000_032,
+                }),
+            ),
+        ];
+
+        let mut seen_items = std::collections::BTreeSet::new();
+        let mut seen_auth = std::collections::BTreeSet::new();
+        let mut seen_proxy_choice = std::collections::BTreeSet::new();
+        let mut seen_proxy_kind = std::collections::BTreeSet::new();
+        let mut seen_key_alg = std::collections::BTreeSet::new();
+        let mut seen_fwd_kind = std::collections::BTreeSet::new();
+        let mut seen_protocol = std::collections::BTreeSet::new();
+        let mut seen_auth_header = std::collections::BTreeSet::new();
+        let mut seen_effort = std::collections::BTreeSet::new();
+        let mut seen_search = std::collections::BTreeSet::new();
+        let mut seen_mcp = std::collections::BTreeSet::new();
+        let mut seen_theme = std::collections::BTreeSet::new();
+        let mut seen_cursor = std::collections::BTreeSet::new();
+        let mut seen_right_click = std::collections::BTreeSet::new();
+
+        for (name, raw, item) in cases {
+            let expected: serde_json::Value =
+                serde_json::from_str(raw).unwrap_or_else(|e| panic!("{name}: {e}"));
+            let actual = serde_json::to_value(&item).unwrap();
+            assert_eq!(actual, expected, "{name}");
+            let back =
+                Item::from_plaintext(raw.as_bytes()).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(back, item, "{name}");
+
+            seen_items.insert(item.kind_str());
+            match &item {
+                Item::Host(h) => {
+                    seen_auth.insert(match &h.auth {
+                        HostAuth::Password { .. } => "password",
+                        HostAuth::Key { .. } => "key",
+                        HostAuth::Agent => "agent",
+                        HostAuth::Ask => "ask",
+                    });
+                    seen_proxy_choice.insert(match &h.proxy {
+                        HostProxy::DeviceDefault => "device_default",
+                        HostProxy::Direct => "direct",
+                        HostProxy::Proxy { .. } => "proxy",
+                    });
+                }
+                Item::TelnetHost(h) => {
+                    seen_proxy_choice.insert(match &h.proxy {
+                        HostProxy::DeviceDefault => "device_default",
+                        HostProxy::Direct => "direct",
+                        HostProxy::Proxy { .. } => "proxy",
+                    });
+                }
+                Item::Key(k) => {
+                    seen_key_alg.insert(match k.algorithm {
+                        KeyAlgorithm::Ed25519 => "ed25519",
+                        KeyAlgorithm::Ecdsa => "ecdsa",
+                        KeyAlgorithm::Rsa => "rsa",
+                    });
+                }
+                Item::Forward(f) => {
+                    seen_fwd_kind.insert(match f.kind {
+                        ForwardKind::Local => "local",
+                        ForwardKind::Remote => "remote",
+                        ForwardKind::Dynamic => "dynamic",
+                    });
+                }
+                Item::Proxy(p) => {
+                    seen_proxy_kind.insert(p.kind.as_str());
+                }
+                Item::AiProvider(p) => {
+                    seen_protocol.insert(p.protocol.as_str());
+                    seen_auth_header.insert(p.auth_header.as_str());
+                    for m in &p.models {
+                        if let Some(efforts) = &m.efforts {
+                            for e in efforts {
+                                seen_effort.insert(e.as_str());
+                            }
+                        }
+                    }
+                }
+                Item::SearchProvider(s) => {
+                    seen_search.insert(s.kind.as_str());
+                }
+                Item::McpServer(m) => {
+                    seen_mcp.insert(m.transport.kind_str());
+                }
+                Item::Settings(s) => {
+                    seen_theme.insert(match s.terminal.theme {
+                        ThemeMode::Light => "light",
+                        ThemeMode::Dark => "dark",
+                        ThemeMode::System => "system",
+                    });
+                    seen_cursor.insert(match s.terminal.cursor_style {
+                        CursorStyle::Bar => "bar",
+                        CursorStyle::Underline => "underline",
+                        CursorStyle::Block => "block",
+                    });
+                    if let Some(rc) = s.terminal.right_click {
+                        seen_right_click.insert(match rc {
+                            RightClick::Menu => "menu",
+                            RightClick::CopyPaste => "copy_paste",
+                        });
+                    }
+                }
+                Item::Group(_)
+                | Item::KnownHost(_)
+                | Item::Snippet(_)
+                | Item::AiConversation(_)
+                | Item::AiMessage(_)
+                | Item::Skill(_)
+                | Item::SkillFile(_)
+                | Item::AiMemory(_) => {}
+            }
+        }
+
+        assert_eq!(seen_items.len(), 17);
+        assert_eq!(seen_auth.len(), 4);
+        assert_eq!(seen_proxy_choice.len(), 3);
+        assert_eq!(seen_proxy_kind.len(), 2);
+        assert_eq!(seen_key_alg.len(), 3);
+        assert_eq!(seen_fwd_kind.len(), 3);
+        assert_eq!(seen_protocol.len(), 4);
+        assert_eq!(seen_auth_header.len(), 2);
+        assert_eq!(seen_effort.len(), 5);
+        assert_eq!(seen_search.len(), 3);
+        assert_eq!(seen_mcp.len(), 2);
+        assert_eq!(seen_theme.len(), 3);
+        assert_eq!(seen_cursor.len(), 3);
+        assert_eq!(seen_right_click.len(), 2);
+    }
 }

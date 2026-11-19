@@ -1,0 +1,20 @@
+{
+  "type": "settings",
+  "terminal": {
+    "font_family": "Cascadia Mono",
+    "font_size": 13,
+    "theme": "system",
+    "cursor_style": "block",
+    "scrollback": 10000
+  },
+  "ai": {
+    "default_model": null,
+    "search_provider_id": null,
+    "native_search": true,
+    "builtin_skill_enabled": true,
+    "send_terminal_screen": true,
+    "memory": true,
+    "text_size": 13
+  },
+  "updated_at": 1700000000032
+}

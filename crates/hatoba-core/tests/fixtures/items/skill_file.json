@@ -1,0 +1,7 @@
+{
+  "type": "skill_file",
+  "skill_id": "skill-1",
+  "path": "references/nginx.md",
+  "content": "# nginx",
+  "updated_at": 1700000000026
+}

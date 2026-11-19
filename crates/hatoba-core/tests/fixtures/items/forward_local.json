@@ -1,0 +1,12 @@
+{
+  "type": "forward",
+  "host_id": "host-1",
+  "name": "Postgres",
+  "kind": "local",
+  "bind_address": "127.0.0.1",
+  "bind_port": 15432,
+  "dest_host": "localhost",
+  "dest_port": 5432,
+  "auto_start": true,
+  "updated_at": 1700000000010
+}

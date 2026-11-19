@@ -1,0 +1,17 @@
+{
+  "type": "ai_provider",
+  "name": "System One",
+  "protocol": "system_one",
+  "base_url": "https://api.typesafe.ai/v1",
+  "api_key": "sys1-key",
+  "auth_header": "x-api-key",
+  "models": [
+    {
+      "id": "jev-latest",
+      "name": "Jev Latest",
+      "context_window": null,
+      "max_output_tokens": null
+    }
+  ],
+  "updated_at": 1700000000018
+}

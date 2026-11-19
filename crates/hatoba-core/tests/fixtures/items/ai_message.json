@@ -1,0 +1,9 @@
+{
+  "type": "ai_message",
+  "conversation_id": "conv-1",
+  "entry_id": "entry-1",
+  "part": 0,
+  "part_count": 1,
+  "data": "{\"role\":\"user\",\"content\":\"hello\"}",
+  "updated_at": 1700000000024
+}

@@ -1,0 +1,17 @@
+{
+  "type": "ai_conversation",
+  "title": "Why is nginx down",
+  "host_id": "host-1",
+  "quick_target": {
+    "username": "root",
+    "address": "fe80::1",
+    "port": 2222
+  },
+  "origin": "prod",
+  "local": "workstation",
+  "pinned": true,
+  "context_start": "entry-1",
+  "effort": "xhigh",
+  "created_at": 1700000000000,
+  "updated_at": 1700000000023
+}

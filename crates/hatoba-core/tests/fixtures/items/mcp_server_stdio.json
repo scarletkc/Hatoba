@@ -1,0 +1,14 @@
+{
+  "type": "mcp_server",
+  "name": "fs",
+  "transport": {
+    "kind": "stdio",
+    "command": "npx",
+    "args": ["-y", "server-fs"],
+    "env": {
+      "TOKEN": "t0k"
+    }
+  },
+  "always_ask": true,
+  "updated_at": 1700000000027
+}

@@ -1,0 +1,21 @@
+{
+  "type": "settings",
+  "terminal": {
+    "font_family": "Menlo",
+    "font_size": 14,
+    "theme": "light",
+    "cursor_style": "underline",
+    "scrollback": 5000,
+    "right_click": "copy_paste"
+  },
+  "ai": {
+    "default_model": null,
+    "search_provider_id": null,
+    "native_search": true,
+    "builtin_skill_enabled": true,
+    "send_terminal_screen": true,
+    "memory": true,
+    "text_size": 13
+  },
+  "updated_at": 1700000000031
+}

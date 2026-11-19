@@ -337,9 +337,10 @@ impl Vault {
 mod tests {
     use super::*;
     use crate::model::AiConversation;
+    use crate::test_support::unlocked_vault;
 
     fn vault() -> Vault {
-        crate::vault_ai::tests::vault().0
+        unlocked_vault().0
     }
 
     fn conversation(vault: &mut Vault) -> String {

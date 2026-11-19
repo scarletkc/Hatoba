@@ -1,0 +1,10 @@
+{
+  "type": "ai_provider",
+  "name": "OpenAI Compat",
+  "protocol": "chat_completions",
+  "base_url": "https://api.openai.com/v1",
+  "api_key": "sk-openai-test",
+  "auth_header": "x-api-key",
+  "models": [],
+  "updated_at": 1700000000019
+}

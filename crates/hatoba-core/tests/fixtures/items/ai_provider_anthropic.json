@@ -1,0 +1,19 @@
+{
+  "type": "ai_provider",
+  "name": "Anthropic",
+  "protocol": "anthropic",
+  "base_url": "https://api.anthropic.com",
+  "api_key": "sk-ant-test",
+  "auth_header": "authorization",
+  "models": [
+    {
+      "id": "claude-x",
+      "name": "Claude X",
+      "context_window": 200000,
+      "max_output_tokens": 16384,
+      "efforts": ["low", "medium", "high", "xhigh", "max"],
+      "adaptive_thinking": true
+    }
+  ],
+  "updated_at": 1700000000016
+}

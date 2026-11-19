@@ -1,0 +1,8 @@
+{
+  "type": "ai_memory",
+  "name": "sudo",
+  "content": "Uses doas, not sudo.",
+  "host_id": "host-1",
+  "local": "workstation",
+  "updated_at": 1700000000029
+}

@@ -161,10 +161,12 @@ mod tests {
     use crate::sync::backend::{RemoteItem, VaultMeta};
     use crate::sync::engine::remote_row;
 
+    use crate::test_support::unlocked_vault;
+
     const SHELL: &str = "local:pwsh";
 
     fn vault() -> Vault {
-        crate::vault_ai::tests::vault().0
+        unlocked_vault().0
     }
 
     fn host(vault: &mut Vault) -> String {
@@ -334,7 +336,7 @@ mod tests {
         vault.store.put_command_history(&damaged).unwrap();
 
         // Another vault, as flow C finds it in the cloud.
-        let cloud = crate::vault_ai::tests::vault().0;
+        let cloud = unlocked_vault().0;
         let meta = cloud.local_meta().unwrap();
         let remote = VaultMeta {
             schema_version: meta.schema_version,

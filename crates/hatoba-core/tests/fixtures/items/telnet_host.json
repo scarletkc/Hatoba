@@ -1,0 +1,19 @@
+{
+  "type": "telnet_host",
+  "name": "core-switch-1",
+  "address": "10.0.0.2",
+  "port": 23,
+  "username": "admin",
+  "password": "switch-password",
+  "group_id": "grp-1",
+  "tags": ["network"],
+  "favorite": true,
+  "sort": 2000,
+  "proxy": {
+    "kind": "proxy",
+    "proxy_id": "proxy-1"
+  },
+  "note": "Core rack",
+  "ai_notes": "Cisco IOS",
+  "updated_at": 1700000000004
+}

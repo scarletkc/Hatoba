@@ -1,0 +1,10 @@
+{
+  "type": "known_host",
+  "host": "10.0.0.7",
+  "port": 22,
+  "key_type": "ssh-ed25519",
+  "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestHost",
+  "fingerprint": "SHA256:host123456",
+  "first_seen_at": 1700000000000,
+  "updated_at": 1700000000009
+}

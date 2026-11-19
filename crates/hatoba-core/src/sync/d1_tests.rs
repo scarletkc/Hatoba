@@ -18,7 +18,8 @@ use crate::crypto::{KdfParams, auth_hash, random_key};
 use crate::error::Error;
 use crate::model::{Host, Item};
 use crate::platform::DeviceInfo;
-use crate::vault::{ManualClock, Vault};
+use crate::test_support::{unlocked_vault_on, vault_on};
+use crate::vault::ManualClock;
 
 const ACCOUNT: &str = "0123456789abcdef0123456789abcdef";
 const DATABASE: &str = "11111111-2222-3333-4444-555555555555";
@@ -888,12 +889,11 @@ fn device(
     clock: &Arc<ManualClock>,
     created: bool,
 ) -> (SharedVault, D1Backend) {
-    let mut vault = Vault::open_in_memory().unwrap().with_clock(clock.clone());
-    if created {
-        vault
-            .create_with_params(PW, KdfParams::for_tests())
-            .unwrap();
-    }
+    let vault = if created {
+        unlocked_vault_on(clock, PW).0
+    } else {
+        vault_on(clock)
+    };
     (share(vault), backend(server))
 }
 
@@ -1064,4 +1064,56 @@ async fn direct_mode_push_conflict_triggers_the_engine_retry_path() {
         .unwrap();
     assert_eq!(names(&a), ["a-later"]);
     assert_eq!(names(&b), ["a-later"]);
+}
+
+#[test]
+fn schema_matches_worker_migration_meta_and_items() {
+    const WORKER_MIGRATION: &str =
+        include_str!("../../../../workers/sync/migrations/0001_init.sql");
+
+    fn normalize_ddl(sql: &str) -> String {
+        let no_comments: String = sql
+            .lines()
+            .map(|line| line.split("--").next().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let collapsed = no_comments.split_whitespace().collect::<Vec<_>>().join(" ");
+        collapsed
+            .replace("CREATE TABLE IF NOT EXISTS ", "CREATE TABLE ")
+            .replace("CREATE INDEX IF NOT EXISTS ", "CREATE INDEX ")
+            .replace(" )", ")")
+            .replace("( ", "(")
+    }
+
+    fn schema_objects(conn: &rusqlite::Connection) -> Vec<(String, String, String)> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT type, name, sql FROM sqlite_master
+                 WHERE name IN ('meta', 'items', 'idx_items_seq')
+                 ORDER BY name",
+            )
+            .unwrap();
+        stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                normalize_ddl(&row.get::<_, String>(2)?),
+            ))
+        })
+        .unwrap()
+        .map(std::result::Result::unwrap)
+        .collect()
+    }
+
+    let worker_db = rusqlite::Connection::open_in_memory().unwrap();
+    worker_db.execute_batch(WORKER_MIGRATION).unwrap();
+
+    let d1_db = rusqlite::Connection::open_in_memory().unwrap();
+    for stmt in super::d1::SCHEMA {
+        d1_db.execute_batch(stmt).unwrap();
+    }
+
+    let d1_objects = schema_objects(&d1_db);
+    assert_eq!(d1_objects.len(), 3);
+    assert_eq!(d1_objects, schema_objects(&worker_db));
 }

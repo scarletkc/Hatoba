@@ -1,0 +1,10 @@
+{
+  "type": "proxy",
+  "name": "Office SOCKS",
+  "kind": "socks5",
+  "address": "socks.example.org",
+  "port": 1080,
+  "username": "alice",
+  "password": "proxy-password",
+  "updated_at": 1700000000014
+}

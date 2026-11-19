@@ -1,0 +1,16 @@
+{
+  "type": "host",
+  "name": "sandbox",
+  "address": "192.0.2.10",
+  "port": 22,
+  "username": "alice",
+  "auth": {
+    "kind": "ask"
+  },
+  "group_id": null,
+  "tags": [],
+  "favorite": false,
+  "jump_host_id": null,
+  "note": "",
+  "updated_at": 1700000000003
+}

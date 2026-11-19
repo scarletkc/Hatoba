@@ -15,7 +15,7 @@ use zeroize::Zeroize;
 use crate::error::{Error, Result};
 use crate::model::{HostAuth, Item};
 use crate::store::{ItemRow, StoreOps};
-use crate::vault::{Vault, seal_item};
+use crate::vault::{Vault, next_updated_at, seal_item};
 
 impl Vault {
     /// Deletes a host, clears it as the jump host of other hosts and deletes its port forwards and
@@ -149,33 +149,27 @@ impl Vault {
         store.transaction(|tx| {
             for (id, item) in &mut puts {
                 let previous = tx.item_row(id)?;
-                let updated_at = previous
-                    .as_ref()
-                    .map_or(now, |p| now.max(p.updated_at.saturating_add(1)));
+                let updated_at = next_updated_at(previous.as_ref(), now);
                 item.set_updated_at(updated_at);
                 let envelope = seal_item(vault_key, id, item)?;
-                tx.upsert_item_row(&ItemRow {
-                    id: id.clone(),
-                    envelope: Some(envelope.to_json()),
-                    revision: previous.map_or(0, |p| p.revision),
-                    deleted: false,
-                    dirty: true,
+                let revision = previous.map_or(0, |p| p.revision);
+                tx.upsert_item_row(&ItemRow::live(
+                    id.clone(),
+                    envelope.to_json(),
+                    revision,
                     updated_at,
-                })?;
+                ))?;
             }
             for id in deletes {
                 let row = tx
                     .item_row(id)?
                     .filter(|r| !r.deleted)
                     .ok_or_else(|| Error::ItemNotFound(id.clone()))?;
-                tx.upsert_item_row(&ItemRow {
-                    id: id.clone(),
-                    envelope: None,
-                    revision: row.revision,
-                    deleted: true,
-                    dirty: true,
-                    updated_at: now.max(row.updated_at.saturating_add(1)),
-                })?;
+                tx.upsert_item_row(&ItemRow::tombstone(
+                    id.clone(),
+                    row.revision,
+                    next_updated_at(Some(&row), now),
+                ))?;
             }
             Ok(())
         })?;
@@ -198,32 +192,16 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::sync::Arc;
 
-    use zeroize::Zeroizing;
-
     use super::*;
-    use crate::crypto::KdfParams;
-    use crate::model::{AiMemory, Group, Host, PortForward, SshKey, TelnetHost};
+    use crate::model::{AiMemory, Group, PortForward, TelnetHost};
+    use crate::test_support::{
+        TEST_PASSWORD as PW, host_item_with as host, key_item, unlocked_vault_at,
+    };
     use crate::vault::ManualClock;
 
-    const PW: &str = "correct horse battery staple";
-
     fn vault() -> (Vault, Arc<ManualClock>) {
-        let clock = Arc::new(ManualClock::new(1_000_000));
-        let mut vault = Vault::open_in_memory().unwrap().with_clock(clock.clone());
-        vault
-            .create_with_params(PW, KdfParams::for_tests())
-            .unwrap();
-        (vault, clock)
-    }
-
-    fn host(name: &str, edit: impl FnOnce(&mut Host)) -> Item {
-        let mut host = Host {
-            name: name.into(),
-            address: format!("{name}.example.org"),
-            ..Host::default()
-        };
-        edit(&mut host);
-        Item::Host(host)
+        let (v, clock, _) = unlocked_vault_at(1_000_000, PW);
+        (v, clock)
     }
 
     fn group(name: &str, parent_id: Option<&str>) -> Item {
@@ -255,11 +233,7 @@ mod tests {
     }
 
     fn key(name: &str) -> Item {
-        Item::Key(SshKey {
-            name: name.into(),
-            private_key: Zeroizing::new("PRIVATE-KEY-BODY".into()),
-            ..SshKey::default()
-        })
+        key_item(name, "PRIVATE-KEY-BODY")
     }
 
     fn rows(vault: &Vault) -> BTreeMap<String, ItemRow> {
