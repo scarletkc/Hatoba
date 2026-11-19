@@ -54,9 +54,7 @@ pub async fn local_open(
     options: LocalOpenOptions,
     channel: Channel<TermFrame>,
 ) -> AppResult<String> {
-    if !state.vault().is_unlocked() {
-        return Err(AppError::locked());
-    }
+    drop(state.require_unlocked()?);
     let id = shell_id.clone();
     let shell = tokio::task::spawn_blocking(move || hatoba_local::shells::find(Some(&id)))
         .await
@@ -138,9 +136,7 @@ pub async fn local_write_bytes(
 
 fn write(state: &AppState, session_id: &str, data: Vec<u8>) -> AppResult<()> {
     // SEC-03: like SSH sessions, local shells take no input behind the lock screen.
-    if !state.vault().is_unlocked() {
-        return Err(AppError::locked());
-    }
+    drop(state.require_unlocked()?);
     state
         .local
         .get(session_id)?

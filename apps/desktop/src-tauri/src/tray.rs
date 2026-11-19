@@ -28,7 +28,7 @@ mod imp {
     use tauri_specta::Event;
 
     use crate::dto::{
-        CloseAction, ClosePromptEvent, ForwardKind, HostConnectionView, LocalPrefs, LockReason,
+        CloseAction, ClosePromptEvent, ForwardKind, HostConnectionView, LockReason,
         RemoteEditQuitEvent, RunningForwardView, TrayMenuInput, TrayUpdateEvent,
     };
     use crate::state::{AppState, MutexExt};
@@ -83,14 +83,9 @@ mod imp {
     /// Reads the pref, which is readable while locked. Runs at startup and whenever the prefs
     /// are saved.
     pub fn refresh_close_action(state: &AppState) {
-        let action = state
-            .vault()
-            .local_prefs()
+        let action = crate::prefs::device_prefs(&state.vault())
             .ok()
-            .flatten()
-            .map_or(CloseAction::Ask, |json| {
-                LocalPrefs::from_stored(&json).close_action
-            });
+            .map_or(CloseAction::Ask, |p| p.close_action);
         CLOSE_ACTION.store(action as u8, Ordering::Relaxed);
     }
 

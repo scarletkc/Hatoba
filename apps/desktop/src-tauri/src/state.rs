@@ -101,12 +101,19 @@ impl AppState {
         self.vault.lock_unpoisoned()
     }
 
-    /// Runs `f` with the vault, requiring it to be unlocked.
-    pub fn with_unlocked<R>(&self, f: impl FnOnce(&mut Vault) -> AppResult<R>) -> AppResult<R> {
-        let mut vault = self.vault();
+    /// Locks the vault mutex and checks that it is unlocked, returning [`AppError::locked`] if
+    /// locked.
+    pub fn require_unlocked(&self) -> AppResult<MutexGuard<'_, Vault>> {
+        let vault = self.vault();
         if !vault.is_unlocked() {
             return Err(AppError::locked());
         }
+        Ok(vault)
+    }
+
+    /// Runs `f` with the vault, requiring it to be unlocked.
+    pub fn with_unlocked<R>(&self, f: impl FnOnce(&mut Vault) -> AppResult<R>) -> AppResult<R> {
+        let mut vault = self.require_unlocked()?;
         f(&mut vault)
     }
 

@@ -92,9 +92,7 @@ pub async fn deploy_start(
     account_id: Option<String>,
 ) -> AppResult<DeployStart> {
     let api_token = Zeroizing::new(api_token);
-    if !state.vault().is_unlocked() {
-        return Err(AppError::locked());
-    }
+    drop(state.require_unlocked()?);
     let bundle = bundle()?;
     let deployment = Deployment::new(&api_token, Arc::clone(&bundle)).map_err(deploy_error)?;
     let info = deployment

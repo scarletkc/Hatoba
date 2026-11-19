@@ -10,6 +10,7 @@ mod convert;
 mod dashboard;
 mod deploy;
 mod dto;
+mod host_chain;
 mod import;
 mod launch;
 mod local;
@@ -17,6 +18,7 @@ mod lock;
 mod logging;
 mod notification;
 mod platform;
+mod prefs;
 mod remote_edit;
 mod ssh;
 mod ssh_agent;
@@ -352,11 +354,9 @@ pub fn run() {
             // SFTP-05: copies of edited files that a crash left behind go.
             app.state::<state::AppState>().edits.init(&data_dir);
             // TERM-13: the page opens at this device's zoom, before the window shows.
-            let prefs = app.state::<state::AppState>().vault().local_prefs();
-            let zoom = prefs
+            let zoom = prefs::device_prefs(&app.state::<state::AppState>().vault())
                 .ok()
-                .flatten()
-                .map_or(100, |j| dto::LocalPrefs::from_stored(&j).ui_zoom);
+                .map_or(100, |p| p.ui_zoom);
             if let Err(e) = platform::window::apply_zoom(&window, zoom) {
                 tracing::warn!("could not apply the interface zoom: {e}");
             }
@@ -397,8 +397,9 @@ pub fn run() {
                 };
                 let percent = || {
                     let state = app.state::<state::AppState>();
-                    let prefs = state.vault().local_prefs().ok().flatten();
-                    prefs.map_or(100, |j| dto::LocalPrefs::from_stored(&j).ui_zoom)
+                    prefs::device_prefs(&state.vault())
+                        .ok()
+                        .map_or(100, |p| p.ui_zoom)
                 };
                 if let Some(zoom) = platform::window::follow_screen(&webview, percent) {
                     let _ = tauri_specta::Event::emit(&zoom, app);
