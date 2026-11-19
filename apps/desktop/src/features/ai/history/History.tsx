@@ -27,9 +27,9 @@ import {
   renameConversation,
 } from "../actions/conversations";
 import { conversationBusy, openConversation } from "../actions/slots";
-import { MAX_TITLE_CHARS } from "../fork";
-import { sortConversations } from "../models";
-import { conversationPlace, placeName } from "../place";
+import { MAX_TITLE_CHARS } from "@/lib/ai/fork";
+import { sortConversations } from "@/lib/ai/models";
+import { conversationPlace, placeName } from "@/lib/ai/place";
 import { highlightParts, oneLine, SEARCH_DEBOUNCE_MS } from "./search";
 import { conversationActivity, useAi } from "../store";
 import s from "./History.module.css";

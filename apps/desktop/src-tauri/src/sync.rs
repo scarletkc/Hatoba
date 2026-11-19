@@ -27,7 +27,7 @@ use crate::dto::{
     SyncCounts, SyncKind, SyncState, SyncStatus, TooLargeItem, WorkerUpdate, WorkerUpdateKind,
 };
 use crate::error::{AppError, AppResult};
-use crate::state::{AppState, state};
+use crate::state::{AppState, MutexExt, state};
 
 const INTERVAL: Duration = Duration::from_secs(60);
 const DEBOUNCE: Duration = Duration::from_secs(2);
@@ -103,7 +103,7 @@ impl Default for SyncController {
 
 impl SyncController {
     fn inner(&self) -> std::sync::MutexGuard<'_, Inner> {
-        self.inner.lock().unwrap_or_else(|p| p.into_inner())
+        self.inner.lock_unpoisoned()
     }
 
     pub fn backend(&self) -> Option<Arc<dyn SyncBackend>> {

@@ -9,7 +9,7 @@ use tauri_specta::Event;
 
 use crate::dto::LaunchEvent;
 use crate::platform;
-use crate::state::now_ms;
+use crate::state::{MutexExt, now_ms};
 
 /// The uninstaller runs Hatoba with this to take the `hatoba` command off the `PATH`.
 const UNINSTALL_COMMAND: &str = "--uninstall-command";
@@ -30,7 +30,7 @@ impl LaunchQueue {
     }
 
     fn lock(&self) -> MutexGuard<'_, Vec<Vec<String>>> {
-        self.0.lock().unwrap_or_else(|p| p.into_inner())
+        self.0.lock_unpoisoned()
     }
 
     /// Queues a launch's arguments, given with the program first as `std::env::args` has it.

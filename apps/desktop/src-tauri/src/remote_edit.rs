@@ -12,7 +12,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 use hatoba_ssh::{RemoteStat, SftpClient};
@@ -25,7 +25,7 @@ use tokio::time::{Instant, MissedTickBehavior};
 use crate::commands::sftp::{client, run_transfer};
 use crate::dto::{RemoteEditEvent, RemoteEditState, RemoteEditView, TransferDirection};
 use crate::error::{AppError, AppResult, ErrorCode, SshErrorKind};
-use crate::state::state as app_state;
+use crate::state::{MutexExt, state as app_state};
 
 /// How often each copy is checked for saves.
 const POLL: Duration = Duration::from_millis(250);
@@ -85,13 +85,9 @@ enum Command {
     Unlock,
 }
 
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|p| p.into_inner())
-}
-
 impl Edit {
     fn view(&self) -> RemoteEditView {
-        lock(&self.view).clone()
+        self.view.lock_unpoisoned().clone()
     }
 }
 
@@ -104,13 +100,13 @@ impl RemoteEdits {
         {
             tracing::warn!("could not delete the copies of edited files: {e}");
         }
-        lock(&self.inner).root = Some(root);
+        self.inner.lock_unpoisoned().root = Some(root);
     }
 
     /// Deletes every copy as the app quits.
     pub fn shutdown(&self) {
         let root = {
-            let mut inner = lock(&self.inner);
+            let mut inner = self.inner.lock_unpoisoned();
             inner.edits.clear();
             inner.root.clone()
         };
@@ -120,7 +116,7 @@ impl RemoteEdits {
     }
 
     pub fn list(&self) -> Vec<RemoteEditView> {
-        let inner = lock(&self.inner);
+        let inner = self.inner.lock_unpoisoned();
         let mut views: Vec<_> = inner.edits.values().map(|e| e.view()).collect();
         views.sort_by(|a, b| a.edit_id.cmp(&b.edit_id));
         views
@@ -129,7 +125,7 @@ impl RemoteEdits {
     /// Records the session `tab_id` is connected with, or that it is not; saves that waited for
     /// the connection upload.
     pub fn set_session(&self, tab_id: &str, session_id: Option<String>) {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         match session_id {
             Some(id) => inner.sessions.insert(tab_id.to_owned(), id),
             None => inner.sessions.remove(tab_id),
@@ -141,31 +137,32 @@ impl RemoteEdits {
 
     /// The vault locked: editing pauses, so nothing uploads until the unlock.
     pub fn lock(&self) {
-        for edit in lock(&self.inner).edits.values() {
+        for edit in self.inner.lock_unpoisoned().edits.values() {
             let _ = edit.commands.send(Command::Lock);
         }
     }
 
     /// The vault unlocked: editing goes on, and copies with saves that did not upload ask first.
     pub fn unlock(&self) {
-        for edit in lock(&self.inner).edits.values() {
+        for edit in self.inner.lock_unpoisoned().edits.values() {
             let _ = edit.commands.send(Command::Unlock);
         }
     }
 
     /// Whether quitting waits for the user to answer for the edits first.
     pub fn holds_quit(&self) -> bool {
-        let inner = lock(&self.inner);
+        let inner = self.inner.lock_unpoisoned();
         !inner.quit && !inner.edits.is_empty()
     }
 
     /// The user answered for the edits: Hatoba quits, deleting the copies.
     pub fn allow_quit(&self) {
-        lock(&self.inner).quit = true;
+        self.inner.lock_unpoisoned().quit = true;
     }
 
     fn get(&self, edit_id: &str) -> AppResult<Arc<Edit>> {
-        lock(&self.inner)
+        self.inner
+            .lock_unpoisoned()
             .edits
             .get(edit_id)
             .cloned()
@@ -220,11 +217,12 @@ impl RemoteEdits {
     }
 
     fn session_of(&self, tab_id: &str) -> Option<String> {
-        lock(&self.inner).sessions.get(tab_id).cloned()
+        self.inner.lock_unpoisoned().sessions.get(tab_id).cloned()
     }
 
     fn find(&self, tab_id: &str, remote: &str) -> Option<Arc<Edit>> {
-        lock(&self.inner)
+        self.inner
+            .lock_unpoisoned()
             .edits
             .values()
             .find(|e| e.tab_id == tab_id && e.remote == remote)
@@ -232,14 +230,15 @@ impl RemoteEdits {
     }
 
     fn root(&self) -> AppResult<PathBuf> {
-        lock(&self.inner)
+        self.inner
+            .lock_unpoisoned()
             .root
             .clone()
             .ok_or_else(|| AppError::internal("the folder for edited files is not set"))
     }
 
     fn remove(&self, edit: &Edit) {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         inner.edits.remove(&edit.id);
         if !inner.edits.values().any(|e| e.tab_id == edit.tab_id) {
             inner.sessions.remove(&edit.tab_id);
@@ -342,7 +341,7 @@ pub async fn open(
         view: Mutex::new(view.clone()),
     });
     let opened = {
-        let mut inner = lock(&edits.inner);
+        let mut inner = edits.inner.lock_unpoisoned();
         // Ending the tab's other edits during the download forgot its session.
         inner
             .sessions
@@ -663,9 +662,9 @@ impl Worker {
     async fn upload(&mut self, overwrite: bool) -> (Flow, AppResult<()>) {
         // Nothing uploads behind the lock screen, also before the lock's command arrives: a save
         // made there asks after the unlock.
-        if !app_state(&self.app).vault().is_unlocked() {
+        if let Err(err) = app_state(&self.app).require_unlocked().map(drop) {
             self.locked = true;
-            return (Flow::Go, Err(AppError::locked()));
+            return (Flow::Go, Err(err));
         }
         let Some((session_id, sftp)) = self.client().await else {
             self.set(RemoteEditState::Pending, None);
@@ -797,7 +796,7 @@ impl Worker {
                         };
                         match replaced {
                             Ok(content) => {
-                                *lock(&got) = Some(digest(&content));
+                                *got.lock_unpoisoned() = Some(digest(&content));
                                 Ok(())
                             }
                             Err(e) => {
@@ -813,7 +812,8 @@ impl Worker {
             }),
         )
         .await?;
-        let synced = lock(&got)
+        let synced = got
+            .lock_unpoisoned()
             .take()
             .ok_or_else(|| AppError::internal("the discarded copy was not read"))?;
         self.synced = synced;
@@ -827,7 +827,7 @@ impl Worker {
     }
 
     fn view_name(&self) -> String {
-        lock(&self.edit.view).name.clone()
+        self.edit.view.lock_unpoisoned().name.clone()
     }
 
     fn set(&mut self, state: RemoteEditState, error: Option<String>) {
@@ -838,7 +838,7 @@ impl Worker {
 
     fn publish(&self) {
         let view = {
-            let mut view = lock(&self.edit.view);
+            let mut view = self.edit.view.lock_unpoisoned();
             view.state = self.state;
             view.error = self.error.clone();
             view.held = self.held;

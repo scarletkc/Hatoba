@@ -1,0 +1,7 @@
+---
+source: crates/hatoba-ai/tests/tools_snapshots.rs
+expression: "file_revert_block(\"/etc/nginx/nginx.conf\", \"toolu_01\", \"edit_file\", false)"
+---
+<file_revert path="/etc/nginx/nginx.conf" tool_call_id="toolu_01">
+The user reverted the change your edit_file call toolu_01 made to /etc/nginx/nginx.conf.
+</file_revert>

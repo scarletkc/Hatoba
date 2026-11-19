@@ -34,7 +34,7 @@ use tokio::time::Instant;
 
 use crate::error::SshError;
 use crate::local_sh::LocalSh;
-use crate::remote_file::last_line;
+use crate::script::last_line;
 use crate::server_os::ServerOs;
 use crate::session::{ExecOutput, ExecSlot, ExecWriter, MAX_EXEC_OUTPUT, SshSession};
 use crate::sudo::{self, RunAs};
@@ -278,6 +278,8 @@ fn check(command: &str, workdir: Option<&str>) -> Result<(), SshError> {
     if command.contains('\0') {
         return Err(SshError::other("the command has a NUL character"));
     }
+    // `SCRIPT` reads `workdir` with `IFS= read -r`, so `\r` stays allowed here (unlike
+    // `script::is_single_line`).
     if workdir.is_some_and(|d| d.contains(['\n', '\0'])) {
         return Err(SshError::other(
             "workdir has a line break or a NUL character",

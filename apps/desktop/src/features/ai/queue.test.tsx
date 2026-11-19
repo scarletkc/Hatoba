@@ -11,7 +11,7 @@ import type {
   AiTurnEndReason,
   AiTurnEvent,
 } from "@/ipc/types";
-import type { PasteAttachment } from "./attachments";
+import type { PasteAttachment } from "@/lib/ai/attachments";
 
 /** The calls the actions make, answered by each test. */
 const ipc = vi.hoisted(() => ({

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { messages } from "./locales";
+import { messages, tables } from "./locales";
 import {
   detectLocale,
   formatBytes,
@@ -35,6 +35,21 @@ describe("message tables", () => {
         .map(([k]) => k);
       expect(empty).toEqual([]);
     }
+  });
+
+  it("defines no key in more than one table", () => {
+    const seen = new Map<string, number>();
+    const duplicates: string[] = [];
+    for (const [i, table] of tables.entries()) {
+      for (const locale of ["zh-CN", "zh-TW", "en", "ja"] as const) {
+        for (const key of Object.keys(table[locale])) {
+          const prev = seen.get(key);
+          if (prev !== undefined && prev !== i) duplicates.push(`${locale}:${key} (${prev} & ${i})`);
+          seen.set(key, i);
+        }
+      }
+    }
+    expect(duplicates).toEqual([]);
   });
 });
 

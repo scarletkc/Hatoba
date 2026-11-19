@@ -8,6 +8,11 @@ repository.workspace = true
 rust-version.workspace = true
 publish = false
 
+[features]
+# Exposes `test_support` (`provider()`, `bodies()`, `sse()`, `stalling_server()`).
+# For tests only; never enable in a shipping build.
+test-util = ["dep:wiremock"]
+
 [dependencies]
 # `process`: MCP stdio servers run as child processes.
 tokio = { workspace = true, features = ["process"] }
@@ -52,6 +57,7 @@ regex-syntax = "0.8"
 # Skills (spec §13.8): SKILL.md frontmatter and .zip import / export.
 serde_yaml_ng = "0.10"
 zip = { version = "9.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+wiremock = { version = "0.6", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 # CREATE_NO_WINDOW for MCP stdio servers, in the type process-wrap's `CreationFlags` takes.
@@ -61,3 +67,4 @@ windows = { version = "0.62", features = ["Win32_System_Threading"] }
 tokio = { workspace = true, features = ["test-util"] }
 wiremock = "0.6"
 tempfile = "3"
+insta = { version = "1", features = ["json"] }

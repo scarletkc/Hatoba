@@ -6,9 +6,9 @@ use std::time::Duration;
 use tauri::AppHandle;
 use tauri_specta::Event;
 
-use crate::dto::{LocalPrefs, LockReason, VaultLockedEvent};
+use crate::dto::{LockReason, VaultLockedEvent};
 use crate::state::{AppState, state};
-use crate::sync;
+use crate::{prefs, sync};
 
 /// The device's lock settings (SEC-02/03), copied out of the device-local prefs so that each
 /// decision reads them without the vault's mutex.
@@ -22,10 +22,7 @@ pub struct LockPolicy {
 /// Reads the policy from the prefs, which are readable while locked. Runs after unlock and
 /// whenever the prefs are saved.
 pub fn refresh_policy(state: &AppState) {
-    let stored = state.vault().local_prefs().ok().flatten();
-    let prefs = stored
-        .map(|json| LocalPrefs::from_stored(&json))
-        .unwrap_or_default();
+    let prefs = prefs::read(&state.vault()).ok().unwrap_or_default();
     let policy = &state.lock_policy;
     policy
         .auto_lock_minutes
@@ -101,7 +98,7 @@ pub async fn lock_vault(app: &AppHandle, reason: LockReason) {
     // HOST-14: the dashboard reads nothing behind the lock screen, and its connections close.
     // The hashes of credentials it compares start over, so none outlives the unlocked vault.
     state.dashboard.stop_all();
-    crate::dashboard::forget_secret_hashes();
+    crate::host_chain::forget_secret_hashes();
     // HOST-15: what other programs run through the `hatoba` command stops, and its connections
     // close.
     state.cli.lock(app);

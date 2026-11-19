@@ -11,7 +11,7 @@ vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, remo
 const { MessageList } = await import("./Messages");
 const { blankSlot } = await import("../store");
 const { newTurn } = await import("../turn");
-const { noteBlock } = await import("../attachments");
+const { noteBlock } = await import("@/lib/ai/attachments");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

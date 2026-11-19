@@ -1,0 +1,7 @@
+---
+source: crates/hatoba-ai/tests/tools_snapshots.rs
+expression: "host_change_block(\"staging-web\", \"prod-db\")"
+---
+<host_change from="staging-web" to="prod-db">
+The conversation moved to another host. Screens and command output before this message came from "staging-web".
+</host_change>

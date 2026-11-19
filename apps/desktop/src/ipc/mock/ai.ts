@@ -8,11 +8,11 @@ import {
   screenStateNote,
   splitPermissionNote,
   type Note,
-} from "@/features/ai/attachments";
-import { effectiveEffort, modelEfforts } from "@/features/ai/effort";
-import { forkCopies } from "@/features/ai/fork";
-import { localName, movedFrom, moves, recordedTarget } from "@/features/ai/place";
-import { shownCall } from "@/features/ai/tools";
+} from "@/lib/ai/attachments";
+import { effectiveEffort, modelEfforts } from "@/lib/ai/effort";
+import { forkCopies } from "@/lib/ai/fork";
+import { shownCall } from "@/lib/ai/mcpCall";
+import { localName, movedFrom, moves, recordedTarget } from "@/lib/ai/place";
 import { formatTarget, parseQuickConnect, sameTarget } from "@/session/quickConnect";
 import { appError, type HatobaApi } from "../api";
 import type {

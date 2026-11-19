@@ -42,6 +42,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use hatoba_ai::chat::{ChatRequest, ToolDef};
 use hatoba_ai::entry::{AiEntry, AssistantEntry, AutoVerdict, Finish, ToolCall, ToolStatus};
+use hatoba_ai::mcp::MCP_PREFIX;
 use hatoba_ai::provider::{Effort, ModelSpec, ProviderConfig};
 use hatoba_core::Vault;
 use hatoba_core::sync::SharedVault;
@@ -63,9 +64,6 @@ pub use request::{
 };
 pub use skills::{skill_commands, skill_text};
 pub use view::{conversation_view, conversation_view_at, error_kind};
-
-/// What every MCP tool name starts with (AI-30).
-const MCP_PREFIX: &str = "mcp__";
 
 /// The most characters a conversation's title holds (AI-23): a rename longer is refused and a
 /// fork's title is cut to it.

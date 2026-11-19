@@ -1,51 +1,49 @@
+import { byteCount, HOST_NOTES_MAX_BYTES } from "@/lib/ai/instructions";
 import { hostPort, reachableAddress } from "@/lib/address";
+import { ENV_MAX_VARS, envRows, envTooLarge, validateEnvRows } from "@/lib/envVars";
+import { defaultRightClick, defaultTerminalFont } from "@/lib/platform";
+import { ZOOM_STEPS, zoomStep } from "@/lib/zoom";
 import { formatTarget, sameTarget } from "@/session/quickConnect";
 import { withCommand } from "@/session/suggest";
 import { appError, type FrameHandler, type HatobaApi, type Unlisten } from "../api";
 import type {
-  ConnectionsEvent,
   AppError,
+  ConnectionsEvent,
   EventMap,
   FileEntry,
   ForwardView,
   GroupView,
   HostView,
-  KeyView,
-  LocalPrefs,
-  ProxyView,
   QuickTarget,
   RunningForwardView,
   SshErrorKind,
   StarPrompt,
-  SyncStatus,
-  TelnetHostView,
-  VaultStatus,
 } from "../types";
-import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
-import { ENV_MAX_VARS, envRows, envTooLarge, validateEnvRows } from "@/features/hosts/envVars";
-import { defaultRightClick, defaultTerminalFont } from "@/lib/platform";
-import { ZOOM_STEPS, zoomStep } from "@/lib/zoom";
 import { FRAME_CLOSED, FRAME_DATA, FRAME_SESSION } from "../types";
 import { createAiMock } from "./ai";
 import { createAiExtensionsMock } from "./aiExtensions";
 import { createAiMemoryMock } from "./aiMemory";
 import { createAiSettingsMock } from "./aiSettings";
 import { createDashboardMock } from "./dashboard";
-import { createEditsMock } from "./edits";
 import * as D from "./data";
 import { mockStats } from "./data";
+import { createEditsMock } from "./edits";
+import { createKeysProxiesMock } from "./keysProxies";
+import { mockLocalShells } from "./local";
 import { applyPatch } from "./patch";
 import { readStoredPrefs } from "./prefs";
+import { delay, fail, frame, type MockDeps, type MockState } from "./shared";
 import { FakeShell } from "./shell";
-import { FakeTelnet } from "./telnet";
-import { mockLocalShells } from "./local";
+import { createSyncMock } from "./sync";
+import { createTelnetMock } from "./telnet";
+import { createVaultMock } from "./vault";
 import { passedLocale, VISITOR, VISITOR_HOST, visitorPlatform } from "./visitor";
 import { version as appVersion } from "../../../package.json";
 
-/** `?ssh=<kind>`: every connection fails with this SSH error kind and a detail like the real one. */
 /** The room between neighbouring places in the custom order, as `PLACE_STEP` in Rust (HOST-16). */
 const PLACE_STEP = 1 << 16;
 
+/** `?ssh=<kind>`: every connection fails with this SSH error kind and a detail like the real one. */
 const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: number) => string>> &
   Record<"timeout", (address: string, port: number) => string> = {
   timeout: (a, p) => `connect to ${a}:${p}: operation timed out`,
@@ -125,32 +123,30 @@ export function createMockApi(): HatobaApi {
   const workerDemo = q.get("worker");
   let closeDemo = q.get("close") === "prompt";
   const version = VISITOR ? appVersion : "0.1.0-dev";
-  /** The Worker version this build "bundles". */
-  const BUNDLED_WORKER = "0.2.0";
 
-  let hosts: HostView[] = demo === "empty" ? [] : D.HOSTS.map((h) => ({ ...h }));
-  let telnetHosts: TelnetHostView[] = demo === "empty" || VISITOR ? [] : D.TELNET_HOSTS.map((h) => ({ ...h }));
-  let groups: GroupView[] = demo === "empty" ? [] : D.GROUPS.map((g) => ({ ...g }));
-  let keys: KeyView[] = demo === "empty" ? [] : D.KEYS.map((k) => ({ ...k }));
-  let proxies: ProxyView[] = demo === "empty" ? [] : D.PROXIES.map((p) => ({ ...p }));
+  const state: MockState = {
+    hosts: demo === "empty" ? [] : D.HOSTS.map((h) => ({ ...h })),
+    telnetHosts: demo === "empty" || VISITOR ? [] : D.TELNET_HOSTS.map((h) => ({ ...h })),
+    groups: demo === "empty" ? [] : D.GROUPS.map((g) => ({ ...g })),
+    keys: demo === "empty" ? [] : D.KEYS.map((k) => ({ ...k })),
+    proxies: demo === "empty" ? [] : D.PROXIES.map((p) => ({ ...p })),
+    // The demo keeps prefs only until the page reloads, so a reload starts it over.
+    prefs: VISITOR
+      ? { ...D.PREFS, ai_panel_open: true }
+      : readStoredPrefs(() => localStorage.getItem("hatoba.mock.prefs")),
+  };
   let settings = structuredClone(D.SETTINGS);
   settings.terminal.font_family = defaultTerminalFont(platform);
   settings.terminal.right_click = defaultRightClick(platform);
-  // The demo keeps prefs only until the page reloads, so a reload starts it over.
-  let prefs: LocalPrefs = VISITOR
-    ? { ...D.PREFS, ai_panel_open: true }
-    : readStoredPrefs(() => localStorage.getItem("hatoba.mock.prefs"));
   const lang = passedLocale();
-  if (lang) prefs = { ...prefs, language: lang };
+  if (lang) state.prefs = { ...state.prefs, language: lang };
   const storePrefs = () => {
-    if (!VISITOR) localStorage.setItem("hatoba.mock.prefs", JSON.stringify(prefs));
+    if (!VISITOR) localStorage.setItem("hatoba.mock.prefs", JSON.stringify(state.prefs));
   };
   const starPrompt: StarPrompt = {
     first_seen_at: q.get("star") === "due" ? Date.now() - 2 * 86_400_000 : Date.now(),
     done: false,
   };
-  let conflicts = syncDemo === "conflict" ? [...D.CONFLICTS] : [];
-  let devices = [...D.DEVICES];
   let forwards: ForwardView[] = demo === "empty" ? [] : D.FORWARDS.map((f) => ({ ...f }));
   let recentTargets: QuickTarget[] = demo === "empty" ? [] : D.RECENT_TARGETS.map((r) => ({ ...r }));
   // TERM-15: each host's and local shell's commands, newest first; the demo starts every one with a few.
@@ -208,7 +204,7 @@ export function createMockApi(): HatobaApi {
   const openConnection = (hostId: string, name: string): MockConnection => {
     const c: MockConnection = { name, tabs: new Set(), forwards: new Map(), failed: new Map() };
     connections.set(hostId, c);
-    hosts = hosts.map((x) => (x.id === hostId ? { ...x, last_connected_at: Date.now() } : x));
+    state.hosts = state.hosts.map((x) => (x.id === hostId ? { ...x, last_connected_at: Date.now() } : x));
     for (const f of forwards.filter((x) => x.host_id === hostId && x.auto_start)) {
       if (busyDemo) {
         c.failed.set(
@@ -262,35 +258,9 @@ export function createMockApi(): HatobaApi {
     closeIfUnused(hostId);
     connectionsChanged();
   };
-  let vaultState: VaultStatus["state"] =
-    demo === "onboarding" ? "uninitialized" : demo === "locked" ? "locked" : "unlocked";
-  let biometric = q.get("hello") !== "off";
-  const biometricRefusal = q.get("biometric");
-  const pinDemo = q.get("pin");
-  const pinState = {
-    pin: pinDemo === "on" || pinDemo === "persist" ? "1234" : (null as string | null),
-    persist: pinDemo === "persist",
-    armed: true,
-    failures: 0,
-  };
-  /** Any full unlock arms the PIN again and resets its failures. */
-  const armPin = () => {
-    pinState.armed = pinState.pin !== null;
-    pinState.failures = 0;
-  };
-  let failed = 0;
-  let retryAt: number | null = null;
-  let sync: SyncStatus = makeSync();
-  let deployment: { handle: string; failed: boolean; waited: boolean; url: string | null; upgrade: boolean } | null =
-    null;
   const listeners = new Map<string, Set<(p: unknown) => void>>();
   const shells = new Map<string, FakeShell>();
-  const telnets = new Map<string, FakeTelnet>();
   const { unlock: unlockEdits, ...edits } = createEditsMock(emit, startTransfer, q.get("edit"));
-  const dashboard = createDashboardMock({
-    host: (hid) => hosts.find((h) => h.id === hid),
-    unlocked: () => vaultState === "unlocked",
-  });
   /** TERM-12: the mock resource usage of each session that shows it, by the id of its start. */
   const statsTimers = new Map<string, { id: number; timer: ReturnType<typeof setInterval> }>();
   let lastStatsId = 0;
@@ -314,140 +284,22 @@ export function createMockApi(): HatobaApi {
     access: cliAccess,
   });
 
-  function makeSync(): SyncStatus {
-    const s = D.syncStatus();
-    if (demo === "empty" || syncDemo === "none")
-      return { ...s, kind: "none", state: "off", endpoint: null, database: null, last_synced_at: null, counts: null };
-    if (syncDemo === "syncing") return { ...s, state: "syncing", pending: 3 };
-    if (syncDemo === "offline") return { ...s, state: "offline", pending: 3 };
-    if (syncDemo === "auth") return { ...s, state: "auth_failed" };
-    if (syncDemo === "conflict") return { ...s, conflicts: D.CONFLICTS.length };
-    if (syncDemo === "too_large") {
-      const host = D.HOSTS[0];
-      return {
-        ...s,
-        pending: 2,
-        too_large: [
-          { item_id: host.id, item_type: "host", item_name: host.name },
-          { item_id: "settings", item_type: "settings", item_name: "settings" },
-        ],
-      };
-    }
-    if (workerDemo === "available")
-      return { ...s, worker_update: { kind: "available", version: "0.1.0", bundled: BUNDLED_WORKER } };
-    if (workerDemo === "required" || workerDemo === "custom")
-      return {
-        ...s,
-        state: "paused",
-        pending: 3,
-        endpoint: workerDemo === "custom" ? "sync.example.com" : s.endpoint,
-        worker_update: {
-          kind: "required",
-          version: "0.0.9",
-          bundled: deployDemo === "nobundle" ? null : BUNDLED_WORKER,
-        },
-      };
-    if (workerDemo === "app")
-      return {
-        ...s,
-        state: "paused",
-        pending: 3,
-        worker_update: { kind: "app_required", version: "1.0.0", bundled: BUNDLED_WORKER },
-      };
-    return s;
-  }
-
   function emit<K extends keyof EventMap>(event: K, payload: EventMap[K]) {
     listeners.get(event)?.forEach((h) => h(payload));
   }
 
-  function fail(code: AppError["code"], detail: string = code, extra: Partial<AppError> = {}): never {
-    throw appError(code, detail, extra);
-  }
-
-  /** TELNET-02 in the mock: a fake switch console; a host refused by the probe refuses the connection too. */
-  async function openTelnet(host: TelnetHostView, hostId: string | null, onFrame: FrameHandler): Promise<string> {
-    needUnlocked();
-    await delay(300);
-    // The vault may have locked while connecting.
-    needUnlocked();
-    if (hostId && D.PROBE[hostId] === false)
-      fail("ssh", `connect to ${host.address}:${host.port}: connection refused`, { ssh_kind: "refused" });
-    const sid = id("t");
-    const fake = new FakeTelnet(host, (bytes) => onFrame(frame(FRAME_DATA, bytes)));
-    telnets.set(sid, fake);
-    if (hostId) telnetHosts = telnetHosts.map((h) => (h.id === hostId ? { ...h, last_connected_at: Date.now() } : h));
-    setTimeout(() => {
-      emit("ssh://state", {
-        session_id: sid,
-        host_id: hostId,
-        state: "connected",
-        latency_ms: null,
-        error: null,
-        exit_status: null,
-      });
-      fake.start();
-    }, 0);
-    fake.onExit = () => {
-      onFrame(frame(FRAME_CLOSED, new Uint8Array()));
-      emit("ssh://state", {
-        session_id: sid,
-        host_id: hostId,
-        state: "disconnected",
-        latency_ms: null,
-        error: null,
-        exit_status: null,
-      });
-      telnets.delete(sid);
-    };
-    return sid;
-  }
-
-  function needUnlocked() {
-    if (vaultState !== "unlocked") fail("locked");
-  }
-
-  function needDeployment(handle: string) {
-    if (deployment?.handle !== handle) fail("cancelled", "the deployment has ended");
-    return deployment;
-  }
-
-  const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const id = (p: string) => `${p}-${Date.now().toString(36)}-${(++seq).toString(36)}`;
-
-  function proxyViews(): ProxyView[] {
-    return proxies
-      .map((p) => ({
-        ...p,
-        host_ids: [...hosts, ...telnetHosts]
-          .filter((h) => h.proxy_mode === "proxy" && h.proxy_id === p.id)
-          .map((h) => h.id),
-      }))
-      .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-  }
-
-  function keyViews(): KeyView[] {
-    return keys.map((k) => ({
-      ...k,
-      used_by: hosts.filter((h) => h.auth_kind === "key" && h.key_id === k.id).map((h) => h.id),
-    }));
-  }
-
-  function setSync(patch: Partial<SyncStatus>) {
-    sync = { ...sync, ...patch };
-    emit("sync://status", sync);
-  }
 
   /** Numbers the hosts and Telnet hosts in `order` again, in that order (HOST-16). */
   function arrangeHosts(order: string[]) {
     const place = new Map(order.map((hid, i) => [hid, (i + 1) * PLACE_STEP]));
-    hosts = hosts.map((h) => (place.has(h.id) ? { ...h, sort: place.get(h.id)! } : h));
-    telnetHosts = telnetHosts.map((h) => (place.has(h.id) ? { ...h, sort: place.get(h.id)! } : h));
+    state.hosts = state.hosts.map((h) => (place.has(h.id) ? { ...h, sort: place.get(h.id)! } : h));
+    state.telnetHosts = state.telnetHosts.map((h) => (place.has(h.id) ? { ...h, sort: place.get(h.id)! } : h));
   }
 
   /** The place of a host being added, as `Vault::place_new_host` gives it: after `after`, or else last. */
   function placeNewHost(after?: string): number {
-    const all = [...hosts, ...telnetHosts];
+    const all = [...state.hosts, ...state.telnetHosts];
     if (after && all.find((h) => h.id === after)?.sort === 0) return 0;
     const placed = all.filter((h) => h.sort > 0).sort((a, b) => a.sort - b.sort);
     if (placed.length === 0) return 0;
@@ -458,21 +310,41 @@ export function createMockApi(): HatobaApi {
     return placeNewHost(after);
   }
 
-  function touch() {
-    if (sync.kind === "none") return;
-    if (sync.state === "paused") return setSync({ pending: sync.pending + 1 });
-    setSync({ state: "syncing", pending: sync.pending + 1 });
-    setTimeout(() => setSync({ state: "idle", pending: 0, last_synced_at: Date.now(), too_large: [] }), 900);
-  }
+  const {
+    kind: syncKind,
+    touch,
+    resetOff,
+    resetRestored,
+    ...syncApi
+  } = createSyncMock({
+    state,
+    emit,
+    id,
+    demo,
+    syncDemo,
+    deployDemo,
+    workerDemo,
+  });
+  let dashboardStopAll = () => {};
+  const { unlocked, needUnlocked, ...vaultApi } = createVaultMock({
+    state,
+    q,
+    demo,
+    syncKind,
+    resetSyncOff: resetOff,
+    resetSyncRestored: resetRestored,
+    onUnlock: unlockEdits,
+    onLock: () => dashboardStopAll(),
+  });
+  const dashboard = createDashboardMock({
+    host: (hid) => state.hosts.find((h) => h.id === hid),
+    unlocked,
+  });
+  dashboardStopAll = dashboard.stopAll;
 
-  /** The Worker answers with the bundled version: the notice goes, and a paused sync pushes what waited. */
-  function upgraded() {
-    const paused = sync.state === "paused";
-    setSync({ worker_update: null, state: paused ? "syncing" : sync.state });
-    if (paused) setTimeout(() => setSync({ state: "idle", pending: 0, last_synced_at: Date.now() }), 900);
-  }
-
-  const recovery = "K7QF-2M9X-PL4D-8WRT-H3ZN-6VBE-Q1MA-7TCY";
+  const deps: MockDeps = { state, emit, needUnlocked, id, touch, placeNewHost, storePrefs };
+  const keysProxiesApi = createKeysProxiesMock(deps);
+  const telnetApi = createTelnetMock(deps);
 
   const aiSettings = createAiSettingsMock();
   const aiExtensions = createAiExtensionsMock((event, payload) => emit(event, payload), {
@@ -489,7 +361,7 @@ export function createMockApi(): HatobaApi {
     ...createAiMock({
       providers: aiSettings.ai_providers_list,
       settings: aiSettings.ai_settings_get,
-      hosts: async () => hosts,
+      hosts: async () => state.hosts,
       sessionServer: (sid) => {
         const shell = shells.get(sid);
         return shell?.host ? formatTarget(shell.host) : shell ? "local" : null;
@@ -502,6 +374,10 @@ export function createMockApi(): HatobaApi {
       },
       memory: memory_tool,
     }),
+    ...vaultApi,
+    ...syncApi,
+    ...keysProxiesApi,
+    ...telnetApi,
     app_info: async () => ({
       version,
       platform,
@@ -550,134 +426,14 @@ export function createMockApi(): HatobaApi {
       // The real app closes here, and the installer starts the new version.
       return new Promise<void>(() => {});
     },
-
-    vault_status: async () => ({
-      state: vaultState,
-      failed_attempts: failed,
-      retry_at: retryAt,
-      sync_kind: sync.kind,
-      biometric_available: true,
-      biometric_enabled: biometric,
-      pin_enabled: pinState.pin !== null,
-      pin_persist: pinState.persist,
-      pin_unlock: pinState.pin !== null && pinState.armed,
-    }),
-    vault_create: async (password) => {
-      await delay(600);
-      if (password.length < 8) fail("invalid_input", "password too short", { field: "password" });
-      vaultState = "unlocked";
-      hosts = [];
-      telnetHosts = [];
-      groups = [];
-      keys = [];
-      sync = {
-        ...sync,
-        kind: "none",
-        state: "off",
-        endpoint: null,
-        database: null,
-        last_synced_at: null,
-        counts: null,
-      };
-      return recovery;
-    },
-    vault_unlock: async (password) => {
-      if (retryAt && Date.now() < retryAt) fail("throttled", "throttled", { retry_at: retryAt });
-      await delay(450);
-      if (password !== "hatoba" && password.length < 4) {
-        failed++;
-        if (failed >= 3) retryAt = Date.now() + 2 ** (failed - 3) * 1000;
-        fail("wrong_password");
-      }
-      failed = 0;
-      retryAt = null;
-      armPin();
-      vaultState = "unlocked";
-      unlockEdits();
-    },
-    vault_unlock_biometric: async () => {
-      await delay(700);
-      if (biometricRefusal === "unavailable") fail("biometric_unavailable", "Touch ID unavailable");
-      if (biometricRefusal === "stale") {
-        // The backend removes an enrolment that no longer opens.
-        biometric = false;
-        fail("biometric_stale", "Touch ID key invalidated (fingerprints changed)");
-      }
-      if (biometricRefusal === "cancelled") fail("cancelled");
-      armPin();
-      vaultState = "unlocked";
-    },
-    vault_unlock_pin: async (pin) => {
-      if (pinState.pin === null || !pinState.armed) fail("pin_unavailable");
-      await delay(450);
-      if (pin !== pinState.pin) {
-        pinState.failures++;
-        const attempts_left = Math.max(0, 5 - pinState.failures);
-        if (attempts_left === 0) pinState.armed = false;
-        fail("wrong_pin", "wrong PIN", { attempts_left });
-      }
-      armPin();
-      vaultState = "unlocked";
-    },
-    vault_lock: async () => {
-      vaultState = "locked";
-      dashboard.stopAll();
-    },
-    vault_verify_password: async (password) => password.length >= 4,
-    vault_change_password: async (current) => {
-      await delay(500);
-      if (current.length < 4) fail("wrong_password");
-    },
-    vault_recover: async (code) => {
-      await delay(500);
-      if (code.replace(/[-\s]/g, "").length !== 32) fail("wrong_recovery_code");
-      armPin();
-      vaultState = "unlocked";
-    },
-    vault_restore_from_cloud: async (_config, password) => {
-      await delay(1200);
-      if (password.length < 4) fail("wrong_password");
-      hosts = D.HOSTS.map((h) => ({ ...h }));
-      groups = D.GROUPS.map((g) => ({ ...g }));
-      keys = D.KEYS.map((k) => ({ ...k }));
-      sync = D.syncStatus();
-      vaultState = "unlocked";
-    },
-    vault_export_backup: async () => {
-      await delay(300);
-    },
-    vault_rotate_recovery: async (password) => {
-      if (password.length < 4) fail("wrong_password");
-      return "M2QX-9KPL-D4WR-T8ZN-H36V-BEQ1-MA7T-CYK7";
-    },
-    biometric_enable: async (password) => {
-      await delay(300);
-      if (password.length < 4) fail("wrong_password");
-      biometric = true;
-    },
-    biometric_disable: async () => {
-      biometric = false;
-    },
-    pin_enable: async (password, pin) => {
-      if (pin.length < 4) fail("invalid_input", "the PIN must have at least 4 characters", { field: "pin" });
-      await delay(400);
-      if (password.length < 4) fail("wrong_password");
-      Object.assign(pinState, { pin, persist: false, armed: true, failures: 0 });
-    },
-    pin_disable: async () => {
-      Object.assign(pinState, { pin: null, persist: false, armed: false, failures: 0 });
-    },
-    pin_set_persist: async (persist) => {
-      pinState.persist = persist;
-    },
     activity_ping: async () => {},
 
     hosts_list: async () => {
       needUnlocked();
-      return hosts.map((h) => ({ ...h }));
+      return state.hosts.map((h) => ({ ...h }));
     },
     host_get: async (hid) => {
-      const h = hosts.find((x) => x.id === hid);
+      const h = state.hosts.find((x) => x.id === hid);
       if (!h) fail("not_found");
       return { ...h };
     },
@@ -686,7 +442,7 @@ export function createMockApi(): HatobaApi {
       if (!input.address.trim()) fail("invalid_input", "address is required", { field: "address" });
       if (byteCount(input.ai_notes) > HOST_NOTES_MAX_BYTES)
         fail("invalid_input", "AI notes are limited to 16 KB", { field: "ai_notes" });
-      if (input.proxy_mode === "proxy" && !proxies.some((p) => p.id === input.proxy_id))
+      if (input.proxy_mode === "proxy" && !state.proxies.some((p) => p.id === input.proxy_id))
         fail("invalid_input", "proxy not found", { field: "proxy_id" });
       const env = input.env.map((v) => ({ name: v.name.trim(), value: v.value }));
       if (
@@ -696,7 +452,7 @@ export function createMockApi(): HatobaApi {
         env.some((v) => !v.name)
       )
         fail("invalid_input", "invalid environment variables", { field: "env" });
-      const existing = input.id ? hosts.find((h) => h.id === input.id) : undefined;
+      const existing = input.id ? state.hosts.find((h) => h.id === input.id) : undefined;
       const view: HostView = {
         id: existing?.id ?? id("h"),
         name: input.name.trim() || Array.from(input.address.trim()).slice(0, 128).join(""),
@@ -724,12 +480,14 @@ export function createMockApi(): HatobaApi {
         show_stats: existing?.show_stats ?? false,
         dashboard: existing?.dashboard ?? true,
       };
-      hosts = existing ? hosts.map((h) => (h.id === view.id ? view : h)) : [...hosts, view];
+      state.hosts = existing ? state.hosts.map((h) => (h.id === view.id ? view : h)) : [...state.hosts, view];
       touch();
       return view;
     },
     host_delete: async (hid) => {
-      hosts = hosts.filter((h) => h.id !== hid).map((h) => (h.jump_host_id === hid ? { ...h, jump_host_id: null } : h));
+      state.hosts = state.hosts
+        .filter((h) => h.id !== hid)
+        .map((h) => (h.jump_host_id === hid ? { ...h, jump_host_id: null } : h));
       // Its forwards go with it, and stop where they run; its tabs stay connected.
       forwards = forwards.filter((f) => f.host_id !== hid);
       const c = connections.get(hid);
@@ -742,7 +500,7 @@ export function createMockApi(): HatobaApi {
       touch();
     },
     host_duplicate: async (hid) => {
-      const h = hosts.find((x) => x.id === hid);
+      const h = state.hosts.find((x) => x.id === hid);
       if (!h) fail("not_found");
       const copy = {
         ...h,
@@ -754,54 +512,58 @@ export function createMockApi(): HatobaApi {
         os: null,
         show_stats: false,
       };
-      hosts = [...hosts, copy];
+      state.hosts = [...state.hosts, copy];
       touch();
       return copy;
     },
     hosts_arrange: async (order) => {
       needUnlocked();
-      arrangeHosts(order.filter((hid) => hosts.some((h) => h.id === hid) || telnetHosts.some((h) => h.id === hid)));
+      arrangeHosts(
+        order.filter((hid) => state.hosts.some((h) => h.id === hid) || state.telnetHosts.some((h) => h.id === hid)),
+      );
       touch();
     },
     host_set_favorite: async (hid, favorite) => {
-      hosts = hosts.map((h) => (h.id === hid ? { ...h, favorite } : h));
+      state.hosts = state.hosts.map((h) => (h.id === hid ? { ...h, favorite } : h));
       touch();
     },
     host_set_show_stats: async (hid, on) => {
       needUnlocked();
-      hosts = hosts.map((h) => (h.id === hid ? { ...h, show_stats: on } : h));
+      state.hosts = state.hosts.map((h) => (h.id === hid ? { ...h, show_stats: on } : h));
     },
     dashboard_set_shown: async (itemId, shown) => {
       needUnlocked();
-      if (!hosts.some((h) => h.id === itemId) && !groups.some((g) => g.id === itemId))
+      if (!state.hosts.some((h) => h.id === itemId) && !state.groups.some((g) => g.id === itemId))
         fail("not_found", "host or group");
-      hosts = hosts.map((h) => (h.id === itemId ? { ...h, dashboard: shown } : h));
-      groups = groups.map((g) => (g.id === itemId ? { ...g, dashboard: shown } : g));
+      state.hosts = state.hosts.map((h) => (h.id === itemId ? { ...h, dashboard: shown } : h));
+      state.groups = state.groups.map((g) => (g.id === itemId ? { ...g, dashboard: shown } : g));
     },
     ...dashboard,
     host_copy_password: async () => {},
-    groups_list: async () => groups.map((g) => ({ ...g })),
+    groups_list: async () => state.groups.map((g) => ({ ...g })),
     group_save: async (input) => {
       const g: GroupView = {
         id: input.id ?? id("g"),
         name: input.name,
         parent_id: input.parent_id,
         sort: input.sort,
-        dashboard: groups.find((x) => x.id === input.id)?.dashboard ?? true,
+        dashboard: state.groups.find((x) => x.id === input.id)?.dashboard ?? true,
       };
-      groups = input.id ? groups.map((x) => (x.id === g.id ? g : x)) : [...groups, g];
+      state.groups = input.id ? state.groups.map((x) => (x.id === g.id ? g : x)) : [...state.groups, g];
       touch();
       return g;
     },
     group_delete: async (gid) => {
-      groups = groups.filter((g) => g.id !== gid);
-      hosts = hosts.map((h) => (h.group_id === gid ? { ...h, group_id: null } : h));
-      telnetHosts = telnetHosts.map((h) => (h.group_id === gid ? { ...h, group_id: null } : h));
+      state.groups = state.groups.filter((g) => g.id !== gid);
+      state.hosts = state.hosts.map((h) => (h.group_id === gid ? { ...h, group_id: null } : h));
+      state.telnetHosts = state.telnetHosts.map((h) => (h.group_id === gid ? { ...h, group_id: null } : h));
       touch();
     },
     tags_list: async () => {
       const counts = new Map<string, number>();
-      [...hosts, ...telnetHosts].forEach((h) => h.tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1)));
+      [...state.hosts, ...state.telnetHosts].forEach((h) =>
+        h.tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1)),
+      );
       return [...counts.entries()]
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .map(([name, count]) => ({ name, count }));
@@ -817,7 +579,7 @@ export function createMockApi(): HatobaApi {
       await delay(200);
       const candidates = D.importCandidates(source).map((c) => ({
         ...c,
-        exists: hosts.some((h) => h.name.toLowerCase() === c.name.toLowerCase()),
+        exists: state.hosts.some((h) => h.name.toLowerCase() === c.name.toLowerCase()),
       }));
       return { location: path ?? D.importLocation(source, platform), encrypted: false, candidates };
     },
@@ -828,18 +590,18 @@ export function createMockApi(): HatobaApi {
         // A folder becomes a group named after its path.
         let groupId: string | null = null;
         if (c.folder) {
-          const found = groups.find((g) => !g.parent_id && g.name.toLowerCase() === c.folder?.toLowerCase());
+          const found = state.groups.find((g) => !g.parent_id && g.name.toLowerCase() === c.folder?.toLowerCase());
           const g: GroupView = found ?? {
             id: id("g"),
             name: c.folder,
             parent_id: null,
-            sort: groups.length,
+            sort: state.groups.length,
             dashboard: true,
           };
-          if (!found) groups.push(g);
+          if (!found) state.groups.push(g);
           groupId = g.id;
         }
-        hosts.push({
+        state.hosts.push({
           ...D.HOSTS[0],
           id: id("h"),
           name: c.name,
@@ -865,118 +627,12 @@ export function createMockApi(): HatobaApi {
       return { hosts_created: chosen.length, keys_imported: keyFiles.length, warnings };
     },
 
-    proxies_list: async () => {
-      needUnlocked();
-      return proxyViews();
-    },
-    proxy_save: async (input) => {
-      needUnlocked();
-      if (!input.name.trim()) fail("invalid_input", "name is required", { field: "name" });
-      const address = input.address.trim().replace(/^\[(.*)\]$/, "$1");
-      if (!address) fail("invalid_input", "address is required", { field: "address" });
-      if (/\s/.test(address)) fail("invalid_input", "address is not a valid host name or IP", { field: "address" });
-      if (!input.port) fail("invalid_input", "port must be between 1 and 65535", { field: "port" });
-      const username = input.username.trim();
-      if (input.kind === "http" && username.includes(":"))
-        fail("invalid_input", "an HTTP proxy username can't contain a colon", { field: "username" });
-      const existing = input.id ? proxies.find((p) => p.id === input.id) : undefined;
-      if (input.id && !existing) fail("not_found");
-      const view: ProxyView = {
-        id: existing?.id ?? id("p"),
-        name: input.name.trim(),
-        kind: input.kind,
-        address,
-        port: input.port,
-        username,
-        has_password: !!username && (input.password !== null ? input.password.length > 0 : !!existing?.has_password),
-        host_ids: [],
-        updated_at: Date.now(),
-      };
-      proxies = existing ? proxies.map((p) => (p.id === view.id ? view : p)) : [...proxies, view];
-      touch();
-      return proxyViews().find((p) => p.id === view.id)!;
-    },
-    proxy_delete: async (pid) => {
-      if (!proxies.some((p) => p.id === pid)) fail("not_found");
-      proxies = proxies.filter((p) => p.id !== pid);
-      hosts = hosts.map((h) =>
-        h.proxy_mode === "proxy" && h.proxy_id === pid ? { ...h, proxy_mode: "device_default", proxy_id: null } : h,
-      );
-      if (prefs.default_proxy_id === pid || prefs.app_proxy_id === pid) {
-        prefs = {
-          ...prefs,
-          default_proxy_id: prefs.default_proxy_id === pid ? null : prefs.default_proxy_id,
-          app_proxy_id: prefs.app_proxy_id === pid ? null : prefs.app_proxy_id,
-        };
-        storePrefs();
-      }
-      touch();
-    },
-
-    keys_list: async () => {
-      needUnlocked();
-      return keyViews();
-    },
-    key_import: async (input) => {
-      await delay(300);
-      const text = input.private_key ?? "";
-      if (!input.path && !text.includes("PRIVATE KEY") && !text.includes("PuTTY-User-Key-File"))
-        fail("key_parse", "unsupported format", { key_kind: "unsupported_format" });
-      if (text.includes("ENCRYPTED") && !input.passphrase)
-        fail("key_parse", "passphrase required", { key_kind: "passphrase_required" });
-      const k: KeyView = {
-        ...D.KEYS[1],
-        id: id("k"),
-        name: input.name || "imported-key",
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        has_passphrase: !!input.passphrase,
-        used_by: [],
-      };
-      keys = [...keys, k];
-      touch();
-      return k;
-    },
-    key_generate: async (input) => {
-      await delay(input.algorithm === "rsa" ? 1500 : 300);
-      const k: KeyView = {
-        id: id("k"),
-        name: input.name,
-        algorithm: input.algorithm,
-        bits: input.algorithm === "rsa" ? 4096 : 256,
-        public_key: `${input.algorithm === "rsa" ? "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQ" : "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI"}${Math.random().toString(36).slice(2, 30)} ${input.comment}`,
-        fingerprint: `SHA256:${btoa(String(Math.random())).replace(/=/g, "").slice(0, 43)}`,
-        comment: input.comment,
-        has_passphrase: !!input.passphrase,
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        used_by: [],
-      };
-      keys = [...keys, k];
-      touch();
-      return k;
-    },
-    key_rename: async (kid, name) => {
-      keys = keys.map((k) => (k.id === kid ? { ...k, name, updated_at: Date.now() } : k));
-      touch();
-      return keyViews().find((k) => k.id === kid)!;
-    },
-    key_delete: async (kid) => {
-      keys = keys.filter((k) => k.id !== kid);
-      hosts = hosts.map((h) => (h.key_id === kid ? { ...h, key_id: null, auth_kind: "ask" } : h));
-      touch();
-    },
-    key_public: async (kid) => keys.find((k) => k.id === kid)?.public_key ?? fail("not_found"),
-    key_deploy: async () => {
-      await delay(900);
-    },
-
     ssh_connect: async (hostId, _options, onFrame: FrameHandler) => {
-      const h = hosts.find((x) => x.id === hostId);
+      const h = state.hosts.find((x) => x.id === hostId);
       if (!h) fail("not_found");
       const sid = id("s");
       onFrame(frame(FRAME_SESSION, new TextEncoder().encode(sid)));
-      const state = (s: EventMap["ssh://state"]["state"], extra: Partial<EventMap["ssh://state"]> = {}) =>
+      const stateEvt = (s: EventMap["ssh://state"]["state"], extra: Partial<EventMap["ssh://state"]> = {}) =>
         emit("ssh://state", {
           session_id: sid,
           host_id: hostId,
@@ -986,7 +642,7 @@ export function createMockApi(): HatobaApi {
           exit_status: null,
           ...extra,
         });
-      setTimeout(() => state("connecting"), 0);
+      setTimeout(() => stateEvt("connecting"), 0);
       if (D.FAILING_HOSTS.has(hostId) || sshDemo) {
         const enc = new TextEncoder();
         for (let i = 1; i <= 3; i++) {
@@ -999,7 +655,7 @@ export function createMockApi(): HatobaApi {
         const kind = sshDemo && sshDemo in SSH_DEMO_DETAIL ? (sshDemo as SshErrorKind) : "timeout";
         const detail = (SSH_DEMO_DETAIL[kind] ?? SSH_DEMO_DETAIL.timeout)(h.address, h.port);
         const error = appError("ssh", detail, { ssh_kind: kind });
-        setTimeout(() => state("failed", { error }), 0);
+        setTimeout(() => stateEvt("failed", { error }), 0);
         throw error;
       }
       const shared = connections.get(hostId);
@@ -1021,7 +677,7 @@ export function createMockApi(): HatobaApi {
         });
         if (!accepted) {
           const error = appError("ssh", "host key rejected", { ssh_kind: "host_key_rejected" });
-          setTimeout(() => state("failed", { error }), 0);
+          setTimeout(() => stateEvt("failed", { error }), 0);
           throw error;
         }
       }
@@ -1032,14 +688,14 @@ export function createMockApi(): HatobaApi {
       const c = shared ?? openConnection(hostId, h.name);
       c.tabs.add(sid);
       connectionsChanged();
-      hosts = hosts.map((x) => (x.id === hostId ? { ...x, last_connected_at: Date.now() } : x));
+      state.hosts = state.hosts.map((x) => (x.id === hostId ? { ...x, last_connected_at: Date.now() } : x));
       setTimeout(() => {
-        state("connected", { latency_ms: 38 });
+        stateEvt("connected", { latency_ms: 38 });
         shell.start();
       }, 0);
       shell.onExit = () => {
         onFrame(frame(FRAME_CLOSED, new TextEncoder().encode("exit")));
-        state("disconnected", { exit_status: 0 });
+        stateEvt("disconnected", { exit_status: 0 });
         shells.delete(sid);
         leaveConnection(sid);
         stopStats(sid);
@@ -1050,7 +706,7 @@ export function createMockApi(): HatobaApi {
       needUnlocked();
       const sid = id("s");
       onFrame(frame(FRAME_SESSION, new TextEncoder().encode(sid)));
-      const state = (s: EventMap["ssh://state"]["state"], extra: Partial<EventMap["ssh://state"]> = {}) =>
+      const stateEvt = (s: EventMap["ssh://state"]["state"], extra: Partial<EventMap["ssh://state"]> = {}) =>
         emit("ssh://state", {
           session_id: sid,
           host_id: null,
@@ -1061,10 +717,10 @@ export function createMockApi(): HatobaApi {
           ...extra,
         });
       const failWith = (error: AppError): never => {
-        setTimeout(() => state("failed", { error }), 0);
+        setTimeout(() => stateEvt("failed", { error }), 0);
         throw error;
       };
-      setTimeout(() => state("connecting"), 0);
+      setTimeout(() => stateEvt("connecting"), 0);
       await delay(400);
       if (target.address.includes("timeout"))
         failWith(appError("ssh", SSH_DEMO_DETAIL.timeout(target.address, target.port), { ssh_kind: "timeout" }));
@@ -1142,12 +798,12 @@ export function createMockApi(): HatobaApi {
       shells.set(sid, shell);
       recentTargets = [target, ...recentTargets.filter((r) => !sameTarget(r, target))].slice(0, 8);
       setTimeout(() => {
-        state("connected", { latency_ms: 21 });
+        stateEvt("connected", { latency_ms: 21 });
         shell.start();
       }, 0);
       shell.onExit = () => {
         onFrame(frame(FRAME_CLOSED, new TextEncoder().encode("exit")));
-        state("disconnected", { exit_status: 0 });
+        stateEvt("disconnected", { exit_status: 0 });
         shells.delete(sid);
         stopStats(sid);
       };
@@ -1242,89 +898,6 @@ export function createMockApi(): HatobaApi {
       shells.get(sid)?.stop();
       shells.delete(sid);
     },
-    telnet_hosts_list: async () => {
-      needUnlocked();
-      return telnetHosts.map((h) => ({ ...h }));
-    },
-    telnet_host_save: async (input) => {
-      needUnlocked();
-      if (!input.address.trim()) fail("invalid_input", "address is required", { field: "address" });
-      if (byteCount(input.ai_notes) > HOST_NOTES_MAX_BYTES)
-        fail("invalid_input", "AI notes are limited to 16 KB", { field: "ai_notes" });
-      if (input.proxy_mode === "proxy" && !proxies.some((p) => p.id === input.proxy_id))
-        fail("invalid_input", "proxy not found", { field: "proxy_id" });
-      const existing = input.id ? telnetHosts.find((h) => h.id === input.id) : undefined;
-      const view: TelnetHostView = {
-        id: existing?.id ?? id("t"),
-        name: input.name.trim() || Array.from(input.address.trim()).slice(0, 128).join(""),
-        address: input.address.trim(),
-        port: input.port || 23,
-        username: input.username.trim(),
-        has_password: input.password !== null ? input.password.length > 0 : !!existing?.has_password,
-        group_id: input.group_id,
-        tags: input.tags,
-        favorite: input.favorite,
-        sort: existing?.sort ?? placeNewHost(),
-        proxy_mode: input.proxy_mode,
-        proxy_id: input.proxy_mode === "proxy" ? input.proxy_id : null,
-        note: input.note,
-        ai_notes: input.ai_notes,
-        updated_at: Date.now(),
-        last_connected_at: existing?.last_connected_at ?? null,
-      };
-      telnetHosts = existing ? telnetHosts.map((h) => (h.id === view.id ? view : h)) : [...telnetHosts, view];
-      touch();
-      return view;
-    },
-    telnet_host_delete: async (hid) => {
-      telnetHosts = telnetHosts.filter((h) => h.id !== hid);
-      touch();
-    },
-    telnet_host_duplicate: async (hid) => {
-      const h = telnetHosts.find((x) => x.id === hid) ?? fail("not_found");
-      const copy = {
-        ...h,
-        id: id("t"),
-        name: `${h.name}-copy`,
-        favorite: false,
-        sort: placeNewHost(hid),
-        last_connected_at: null,
-      };
-      telnetHosts = [...telnetHosts, copy];
-      touch();
-      return copy;
-    },
-    telnet_host_set_favorite: async (hid, favorite) => {
-      telnetHosts = telnetHosts.map((h) => (h.id === hid ? { ...h, favorite } : h));
-      touch();
-    },
-    telnet_host_copy_password: async () => {},
-    telnet_open_target: async (address, port, _options, onFrame: FrameHandler) => {
-      const host: TelnetHostView = {
-        ...D.TELNET_HOSTS[1],
-        id: "",
-        name: address,
-        address,
-        port,
-        username: "",
-        has_password: false,
-      };
-      return openTelnet(host, null, onFrame);
-    },
-    telnet_open: async (hostId, _options, onFrame: FrameHandler) => {
-      needUnlocked();
-      const host = telnetHosts.find((h) => h.id === hostId) ?? fail("not_found", "host not found");
-      return openTelnet(host, hostId, onFrame);
-    },
-    telnet_write: async (sid, data) => {
-      telnets.get(sid)?.input(data);
-    },
-    telnet_write_bytes: async () => {},
-    telnet_resize: async () => {},
-    telnet_close: async (sid) => {
-      telnets.get(sid)?.stop();
-      telnets.delete(sid);
-    },
     ssh_stats_start: async (sid, onEvent) => {
       const shell = shells.get(sid) ?? fail("not_found", "session");
       const statsId = ++lastStatsId;
@@ -1401,7 +974,7 @@ export function createMockApi(): HatobaApi {
     },
     forward_start: async (hostId, fid, options) => {
       needUnlocked();
-      const h = hosts.find((x) => x.id === hostId) ?? fail("not_found", "host not found");
+      const h = state.hosts.find((x) => x.id === hostId) ?? fail("not_found", "host not found");
       const f = forwards.find((x) => x.id === fid && x.host_id === hostId) ?? fail("not_found", "forward not found");
       let c = connections.get(hostId);
       if (!c) {
@@ -1443,277 +1016,6 @@ export function createMockApi(): HatobaApi {
     },
     ...edits,
 
-    sync_status: async () => sync,
-    sync_test: async (config) => {
-      await delay(700);
-      if (config.kind === "d1") {
-        if (config.api_token.length < 20)
-          return {
-            ok: false,
-            initialized: false,
-            version: null,
-            latency_ms: null,
-            databases: null,
-            error: appError("sync", "token lacks D1 edit permission"),
-          };
-        return {
-          ok: true,
-          initialized: demo === "onboarding" || deployDemo === "vault",
-          version: null,
-          latency_ms: 64,
-          databases: [{ id: "3f8a2c91-d04e-4b7a-a1e6-c5d2b9f07e13", name: "hatoba", region: "APAC" }],
-          error: null,
-        };
-      }
-      if (!/^https?:\/\//.test(config.url) && !config.url.includes("."))
-        return {
-          ok: false,
-          initialized: false,
-          version: null,
-          latency_ms: null,
-          databases: null,
-          error: appError("sync_offline", "dns"),
-        };
-      // First-launch demo (flow B) restores from a remote that already holds a vault, and so
-      // does `?deploy=vault` (flow C).
-      return {
-        ok: true,
-        initialized: demo === "onboarding" || deployDemo === "vault",
-        version: "0.1.0",
-        latency_ms: 64,
-        databases: null,
-        error: null,
-      };
-    },
-    sync_configure: async (config, password) => {
-      await delay(1200);
-      if (password.length < 4) fail("wrong_password");
-      sync = {
-        ...D.syncStatus(),
-        endpoint: config.kind === "worker" ? config.url.replace(/^https?:\/\//, "") : null,
-        database: config.kind === "d1" ? "hatoba" : "hatoba · APAC",
-        last_synced_at: Date.now(),
-        counts: { hosts: hosts.length, keys: keys.length, groups: groups.length },
-      };
-      emit("sync://status", sync);
-    },
-    sync_join: async (config, password) => {
-      await delay(1200);
-      if (password.length < 4) fail("wrong_password");
-      sync = {
-        ...D.syncStatus(),
-        endpoint: config.kind === "worker" ? config.url.replace(/^https?:\/\//, "") : null,
-        database: config.kind === "d1" ? "hatoba" : "hatoba · APAC",
-        last_synced_at: Date.now(),
-        counts: { hosts: hosts.length, keys: keys.length, groups: groups.length },
-      };
-      emit("sync://status", sync);
-    },
-    sync_now: async () => {
-      if (sync.kind === "none") return;
-      const paused = sync.state === "paused";
-      setSync({ state: "syncing" });
-      await delay(900);
-      // A paused round only rereads /v1/health.
-      if (paused) return setSync({ state: "paused" });
-      setSync({ state: "idle", pending: 0, last_synced_at: Date.now() });
-    },
-    sync_login: async (password) => {
-      await delay(600);
-      if (password.length < 4) fail("wrong_password");
-      setSync({ state: "idle", last_synced_at: Date.now() });
-    },
-    sync_set_auto: async (enabled) => setSync({ auto_sync: enabled }),
-    sync_check_worker: async () => {
-      await delay(300);
-      emit("sync://status", sync);
-    },
-    sync_dismiss_worker_update: async () => {
-      if (sync.worker_update?.kind === "available") setSync({ worker_update: null });
-    },
-    sync_disconnect: async () => {
-      sync = {
-        ...sync,
-        kind: "none",
-        state: "off",
-        endpoint: null,
-        database: null,
-        last_synced_at: null,
-        counts: null,
-        conflicts: 0,
-      };
-      emit("sync://status", sync);
-    },
-    sync_devices: async () => devices,
-    sync_revoke_device: async (did) => {
-      devices = devices.filter((d) => d.device_id !== did);
-    },
-    sync_conflicts: async () => conflicts,
-    sync_conflict_resolve: async (cid) => {
-      conflicts = conflicts.filter((c) => c.id !== cid);
-      setSync({ conflicts: conflicts.length });
-    },
-
-    deploy_start: async (token, accountId) => {
-      await delay(700);
-      if (deployDemo === "nobundle") fail("no_worker_bundle");
-      if (token.length < 20) fail("cloudflare_token");
-      deployment = { handle: id("deploy"), failed: false, waited: false, url: null, upgrade: false };
-      const accounts =
-        deployDemo === "accounts"
-          ? [
-              { id: "0123456789abcdef0123456789abcdef", name: "Personal" },
-              { id: "fedcba9876543210fedcba9876543210", name: "Work" },
-            ]
-          : accountId
-            ? []
-            : [{ id: "0123456789abcdef0123456789abcdef", name: "Personal" }];
-      return {
-        handle: deployment.handle,
-        account_owned: !!accountId && deployDemo !== "accounts",
-        accounts,
-        worker_name: "hatoba-sync",
-        database_name: "hatoba",
-      };
-    },
-    deploy_inspect: async (handle, target) => {
-      needDeployment(handle);
-      await delay(800);
-      if (deployDemo === "permission") fail("cloudflare_permission", "token lacks D1 Edit", { permission: "d1" });
-      const fresh = target.worker_name !== "hatoba-sync";
-      return {
-        subdomain: deployDemo === "nosub" ? null : "kc",
-        worker: fresh
-          ? "create"
-          : deployDemo === "vault"
-            ? "has_vault"
-            : deployDemo === "foreign"
-              ? "foreign"
-              : "create",
-        database: "create",
-        database_name: target.database_name,
-        vault_url: deployDemo === "vault" && !fresh ? `https://${target.worker_name}.kc.workers.dev` : null,
-      };
-    },
-    deploy_run: async (handle, target, onProgress) => {
-      const d = needDeployment(handle);
-      const steps = ["inspect", "create_database", "migrate", "upload", "setup_token", "route", "wait"] as const;
-      for (const step of steps) {
-        onProgress({ step, status: "running" });
-        await delay(step === "wait" ? 1500 : 600);
-        if (step === "upload" && deployDemo === "fail" && !d.failed) {
-          d.failed = true;
-          fail("cloudflare", "HTTP 500, code 10013", { cf_code: 10013 });
-        }
-        if (step === "wait" && deployDemo === "waiting" && !d.waited) {
-          d.waited = true;
-          d.url = `https://${target.worker_name}.${target.subdomain ?? "kc"}.workers.dev`;
-          return { url: d.url, ready: false };
-        }
-        onProgress({ step, status: d.failed && step === "create_database" ? "skipped" : "done" });
-      }
-      d.url = `https://${target.worker_name}.${target.subdomain ?? "kc"}.workers.dev`;
-      return { url: d.url, ready: true };
-    },
-    deploy_check: async (handle) => {
-      const d = needDeployment(handle);
-      await delay(900);
-      if (d.upgrade) upgraded();
-      return true;
-    },
-    deploy_cleanup: async (handle) => {
-      const d = needDeployment(handle);
-      await delay(900);
-      d.failed = false;
-    },
-    deploy_cancel: async (handle) => {
-      if (deployment?.handle === handle) deployment = null;
-    },
-    deploy_setup: async (handle, password) => {
-      const d = needDeployment(handle);
-      await delay(1200);
-      if (password.length < 4) fail("wrong_password");
-      sync = {
-        ...D.syncStatus(),
-        endpoint: (d.url ?? "").replace(/^https?:\/\//, ""),
-        last_synced_at: Date.now(),
-        counts: { hosts: hosts.length, keys: keys.length, groups: groups.length },
-      };
-      deployment = null;
-      emit("sync://status", sync);
-    },
-    deploy_join: async (handle, target, password) => {
-      needDeployment(handle);
-      await delay(1200);
-      if (password.length < 4) fail("wrong_password");
-      sync = {
-        ...D.syncStatus(),
-        endpoint: `${target.worker_name}.kc.workers.dev`,
-        last_synced_at: Date.now(),
-        counts: { hosts: hosts.length, keys: keys.length, groups: groups.length },
-      };
-      deployment = null;
-      emit("sync://status", sync);
-    },
-
-    deploy_upgrade_defaults: async () => {
-      if (sync.kind !== "worker") fail("sync", "sync does not use a Worker");
-      const url = `https://${sync.endpoint}`;
-      const workersDev = url.endsWith(".workers.dev");
-      return workerDemo === "available"
-        ? { url, account_id: "0123456789abcdef0123456789abcdef", worker_name: "hatoba-sync", deployed_by_app: true }
-        : {
-            url,
-            account_id: null,
-            worker_name: workersDev ? (sync.endpoint ?? "").split(".")[0] : null,
-            deployed_by_app: false,
-          };
-    },
-    deploy_upgrade_inspect: async (handle, target) => {
-      needDeployment(handle);
-      await delay(800);
-      if (deployDemo === "permission") fail("cloudflare_permission", "token lacks D1 Edit", { permission: "d1" });
-      const version = sync.worker_update?.version ?? null;
-      const stop =
-        target.worker_name !== "hatoba-sync"
-          ? "missing"
-          : ({ missing: "missing", novault: "no_vault", newer: "newer", foreign: "foreign" } as const)[
-              deployDemo ?? ""
-            ];
-      return {
-        worker: stop ?? "upgrade",
-        database_name: stop ? null : "hatoba",
-        migrations: 1,
-        route: !!sync.endpoint?.endsWith(".workers.dev"),
-        version: stop === "newer" ? "0.3.0" : version,
-        bundled: BUNDLED_WORKER,
-      };
-    },
-    deploy_upgrade: async (handle, _target, onProgress) => {
-      const d = needDeployment(handle);
-      d.upgrade = true;
-      const route = !!sync.endpoint?.endsWith(".workers.dev");
-      for (const step of ["inspect", "migrate", "upload", "route", "wait"] as const) {
-        if (step === "route" && !route) {
-          onProgress({ step, status: "skipped" });
-          continue;
-        }
-        onProgress({ step, status: "running" });
-        await delay(step === "wait" ? 1500 : 600);
-        if (step === "upload" && deployDemo === "fail" && !d.failed) {
-          d.failed = true;
-          fail("cloudflare", "HTTP 500, code 10013", { cf_code: 10013 });
-        }
-        if (step === "wait" && deployDemo === "waiting" && !d.waited) {
-          d.waited = true;
-          return { url: `https://${sync.endpoint}`, ready: false };
-        }
-        onProgress({ step, status: d.failed && step === "migrate" ? "skipped" : "done" });
-      }
-      upgraded();
-      return { url: `https://${sync.endpoint}`, ready: true };
-    },
-
     settings_get: async () => structuredClone(settings),
     settings_save: async (patch) => {
       const terminal = applyPatch(settings.terminal, patch.terminal ?? {});
@@ -1721,9 +1023,9 @@ export function createMockApi(): HatobaApi {
       settings = { ...settings, terminal };
       touch();
     },
-    prefs_get: async () => prefs,
+    prefs_get: async () => state.prefs,
     prefs_save: async (next) => {
-      prefs = next;
+      state.prefs = next;
       storePrefs();
     },
     star_prompt_get: async () => ({ ...starPrompt }),
@@ -1801,10 +1103,3 @@ export function createMockApi(): HatobaApi {
 const pendingHostKeys = new Map<string, (accept: boolean) => void>();
 const pendingAuth = new Map<string, (answers: string[] | null) => void>();
 const transfers = new Map<string, () => void>();
-
-function frame(tag: number, payload: Uint8Array): Uint8Array {
-  const out = new Uint8Array(payload.length + 1);
-  out[0] = tag;
-  out.set(payload, 1);
-  return out;
-}

@@ -315,7 +315,7 @@ fn a_sudo_password_is_kept_for_its_host_until_unused_for_15_minutes() {
     );
     // The host connects another way now.
     assert!(cli.kept_sudo("h1\nv2").is_none());
-    lock(&cli.sudo).get_mut("h1\nv1").unwrap().used = SystemTime::now() - SUDO_KEPT;
+    cli.sudo.lock_unpoisoned().get_mut("h1\nv1").unwrap().used = SystemTime::now() - SUDO_KEPT;
     assert!(cli.kept_sudo("h1\nv1").is_none());
     assert_eq!(detail(true, "ls".into()), "sudo ls");
     assert_eq!(detail(false, "ls".into()), "ls");

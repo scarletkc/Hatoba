@@ -8,7 +8,7 @@ import type { SearchProviderView } from "@/ipc/types";
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 
 const { useApp } = await import("@/app/store");
-const { effortKey } = await import("@/features/ai/effort");
+const { effortKey } = await import("@/lib/ai/effort");
 const { t } = await import("@/i18n");
 const { api } = await import("@/ipc/api");
 const { AiPane } = await import("./AiPane");

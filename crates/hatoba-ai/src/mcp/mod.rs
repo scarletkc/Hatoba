@@ -35,7 +35,7 @@ mod stdio;
 mod tests;
 
 pub use client::{McpConnection, prompt_text, resource_text};
-pub use names::{MAX_TOOL_NAME_LEN, tool_names};
+pub use names::{MAX_TOOL_NAME_LEN, MCP_PREFIX, tool_names};
 pub use schema::clean_schema;
 pub use stdio::{STDERR_LINES, StderrTail};
 

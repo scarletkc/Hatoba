@@ -6,6 +6,7 @@ use tauri::{
 };
 
 use crate::dto::ZoomView;
+use crate::state::MutexExt;
 
 pub const MAIN: &str = "main";
 
@@ -135,7 +136,7 @@ fn zoom_limit(width: f64, height: f64) -> u32 {
 /// it is smaller, keeping it inside that screen's work area.
 pub fn apply_zoom(window: &WebviewWindow, percent: u32) -> tauri::Result<ZoomView> {
     let monitor = window.current_monitor()?;
-    *ZOOM_SCREEN.lock().unwrap_or_else(|e| e.into_inner()) = monitor.as_ref().map(screen_key);
+    *ZOOM_SCREEN.lock_unpoisoned() = monitor.as_ref().map(screen_key);
     let max = monitor
         .as_ref()
         .map_or(ZOOM_STEPS[ZOOM_STEPS.len() - 1], |m| {
@@ -180,7 +181,7 @@ pub fn follow_screen(window: &WebviewWindow, percent: impl FnOnce() -> u32) -> O
         .ok()
         .flatten()
         .map(|m| screen_key(&m));
-    if key.is_none() || *ZOOM_SCREEN.lock().unwrap_or_else(|e| e.into_inner()) == key {
+    if key.is_none() || *ZOOM_SCREEN.lock_unpoisoned() == key {
         return None;
     }
     apply_zoom(window, percent()).ok()

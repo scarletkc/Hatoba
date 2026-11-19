@@ -7,9 +7,8 @@ use std::time::Duration;
 
 use hatoba_core::model::{Host, HostProxy, Item};
 use hatoba_ssh::{AuthMethod, ConnectConfig, ShellEvent, ShellOptions};
-use tauri::ipc::{Channel, InvokeResponseBody, IpcResponse};
+use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
-use tauri_specta::Event;
 use tokio::sync::mpsc;
 use zeroize::Zeroizing;
 
@@ -18,62 +17,20 @@ use crate::commands::quick;
 use crate::connection;
 use crate::convert::stats_view;
 use crate::dto::{
-    ConnectOptions, HostInput, QuickTarget, ServerSuggestionsView, SessionState, SessionStateEvent,
-    StatsEvent, TestResult,
+    ConnectOptions, HostInput, QuickTarget, ServerSuggestionsView, SessionState, StatsEvent,
+    TestResult,
 };
 use crate::error::{AppError, AppResult, SshErrorKind};
 use crate::ssh::{LiveSession, Overrides, build_config, connect_with, resolve_proxy};
 use crate::state::AppState;
+use crate::terminal::{
+    FRAME_CLOSED, FRAME_DATA, FRAME_ERROR, FRAME_SESSION, TermFrame, clamp_size, emit_state,
+};
 
-pub(crate) const FRAME_DATA: u8 = 0;
-pub(crate) const FRAME_CLOSED: u8 = 1;
-pub(crate) const FRAME_ERROR: u8 = 2;
-/// The session id, sent before connecting: the tab can then answer the session's host-key and
-/// login prompts for itself if it closes while they are open.
-const FRAME_SESSION: u8 = 3;
 /// How often the status bar's resource usage is read (TERM-12).
 const STATS_INTERVAL: Duration = Duration::from_secs(2);
 /// The id of the next `ssh_stats_start`.
 static NEXT_STATS_ID: AtomicU64 = AtomicU64::new(1);
-
-/// One terminal frame on the per-session channel: tag byte + payload. Sent through Tauri's raw
-/// binary IPC path (an `ArrayBuffer` in the WebView), never as a JSON number array (§10.3).
-#[derive(specta::Type)]
-pub struct TermFrame(#[specta(type = Vec<u8>)] Vec<u8>);
-
-impl TermFrame {
-    pub(crate) fn new(tag: u8, payload: &[u8]) -> Self {
-        let mut buf = Vec::with_capacity(payload.len() + 1);
-        buf.push(tag);
-        buf.extend_from_slice(payload);
-        Self(buf)
-    }
-}
-
-impl IpcResponse for TermFrame {
-    fn body(self) -> tauri::Result<InvokeResponseBody> {
-        Ok(InvokeResponseBody::Raw(self.0))
-    }
-}
-
-pub(crate) fn emit_state(
-    app: &AppHandle,
-    session_id: &str,
-    host_id: Option<&str>,
-    state: SessionState,
-    extra: impl FnOnce(&mut SessionStateEvent),
-) {
-    let mut event = SessionStateEvent {
-        session_id: session_id.to_owned(),
-        host_id: host_id.map(str::to_owned),
-        state,
-        latency_ms: None,
-        error: None,
-        exit_status: None,
-    };
-    extra(&mut event);
-    let _ = event.emit(app);
-}
 
 fn overrides(options: &ConnectOptions) -> Overrides {
     Overrides {
@@ -211,9 +168,10 @@ async fn open_terminal(
         });
         err
     };
+    let (cols, rows) = clamp_size(options.cols, options.rows);
     let shell_opts = ShellOptions {
-        cols: options.cols.clamp(10, 1000),
-        rows: options.rows.clamp(2, 500),
+        cols: u32::from(cols),
+        rows: u32::from(rows),
         ..ShellOptions::default()
     }
     .with_env(env);
@@ -355,9 +313,7 @@ pub async fn ssh_write_bytes(
 
 async fn write_shell(state: &AppState, session_id: &str, data: Vec<u8>) -> AppResult<()> {
     // SEC-03: sessions stay connected behind the lock screen, but take no input until unlocked.
-    if !state.vault().is_unlocked() {
-        return Err(AppError::locked());
-    }
+    drop(state.require_unlocked()?);
     let live = state.ssh.get(session_id)?;
     live.shell.write(data).await?;
     Ok(())
@@ -372,9 +328,8 @@ pub async fn ssh_resize(
     rows: u32,
 ) -> AppResult<()> {
     let live = state.ssh.get(&session_id)?;
-    live.shell
-        .resize(cols.clamp(10, 1000), rows.clamp(2, 500))
-        .await;
+    let (cols, rows) = clamp_size(cols, rows);
+    live.shell.resize(u32::from(cols), u32::from(rows)).await;
     Ok(())
 }
 
@@ -390,7 +345,7 @@ pub async fn ssh_stats_start(
     channel: Channel<StatsEvent>,
 ) -> AppResult<u64> {
     // SEC-03: nothing runs on the server behind the lock screen.
-    state.with_unlocked(|_| Ok(()))?;
+    drop(state.require_unlocked()?);
     // Taken before the round trip to the server, so ids follow the order the starts arrived in.
     let id = NEXT_STATS_ID.fetch_add(1, Ordering::Relaxed);
     let live = state.ssh.get(&session_id)?;
@@ -434,7 +389,7 @@ pub async fn ssh_suggestions(
     session_id: String,
 ) -> AppResult<Option<ServerSuggestionsView>> {
     // SEC-03: nothing runs on the server behind the lock screen.
-    state.with_unlocked(|_| Ok(()))?;
+    drop(state.require_unlocked()?);
     let live = state.ssh.get(&session_id)?;
     let found = live.session.suggestions().await?;
     Ok(found.map(|s| ServerSuggestionsView {

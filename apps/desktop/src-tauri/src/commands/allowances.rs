@@ -2,6 +2,7 @@
 //! domains `fetch_url` may fetch. The frontend decides with them which calls ask; this module only
 //! keeps them, sealed in the vault's meta table and never synced.
 
+use hatoba_ai::tools::BuiltinTool;
 use hatoba_core::vault::Vault;
 use tauri::State;
 
@@ -10,7 +11,11 @@ use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
 /// The tools a [`AiAllowanceKind::Tool`] approval can name.
-const TOOLS: [&str; 3] = ["edit_file", "write_file", "send_input"];
+const TOOLS: [&str; 3] = [
+    BuiltinTool::EditFile.name(),
+    BuiltinTool::WriteFile.name(),
+    BuiltinTool::SendInput.name(),
+];
 /// Longest value or host reference kept, in characters.
 const MAX_CHARS: usize = 1000;
 

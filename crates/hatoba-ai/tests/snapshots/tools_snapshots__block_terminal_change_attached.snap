@@ -1,0 +1,7 @@
+---
+source: crates/hatoba-ai/tests/tools_snapshots.rs
+expression: terminal_change_block(true)
+---
+<terminal_change to="attached">
+A terminal is attached from this message on. Before this message none was, so replies that said they could not read a screen or run commands were right at the time.
+</terminal_change>

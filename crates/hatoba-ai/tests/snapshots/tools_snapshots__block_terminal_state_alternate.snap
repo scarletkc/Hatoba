@@ -1,0 +1,8 @@
+---
+source: crates/hatoba-ai/tests/tools_snapshots.rs
+expression: "terminal_state_block(\"prod-api\", true, \"  ~\\n\\\"x.conf\\\" 3L\")"
+---
+<terminal_state host="prod-api" alternate_screen="true" lines="2">
+  ~
+"x.conf" 3L
+</terminal_state>

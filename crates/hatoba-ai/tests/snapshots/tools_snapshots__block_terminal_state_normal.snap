@@ -1,0 +1,10 @@
+---
+source: crates/hatoba-ai/tests/tools_snapshots.rs
+expression: "terminal_state_block(\"prod-api\", false,\n\"\\n\\n$ make\\nerror: no rule\\n\\n$   \\n\\n\")"
+---
+<terminal_state host="prod-api" alternate_screen="false" lines="4">
+$ make
+error: no rule
+
+$
+</terminal_state>

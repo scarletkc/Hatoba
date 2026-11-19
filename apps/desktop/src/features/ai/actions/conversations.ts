@@ -10,7 +10,7 @@ import { api } from "@/ipc/api";
 import { pickSavePath } from "@/lib/native";
 import { hostInfo } from "../calls/hostInfo";
 import { conversationMarkdown, exportFileName } from "../history/exportMarkdown";
-import { forkModel, forkTitle } from "../fork";
+import { forkModel, forkTitle } from "@/lib/ai/fork";
 import { getSlot, slotOf, updateConversation, useAi } from "../store";
 import { aiErrorMessage } from "./context";
 import { focusInput } from "./panel";

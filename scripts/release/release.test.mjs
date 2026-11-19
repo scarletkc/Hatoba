@@ -20,6 +20,7 @@ import {
   releaseOutputs,
   releaseTarget,
   signatureName,
+  skippedByCi,
   updateNotes,
   updaterPubkey,
   verifyUpdaterSignature,
@@ -612,4 +613,48 @@ test("writes install instructions for each platform, with macOS marked experimen
 test("marks only a version with a prerelease stage as a prerelease in the job outputs", () => {
   assert.equal(releaseOutputs("1.2.3"), "version=1.2.3\ntag=v1.2.3\nprerelease=false\n");
   assert.equal(releaseOutputs("1.3.0-rc.1"), "version=1.3.0-rc.1\ntag=v1.3.0-rc.1\nprerelease=true\n");
+});
+
+test("skippedByCi matches paths-ignore under push in ci.yml", () => {
+  const workflow = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
+  const pushBlock = /^on:\r?\n  push:\r?\n((?:    .*\r?\n)*)/m.exec(workflow)?.[1] ?? "";
+  const inline = /^\s*paths-ignore:\s*\[([^\]]+)\]/m.exec(pushBlock);
+  const block = /^\s*paths-ignore:\r?\n((?:\s*-\s+.*\r?\n?)+)/m.exec(pushBlock);
+  const raw = inline
+    ? inline[1].split(",")
+    : block
+      ? block[1].split(/\r?\n/).map((line) => line.replace(/^\s*-\s+/, ""))
+      : [];
+  const patterns = raw.map((item) => item.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+  assert.ok(patterns.length > 0, "expected paths-ignore patterns under on.push in ci.yml");
+
+  const toRegExp = (pattern) => {
+    const regex = pattern
+      .replace(/[.+^${}()|[\]\\?]/g, "\\$&")
+      .replace(/\*\*\//g, "\0STARSTARSLASH\0")
+      .replace(/\*\*/g, "\0STARSTAR\0")
+      .replace(/\*/g, "[^/]*")
+      .replaceAll("\0STARSTARSLASH\0", "(?:.*/)?")
+      .replaceAll("\0STARSTAR\0", ".*");
+    return new RegExp(`^${regex}$`);
+  };
+  const matchers = patterns.map(toRegExp);
+  const samples = [
+    ...patterns.map((p) => p.replaceAll("**", "dir/file").replaceAll("*", "file")),
+    "README.md",
+    "workers/sync/README.md",
+    "docs/guide.md",
+    "docs/media/screenshot.png",
+    "docs-extra/guide.txt",
+    "README.mdx",
+    "crates/hatoba-core/src/lib.rs",
+    ".github/workflows/ci.yml",
+  ];
+  for (const path of samples) {
+    assert.equal(
+      skippedByCi(path),
+      matchers.some((re) => re.test(path)),
+      path,
+    );
+  }
 });
