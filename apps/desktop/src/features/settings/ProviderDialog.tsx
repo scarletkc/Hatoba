@@ -23,7 +23,7 @@ import {
   toast,
   useMenu,
 } from "@hatoba/ui";
-import { EFFORTS, UNKNOWN_EFFORTS, effortKey } from "@/features/ai/effort";
+import { EFFORTS, UNKNOWN_EFFORTS, effortKey } from "@/lib/ai/effort";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type {

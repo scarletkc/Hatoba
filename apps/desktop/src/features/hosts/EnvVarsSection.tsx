@@ -10,7 +10,7 @@ import {
   newEnvRow,
   type EnvRow,
   type EnvRowProblem,
-} from "./envVars";
+} from "@/lib/envVars";
 import s from "./EnvVarsSection.module.css";
 
 /** Id of the field the host editor focuses when a variable keeps the form from saving. */

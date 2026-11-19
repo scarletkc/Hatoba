@@ -1,10 +1,10 @@
 import type { MessageKey, Params } from "@/i18n";
 import type { AiConversationView, AiEntryView, AiToolCall } from "@/ipc/types";
 import { formatTarget } from "@/session/quickConnect";
-import { folderName, parseMessage, pathName, splitPermissionNote, type Attachment } from "../attachments";
+import { folderName, parseMessage, pathName, splitPermissionNote, type Attachment } from "@/lib/ai/attachments";
 import { fenced, quoted } from "./markdownText";
 import { noteTitle } from "../messages/notes";
-import { localName, placeLabel } from "../place";
+import { localName, placeLabel } from "@/lib/ai/place";
 import { exitStatusOf, prettyArgs, shownCall, toolKind, toolLabel } from "../tools";
 
 type ToolEntry = Extract<AiEntryView, { role: "tool" }>;

@@ -20,12 +20,12 @@ import {
 } from "@hatoba/ui";
 import { useAllHosts } from "@/app/data";
 import { LOCAL_TARGET, removeAllowance, savedAllowances, useAllowances } from "@/features/ai/rules/allowances";
-import { EFFORTS, effortKey } from "@/features/ai/effort";
 import { answersText, verdictText } from "@/features/ai/rules/autoText";
 import { InstructionsField } from "@/features/ai/InstructionsField";
-import { judgeChosen } from "@/features/ai/models";
-import { byteCount, INSTRUCTIONS_MAX_BYTES } from "@/features/ai/instructions";
 import { toolLabel } from "@/features/ai/tools";
+import { EFFORTS, effortKey } from "@/lib/ai/effort";
+import { byteCount, INSTRUCTIONS_MAX_BYTES } from "@/lib/ai/instructions";
+import { judgeChosen } from "@/lib/ai/models";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type {

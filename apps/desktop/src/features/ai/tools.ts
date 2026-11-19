@@ -1,5 +1,6 @@
 import type { MessageKey, Params } from "@/i18n";
 import type { AiAllowance, AiFilePreview, AiPermissionMode, AiSettingsView, McpToolInfo } from "@/ipc/types";
+import { CALL_MCP_TOOL, parseArgs, proxyArguments, proxyCall, shownCall, splitMcpName } from "@/lib/ai/mcpCall";
 import type { CallLimit } from "./batches";
 import {
   allowancePrefixes,
@@ -11,6 +12,7 @@ import {
 import { parseSendKey, SEND_KEY_NOTATION, showTerminalInput, type SendKey } from "./terminal/sendKeys";
 export { SEND_KEYS, keySequence, parseSendKey } from "./terminal/sendKeys";
 export type { SendKey } from "./terminal/sendKeys";
+export { CALL_MCP_TOOL, parseArgs, proxyArguments, proxyCall, shownCall, splitMcpName };
 
 /**
  * Built-in tool names (§13.4, §13.8); MCP tools are `mcp__<server>__<tool>` (§13.9), called directly or,
@@ -28,7 +30,6 @@ export const WEB_SEARCH = "web_search";
 export const FETCH_URL = "fetch_url";
 export const READ_SKILL = "read_skill";
 export const SEARCH_TOOLS = "search_tools";
-export const CALL_MCP_TOOL = "call_mcp_tool";
 export const MEMORY = "memory";
 
 export type ToolKind =
@@ -69,39 +70,6 @@ export function toolKind(name: string): ToolKind {
   if (BUILTIN.includes(name)) return name as ToolKind;
   if (name === CALL_MCP_TOOL || /^mcp__.+__.+/.test(name)) return "mcp";
   return "unknown";
-}
-
-/**
- * AI-45: the MCP tool a `call_mcp_tool` call names, and that tool's arguments as JSON: an object, or a
- * string that holds one, `{}` when left out, as Rust reads them. Null for any other call, or one whose
- * arguments name no MCP tool: Rust runs no other tool through it (a call that names `run_command`
- * returns an error), so such a call is shown as it is.
- */
-export function proxyCall(name: string, json: string): { tool: string; arguments: string } | null {
-  if (name !== CALL_MCP_TOOL) return null;
-  const args = parseArgs(json);
-  const tool = typeof args?.tool === "string" ? args.tool.trim() : "";
-  if (!args || !splitMcpName(tool)) return null;
-  const inner = args.arguments;
-  if (inner === undefined || inner === null || (typeof inner === "string" && !inner.trim()))
-    return { tool, arguments: "{}" };
-  if (typeof inner === "string") {
-    const parsed = parseArgs(inner);
-    return { tool, arguments: parsed ? JSON.stringify(parsed) : inner };
-  }
-  return { tool, arguments: JSON.stringify(inner) };
-}
-
-/** A call as the panel and the export show it: a `call_mcp_tool` call as the MCP tool it names, with that tool's arguments (AI-45). */
-export function shownCall<T extends { name: string; arguments: string }>(call: T): T {
-  const proxy = proxyCall(call.name, call.arguments);
-  return proxy ? { ...call, name: proxy.tool, arguments: proxy.arguments } : call;
-}
-
-/** The arguments a `call_mcp_tool` call runs with after the user edited the tool's own on its card (AI-17, AI-45). */
-export function proxyArguments(json: string, edited: string): string {
-  const args = parseArgs(json) ?? {};
-  return JSON.stringify({ ...args, arguments: JSON.parse(edited) as unknown });
 }
 
 /** `read_terminal` and `send_input` need the tab's xterm instance, so the frontend runs them (§13.1). */
@@ -390,12 +358,6 @@ export function mcpOffResult(serverName: string): string {
   return `The MCP server "${serverName}" was switched off for this conversation, so the tool did not run.`;
 }
 
-/** `mcp__server__tool` → `["server", "tool"]`. */
-export function splitMcpName(name: string): [string, string] | null {
-  const m = /^mcp__(.+?)__(.+)$/.exec(name);
-  return m ? [m[1], m[2]] : null;
-}
-
 const TOOL_LABEL: Record<Exclude<ToolKind, "mcp" | "unknown">, MessageKey> = {
   read_terminal: "ai.tool.read_terminal",
   run_command: "ai.tool.run_command",
@@ -451,17 +413,6 @@ export function callFileChange(name: string, json: string): AiFilePreview | null
   const [before, after] =
     kind === "edit_file" ? [text(args.old_string), text(args.new_string)] : ["", text(args.content)];
   return { path: text(args.path), before, after, error: null, crlf: false };
-}
-
-/** The call's arguments as an object. An empty string counts as `{}` (some providers send it for no arguments). */
-export function parseArgs(json: string): Record<string, unknown> | null {
-  if (!json.trim()) return {};
-  try {
-    const v: unknown = JSON.parse(json);
-    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
 }
 
 /** An integer argument: a number or a numeric string, rounded down and clamped; `fallback` when absent. */

@@ -33,7 +33,7 @@ import {
   scopeFields,
   type MemoryProblem,
   type MemoryScope,
-} from "@/features/ai/memory";
+} from "@/lib/ai/memory";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AiMemoryView, AnyHostView } from "@/ipc/types";

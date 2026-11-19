@@ -16,6 +16,7 @@ on:
       - apps/desktop/src-tauri/icons/**
       - apps/desktop/src-tauri/tauri.conf.json
       - scripts/release/**
+      - scripts/lib/**
       - README.md
       - package.json
       - pnpm-lock.yaml
@@ -37,6 +38,7 @@ on:
       - apps/desktop/src-tauri/icons/**
       - apps/desktop/src-tauri/tauri.conf.json
       - scripts/release/**
+      - scripts/lib/**
       - README.md
       - package.json
       - pnpm-lock.yaml

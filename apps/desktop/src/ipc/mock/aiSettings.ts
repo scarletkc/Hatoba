@@ -1,5 +1,5 @@
-import { byteCount, INSTRUCTIONS_MAX_BYTES } from "@/features/ai/instructions";
-import { AI_TEXT_SIZE_DEFAULT, AI_TEXT_SIZE_MAX, AI_TEXT_SIZE_MIN } from "@/features/ai/textSize";
+import { byteCount, INSTRUCTIONS_MAX_BYTES } from "@/lib/ai/instructions";
+import { AI_TEXT_SIZE_DEFAULT, AI_TEXT_SIZE_MAX, AI_TEXT_SIZE_MIN } from "@/lib/ai/textSize";
 import { appError, type HatobaApi } from "../api";
 import { applyPatch } from "./patch";
 import type {

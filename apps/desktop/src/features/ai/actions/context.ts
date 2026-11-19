@@ -9,8 +9,8 @@ import { tabHostId, useTabs, type SessionTab } from "@/app/tabs";
 import { getSession, type LiveSession } from "@/session/session";
 import { t, type MessageKey, type Params } from "@/i18n";
 import type { AiEffort, AiModelRef, AiTurnContext } from "@/ipc/types";
-import { chosenEffort } from "../effort";
-import { conversationModel } from "../models";
+import { chosenEffort } from "@/lib/ai/effort";
+import { conversationModel } from "@/lib/ai/models";
 import { getSlot, HOME_SLOT, sendsScreen, tabOf, useAi } from "../store";
 import { screenNote } from "../terminal/terminalText";
 

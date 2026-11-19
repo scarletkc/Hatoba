@@ -31,7 +31,7 @@ use std::time::Duration;
 
 use crate::error::SshError;
 use crate::exec::Exec;
-use crate::remote_file::{after_marker, command, last_line};
+use crate::script::{after_marker, check_line, command, last_line};
 use crate::session::ExecOutput;
 
 /// Reads the path, and the directories below it to search instead, from the variables `f` and `s`,
@@ -306,11 +306,7 @@ pub async fn grep(
 
 /// One line of stdin, without a line break or NUL; not empty unless `empty` allows it.
 fn line(value: &str, empty: bool) -> Result<&str, RemoteSearchError> {
-    if (value.is_empty() && !empty) || value.contains(['\n', '\r', '\0']) {
-        Err(RemoteSearchError::InvalidArgument)
-    } else {
-        Ok(value)
-    }
+    check_line(value, empty).ok_or(RemoteSearchError::InvalidArgument)
 }
 
 /// The scope's path, directories below and depth, a line each.
@@ -469,15 +465,19 @@ mod tests {
         let mut s = scope("~/etc", &names);
         s.max_depth = Some(2);
         let (command, stdin) = glob_request(&s, 10, Duration::from_millis(1500)).unwrap();
-        assert!(command.ends_with("' sh 11 2"), "{command}");
+        assert_eq!(command, format!("sh -c '{GLOB_SCRIPT}' sh 11 2"));
         assert_eq!(
             stdin,
             format!("~/etc\n\n2\n{GLOB_LINKS}\n{RUNNER}\n*.conf\nit's [!a]*\n").as_bytes()
         );
         let mut s = scope("/", &[]);
         s.below = "etc/nginx";
-        let (_, stdin) = glob_request(&s, 10, LIMIT).unwrap();
-        assert!(stdin.starts_with(b"/\netc/nginx\n-\n"));
+        let (command, stdin) = glob_request(&s, 10, LIMIT).unwrap();
+        assert_eq!(command, format!("sh -c '{GLOB_SCRIPT}' sh 11 30"));
+        assert_eq!(
+            stdin,
+            format!("/\netc/nginx\n-\n{GLOB_LINKS}\n{RUNNER}\n").as_bytes()
+        );
 
         let mut q = query("/etc", r"listen\s+80$", &names[..1]);
         q.extended = Some("listen[[:space:]]+80$");
@@ -486,7 +486,8 @@ mod tests {
             after: 0,
         };
         q.ignore_case = true;
-        let (_, stdin) = grep_request(&q, 10, LIMIT).unwrap();
+        let (command, stdin) = grep_request(&q, 10, LIMIT).unwrap();
+        assert_eq!(command, format!("sh -c '{GREP_SCRIPT}' sh 11 30"));
         assert_eq!(
             stdin,
             format!(
@@ -500,7 +501,8 @@ mod tests {
         q.multiline = true;
         q.extended = None;
         q.scope.max_depth = Some(0);
-        let (_, stdin) = grep_request(&q, 10, LIMIT).unwrap();
+        let (command, stdin) = grep_request(&q, 10, LIMIT).unwrap();
+        assert_eq!(command, format!("sh -c '{GREP_SCRIPT}' sh 11 30"));
         assert_eq!(
             stdin,
             format!("/etc\n\n1\nc\ns\n0\n0\nu\n{GREP_LINKS}\n{RUNNER}\nlisten\\s+80$\n\n*.conf\n")

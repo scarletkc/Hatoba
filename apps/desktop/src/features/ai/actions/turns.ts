@@ -4,7 +4,7 @@ import { toast } from "@hatoba/ui";
 import { t } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AiConversationView, AiEntryView, AiFileChange, AiFileRevert, AiTurnEndReason } from "@/ipc/types";
-import { composeMessage, notedPermission, parseMessage } from "../attachments";
+import { composeMessage, notedPermission, parseMessage } from "@/lib/ai/attachments";
 import { askEditedFiles } from "../calls/EditFiles";
 import { menuSources, useMcp } from "../mcp";
 import { notifyAi } from "../notify";

@@ -3,7 +3,7 @@ import { Icon, IconButton } from "@hatoba/ui";
 import { useApp } from "@/app/store";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
-import { parseMessage, type Note } from "../attachments";
+import { parseMessage, type Note } from "@/lib/ai/attachments";
 import { AttachmentCardFor, ScreenCard } from "../composer/AttachmentChips";
 import { MODE_ICON } from "../tools";
 import { EditMessage } from "./EditMessage";

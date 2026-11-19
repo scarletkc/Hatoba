@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AiConversationView, AiEntryView } from "@/ipc/types";
-import type { PasteAttachment } from "../attachments";
+import type { PasteAttachment } from "@/lib/ai/attachments";
 import { newTurn } from "../turn";
 
 // The action never calls the backend; this keeps the real IPC layer out of the test.

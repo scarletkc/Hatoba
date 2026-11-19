@@ -12,9 +12,7 @@
 //! terminal tab took one over in the meantime ([`Dashboard::take_connection`]).
 
 use std::collections::{HashMap, HashSet};
-use std::hash::{BuildHasher, Hash, Hasher};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use hatoba_core::model::{Host, HostAuth, Item};
@@ -27,8 +25,9 @@ use tokio_util::sync::CancellationToken;
 use crate::convert::stats_view;
 use crate::dto::{DashboardEvent, DashboardHold, HostKeyPromptKind};
 use crate::error::{AppError, KeyParseErrorKind, SshErrorKind};
-use crate::ssh::{Unattended, build_config, connect_unattended, known_host_keys};
-use crate::state::state;
+use crate::host_chain::{JumpVersion, Versions, config_version, hops};
+use crate::ssh::{Unattended, build_config, connect_unattended};
+use crate::state::{MutexExt, state};
 
 /// Connections being set up at the same time, from the TCP connection to the end of sign-in.
 /// OpenSSH's default `MaxStartups` starts dropping unauthenticated connections past 10, which
@@ -150,10 +149,6 @@ struct Probe {
     online: OnceCell<bool>,
 }
 
-fn lock(inner: &Mutex<Inner>) -> MutexGuard<'_, Inner> {
-    inner.lock().unwrap_or_else(|p| p.into_inner())
-}
-
 /// Closes a connection without waiting for it.
 fn close(session: SshSession) {
     tauri::async_runtime::spawn(async move { session.disconnect().await });
@@ -172,7 +167,7 @@ impl Dashboard {
     ) -> u64 {
         let interval = Duration::from_secs(u64::from(interval_secs.clamp(1, 60)));
         let wanted: HashSet<&str> = host_ids.iter().map(String::as_str).collect();
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         inner.next_watch += 1;
         let id = inner.next_watch;
         let restart = inner.watch.as_ref().is_some_and(|w| w.interval != interval);
@@ -222,7 +217,7 @@ impl Dashboard {
 
     /// Stops the watch `id`: every reader stops, and the connections close a minute later.
     pub fn unwatch(&self, id: u64) {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         if inner.watch.as_ref().is_none_or(|w| w.id != id) {
             return;
         }
@@ -237,7 +232,9 @@ impl Dashboard {
     /// A terminal tab on the host connected: its reader looks at once, so a held host is read
     /// over the tab without waiting for the next minute.
     pub fn wake(&self, host_id: &str) {
-        if let Some(reader) = lock(&self.inner)
+        if let Some(reader) = self
+            .inner
+            .lock_unpoisoned()
             .hosts
             .get(host_id)
             .and_then(|e| e.reader.as_ref())
@@ -248,7 +245,7 @@ impl Dashboard {
 
     /// **Retry**: signs in to a held host again, and looks at an offline or failed one now.
     pub fn retry(&self, host_id: &str) {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         let Some(entry) = inner.hosts.get_mut(host_id) else {
             return;
         };
@@ -274,10 +271,11 @@ impl Dashboard {
 
     /// The lock (SEC-03): every reader stops and every connection of the dashboard closes now.
     /// The holds go too: they were made with hashes of the credentials, which start over at the
-    /// lock ([`forget_secret_hashes`]), so a held host is tried once more after the unlock.
+    /// lock ([`crate::host_chain::forget_secret_hashes`]), so a held host is tried once more after
+    /// the unlock.
     pub fn stop_all(&self) {
         let sessions: Vec<SshSession> = {
-            let mut inner = lock(&self.inner);
+            let mut inner = self.inner.lock_unpoisoned();
             inner.watch = None;
             inner.probes.clear();
             inner.hop_gates.clear();
@@ -304,7 +302,7 @@ impl Dashboard {
     /// open and was made for the host as it is now (`config` is [`Versions::config`]). The
     /// dashboard then reads over the tab's connection like any other.
     pub fn take_connection(&self, host_id: &str, config: &str) -> Option<SshSession> {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         let entry = inner.hosts.get_mut(host_id)?;
         let own = entry.own.take()?;
         if own.config == config && !own.session.is_closed() {
@@ -316,7 +314,9 @@ impl Dashboard {
     }
 
     fn emit(&self, event: DashboardEvent) {
-        let Some((id, sink)) = lock(&self.inner)
+        let Some((id, sink)) = self
+            .inner
+            .lock_unpoisoned()
             .watch
             .as_ref()
             .map(|w| (w.id, Arc::clone(&w.sink)))
@@ -331,7 +331,7 @@ impl Dashboard {
 
     /// The dashboard's open connection to the host, made for the host as it is now.
     fn own(&self, host_id: &str, config: &str) -> Option<SshSession> {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         let entry = inner.hosts.get_mut(host_id)?;
         let fresh = entry
             .own
@@ -355,7 +355,7 @@ impl Dashboard {
         config: String,
         cancel: &CancellationToken,
     ) -> bool {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         // Checked under the lock that `unwatch` and `stop_all` cancel under.
         if cancel.is_cancelled() {
             close(session);
@@ -370,7 +370,8 @@ impl Dashboard {
 
     /// Whether the dashboard still holds its own connection to the host.
     fn owns(&self, host_id: &str) -> bool {
-        lock(&self.inner)
+        self.inner
+            .lock_unpoisoned()
             .hosts
             .get(host_id)
             .is_some_and(|e| e.own.is_some())
@@ -379,7 +380,7 @@ impl Dashboard {
     /// Whether the page's readings of the host came from a connection made for other settings
     /// (another server, perhaps), and are to be dropped. Once.
     fn settings_changed(&self, host_id: &str, config: &str) -> bool {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         let Some(entry) = inner.hosts.get_mut(host_id) else {
             return false;
         };
@@ -391,14 +392,16 @@ impl Dashboard {
     }
 
     fn reading_with(&self, host_id: &str, config: &str) {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         let entry = inner.hosts.entry(host_id.to_owned()).or_default();
         entry.read_with = Some(config.to_owned());
     }
 
     /// Closes the dashboard's own connection to the host, now that a tab's serves it.
     fn drop_own(&self, host_id: &str) {
-        let own = lock(&self.inner)
+        let own = self
+            .inner
+            .lock_unpoisoned()
             .hosts
             .get_mut(host_id)
             .and_then(|e| e.own.take());
@@ -410,7 +413,7 @@ impl Dashboard {
     /// The reader `reader_id` of the host ended: it is forgotten, so a later watch starts
     /// another, and the connection lingers.
     fn reader_ended(&self, host_id: &str, reader_id: u64) {
-        if let Some(entry) = lock(&self.inner).hosts.get_mut(host_id)
+        if let Some(entry) = self.inner.lock_unpoisoned().hosts.get_mut(host_id)
             && entry.reader.as_ref().is_some_and(|r| r.id == reader_id)
         {
             entry.reader = None;
@@ -422,7 +425,7 @@ impl Dashboard {
     /// again before then or a tab took the connection over.
     fn release(&self, host_id: &str) {
         let generation = {
-            let mut inner = lock(&self.inner);
+            let mut inner = self.inner.lock_unpoisoned();
             inner.next_release += 1;
             let generation = inner.next_release;
             let Some(entry) = inner.hosts.get_mut(host_id) else {
@@ -439,7 +442,7 @@ impl Dashboard {
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(LINGER).await;
             let own = {
-                let mut inner = lock(&inner);
+                let mut inner = inner.lock_unpoisoned();
                 inner.hosts.get_mut(&host_id).and_then(|entry| {
                     (entry.reader.is_none() && entry.released == generation)
                         .then(|| entry.own.take())
@@ -453,7 +456,7 @@ impl Dashboard {
     }
 
     fn held(&self, host_id: &str, version: &str) -> Option<(DashboardHold, Option<AppError>)> {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         let entry = inner.hosts.get_mut(host_id)?;
         if entry.hold.as_ref().is_some_and(|h| h.version != version) {
             entry.hold = None;
@@ -469,7 +472,7 @@ impl Dashboard {
         version: String,
         hop: Option<&JumpVersion>,
     ) {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         if let Some(jump) = hop {
             if let Some(gate) = inner.hop_gates.get_mut(&jump.id) {
                 gate.passed = None;
@@ -498,7 +501,7 @@ impl Dashboard {
     /// the one whose connection failed at them included, and those hosts no longer try them
     /// one at a time.
     fn passed(&self, jumps: &[JumpVersion]) {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         for jump in jumps {
             inner
                 .hop_gates
@@ -539,7 +542,7 @@ impl Dashboard {
         order.dedup_by(|a, b| a.id == b.id);
         for jump in order {
             let gate = {
-                let mut inner = lock(&self.inner);
+                let mut inner = self.inner.lock_unpoisoned();
                 let entry = inner
                     .hop_gates
                     .entry(jump.id.clone())
@@ -551,7 +554,9 @@ impl Dashboard {
             };
             let permit = gate.acquire_owned().await.ok()?;
             // The connection before this one may have got through.
-            let passed = lock(&self.inner)
+            let passed = self
+                .inner
+                .lock_unpoisoned()
                 .hop_gates
                 .get(&jump.id)
                 .and_then(|g| g.passed.as_deref())
@@ -570,7 +575,7 @@ impl Dashboard {
         host_id: &str,
         jumps: &[JumpVersion],
     ) -> Option<(DashboardHold, Option<AppError>)> {
-        let mut inner = lock(&self.inner);
+        let mut inner = self.inner.lock_unpoisoned();
         let mut found = None;
         for jump in jumps {
             match inner.hop_holds.get(&jump.id) {
@@ -593,14 +598,14 @@ impl Dashboard {
     }
 
     fn unsupported(&self, host_id: &str, config: &str) -> Option<String> {
-        let inner = lock(&self.inner);
+        let inner = self.inner.lock_unpoisoned();
         let (version, system) = inner.hosts.get(host_id)?.unsupported.as_ref()?;
         (version == config).then(|| system.clone())
     }
 
     fn set_unsupported(&self, host_id: &str, config: String, system: String) {
         let own = {
-            let mut inner = lock(&self.inner);
+            let mut inner = self.inner.lock_unpoisoned();
             let entry = inner.hosts.entry(host_id.to_owned()).or_default();
             entry.unsupported = Some((config, system));
             entry.own.take()
@@ -615,7 +620,7 @@ impl Dashboard {
     /// [`PROBE_FRESH`] for every host it is the first hop of, and again after **Retry**.
     async fn probe(&self, host_id: &str, target: &ProbeTarget) -> bool {
         let probe = {
-            let mut inner = lock(&self.inner);
+            let mut inner = self.inner.lock_unpoisoned();
             let reprobe = inner
                 .hosts
                 .get_mut(host_id)
@@ -647,184 +652,6 @@ impl Dashboard {
             })
             .await
     }
-}
-
-/// What a host's connection depends on. A change to `config` (the host or a jump host was
-/// edited) closes the dashboard's connection made before it; a change to either ends a hold.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Versions {
-    config: String,
-    /// The trusted host keys of every hop: a key accepted in a tab ends a host key hold.
-    trust: String,
-    /// Each jump host, outwards, with its own part of the two.
-    jumps: Vec<JumpVersion>,
-}
-
-/// A jump host of a chain, and how it connects: what its shared hold is valid for.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct JumpVersion {
-    id: String,
-    version: String,
-}
-
-impl Versions {
-    /// Only what the connection is made from counts, so starring a host or a sync pull that
-    /// changes its notes neither ends a hold nor closes a connection.
-    fn of(vault: &Vault, host: &Host) -> Self {
-        let hops = chain(vault, host);
-        let mut config = Vec::new();
-        let mut trust = Vec::new();
-        let mut jumps: Vec<(usize, JumpVersion)> = Vec::new();
-        for (i, (id, hop)) in hops.iter().enumerate() {
-            let hop_config = hop_config(vault, hop, i + 1 == hops.len());
-            let mut keys: Vec<String> = known_host_keys(vault, &hop.address, hop.port)
-                .into_iter()
-                .map(|(_, k)| k.fingerprint)
-                .collect();
-            keys.sort();
-            let hop_trust = keys.join(",");
-            if let Some(id) = id {
-                jumps.push((
-                    i,
-                    JumpVersion {
-                        id: (*id).to_owned(),
-                        version: String::new(),
-                    },
-                ));
-            }
-            config.push(hop_config);
-            trust.push(hop_trust);
-        }
-        // A jump host connects through the hops outwards of it as well.
-        let jumps = jumps
-            .into_iter()
-            .map(|(i, jump)| JumpVersion {
-                version: format!("{}|{}", config[i..].join(";"), trust[i..].join(";")),
-                ..jump
-            })
-            .collect();
-        Self {
-            config: config.join(";"),
-            trust: trust.join(";"),
-            jumps,
-        }
-    }
-
-    fn all(&self) -> String {
-        format!("{}|{}", self.config, self.trust)
-    }
-
-    /// [`Versions::config`] alone, without reading the trusted keys of every hop.
-    fn config_of(vault: &Vault, host: &Host) -> String {
-        let hops = chain(vault, host);
-        hops.iter()
-            .enumerate()
-            .map(|(i, (_, hop))| hop_config(vault, hop, i + 1 == hops.len()))
-            .collect::<Vec<_>>()
-            .join(";")
-    }
-}
-
-/// How one hop of a chain connects: its target, its credentials (hashed) and, on the first
-/// hop (`outermost`), the proxy.
-fn hop_config(vault: &Vault, hop: &Host, outermost: bool) -> String {
-    let auth = match &hop.auth {
-        HostAuth::Password { password } => {
-            format!("password#{:x}", secret_hash(&[password]))
-        }
-        HostAuth::Key { key_id } => {
-            let key = vault.get(key_id).and_then(Item::as_key).map(|k| {
-                let passphrase = k.passphrase.as_deref().map_or("", |p| p.as_str());
-                secret_hash(&[&k.private_key, passphrase])
-            });
-            format!("key:{key_id}#{:x}", key.unwrap_or(0))
-        }
-        HostAuth::Agent => "agent".to_owned(),
-        HostAuth::Ask => "ask".to_owned(),
-    };
-    // The proxy only matters on the first hop, the outermost one.
-    let proxy = if outermost {
-        match crate::ssh::resolve_proxy(vault, &hop.proxy) {
-            Ok(Some(p)) => format!(
-                "{:?} {}@{}:{}#{:x}",
-                p.kind,
-                p.username,
-                p.host,
-                p.port,
-                secret_hash(&[&p.password])
-            ),
-            Ok(None) => "direct".to_owned(),
-            Err(_) => "missing".to_owned(),
-        }
-    } else {
-        String::new()
-    };
-    format!(
-        "{}@{}:{} {auth} {proxy}",
-        hop.username, hop.address, hop.port
-    )
-}
-
-/// Mixed into every hash of secrets, and replaced at the lock: a hash made before it, which
-/// may linger in memory, can then no longer be checked against guesses. 0 until first used.
-static SALT: AtomicU64 = AtomicU64::new(0);
-
-/// A salt from the system's random source, never 0.
-fn new_salt() -> u64 {
-    let random = uuid::Uuid::new_v4().as_u128();
-    ((random as u64) ^ ((random >> 64) as u64)).max(1)
-}
-
-/// The lock (SEC-03): hashes of secrets start over, so none made while the vault was unlocked
-/// stays useful after it locks. Versions made before it no longer match any made after it.
-pub fn forget_secret_hashes() {
-    SALT.store(new_salt(), Ordering::Relaxed);
-}
-
-/// A hash of secrets, so a version can tell a changed password from the old one without
-/// holding either, or copying it.
-fn secret_hash(parts: &[&str]) -> u64 {
-    let salt = match SALT.load(Ordering::Relaxed) {
-        0 => {
-            let fresh = new_salt();
-            SALT.compare_exchange(0, fresh, Ordering::Relaxed, Ordering::Relaxed)
-                .map_or_else(|set| set, |_| fresh)
-        }
-        salt => salt,
-    };
-    salted_hash(salt, parts)
-}
-
-fn salted_hash(salt: u64, parts: &[&str]) -> u64 {
-    static KEY: std::sync::OnceLock<std::collections::hash_map::RandomState> =
-        std::sync::OnceLock::new();
-    let mut hasher = KEY.get_or_init(Default::default).build_hasher();
-    salt.hash(&mut hasher);
-    for part in parts {
-        part.hash(&mut hasher);
-    }
-    hasher.finish()
-}
-
-/// The host, then its jump hosts outwards with their ids, as far as the chain goes without
-/// looping.
-fn chain<'a>(vault: &'a Vault, host: &'a Host) -> Vec<(Option<&'a str>, &'a Host)> {
-    let mut hops = vec![(None, host)];
-    let mut seen = HashSet::new();
-    let mut next = host.jump_host_id.as_deref();
-    while let Some(id) = next.filter(|id| seen.insert(*id) && seen.len() <= 8) {
-        let Some(jump) = vault.get(id).and_then(Item::as_host) else {
-            break;
-        };
-        hops.push((Some(id), jump));
-        next = jump.jump_host_id.as_deref();
-    }
-    hops
-}
-
-/// The host, then its jump hosts outwards.
-fn hops<'a>(vault: &'a Vault, host: &'a Host) -> Vec<&'a Host> {
-    chain(vault, host).into_iter().map(|(_, h)| h).collect()
 }
 
 /// Whether a hop asks for its password on every connection (SSH-03).
@@ -1245,7 +1072,7 @@ async fn read_step(
                     let current = state.with_unlocked(|v| {
                         Ok(v.get(host_id)
                             .and_then(Item::as_host)
-                            .map(|h| Versions::config_of(v, h)))
+                            .map(|h| config_version(v, h)))
                     });
                     if !matches!(current, Ok(Some(c)) if c == config) {
                         break Some(Duration::ZERO);
@@ -1274,15 +1101,10 @@ async fn read_step(
     wait
 }
 
-/// The version `take_connection` compares, for `ssh_connect`.
-pub fn config_version(vault: &Vault, host: &Host) -> String {
-    Versions::config_of(vault, host)
-}
-
 #[cfg(test)]
 mod tests {
     use hatoba_core::KdfParams;
-    use hatoba_core::model::{HostProxy, KnownHost};
+    use hatoba_core::model::HostProxy;
 
     use super::*;
 
@@ -1378,13 +1200,7 @@ mod tests {
     }
 
     #[test]
-    fn the_lock_starts_hashes_of_secrets_over_and_ends_the_holds() {
-        // Another salt, another hash: one made before the lock matches none made after it.
-        assert_eq!(salted_hash(7, &["pw"]), salted_hash(7, &["pw"]));
-        assert_ne!(salted_hash(7, &["pw"]), salted_hash(8, &["pw"]));
-        let (a, b) = (new_salt(), new_salt());
-        assert!(a != 0 && b != 0 && a != b);
-        // The holds made with them go at the lock.
+    fn the_lock_ends_the_holds() {
         let dash = Dashboard::default();
         let bastion = JumpVersion {
             id: "bastion".to_owned(),
@@ -1418,61 +1234,6 @@ mod tests {
         dash.reading_with("h", "b");
         dash.stop_all();
         assert!(!dash.settings_changed("h", "c"));
-    }
-
-    #[test]
-    fn versions_follow_the_chain_and_its_trusted_keys() {
-        let mut v = vault();
-        let bastion = v.put(None, host("bastion", password("pw"), None)).unwrap();
-        let id = v
-            .put(None, host("app", password("pw"), Some(&bastion)))
-            .unwrap();
-        let before = Versions::of(&v, &get(&v, &id));
-        assert_eq!(before, Versions::of(&v, &get(&v, &id)));
-
-        // A key accepted for the jump host changes the trust, not the configuration.
-        for fingerprint in ["SHA256:b", "SHA256:a"] {
-            v.put(
-                None,
-                Item::KnownHost(KnownHost {
-                    host: "bastion".to_owned(),
-                    port: 22,
-                    key_type: fingerprint.to_owned(),
-                    public_key: fingerprint.to_owned(),
-                    fingerprint: fingerprint.to_owned(),
-                    first_seen_at: 1,
-                    updated_at: 0,
-                }),
-            )
-            .unwrap();
-        }
-        let trusted = Versions::of(&v, &get(&v, &id));
-        assert_eq!(trusted.config, before.config);
-        assert_eq!(config_version(&v, &get(&v, &id)), trusted.config);
-        assert_ne!(trusted.trust, before.trust);
-        assert!(trusted.trust.contains("SHA256:a,SHA256:b"));
-
-        // Starring or renaming a host changes nothing a connection is made from.
-        let mut starred = get(&v, &id);
-        starred.favorite = true;
-        starred.name = "renamed".to_owned();
-        v.put(Some(&id), Item::Host(starred)).unwrap();
-        assert_eq!(Versions::of(&v, &get(&v, &id)), trusted);
-
-        // A new password does, as does editing the jump host.
-        let mut repassed = get(&v, &id);
-        repassed.auth = password("new");
-        v.put(Some(&id), Item::Host(repassed)).unwrap();
-        let repassed = Versions::of(&v, &get(&v, &id));
-        assert_ne!(repassed.config, trusted.config);
-        assert!(!repassed.config.contains("new"));
-        let mut jump = get(&v, &bastion);
-        jump.port = 2222;
-        v.put(Some(&bastion), Item::Host(jump)).unwrap();
-        let edited = Versions::of(&v, &get(&v, &id));
-        assert_ne!(edited.config, repassed.config);
-        assert_eq!(config_version(&v, &get(&v, &id)), edited.config);
-        assert_ne!(edited.all(), repassed.all());
     }
 
     #[test]
@@ -1632,40 +1393,6 @@ mod tests {
         };
         assert!(dash.jump_held("app-2", &[edited]).is_none());
         assert!(dash.jump_held("app-2", &[bastion]).is_none());
-    }
-
-    #[test]
-    fn each_jump_host_has_a_version_of_its_own() {
-        let mut v = vault();
-        let bastion = v.put(None, host("bastion", password("pw"), None)).unwrap();
-        let id = v
-            .put(None, host("app", password("pw"), Some(&bastion)))
-            .unwrap();
-        let before = Versions::of(&v, &get(&v, &id));
-        assert_eq!(before.jumps.len(), 1);
-        assert_eq!(before.jumps[0].id, bastion);
-        // The jump host's own connection shares its gate and holds with the hosts behind it.
-        assert_eq!(
-            Versions::of(&v, &get(&v, &bastion)).all(),
-            before.jumps[0].version
-        );
-        // The destination's own password does not change the jump host's version.
-        let mut app = get(&v, &id);
-        app.auth = password("new");
-        v.put(Some(&id), Item::Host(app)).unwrap();
-        let after = Versions::of(&v, &get(&v, &id));
-        assert_eq!(after.jumps, before.jumps);
-        let mut jump = get(&v, &bastion);
-        jump.auth = password("new");
-        v.put(Some(&bastion), Item::Host(jump)).unwrap();
-        let repassed = Versions::of(&v, &get(&v, &id)).jumps;
-        assert_ne!(repassed, before.jumps);
-        // So does a change to the hops outwards of the jump host.
-        let outer = v.put(None, host("outer", password("pw"), None)).unwrap();
-        let mut jump = get(&v, &bastion);
-        jump.jump_host_id = Some(outer);
-        v.put(Some(&bastion), Item::Host(jump)).unwrap();
-        assert_ne!(Versions::of(&v, &get(&v, &id)).jumps[0], repassed[0]);
     }
 
     #[tokio::test]

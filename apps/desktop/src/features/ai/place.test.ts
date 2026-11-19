@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { TabSource } from "@/app/tabs";
 import { translate, type MessageKey, type Params } from "@/i18n";
 import type { HostView, QuickTarget, TelnetHostView } from "@/ipc/types";
-import { connectionFor, conversationPlace, movedFrom, moves, placeLabel, placeName } from "./place";
+import { connectionFor, conversationPlace, movedFrom, moves, placeLabel, placeName } from "@/lib/ai/place";
 import { serverLabel } from "./calls/revertText";
 
 const t = (key: MessageKey, params?: Params) => translate("en", key, params);
