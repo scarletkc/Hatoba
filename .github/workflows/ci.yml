@@ -23,8 +23,41 @@ env:
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
+  # The ruleset on main merges a pull request only when it is up to date with main and passed CI, so
+  # a push to main would repeat that run on the same files. When the pull request of the pushed
+  # commit did pass on them, the push skips the tests, and the Rust jobs only check that main still
+  # has their cache. The builds that only pushes run are not affected.
+  tested:
+    name: Tested by pull request
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      # Reads the pull request of the pushed commit and its CI runs.
+      actions: read
+      pull-requests: read
+    outputs:
+      tested: ${{ steps.tested.outputs.tested }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The parent commit is main before the merge, which the pull request has to include.
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: tested
+        run: node scripts/ci/tested.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
   frontend:
     name: Frontend
+    needs: tested
+    # Runs unless the tested job found that the pull request passed, so it also runs when that job
+    # fails or is skipped, as it is for pull requests and manual runs.
+    if: ${{ !cancelled() && needs.tested.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -38,6 +71,8 @@ jobs:
 
   worker:
     name: Sync Worker
+    needs: tested
+    if: ${{ !cancelled() && needs.tested.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -66,6 +101,8 @@ jobs:
 
   scripts:
     name: Release scripts
+    needs: tested
+    if: ${{ !cancelled() && needs.tested.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -77,8 +114,8 @@ jobs:
       - run: node --test "scripts/**/*.test.mjs"
 
   # Pull requests that change nothing the Rust jobs build or check, apart from the release version,
-  # skip them. A job skipped by its `if` passes as a required check. Pushes and manual runs run them
-  # all.
+  # skip them. A job skipped by its `if` passes as a required check. Pushes and manual runs start
+  # them all.
   changes:
     name: Changes
     if: github.event_name == 'pull_request'
@@ -99,7 +136,7 @@ jobs:
 
   rust-linux:
     name: Rust (Linux, SSH integration)
-    needs: changes
+    needs: [changes, tested]
     # Runs unless the changes job found no Rust inputs, so it also runs when that job fails or is
     # skipped.
     if: ${{ !cancelled() && needs.changes.outputs.rust != 'false' }}
@@ -107,46 +144,76 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-tauri-linux
-        with:
-          ssh: true
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+      # On a push that the pull request already tested, this only looks up the cache that the step
+      # below would restore, and the job ends here when main has it. Without it, as after a
+      # dependency change or a new Rust release, the job runs in full and saves one, because pull
+      # requests can only restore the caches that main saved.
       - uses: Swatinem/rust-cache@v2
+        id: cached
+        if: needs.tested.outputs.tested == 'true'
+        with:
+          lookup-only: true
+          save-if: false
+      - uses: Swatinem/rust-cache@v2
+        if: steps.cached.outputs.cache-hit != 'true'
         with:
           cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: ./.github/actions/setup-tauri-linux
+        if: steps.cached.outputs.cache-hit != 'true'
+        with:
+          ssh: true
       - uses: ./.github/actions/setup-node-pnpm
+        if: steps.cached.outputs.cache-hit != 'true'
       - name: Build frontend (embedded by tauri::generate_context!)
+        if: steps.cached.outputs.cache-hit != 'true'
         run: pnpm --filter @hatoba/desktop build
-      - run: cargo fmt --all --check
+      - if: steps.cached.outputs.cache-hit != 'true'
+        run: cargo fmt --all --check
       # rustfmt leaves comments alone on stable, so this keeps them within its 100 columns.
-      - run: node scripts/ci/comment-width.mjs
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - if: steps.cached.outputs.cache-hit != 'true'
+        run: node scripts/ci/comment-width.mjs
+      - if: steps.cached.outputs.cache-hit != 'true'
+        run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests (incl. OpenSSH integration tests)
+        if: steps.cached.outputs.cache-hit != 'true'
         run: cargo test --workspace
         env:
           HATOBA_SSH_IT: "1"
       - name: TypeScript bindings are up to date
+        if: steps.cached.outputs.cache-hit != 'true'
         run: git diff --exit-code apps/desktop/src/ipc/bindings.ts
 
   rust-windows:
     name: Rust (Windows)
-    needs: changes
+    needs: [changes, tested]
     if: ${{ !cancelled() && needs.changes.outputs.rust != 'false' }}
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      # Only looks up the cache on a push that the pull request already tested, as in the Linux job.
       - uses: Swatinem/rust-cache@v2
+        id: cached
+        if: needs.tested.outputs.tested == 'true'
+        with:
+          lookup-only: true
+          save-if: false
+      - uses: Swatinem/rust-cache@v2
+        if: steps.cached.outputs.cache-hit != 'true'
         with:
           cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: ./.github/actions/setup-node-pnpm
-      - run: pnpm --filter @hatoba/desktop build
-      - run: cargo test --workspace
+        if: steps.cached.outputs.cache-hit != 'true'
+      - if: steps.cached.outputs.cache-hit != 'true'
+        run: pnpm --filter @hatoba/desktop build
+      - if: steps.cached.outputs.cache-hit != 'true'
+        run: cargo test --workspace
 
   windows-installer:
     name: Windows installer
@@ -193,7 +260,7 @@ jobs:
 
   rust-macos:
     name: Rust (macOS)
-    needs: changes
+    needs: [changes, tested]
     if: ${{ !cancelled() && needs.changes.outputs.rust != 'false' }}
     runs-on: macos-latest
     timeout-minutes: 60
@@ -202,16 +269,28 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      # Only looks up the cache on a push that the pull request already tested, as in the Linux job.
       - uses: Swatinem/rust-cache@v2
+        id: cached
+        if: needs.tested.outputs.tested == 'true'
+        with:
+          lookup-only: true
+          save-if: false
+      - uses: Swatinem/rust-cache@v2
+        if: steps.cached.outputs.cache-hit != 'true'
         with:
           cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: ./.github/actions/setup-node-pnpm
-      - run: pnpm --filter @hatoba/desktop build
+        if: steps.cached.outputs.cache-hit != 'true'
+      - if: steps.cached.outputs.cache-hit != 'true'
+        run: pnpm --filter @hatoba/desktop build
       # The first run that compiles the macOS-only code, such as platform/window.rs.
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - if: steps.cached.outputs.cache-hit != 'true'
+        run: cargo clippy --workspace --all-targets -- -D warnings
       # The SSH integration tests stay off here: their harness needs Linux and root to start sshd.
-      - run: cargo test --workspace
+      - if: steps.cached.outputs.cache-hit != 'true'
+        run: cargo test --workspace
 
   macos-bundle:
     name: macOS app bundle
