@@ -4,10 +4,10 @@
 // Usage: node scripts/ci/changes.mjs BASE
 // Compares HEAD with BASE, prints rust=true or rust=false, and in GitHub Actions also appends it to
 // $GITHUB_OUTPUT.
-import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { ROOT, onlyVersionChanged } from "../release/version.mjs";
+import { ROOT, gitRaw, nulSeparated } from "../lib/git.mjs";
+import { onlyVersionChanged } from "../release/version.mjs";
 
 /** The files that the Rust jobs compile, read, or check. A path ending in / covers a directory. */
 const RUST_INPUTS = [
@@ -36,12 +36,7 @@ function main(argv) {
     return 2;
   }
   // Without rename detection, a file moved out of a Rust input counts as a change to it.
-  const changed = execFileSync("git", ["diff", "--name-only", "-z", "--no-renames", argv[0], "HEAD"], {
-    cwd: ROOT,
-    encoding: "utf8",
-  })
-    .split("\0")
-    .filter(Boolean);
+  const changed = nulSeparated(gitRaw(["diff", "--name-only", "-z", "--no-renames", argv[0], "HEAD"], ROOT));
   const inputs = changed.filter(affectsRust);
   const bumped = inputs.filter((path) => onlyVersionChanged(path, argv[0], "HEAD"));
   const rust = inputs.filter((path) => !bumped.includes(path));

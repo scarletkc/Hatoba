@@ -1,11 +1,10 @@
 // Checks that no comment line in the Rust sources is longer than 100 characters, the width
 // rustfmt keeps the code within. rustfmt leaves comments alone: `wrap_comments` is nightly-only.
 // Usage: node scripts/ci/comment-width.mjs
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { ROOT } from "../release/version.mjs";
+import { ROOT, lsFiles } from "../lib/git.mjs";
 
 export const MAX_WIDTH = 100;
 
@@ -93,18 +92,8 @@ export function longComments(text) {
   return found;
 }
 
-/** The Rust files in the working tree that git tracks or would track. */
-function rustFiles(root) {
-  const output = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "*.rs"], {
-    cwd: root,
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  return output.split("\0").filter((path) => path && existsSync(join(root, path)));
-}
-
 function main() {
-  const files = rustFiles(ROOT);
+  const files = lsFiles("*.rs", ROOT);
   const found = files.flatMap((path) =>
     longComments(readFileSync(join(ROOT, path), "utf8")).map((long) => ({ path, ...long })),
   );
