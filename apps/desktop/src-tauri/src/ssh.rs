@@ -23,7 +23,9 @@ use crate::dto::{
     AuthBanner, AuthPrompt, AuthPromptClosed, AuthPromptField, HostKeyPrompt, HostKeyPromptKind,
 };
 use crate::error::{AppError, AppResult, SshErrorKind};
-use crate::state::{AppState, now_ms, state};
+use crate::host_chain::{MAX_JUMP_DEPTH, first_hop};
+use crate::state::{AppState, MutexExt, now_ms, state};
+use crate::terminal::SessionRegistry;
 use crate::{connection, sync};
 
 /// How long a host-key or 2FA prompt may stay unanswered before the connection gives up.
@@ -72,7 +74,7 @@ impl LiveSession {
     /// Keeps the sampling started as `id` in place of an earlier one, which stops. Starts can
     /// finish out of order: one that a later start already replaced is dropped, and so stops.
     pub fn set_stats(&self, id: u64, handle: StatsHandle) {
-        let mut stats = lock(&self.stats);
+        let mut stats = self.stats.lock_unpoisoned();
         if stats.as_ref().is_none_or(|(current, _)| *current < id) {
             *stats = Some((id, handle));
         }
@@ -80,7 +82,7 @@ impl LiveSession {
 
     /// Stops the sampling started as `id`, unless a later one replaced it.
     pub fn stop_stats(&self, id: u64) {
-        let mut stats = lock(&self.stats);
+        let mut stats = self.stats.lock_unpoisoned();
         if stats.as_ref().is_some_and(|(current, _)| *current == id) {
             *stats = None;
         }
@@ -89,85 +91,72 @@ impl LiveSession {
     /// Stops sampling and closes the shell and SFTP, which ends the tab's transfers. Its own
     /// connection closes too; a shared one closes once nothing else is left on it.
     pub async fn close(&self) {
-        lock(&self.stats).take();
+        self.stats.lock_unpoisoned().take();
         if let Some(sftp) = self.sftp.get() {
             sftp.close().await;
         }
         self.shell.close().await;
         match &self.link {
             Link::Own => self.session.disconnect().await,
-            Link::Shared(tab) => drop(lock(tab).take()),
+            Link::Shared(tab) => drop(tab.lock_unpoisoned().take()),
         }
     }
 }
 
 #[derive(Default)]
 pub struct SshManager {
-    sessions: Mutex<HashMap<String, Arc<LiveSession>>>,
+    sessions: SessionRegistry<LiveSession>,
     hostkey_waiters: Mutex<HashMap<String, oneshot::Sender<bool>>>,
     auth_waiters: Mutex<HashMap<String, oneshot::Sender<Option<Vec<String>>>>>,
     transfers: Mutex<HashMap<String, CancellationToken>>,
 }
 
-fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|p| p.into_inner())
-}
-
 impl SshManager {
     pub fn insert(&self, id: String, session: Arc<LiveSession>) {
-        lock(&self.sessions).insert(id, session);
+        self.sessions.insert(id, session);
     }
 
     pub fn get(&self, id: &str) -> AppResult<Arc<LiveSession>> {
-        lock(&self.sessions)
-            .get(id)
-            .cloned()
-            .ok_or_else(|| AppError::not_found("session"))
+        self.sessions.get(id)
     }
 
     /// Removes the session only if it is still the given instance (a reconnect may have replaced
     /// it). `false` when something else removed it first.
     pub fn remove_if_same(&self, id: &str, live: &Arc<LiveSession>) -> bool {
-        let mut sessions = lock(&self.sessions);
-        if sessions.get(id).is_some_and(|s| Arc::ptr_eq(s, live)) {
-            sessions.remove(id);
-            true
-        } else {
-            false
-        }
+        self.sessions.remove_if_same(id, live)
     }
 
     pub fn take(&self, id: &str) -> Option<Arc<LiveSession>> {
-        lock(&self.sessions).remove(id)
+        self.sessions.take(id)
     }
 
     /// SEC-03 "lock disconnects sessions": takes every session out, by id, for the lock to close.
     pub fn take_all(&self) -> Vec<(String, Arc<LiveSession>)> {
-        lock(&self.sessions).drain().collect()
+        self.sessions.take_all()
     }
 
     pub fn answer_hostkey(&self, request_id: &str, accept: bool) {
-        if let Some(tx) = lock(&self.hostkey_waiters).remove(request_id) {
+        if let Some(tx) = self.hostkey_waiters.lock_unpoisoned().remove(request_id) {
             let _ = tx.send(accept);
         }
     }
 
     pub fn answer_auth(&self, request_id: &str, answers: Option<Vec<String>>) {
-        if let Some(tx) = lock(&self.auth_waiters).remove(request_id) {
+        if let Some(tx) = self.auth_waiters.lock_unpoisoned().remove(request_id) {
             let _ = tx.send(answers);
         }
     }
 
     pub fn add_transfer(&self, id: String, token: CancellationToken) {
-        lock(&self.transfers).insert(id, token);
+        self.transfers.lock_unpoisoned().insert(id, token);
     }
 
     pub fn finish_transfer(&self, id: &str) {
-        lock(&self.transfers).remove(id);
+        self.transfers.lock_unpoisoned().remove(id);
     }
 
     pub fn cancel_transfer(&self, id: &str) {
-        if let Some(token) = lock(&self.transfers).get(id) {
+        if let Some(token) = self.transfers.lock_unpoisoned().get(id) {
             token.cancel();
         }
     }
@@ -277,22 +266,6 @@ pub fn resolve_proxy(vault: &Vault, choice: &HostProxy) -> AppResult<Option<Prox
     }))
 }
 
-/// The first hop of a connection to `host`: its outermost jump host, or the host itself without
-/// one. A broken jump chain ends where it breaks.
-pub fn first_hop<'a>(vault: &'a Vault, host: &'a Host) -> &'a Host {
-    let mut first = host;
-    let mut seen = HashSet::new();
-    while let Some(jump) = first
-        .jump_host_id
-        .as_deref()
-        .filter(|id| seen.insert(id.to_owned()) && seen.len() <= 8)
-        .and_then(|id| vault.get(id).and_then(Item::as_host))
-    {
-        first = jump;
-    }
-    first
-}
-
 /// The proxy of a connection to `host`: the choice of its first hop.
 pub fn connection_proxy(vault: &Vault, host: &Host) -> AppResult<Option<ProxyConfig>> {
     resolve_proxy(vault, &first_hop(vault, host).proxy)
@@ -312,7 +285,7 @@ pub fn build_config(
     // The first hop is the last jump host reached, or the host itself.
     let mut first_proxy = &host.proxy;
     while let Some(jump_id) = next {
-        if !seen.insert(jump_id.clone()) || chain.len() >= 8 {
+        if !seen.insert(jump_id.clone()) || chain.len() >= MAX_JUMP_DEPTH {
             return Err(AppError::invalid(
                 "jump_host_id",
                 "the jump host chain loops",
@@ -425,7 +398,11 @@ impl HostKeyVerifier for Verifier {
         let (kind, previous) = host_key_status(&known, key);
         let request_id = uuid::Uuid::now_v7().to_string();
         let (tx, rx) = oneshot::channel();
-        lock(&state.ssh.hostkey_waiters).insert(request_id.clone(), tx);
+        state
+            .ssh
+            .hostkey_waiters
+            .lock_unpoisoned()
+            .insert(request_id.clone(), tx);
         let prompt = HostKeyPrompt {
             request_id: request_id.clone(),
             session_id: self.session_id.clone(),
@@ -446,11 +423,19 @@ impl HostKeyVerifier for Verifier {
             on_ask(Asking::HostKey { target });
         }
         if prompt.emit(&self.app).is_err() {
-            lock(&state.ssh.hostkey_waiters).remove(&request_id);
+            state
+                .ssh
+                .hostkey_waiters
+                .lock_unpoisoned()
+                .remove(&request_id);
             return false;
         }
         let accepted = matches!(tokio::time::timeout(PROMPT_TIMEOUT, rx).await, Ok(Ok(true)));
-        lock(&state.ssh.hostkey_waiters).remove(&request_id);
+        state
+            .ssh
+            .hostkey_waiters
+            .lock_unpoisoned()
+            .remove(&request_id);
         if accepted {
             let saved = state.with_unlocked(|v| save_host_key(v, host, port, key));
             match saved {
@@ -476,7 +461,11 @@ impl KeyboardInteractive for Interactive {
     async fn respond(&self, request: PromptRequest) -> Option<Vec<Zeroizing<String>>> {
         let request_id = uuid::Uuid::now_v7().to_string();
         let (tx, rx) = oneshot::channel();
-        lock(&state(&self.app).ssh.auth_waiters).insert(request_id.clone(), tx);
+        state(&self.app)
+            .ssh
+            .auth_waiters
+            .lock_unpoisoned()
+            .insert(request_id.clone(), tx);
         let _open = OpenPrompt {
             app: self.app.clone(),
             request_id: request_id.clone(),
@@ -531,7 +520,11 @@ impl KeyboardInteractive for Interactive {
         }
         let request_id = uuid::Uuid::now_v7().to_string();
         let (tx, rx) = oneshot::channel();
-        lock(&state(&self.app).ssh.auth_waiters).insert(request_id.clone(), tx);
+        state(&self.app)
+            .ssh
+            .auth_waiters
+            .lock_unpoisoned()
+            .insert(request_id.clone(), tx);
         let open = OpenPrompt {
             app: self.app.clone(),
             request_id: request_id.clone(),
@@ -561,7 +554,11 @@ pub async fn ask_sudo_password(
 ) -> Option<Zeroizing<String>> {
     let request_id = uuid::Uuid::now_v7().to_string();
     let (tx, rx) = oneshot::channel();
-    lock(&state(app).ssh.auth_waiters).insert(request_id.clone(), tx);
+    state(app)
+        .ssh
+        .auth_waiters
+        .lock_unpoisoned()
+        .insert(request_id.clone(), tx);
     // Dropped with this future too, when the `hatoba` request stops while it waits.
     let _open = OpenPrompt {
         app: app.clone(),
@@ -605,7 +602,11 @@ struct OpenPrompt {
 
 impl Drop for OpenPrompt {
     fn drop(&mut self) {
-        let waiting = lock(&state(&self.app).ssh.auth_waiters).remove(&self.request_id);
+        let waiting = state(&self.app)
+            .ssh
+            .auth_waiters
+            .lock_unpoisoned()
+            .remove(&self.request_id);
         if waiting.is_some() {
             let request_id = std::mem::take(&mut self.request_id);
             let _ = AuthPromptClosed { request_id }.emit(&self.app);
@@ -634,7 +635,7 @@ pub struct Unattended {
 impl Unattended {
     /// The host key was not trusted yet (`New`) or differs from the trusted one (`Changed`).
     pub fn host_key(&self) -> Option<HostKeyPromptKind> {
-        *lock(&self.host_key)
+        *self.host_key.lock_unpoisoned()
     }
 
     /// The server asked for keyboard-interactive answers beyond the saved password (2FA).
@@ -713,7 +714,7 @@ impl HostKeyVerifier for UnattendedVerifier {
             return true;
         }
         let (kind, _) = host_key_status(&known, key);
-        *lock(&self.outcome.host_key) = Some(kind);
+        *self.outcome.host_key.lock_unpoisoned() = Some(kind);
         false
     }
 }
@@ -1105,5 +1106,119 @@ mod tests {
             .respond(request())
             .await;
         assert!(at_key.prompted() && !at_key.password_prompted());
+    }
+
+    fn jump_host(address: &str, jump: Option<&str>) -> Item {
+        Item::Host(Host {
+            name: address.to_owned(),
+            address: address.to_owned(),
+            port: 22,
+            username: "deploy".to_owned(),
+            auth: HostAuth::Password {
+                password: Zeroizing::new("pw".to_owned()),
+            },
+            jump_host_id: jump.map(str::to_owned),
+            proxy: HostProxy::Direct,
+            ..Host::default()
+        })
+    }
+
+    fn host_by_id(v: &Vault, id: &str) -> Host {
+        v.get(id).and_then(Item::as_host).cloned().unwrap()
+    }
+
+    #[test]
+    fn first_hop_stops_on_loop_missing_jump_or_depth_limit() {
+        let mut v = Vault::open_in_memory().unwrap();
+        v.create_with_params(&hatoba_core::new_id(), KdfParams::for_tests())
+            .unwrap();
+
+        // Cycle b -> a -> b: `first_hop` follows `a` then `b`, then stops at `b`.
+        let a = v.put(None, jump_host("a", None)).unwrap();
+        let b = v.put(None, jump_host("b", Some(&a))).unwrap();
+        let mut ha = host_by_id(&v, &a);
+        ha.jump_host_id = Some(b.clone());
+        v.put(Some(&a), Item::Host(ha)).unwrap();
+        assert_eq!(first_hop(&v, &host_by_id(&v, &b)).address, "b");
+
+        // Cycle h -> j1 -> j2 -> j1: stops at j2.
+        let j1 = v.put(None, jump_host("j1", None)).unwrap();
+        let j2 = v.put(None, jump_host("j2", Some(&j1))).unwrap();
+        let mut hj1 = host_by_id(&v, &j1);
+        hj1.jump_host_id = Some(j2.clone());
+        v.put(Some(&j1), Item::Host(hj1)).unwrap();
+        let h_cycle = v.put(None, jump_host("leaf", Some(&j1))).unwrap();
+        assert_eq!(first_hop(&v, &host_by_id(&v, &h_cycle)).address, "j2");
+
+        // Missing jump host: stops at the last existing hop.
+        let j_ok = v
+            .put(None, jump_host("j-ok", Some("missing-jump")))
+            .unwrap();
+        let h_miss = v.put(None, jump_host("h-miss", Some(&j_ok))).unwrap();
+        assert_eq!(first_hop(&v, &host_by_id(&v, &h_miss)).address, "j-ok");
+        let h_direct_miss = v
+            .put(None, jump_host("h-direct-miss", Some("missing-jump")))
+            .unwrap();
+        assert_eq!(
+            first_hop(&v, &host_by_id(&v, &h_direct_miss)).address,
+            "h-direct-miss"
+        );
+
+        // Chain more than 8 deep: stops after 8 jump hosts (d8).
+        let mut prev: Option<String> = None;
+        for i in (1..=9).rev() {
+            let id = v
+                .put(None, jump_host(&format!("d{i}"), prev.as_deref()))
+                .unwrap();
+            prev = Some(id);
+        }
+        let deep = v.put(None, jump_host("deep", prev.as_deref())).unwrap();
+        assert_eq!(first_hop(&v, &host_by_id(&v, &deep)).address, "d8");
+    }
+
+    #[test]
+    fn build_config_rejects_loop_missing_jump_or_depth_limit() {
+        let mut v = Vault::open_in_memory().unwrap();
+        v.create_with_params(&hatoba_core::new_id(), KdfParams::for_tests())
+            .unwrap();
+
+        // Loop: returns Invalid("jump_host_id", "the jump host chain loops").
+        let a = v.put(None, jump_host("a", None)).unwrap();
+        let b = v.put(None, jump_host("b", Some(&a))).unwrap();
+        let mut ha = host_by_id(&v, &a);
+        ha.jump_host_id = Some(b.clone());
+        v.put(Some(&a), Item::Host(ha)).unwrap();
+        let err = build_config(&v, &host_by_id(&v, &b), Some(&b), None).unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("jump_host_id"));
+        assert!(err.detail.contains("loops"), "{}", err.detail);
+
+        // Missing jump host: returns Invalid("jump_host_id", "jump host not found").
+        let j_ok = v
+            .put(None, jump_host("j-ok", Some("missing-jump")))
+            .unwrap();
+        let h_miss = v.put(None, jump_host("h-miss", Some(&j_ok))).unwrap();
+        let err = build_config(&v, &host_by_id(&v, &h_miss), Some(&h_miss), None).unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("jump_host_id"));
+        assert!(err.detail.contains("not found"), "{}", err.detail);
+
+        // Exactly 8 jump hosts succeeds; 9 jump hosts fails as a loop.
+        let mut prev: Option<String> = None;
+        for i in (1..=9).rev() {
+            let id = v
+                .put(None, jump_host(&format!("c{i}"), prev.as_deref()))
+                .unwrap();
+            prev = Some(id);
+            if i == 2 {
+                let eight = v.put(None, jump_host("eight", prev.as_deref())).unwrap();
+                let cfg = build_config(&v, &host_by_id(&v, &eight), Some(&eight), None).unwrap();
+                assert_eq!(cfg.jump.len(), 8);
+                assert_eq!(cfg.jump[0].host, "c9");
+                assert_eq!(cfg.jump[7].host, "c2");
+            }
+        }
+        let nine = v.put(None, jump_host("nine", prev.as_deref())).unwrap();
+        let err = build_config(&v, &host_by_id(&v, &nine), Some(&nine), None).unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("jump_host_id"));
+        assert!(err.detail.contains("loops"), "{}", err.detail);
     }
 }

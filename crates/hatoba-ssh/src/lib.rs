@@ -30,6 +30,7 @@ pub mod proxy;
 pub mod remote_command;
 pub mod remote_file;
 pub mod remote_search;
+mod script;
 mod server_os;
 pub mod session;
 pub mod sftp;

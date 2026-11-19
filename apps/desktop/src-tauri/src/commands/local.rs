@@ -8,11 +8,11 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
 use tokio::sync::mpsc;
 
-use crate::commands::ssh::{FRAME_CLOSED, FRAME_DATA, TermFrame, emit_state};
 use crate::dto::{LocalOpenOptions, LocalShellKind, LocalShellView, SessionState};
 use crate::error::{AppError, AppResult};
 use crate::local::{shell_env, tools_env};
 use crate::state::AppState;
+use crate::terminal::{FRAME_CLOSED, FRAME_DATA, TermFrame, clamp_size, emit_state};
 
 pub(crate) fn shell_view(shell: &Shell, default: bool) -> LocalShellView {
     LocalShellView {
@@ -54,18 +54,14 @@ pub async fn local_open(
     options: LocalOpenOptions,
     channel: Channel<TermFrame>,
 ) -> AppResult<String> {
-    if !state.vault().is_unlocked() {
-        return Err(AppError::locked());
-    }
+    drop(state.require_unlocked()?);
     let id = shell_id.clone();
     let shell = tokio::task::spawn_blocking(move || hatoba_local::shells::find(Some(&id)))
         .await
         .map_err(|e| AppError::internal(e.to_string()))?
         .ok_or_else(|| AppError::not_found("shell"))?;
-    let size = PtySize {
-        cols: u16::try_from(options.cols.clamp(10, 1000)).unwrap_or(80),
-        rows: u16::try_from(options.rows.clamp(2, 500)).unwrap_or(24),
-    };
+    let (cols, rows) = clamp_size(options.cols, options.rows);
+    let size = PtySize { cols, rows };
     let env = shell_env(&app.package_info().version.to_string());
     let home = dirs::home_dir();
     let (pty, events) =
@@ -140,9 +136,7 @@ pub async fn local_write_bytes(
 
 fn write(state: &AppState, session_id: &str, data: Vec<u8>) -> AppResult<()> {
     // SEC-03: like SSH sessions, local shells take no input behind the lock screen.
-    if !state.vault().is_unlocked() {
-        return Err(AppError::locked());
-    }
+    drop(state.require_unlocked()?);
     state
         .local
         .get(session_id)?
@@ -160,10 +154,8 @@ pub async fn local_resize(
     rows: u32,
 ) -> AppResult<()> {
     let live = state.local.get(&session_id)?;
-    live.pty.resize(PtySize {
-        cols: u16::try_from(cols.clamp(10, 1000)).unwrap_or(80),
-        rows: u16::try_from(rows.clamp(2, 500)).unwrap_or(24),
-    });
+    let (cols, rows) = clamp_size(cols, rows);
+    live.pty.resize(PtySize { cols, rows });
     Ok(())
 }
 
