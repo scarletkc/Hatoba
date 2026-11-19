@@ -1,6 +1,6 @@
 //! Process-wide state managed by Tauri. Secrets only ever live here, in Rust (spec §3.2).
 
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use std::time::Instant;
 
@@ -98,27 +98,39 @@ impl AppState {
     /// Locks the vault mutex. Poisoning only happens after a panic while holding it; the vault's
     /// own invariants are transactional, so recovering the guard is safe.
     pub fn vault(&self) -> MutexGuard<'_, Vault> {
-        self.vault.lock().unwrap_or_else(|p| p.into_inner())
+        self.vault.lock_unpoisoned()
+    }
+
+    pub(crate) fn require_unlocked(&self) -> AppResult<MutexGuard<'_, Vault>> {
+        let vault = self.vault();
+        if !vault.is_unlocked() {
+            return Err(AppError::locked());
+        }
+        Ok(vault)
     }
 
     /// Runs `f` with the vault, requiring it to be unlocked.
     pub fn with_unlocked<R>(&self, f: impl FnOnce(&mut Vault) -> AppResult<R>) -> AppResult<R> {
-        let mut vault = self.vault();
-        if !vault.is_unlocked() {
-            return Err(AppError::locked());
-        }
+        let mut vault = self.require_unlocked()?;
         f(&mut vault)
     }
 
     pub fn touch_activity(&self) {
-        *self.last_activity.lock().unwrap_or_else(|p| p.into_inner()) = Instant::now();
+        *self.last_activity.lock_unpoisoned() = Instant::now();
     }
 
     pub fn idle_for(&self) -> std::time::Duration {
-        self.last_activity
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .elapsed()
+        self.last_activity.lock_unpoisoned().elapsed()
+    }
+}
+
+pub(crate) trait MutexExt<T: ?Sized> {
+    fn lock_unpoisoned(&self) -> MutexGuard<'_, T>;
+}
+
+impl<T: ?Sized> MutexExt<T> for Mutex<T> {
+    fn lock_unpoisoned(&self) -> MutexGuard<'_, T> {
+        self.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 

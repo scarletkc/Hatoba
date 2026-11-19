@@ -23,7 +23,8 @@ use zeroize::Zeroizing;
 
 use crate::error::SshError;
 use crate::exec::Exec;
-use crate::remote_file::{RemoteFileError, command, last_line};
+use crate::remote_file::RemoteFileError;
+use crate::script::{check_line, command, is_single_line, last_line};
 use crate::session::{ExecOutput, SshSession};
 use crate::sftp::{Tracker, TransferProgress, create_local_part};
 
@@ -153,7 +154,7 @@ impl RunAs {
 
 /// The password and a line break; `None` for one that sudo would read as more than one line.
 fn password_line(password: &str) -> Option<Vec<u8>> {
-    if password.contains(['\n', '\r', '\0']) {
+    if !is_single_line(password) {
         return None;
     }
     Some(format!("{password}\n").into_bytes())
@@ -450,10 +451,7 @@ pub(crate) fn root_command(run_as: &RunAs, script: &str) -> String {
 
 /// The password line, the marker, then a line for each of `lines`.
 fn request(run_as: &RunAs, lines: &[&str]) -> Result<Vec<u8>, RemoteFileError> {
-    if lines
-        .iter()
-        .any(|l| l.is_empty() || l.contains(['\n', '\r', '\0']))
-    {
+    if lines.iter().any(|l| check_line(l, false).is_none()) {
         return Err(RemoteFileError::InvalidPath);
     }
     let mut stdin = run_as

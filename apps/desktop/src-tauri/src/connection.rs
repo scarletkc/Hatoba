@@ -25,7 +25,7 @@ use crate::dto::{
 };
 use crate::error::{AppError, AppResult, ErrorCode, SshErrorKind};
 use crate::ssh::{Overrides, build_config, connect_with};
-use crate::state::{AppState, now_ms, state};
+use crate::state::{AppState, MutexExt, now_ms, state};
 
 /// The terminal tabs that share one connection; a further tab opens another. OpenSSH allows 10
 /// sessions on a connection by default (`MaxSessions`), and each tab may also hold one for SFTP,
@@ -38,14 +38,10 @@ pub const TABS_PER_CONNECTION: usize = 4;
 /// unanswered (SSH-06), after a minute or more.
 pub const JOIN_TIMEOUT: Duration = Duration::from_secs(10);
 
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|p| p.into_inner())
-}
-
 pub struct Connection {
     pub session: SshSession,
     pub host_id: String,
-    /// `dashboard::config_version` when it connected: tabs and forwards join it only while the
+    /// `host_chain::config_version` when it connected: tabs and forwards join it only while the
     /// host connects that way. The lock starts the version's hashes over, so the unlock stamps it
     /// again ([`Connections::restamp`]).
     config: Mutex<String>,
@@ -129,7 +125,7 @@ impl Drop for Starting {
 
 impl Connection {
     fn users(&self) -> MutexGuard<'_, Users> {
-        lock(&self.users)
+        self.users.lock_unpoisoned()
     }
 
     fn open(&self) -> bool {
@@ -275,13 +271,18 @@ pub struct Connections {
 
 impl Connections {
     fn gate(&self, host_id: &str) -> Arc<tokio::sync::Mutex<()>> {
-        Arc::clone(lock(&self.gates).entry(host_id.to_owned()).or_default())
+        Arc::clone(
+            self.gates
+                .lock_unpoisoned()
+                .entry(host_id.to_owned())
+                .or_default(),
+        )
     }
 
     /// The registered connections, oldest first. Copied out, so that the list's lock is never held
     /// while another is taken.
     fn all(&self) -> Vec<Arc<Connection>> {
-        lock(&self.list).clone()
+        self.list.lock_unpoisoned().clone()
     }
 
     /// The host's open connections, oldest first; with `config`, only those made the way the host
@@ -290,7 +291,9 @@ impl Connections {
         self.all()
             .into_iter()
             .filter(|c| {
-                c.host_id == host_id && config.is_none_or(|v| *lock(&c.config) == v) && c.open()
+                c.host_id == host_id
+                    && config.is_none_or(|v| *c.config.lock_unpoisoned() == v)
+                    && c.open()
             })
             .collect()
     }
@@ -302,7 +305,9 @@ impl Connections {
             let current = vault
                 .get(&conn.host_id)
                 .and_then(Item::as_host)
-                .is_some_and(|h| crate::dashboard::config_version(vault, h) == *lock(&conn.config));
+                .is_some_and(|h| {
+                    crate::host_chain::config_version(vault, h) == *conn.config.lock_unpoisoned()
+                });
             conn.current_at_lock.store(current, Ordering::Relaxed);
         }
     }
@@ -316,7 +321,7 @@ impl Connections {
                 continue;
             }
             if let Some(host) = vault.get(&conn.host_id).and_then(Item::as_host) {
-                *lock(&conn.config) = crate::dashboard::config_version(vault, host);
+                *conn.config.lock_unpoisoned() = crate::host_chain::config_version(vault, host);
             }
         }
     }
@@ -331,7 +336,7 @@ impl Connections {
     }
 
     fn remove(&self, conn: &Arc<Connection>) -> bool {
-        let mut list = lock(&self.list);
+        let mut list = self.list.lock_unpoisoned();
         let before = list.len();
         list.retain(|c| !Arc::ptr_eq(c, conn));
         list.len() < before
@@ -340,7 +345,7 @@ impl Connections {
     /// SEC-03 "lock disconnects sessions": takes every connection out, for the lock to close once
     /// the tabs on them closed.
     pub fn take_all(&self) -> Vec<Arc<Connection>> {
-        std::mem::take(&mut *lock(&self.list))
+        std::mem::take(&mut *self.list.lock_unpoisoned())
     }
 }
 
@@ -361,7 +366,7 @@ fn config_of(state: &AppState, host_id: &str) -> AppResult<String> {
             .get(host_id)
             .and_then(Item::as_host)
             .ok_or_else(|| AppError::not_found("host"))?;
-        Ok(crate::dashboard::config_version(v, host))
+        Ok(crate::host_chain::config_version(v, host))
     })
 }
 
@@ -670,7 +675,7 @@ fn running_port(state: &AppState, host_id: &str, forward_id: &str) -> Option<u16
 
 /// Every saved host's open connection, with the forwards on it.
 pub fn list(state: &AppState) -> ConnectionsEvent {
-    let version = lock(&state.connections.version);
+    let version = state.connections.version.lock_unpoisoned();
     snapshot(state, *version)
 }
 
@@ -727,7 +732,7 @@ fn snapshot(state: &AppState, version: u64) -> ConnectionsEvent {
 /// Tells the WebView and the tray menu what is open now, in the order the changes happened.
 pub fn changed(app: &AppHandle) {
     let state = state(app);
-    let mut version = lock(&state.connections.version);
+    let mut version = state.connections.version.lock_unpoisoned();
     *version += 1;
     let event = snapshot(&state, *version);
     crate::tray::set_forwards(app, event.version, &event.connections);
@@ -756,7 +761,7 @@ async fn open(
             .and_then(Item::as_host)
             .cloned()
             .ok_or_else(|| AppError::not_found("host"))?;
-        let config = crate::dashboard::config_version(v, &host);
+        let config = crate::host_chain::config_version(v, &host);
         let via = match state.dashboard.take_connection(host_id, &config) {
             Some(session) => Via::Dashboard(session),
             None => Via::Connect(Box::new(build_config(
@@ -784,7 +789,11 @@ async fn open(
         }),
     });
     let starting = Starting(Arc::clone(&conn));
-    lock(&state.connections.list).push(Arc::clone(&conn));
+    state
+        .connections
+        .list
+        .lock_unpoisoned()
+        .push(Arc::clone(&conn));
     // HOST-14: the dashboard reads the host over this connection from now on.
     state.dashboard.wake(host_id);
     watch(app.clone(), Arc::clone(&conn));

@@ -2,7 +2,7 @@
 //! This device's preferences name a saved proxy (`LocalPrefs::app_proxy_id`); without one, or
 //! once that proxy is deleted, they use the system proxy.
 
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Mutex, MutexGuard};
 
 use hatoba_core::model::{Item, Proxy, ProxyKind};
 use hatoba_core::vault::Vault;
@@ -10,9 +10,8 @@ use reqwest::{NoProxy, Url};
 use tauri::{AppHandle, Manager};
 use zeroize::Zeroizing;
 
-use crate::dto::LocalPrefs;
-use crate::state::AppState;
-use crate::sync;
+use crate::state::{AppState, MutexExt};
+use crate::{prefs, sync};
 
 /// The saved proxy that Hatoba's own connections go through now; `None` for the system proxy.
 #[derive(Default)]
@@ -20,7 +19,7 @@ pub struct AppProxy(Mutex<Option<Proxy>>);
 
 impl AppProxy {
     fn applied(&self) -> MutexGuard<'_, Option<Proxy>> {
-        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+        self.0.lock_unpoisoned()
     }
 
     /// The proxy of the update check's requests; `None` for the system proxy.
@@ -63,8 +62,7 @@ pub fn forget(app: &AppHandle) {
 
 /// The saved proxy this device's preferences name, if it still exists.
 fn named(v: &Vault) -> Option<Proxy> {
-    let json = v.local_prefs().ok().flatten()?;
-    let id = LocalPrefs::from_stored(&json).app_proxy_id?;
+    let id = prefs::read(v).ok()?.app_proxy_id?;
     v.get(&id).and_then(Item::as_proxy).cloned()
 }
 

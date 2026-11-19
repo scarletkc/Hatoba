@@ -17,7 +17,7 @@ use tauri_plugin_updater::{Error as UpdaterError, Update, Updater, UpdaterExt};
 
 use crate::dto::{AvailableUpdate, PackageManager, UpdateCheck, UpdateProgress};
 use crate::error::{AppError, AppResult, ErrorCode};
-use crate::state::AppState;
+use crate::state::{AppState, MutexExt};
 
 /// The release page of version X.Y.Z is this followed by X.Y.Z.
 const RELEASE_PAGE: &str = "https://github.com/scarletkc/Hatoba/releases/tag/v";
@@ -48,7 +48,7 @@ pub struct Updates {
 
 impl Updates {
     fn found(&self) -> MutexGuard<'_, Option<Update>> {
-        self.found.lock().unwrap_or_else(|p| p.into_inner())
+        self.found.lock_unpoisoned()
     }
 }
 

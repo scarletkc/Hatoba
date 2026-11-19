@@ -14,6 +14,9 @@ test("Rust sources, manifests and the files they read need the Rust jobs", () =>
     "workers/sync/migrations/0001_init.sql",
     "scripts/ci/comment-width.mjs",
     "scripts/ci/changes.mjs",
+    "scripts/lib/git.mjs",
+    ".github/actions/setup-node-pnpm/action.yml",
+    ".github/actions/setup-tauri-linux/action.yml",
     ".github/workflows/ci.yml",
   ]) {
     assert.ok(affectsRust(path), path);

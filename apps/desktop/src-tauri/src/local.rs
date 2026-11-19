@@ -1,56 +1,11 @@
 //! Local terminal tabs (spec §7.5): the shells of this computer, each in a PTY, by session id.
 //! Their ids are UUIDv7 like the SSH sessions', so one id never names both.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-
 use hatoba_local::LocalSession;
 
-use crate::error::{AppError, AppResult};
+use crate::terminal::SessionRegistry;
 
-#[derive(Default)]
-pub struct LocalManager {
-    sessions: Mutex<HashMap<String, Arc<LocalSession>>>,
-}
-
-fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|p| p.into_inner())
-}
-
-impl LocalManager {
-    pub fn insert(&self, id: String, session: Arc<LocalSession>) {
-        lock(&self.sessions).insert(id, session);
-    }
-
-    pub fn get(&self, id: &str) -> AppResult<Arc<LocalSession>> {
-        lock(&self.sessions)
-            .get(id)
-            .cloned()
-            .ok_or_else(|| AppError::not_found("session"))
-    }
-
-    /// The session with `id`, when one is open.
-    pub fn find(&self, id: &str) -> Option<Arc<LocalSession>> {
-        lock(&self.sessions).get(id).cloned()
-    }
-
-    /// Removes the session only if it is still the given instance.
-    pub fn remove_if_same(&self, id: &str, live: &Arc<LocalSession>) {
-        let mut sessions = lock(&self.sessions);
-        if sessions.get(id).is_some_and(|s| Arc::ptr_eq(s, live)) {
-            sessions.remove(id);
-        }
-    }
-
-    pub fn take(&self, id: &str) -> Option<Arc<LocalSession>> {
-        lock(&self.sessions).remove(id)
-    }
-
-    /// SEC-03 "lock disconnects sessions", and quitting: takes every session out, by id.
-    pub fn take_all(&self) -> Vec<(String, Arc<LocalSession>)> {
-        lock(&self.sessions).drain().collect()
-    }
-}
+pub type LocalManager = SessionRegistry<LocalSession>;
 
 /// The variables the AI's tools on a local tab start their `sh` with (macOS and Linux): on macOS
 /// the login shell's `PATH`, which an app started from the Dock lacks, as MCP servers get it.

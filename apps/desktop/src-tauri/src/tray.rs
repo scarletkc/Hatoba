@@ -28,10 +28,10 @@ mod imp {
     use tauri_specta::Event;
 
     use crate::dto::{
-        CloseAction, ClosePromptEvent, ForwardKind, HostConnectionView, LocalPrefs, LockReason,
+        CloseAction, ClosePromptEvent, ForwardKind, HostConnectionView, LockReason,
         RemoteEditQuitEvent, RunningForwardView, TrayMenuInput, TrayUpdateEvent,
     };
-    use crate::state::AppState;
+    use crate::state::{AppState, MutexExt};
     use crate::{lock, platform};
 
     /// Sharp at the tray's size: 16 px at 100% on Windows; Linux panels scale the larger one.
@@ -83,14 +83,9 @@ mod imp {
     /// Reads the pref, which is readable while locked. Runs at startup and whenever the prefs
     /// are saved.
     pub fn refresh_close_action(state: &AppState) {
-        let action = state
-            .vault()
-            .local_prefs()
+        let action = crate::prefs::read(&state.vault())
             .ok()
-            .flatten()
-            .map_or(CloseAction::Ask, |json| {
-                LocalPrefs::from_stored(&json).close_action
-            });
+            .map_or(CloseAction::Ask, |p| p.close_action);
         CLOSE_ACTION.store(action as u8, Ordering::Relaxed);
     }
 
@@ -224,7 +219,7 @@ mod imp {
             let Some(tray) = handle.try_state::<Tray>() else {
                 return;
             };
-            let mut shown = tray.shown.lock().unwrap_or_else(|p| p.into_inner());
+            let mut shown = tray.shown.lock_unpoisoned();
             change(&mut shown);
             if let Err(e) = refresh(&handle, &tray, &mut shown) {
                 tracing::warn!("tray menu not updated: {e}");
