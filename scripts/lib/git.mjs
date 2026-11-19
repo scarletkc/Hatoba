@@ -1,4 +1,3 @@
-// Git command helpers and repository root path shared by CI and release scripts.
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -9,7 +8,6 @@ const MAX_BUFFER = 64 * 1024 * 1024;
 
 export const nulSeparated = (output) => output.split("\0").filter(Boolean);
 
-/** Runs git in `root` and returns raw stdout without trimming. */
 export function gitRaw(args, root = ROOT, { stderr = "pipe" } = {}) {
   return execFileSync("git", args, {
     cwd: root,
@@ -19,12 +17,10 @@ export function gitRaw(args, root = ROOT, { stderr = "pipe" } = {}) {
   });
 }
 
-/** Runs git in `root` and returns trimmed stdout. */
 export function git(args, root = ROOT) {
   return gitRaw(args, root).trim();
 }
 
-/** Lists existing tracked and untracked (non-ignored) files matching `pathspecs` in `root`. */
 export function lsFiles(pathspecs = [], root = ROOT) {
   const paths = Array.isArray(pathspecs) ? pathspecs : [pathspecs];
   const args = [
@@ -35,5 +31,6 @@ export function lsFiles(pathspecs = [], root = ROOT) {
     "--exclude-standard",
     ...(paths.length > 0 ? ["--", ...paths] : []),
   ];
+  // --cached still lists tracked files deleted in the working tree.
   return nulSeparated(gitRaw(args, root)).filter((path) => existsSync(join(root, path)));
 }

@@ -1,8 +1,5 @@
-// Minimal GitHub REST API client shared by CI and release scripts.
-
-/** Creates a GitHub REST API client using `fetch`. */
 export function githubClient(token, { userAgent, baseUrl } = {}) {
-  const base = (baseUrl ?? process.env.GITHUB_API_URL ?? "https://api.github.com").replace(/\/+$/, "");
+  const base = (baseUrl || process.env.GITHUB_API_URL || "https://api.github.com").replace(/\/+$/, "");
 
   async function request(method, path, body, { missingOk = false } = {}) {
     const headers = {
@@ -10,12 +7,12 @@ export function githubClient(token, { userAgent, baseUrl } = {}) {
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
       ...(userAgent ? { "User-Agent": userAgent } : {}),
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(body != null ? { "Content-Type": "application/json" } : {}),
     };
     const res = await fetch(`${base}${path}`, {
       method,
       headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body != null ? JSON.stringify(body) : undefined,
     });
     if (missingOk && res.status === 404) return null;
     if (!res.ok) throw new Error(`${method} ${path}: HTTP ${res.status} ${await res.text()}`);

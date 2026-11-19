@@ -1,4 +1,3 @@
-// Release notes, changelog grouping, and install instructions.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ROOT, git } from "../lib/git.mjs";

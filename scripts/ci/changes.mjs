@@ -19,8 +19,8 @@ const RUST_INPUTS = [
   "apps/desktop/src/ipc/bindings.ts",
   // A hatoba-core test reads the migrations.
   "workers/sync/migrations/",
-  // comment-width.mjs runs in the Linux job, and this script decides which jobs run. The other
-  // scripts here run in other jobs or workflows.
+  // comment-width.mjs runs in the Linux job, this script decides which jobs run, and both import
+  // scripts/lib/git.mjs. The other scripts run in other jobs or workflows.
   "scripts/ci/comment-width.mjs",
   "scripts/ci/changes.mjs",
   "scripts/lib/git.mjs",

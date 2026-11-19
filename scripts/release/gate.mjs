@@ -1,4 +1,3 @@
-// Release CI gate and environment protection checks.
 import { ROOT, git } from "../lib/git.mjs";
 import { githubClient } from "../lib/github.mjs";
 import { SIGNING_ENVIRONMENT } from "./minisign.mjs";

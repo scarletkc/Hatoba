@@ -1,4 +1,3 @@
-// Git release targeting: locating the release commit, tag, and raised version outputs.
 import { ROOT, git } from "../lib/git.mjs";
 import { NOTES_DIR, VERSION_FILES, compareVersions, isPrerelease } from "./version.mjs";
 

@@ -1,4 +1,3 @@
-// Collecting release installers, assembling checksums/latest.json, and publishing the release.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";

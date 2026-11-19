@@ -10,7 +10,7 @@ test("ROOT points to the repository root", () => {
   assert.ok(existsSync(join(ROOT, "package.json")));
 });
 
-test("git trims output while gitRaw preserves trailing newlines and nul bytes", (t) => {
+test("git trims output, gitRaw keeps raw output, and lsFiles skips deleted tracked files", (t) => {
   const root = mkdtempSync(join(tmpdir(), "hatoba-git-lib-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   git(["init", "--quiet"], root);
@@ -26,7 +26,6 @@ test("git trims output while gitRaw preserves trailing newlines and nul bytes", 
   assert.equal(git(["rev-parse", "--is-inside-work-tree"], root), "true");
   assert.deepEqual(nulSeparated("a.txt\0b.rs\0"), ["a.txt", "b.rs"]);
 
-  // lsFiles includes tracked and untracked files and filters out deleted tracked files.
   assert.deepEqual(lsFiles([], root).sort(), ["a.txt", "b.rs"]);
   assert.deepEqual(lsFiles("*.rs", root), ["b.rs"]);
   rmSync(join(root, "a.txt"));

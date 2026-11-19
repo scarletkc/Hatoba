@@ -1,5 +1,3 @@
-// Release installer metadata and file naming conventions.
-
 export const CHECKSUMS = "SHA256SUMS.txt";
 /** The update manifest that installed apps read from the latest stable release (spec §11). */
 export const LATEST = "latest.json";
