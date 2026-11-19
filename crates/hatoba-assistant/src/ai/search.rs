@@ -8,7 +8,9 @@ use std::time::Duration;
 use super::conn::Conn;
 use hatoba_ai::entry::ToolStatus;
 use hatoba_ai::search::{self, Found, MAX_OUTPUT_BYTES, Search};
-use hatoba_ai::tools::{self, GlobArgs, GrepArgs, GrepOutput};
+#[cfg(test)]
+use hatoba_ai::tools;
+use hatoba_ai::tools::{BuiltinTool, GlobArgs, GrepArgs, GrepOutput};
 use hatoba_ssh::remote_search::{GrepMode, GrepQuery, RemoteSearchError, Scope, SearchOutput};
 use tokio_util::sync::CancellationToken;
 
@@ -27,10 +29,17 @@ pub(super) enum SearchJob {
 impl SearchJob {
     /// `Some` for a search tool's name: its arguments, or the message for arguments that do not
     /// parse.
+    #[cfg_attr(not(test), expect(dead_code))]
     pub(super) fn parse(name: &str, arguments: &str) -> Option<Result<Self, String>> {
-        Some(match name {
-            tools::GREP => parse(arguments).map(Self::Grep),
-            tools::GLOB => parse(arguments).map(Self::Glob),
+        BuiltinTool::from_name(name).and_then(|tool| Self::parse_tool(tool, arguments))
+    }
+
+    /// `Some` for a search tool variant: its arguments, or the message for arguments that do not
+    /// parse.
+    pub(super) fn parse_tool(tool: BuiltinTool, arguments: &str) -> Option<Result<Self, String>> {
+        Some(match tool {
+            BuiltinTool::Grep => parse(arguments).map(Self::Grep),
+            BuiltinTool::Glob => parse(arguments).map(Self::Glob),
             _ => return None,
         })
     }
@@ -76,7 +85,7 @@ async fn search(session: &Conn, mut job: SearchJob) -> Result<String, String> {
             let target = Search::glob(args.path.as_deref(), &args.pattern)?;
             let out = within(
                 &target,
-                tools::GLOB,
+                BuiltinTool::Glob,
                 None,
                 session.glob(&scope(&target), MAX_OUTPUT_BYTES, TIMEOUT),
             )
@@ -106,7 +115,7 @@ async fn search(session: &Conn, mut job: SearchJob) -> Result<String, String> {
             };
             let out = within(
                 &target,
-                tools::GREP,
+                BuiltinTool::Grep,
                 pattern.extended.as_ref().err().copied(),
                 session.grep(&query, MAX_OUTPUT_BYTES, TIMEOUT),
             )
@@ -139,7 +148,7 @@ fn found(out: &SearchOutput) -> Found<'_> {
 /// only `rg` can run, for grep.
 async fn within(
     target: &Search,
-    tool: &str,
+    tool: BuiltinTool,
     rg_only: Option<&str>,
     search: impl Future<Output = Result<SearchOutput, RemoteSearchError>>,
 ) -> Result<SearchOutput, String> {
@@ -149,7 +158,7 @@ async fn within(
         Err(_) => Err(format!(
             "The search did not finish within 30 seconds, so Hatoba closed its channel. Search a \
              smaller directory, or narrow it with {}.",
-            if tool == tools::GREP {
+            if tool == BuiltinTool::Grep {
                 "glob"
             } else {
                 "a pattern that names the directories to search"
@@ -161,7 +170,7 @@ async fn within(
 /// The message for the model when a search did not run.
 fn describe(
     target: &Search,
-    tool: &str,
+    tool: BuiltinTool,
     rg_only: Option<&str>,
     error: RemoteSearchError,
 ) -> String {
@@ -186,7 +195,8 @@ fn describe(
         RemoteSearchError::PermissionDenied => format!(
             "Permission denied: the user this tab is logged in as cannot read {path}. {tool} \
              never uses sudo. To go on, use send_input to run the search with sudo in the \
-             terminal's shell, where the user can enter a password, or ask the user."
+             terminal's shell, where the user can enter a password, or ask the user.",
+            tool = tool.name()
         ),
         RemoteSearchError::BadPattern { rg: true, message } => {
             format!("rg on the host refused the pattern, so nothing was searched: {message}.")
@@ -231,7 +241,7 @@ mod tests {
         assert_eq!(
             describe(
                 &at("/etc", "x/*"),
-                tools::GLOB,
+                BuiltinTool::Glob,
                 None,
                 RemoteSearchError::NotFound
             ),
@@ -240,7 +250,7 @@ mod tests {
         assert!(
             describe(
                 &at("/root", ""),
-                tools::GREP,
+                BuiltinTool::Grep,
                 None,
                 RemoteSearchError::PermissionDenied
             )
@@ -248,7 +258,7 @@ mod tests {
         );
         let bad = describe(
             &at("~", ""),
-            tools::GREP,
+            BuiltinTool::Grep,
             None,
             RemoteSearchError::BadPattern {
                 rg: false,
@@ -258,7 +268,7 @@ mod tests {
         assert!(bad.contains("refused the pattern as Hatoba translated it, so nothing was"));
         let file = describe(
             &at("/etc/hosts", "conf.d/*"),
-            tools::GLOB,
+            BuiltinTool::Glob,
             None,
             RemoteSearchError::NotDirectory("/etc/hosts".into()),
         );
@@ -267,7 +277,7 @@ mod tests {
         assert_eq!(
             describe(
                 &at("~", ""),
-                tools::GREP,
+                BuiltinTool::Grep,
                 multiline,
                 RemoteSearchError::NeedsRg
             ),
