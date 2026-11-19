@@ -7,7 +7,6 @@ import { toAppError } from "@/ipc/api";
 
 type Tr = ReturnType<typeof useT>;
 
-/** Validates a host's address and TCP port as both SSH and Telnet editors require. */
 export function validateAddressAndPort(t: Tr, address: string, port: string): { address?: string; port?: string } {
   const e: { address?: string; port?: string } = {};
   if (!address.trim()) e.address = t("hosts.err.addressRequired");
@@ -16,7 +15,6 @@ export function validateAddressAndPort(t: Tr, address: string, port: string): { 
   return e;
 }
 
-/** Maps a failed host save to a field error, the oversized-host toast, or a generic error toast. */
 export function handleHostSaveError<Field extends string>(
   t: Tr,
   err: unknown,
@@ -52,7 +50,6 @@ export function useHostEditorShortcuts(form: unknown, save: () => Promise<void>,
   }, []);
 }
 
-/** Confirms, deletes the host via `deleteHost`, reloads vault data, shows a toast, and navigates back. */
 export function useDeleteHost(
   host: { id: string; name: string } | undefined,
   deleteHost: (id: string) => Promise<void>,

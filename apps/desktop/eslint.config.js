@@ -43,10 +43,17 @@ export default defineConfig(
         {
           patterns: [
             {
-              regex: "^(?:@/|\\.\\./+)features(?:/|$)",
+              regex: "^(?:@/|(?:\\.\\./)+)features(?:/|$)",
               message: "Shared layers never import a feature (#346).",
             },
           ],
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ImportExpression[source.value=/^(@\\/|(\\.\\.\\/)+)features(\\/|$)/]",
+          message: "Shared layers never import a feature (#346).",
         },
       ],
     },

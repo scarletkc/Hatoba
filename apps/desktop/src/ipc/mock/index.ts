@@ -40,10 +40,10 @@ import { createVaultMock } from "./vault";
 import { passedLocale, VISITOR, VISITOR_HOST, visitorPlatform } from "./visitor";
 import { version as appVersion } from "../../../package.json";
 
-/** `?ssh=<kind>`: every connection fails with this SSH error kind and a detail like the real one. */
 /** The room between neighbouring places in the custom order, as `PLACE_STEP` in Rust (HOST-16). */
 const PLACE_STEP = 1 << 16;
 
+/** `?ssh=<kind>`: every connection fails with this SSH error kind and a detail like the real one. */
 const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: number) => string>> &
   Record<"timeout", (address: string, port: number) => string> = {
   timeout: (a, p) => `connect to ${a}:${p}: operation timed out`,

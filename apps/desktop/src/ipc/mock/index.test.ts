@@ -111,10 +111,16 @@ describe("createMockApi", () => {
 
     const frames: Uint8Array[] = [];
     const sid = await mock.telnet_open(created.id, { cols: 80, rows: 24 }, (f) => frames.push(f));
-    await mock.telnet_write(sid, "help\r");
-    await mock.telnet_close(sid);
     await new Promise((r) => setTimeout(r, 20));
     expect(events.some((e) => e.session_id === sid && e.state === "connected")).toBe(true);
+    expect(frames.length).toBeGreaterThan(0);
+    await mock.telnet_write(sid, "help\r");
+    await mock.telnet_close(sid);
+
+    const closedEarly = await mock.telnet_open(created.id, { cols: 80, rows: 24 }, () => {});
+    await mock.telnet_close(closedEarly);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(events.some((e) => e.session_id === closedEarly && e.state === "connected")).toBe(false);
 
     await mock.telnet_host_delete(copy.id);
     await mock.telnet_host_delete(created.id);
@@ -152,6 +158,15 @@ describe("createMockApi", () => {
       username: "",
       password: null,
     });
+    const keptProxy = await mock.proxy_save({
+      id: null,
+      name: "Backup SOCKS",
+      kind: "socks5",
+      address: "127.0.0.1",
+      port: 1081,
+      username: "",
+      password: null,
+    });
     const host = await mock.host_save({
       id: null,
       name: "Proxy Host",
@@ -171,9 +186,41 @@ describe("createMockApi", () => {
       ai_notes: "",
       env: [],
     });
+    const telnetUsingDeleted = await mock.telnet_host_save({
+      id: null,
+      name: "Switch A",
+      address: "10.2.3.5",
+      port: 23,
+      username: "",
+      password: null,
+      group_id: null,
+      tags: [],
+      favorite: false,
+      proxy_mode: "proxy",
+      proxy_id: proxy.id,
+      note: "",
+      ai_notes: "",
+    });
+    const telnetUsingKept = await mock.telnet_host_save({
+      id: null,
+      name: "Switch B",
+      address: "10.2.3.6",
+      port: 23,
+      username: "",
+      password: null,
+      group_id: null,
+      tags: [],
+      favorite: false,
+      proxy_mode: "proxy",
+      proxy_id: keptProxy.id,
+      note: "",
+      ai_notes: "",
+    });
 
     const proxies = await mock.proxies_list();
-    expect(proxies.find((p) => p.id === proxy.id)?.host_ids).toContain(host.id);
+    expect(proxies.find((p) => p.id === proxy.id)?.host_ids).toEqual(
+      expect.arrayContaining([host.id, telnetUsingDeleted.id]),
+    );
 
     await mock.key_delete(generated.id);
     await mock.proxy_delete(proxy.id);
@@ -182,6 +229,15 @@ describe("createMockApi", () => {
     expect(updatedHost.auth_kind).toBe("ask");
     expect(updatedHost.proxy_mode).toBe("device_default");
     expect(updatedHost.proxy_id).toBeNull();
+    const telnetHosts = await mock.telnet_hosts_list();
+    expect(telnetHosts.find((h) => h.id === telnetUsingDeleted.id)).toMatchObject({
+      proxy_mode: "device_default",
+      proxy_id: null,
+    });
+    expect(telnetHosts.find((h) => h.id === telnetUsingKept.id)).toMatchObject({
+      proxy_mode: "proxy",
+      proxy_id: keptProxy.id,
+    });
   });
 
   it("handles sync configuration and disconnect flows", async () => {
@@ -193,18 +249,32 @@ describe("createMockApi", () => {
     expect(testOk.ok).toBe(true);
 
     await mock.sync_configure({ kind: "worker", url: "https://sync.example.workers.dev", setup_token: null }, "hatoba");
-    expect((await mock.sync_status()).endpoint).toBe("sync.example.workers.dev");
+    expect(await mock.sync_status()).toMatchObject({ kind: "worker", endpoint: "sync.example.workers.dev" });
     expect(statuses.length).toBeGreaterThan(0);
+
+    await mock.sync_configure(
+      { kind: "d1", account_id: "acc", database_id: "db", api_token: "a-valid-cloudflare-token-20" },
+      "hatoba",
+    );
+    expect(await mock.sync_status()).toMatchObject({ kind: "d1", endpoint: null, database: "hatoba" });
+
+    await mock.vault_restore_from_cloud(
+      { kind: "worker", url: "https://restore.example.workers.dev", setup_token: null },
+      "hatoba",
+    );
+    expect(await mock.sync_status()).toMatchObject({ kind: "worker", endpoint: "restore.example.workers.dev" });
 
     const conflicts = await mock.sync_conflicts();
     if (conflicts.length > 0) {
       await mock.sync_conflict_resolve(conflicts[0].id, "keep");
     }
 
+    const inFlight = mock.sync_now();
     await mock.sync_disconnect();
-    expect((await mock.sync_status()).kind).toBe("none");
+    await inFlight;
+    expect(await mock.sync_status()).toMatchObject({ kind: "none", state: "off", last_synced_at: null });
     unlisten();
-  });
+  }, 10_000);
 
   it("handles deploy start, inspect, run, and setup flows", async () => {
     const mock = createMockApi();

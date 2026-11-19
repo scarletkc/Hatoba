@@ -1,5 +1,5 @@
 import { appError, type HatobaApi } from "../api";
-import type { SyncStatus } from "../types";
+import type { SyncConfigInput, SyncStatus } from "../types";
 import * as D from "./data";
 import { delay, fail, type MockEmit, type MockState } from "./shared";
 
@@ -36,7 +36,7 @@ export interface SyncMock extends SyncApi {
   kind(): SyncStatus["kind"];
   touch(): void;
   resetOff(): void;
-  resetRestored(): void;
+  resetRestored(config: SyncConfigInput): void;
 }
 
 export function createSyncMock(ctx: {
@@ -55,6 +55,7 @@ export function createSyncMock(ctx: {
   let conflicts = syncDemo === "conflict" ? [...D.CONFLICTS] : [];
   let devices = [...D.DEVICES];
   let sync: SyncStatus = makeSync();
+  let syncGen = 0;
   let deployment: { handle: string; failed: boolean; waited: boolean; url: string | null; upgrade: boolean } | null =
     null;
 
@@ -109,15 +110,22 @@ export function createSyncMock(ctx: {
   function touch() {
     if (sync.kind === "none") return;
     if (sync.state === "paused") return setSync({ pending: sync.pending + 1 });
+    const gen = syncGen;
     setSync({ state: "syncing", pending: sync.pending + 1 });
-    setTimeout(() => setSync({ state: "idle", pending: 0, last_synced_at: Date.now(), too_large: [] }), 900);
+    setTimeout(() => {
+      if (syncGen === gen) setSync({ state: "idle", pending: 0, last_synced_at: Date.now(), too_large: [] });
+    }, 900);
   }
 
   /** The Worker answers with the bundled version: the notice goes, and a paused sync pushes what waited. */
   function upgraded() {
     const paused = sync.state === "paused";
+    const gen = syncGen;
     setSync({ worker_update: null, state: paused ? "syncing" : sync.state });
-    if (paused) setTimeout(() => setSync({ state: "idle", pending: 0, last_synced_at: Date.now() }), 900);
+    if (paused)
+      setTimeout(() => {
+        if (syncGen === gen) setSync({ state: "idle", pending: 0, last_synced_at: Date.now() });
+      }, 900);
   }
 
   function needDeployment(handle: string) {
@@ -131,10 +139,22 @@ export function createSyncMock(ctx: {
     groups: state.groups.length,
   });
 
+  function configuredSync(config: SyncConfigInput): SyncStatus {
+    return {
+      ...D.syncStatus(),
+      kind: config.kind,
+      endpoint: config.kind === "worker" ? config.url.replace(/^https?:\/\//, "") : null,
+      database: config.kind === "d1" ? "hatoba" : "hatoba · APAC",
+      last_synced_at: Date.now(),
+      counts: itemCounts(),
+    };
+  }
+
   return {
     kind: () => sync.kind,
     touch,
     resetOff: () => {
+      syncGen++;
       sync = {
         ...sync,
         kind: "none",
@@ -145,8 +165,9 @@ export function createSyncMock(ctx: {
         counts: null,
       };
     },
-    resetRestored: () => {
-      sync = D.syncStatus();
+    resetRestored: (config) => {
+      syncGen++;
+      sync = configuredSync(config);
     },
 
     sync_status: async () => sync,
@@ -194,32 +215,24 @@ export function createSyncMock(ctx: {
     sync_configure: async (config, password) => {
       await delay(1200);
       if (password.length < 4) fail("wrong_password");
-      sync = {
-        ...D.syncStatus(),
-        endpoint: config.kind === "worker" ? config.url.replace(/^https?:\/\//, "") : null,
-        database: config.kind === "d1" ? "hatoba" : "hatoba · APAC",
-        last_synced_at: Date.now(),
-        counts: itemCounts(),
-      };
+      syncGen++;
+      sync = configuredSync(config);
       emit("sync://status", sync);
     },
     sync_join: async (config, password) => {
       await delay(1200);
       if (password.length < 4) fail("wrong_password");
-      sync = {
-        ...D.syncStatus(),
-        endpoint: config.kind === "worker" ? config.url.replace(/^https?:\/\//, "") : null,
-        database: config.kind === "d1" ? "hatoba" : "hatoba · APAC",
-        last_synced_at: Date.now(),
-        counts: itemCounts(),
-      };
+      syncGen++;
+      sync = configuredSync(config);
       emit("sync://status", sync);
     },
     sync_now: async () => {
       if (sync.kind === "none") return;
       const paused = sync.state === "paused";
+      const gen = syncGen;
       setSync({ state: "syncing" });
       await delay(900);
+      if (syncGen !== gen) return;
       // A paused round only rereads /v1/health.
       if (paused) return setSync({ state: "paused" });
       setSync({ state: "idle", pending: 0, last_synced_at: Date.now() });
@@ -238,6 +251,7 @@ export function createSyncMock(ctx: {
       if (sync.worker_update?.kind === "available") setSync({ worker_update: null });
     },
     sync_disconnect: async () => {
+      syncGen++;
       sync = {
         ...sync,
         kind: "none",
@@ -339,6 +353,7 @@ export function createSyncMock(ctx: {
       const d = needDeployment(handle);
       await delay(1200);
       if (password.length < 4) fail("wrong_password");
+      syncGen++;
       sync = {
         ...D.syncStatus(),
         endpoint: (d.url ?? "").replace(/^https?:\/\//, ""),
@@ -352,6 +367,7 @@ export function createSyncMock(ctx: {
       needDeployment(handle);
       await delay(1200);
       if (password.length < 4) fail("wrong_password");
+      syncGen++;
       sync = {
         ...D.syncStatus(),
         endpoint: `${target.worker_name}.kc.workers.dev`,

@@ -1,5 +1,5 @@
 import type { HatobaApi } from "../api";
-import type { SyncStatus, VaultStatus } from "../types";
+import type { SyncConfigInput, SyncStatus, VaultStatus } from "../types";
 import * as D from "./data";
 import { delay, fail, type MockState } from "./shared";
 
@@ -35,7 +35,7 @@ export function createVaultMock(ctx: {
   demo: string | null;
   syncKind(): SyncStatus["kind"];
   resetSyncOff(): void;
-  resetSyncRestored(): void;
+  resetSyncRestored(config: SyncConfigInput): void;
   onUnlock(): void;
   onLock(): void;
 }): VaultMock {
@@ -145,13 +145,13 @@ export function createVaultMock(ctx: {
       armPin();
       vaultState = "unlocked";
     },
-    vault_restore_from_cloud: async (_config, password) => {
+    vault_restore_from_cloud: async (config, password) => {
       await delay(1200);
       if (password.length < 4) fail("wrong_password");
       state.hosts = D.HOSTS.map((h) => ({ ...h }));
       state.groups = D.GROUPS.map((g) => ({ ...g }));
       state.keys = D.KEYS.map((k) => ({ ...k }));
-      ctx.resetSyncRestored();
+      ctx.resetSyncRestored(config);
       vaultState = "unlocked";
     },
     vault_export_backup: async () => {

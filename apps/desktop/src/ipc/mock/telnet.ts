@@ -8,7 +8,7 @@ import { delay, fail, frame, type MockDeps } from "./shared";
  * A switch's console over Telnet (mock only): it asks for a user name and a password, which a
  * host with saved ones gets typed for it (TELNET-03), then answers a few IOS-style commands.
  */
-export class FakeTelnet {
+class FakeTelnet {
   onExit: (() => void) | null = null;
   private line = "";
   private stage: "user" | "password" | "exec" = "user";
@@ -154,6 +154,7 @@ export function createTelnetMock(ctx: MockDeps): TelnetApi {
     if (hostId)
       state.telnetHosts = state.telnetHosts.map((h) => (h.id === hostId ? { ...h, last_connected_at: Date.now() } : h));
     setTimeout(() => {
+      if (telnets.get(sid) !== fake) return;
       ctx.emit("ssh://state", {
         session_id: sid,
         host_id: hostId,

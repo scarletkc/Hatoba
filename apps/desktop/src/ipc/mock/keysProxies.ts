@@ -76,6 +76,9 @@ export function createKeysProxiesMock(ctx: MockDeps): KeysProxiesApi {
       state.hosts = state.hosts.map((h) =>
         h.proxy_mode === "proxy" && h.proxy_id === pid ? { ...h, proxy_mode: "device_default", proxy_id: null } : h,
       );
+      state.telnetHosts = state.telnetHosts.map((h) =>
+        h.proxy_mode === "proxy" && h.proxy_id === pid ? { ...h, proxy_mode: "device_default", proxy_id: null } : h,
+      );
       if (state.prefs.default_proxy_id === pid || state.prefs.app_proxy_id === pid) {
         state.prefs = {
           ...state.prefs,
