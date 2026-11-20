@@ -224,16 +224,7 @@ function HomePage({ page }: { page: Page }) {
 function useGlobalEvents() {
   // The state of the last sync status, to tell when a round ends.
   const lastSync = useRef<SyncState | null>(null);
-  const live = useRef(true);
   const chromePushed = useRef(false);
-
-  useEffect(() => {
-    live.current = true;
-    chromePushed.current = false;
-    return () => {
-      live.current = false;
-    };
-  }, []);
 
   useBackendEvent("vault://locked", ({ reason }) => {
     // HOST-14: the readings are not kept behind the lock screen.
@@ -270,11 +261,12 @@ function useGlobalEvents() {
     {
       // A chrome change between the boot-time read and this listener would be lost, so
       // re-read once the listener is registered. Errors are ignored: the next event wins.
-      onSubscribed: () => {
+      onSubscribed: (isActive) => {
+        chromePushed.current = false;
         void api
           .window_floating()
           .then((floating) => {
-            if (live.current && !chromePushed.current) useApp.setState({ floating });
+            if (isActive() && !chromePushed.current) useApp.setState({ floating });
           })
           .catch(() => {});
       },

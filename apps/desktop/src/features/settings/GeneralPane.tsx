@@ -322,16 +322,7 @@ function CliActivityList() {
   const [entries, setEntries] = useState<CliActivity[] | null>(null);
   const [details, setDetails] = useState(false);
 
-  const live = useRef(true);
   const pushed = useRef(false);
-
-  useEffect(() => {
-    live.current = true;
-    pushed.current = false;
-    return () => {
-      live.current = false;
-    };
-  }, []);
 
   // Listening first, so no use is missed; an event is newer than the list.
   useBackendEvent(
@@ -341,11 +332,12 @@ function CliActivityList() {
       setEntries(e.entries);
     },
     {
-      onSubscribed: () => {
+      onSubscribed: (isActive) => {
+        pushed.current = false;
         void api
           .cli_activity_list()
           .then((list) => {
-            if (live.current && !pushed.current) setEntries(list);
+            if (isActive() && !pushed.current) setEntries(list);
           })
           .catch(() => {});
       },

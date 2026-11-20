@@ -6,7 +6,7 @@ import { canRetry } from "@/features/dashboard/views";
 import type { MessageKey, t as translateFn } from "@/i18n";
 import { isTelnetHost, type AnyHostView, type GroupView, type ImportSource, type TagCount } from "@/ipc/types";
 import { IMPORT_APPS } from "./ImportDialog";
-import { LIST_SORTS, STATS_SORTS, isListSort, type HostSort, type ListSort } from "./ui";
+import { LIST_SORTS, STATS_SORTS, isListSort, type HostSort } from "./ui";
 
 type Translator = typeof translateFn;
 
@@ -160,7 +160,7 @@ export function buildImportMenuEntries(t: Translator, onImport: (source: ImportS
 
 export function buildSortMenuEntries(
   t: Translator,
-  opts: { stats: boolean; sort: HostSort; shownSort: HostSort | ListSort; onSelect: (sort: HostSort) => void },
+  opts: { stats: boolean; sort: HostSort; shownSort: HostSort; onSelect: (sort: HostSort) => void },
 ): MenuEntry[] {
   return [
     ...LIST_SORTS.map((k) => ({

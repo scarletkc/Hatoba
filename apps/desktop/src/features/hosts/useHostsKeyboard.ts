@@ -1,4 +1,4 @@
-import type { KeyboardEvent, MutableRefObject, RefObject } from "react";
+import { useCallback, useRef, type KeyboardEvent, type RefObject } from "react";
 import { isImeEvent } from "@hatoba/ui";
 import type { AnyHostView, HostView, LocalPrefs, QuickTarget, TelnetHostView } from "@/ipc/types";
 import { isMac, type Platform } from "@/lib/platform";
@@ -17,7 +17,7 @@ export interface HostsKeyboardOptions {
   searchRef: RefObject<HTMLInputElement | null>;
   listRef: RefObject<HTMLDivElement | null>;
   cardsRef: RefObject<HTMLDivElement | null>;
-  anchorRef: MutableRefObject<string | null>;
+  anchorRef: RefObject<string | null>;
   platform: Platform;
   view: LocalPrefs["hosts_view"];
   stats: boolean;
@@ -53,25 +53,29 @@ export interface HostsKeyboardOptions {
  * Keyboard handler for the hosts page: arrows move the selection, Enter connects (HOST-07),
  * Alt+Up/Down reorders (HOST-16), and typing focuses the search field.
  */
-export function useHostsKeyboard(opts: HostsKeyboardOptions): (e: KeyboardEvent) => void {
-  const cardsPerRow = () => {
-    const el = opts.cardsRef.current;
-    if (!el) return 1;
-    return Math.max(1, getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean).length);
-  };
+export function useHostsKeyboard(options: HostsKeyboardOptions): (e: KeyboardEvent) => void {
+  const latest = useRef(options);
+  latest.current = options;
 
-  const move = (delta: number, range: boolean) => {
-    const { rowIds, focusId, hostIds, pickWith, listRef } = opts;
-    if (rowIds.length === 0) return;
-    const i = focusId ? rowIds.indexOf(focusId) : -1;
-    const next = rowIds[Math.max(0, Math.min(rowIds.length - 1, i + delta))];
-    pickWith(next, { range: range && hostIds.includes(next), add: false });
-    requestAnimationFrame(() =>
-      listRef.current?.querySelector(`[data-id="${CSS.escape(next)}"]`)?.scrollIntoView({ block: "nearest" }),
-    );
-  };
+  return useCallback((e: KeyboardEvent) => {
+    const opts = latest.current;
+    const cardsPerRow = () => {
+      const el = opts.cardsRef.current;
+      if (!el) return 1;
+      return Math.max(1, getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean).length);
+    };
 
-  return (e: KeyboardEvent) => {
+    const move = (delta: number, range: boolean) => {
+      const { rowIds, focusId, hostIds, pickWith, listRef } = opts;
+      if (rowIds.length === 0) return;
+      const i = focusId ? rowIds.indexOf(focusId) : -1;
+      const next = rowIds[Math.max(0, Math.min(rowIds.length - 1, i + delta))];
+      pickWith(next, { range: range && hostIds.includes(next), add: false });
+      requestAnimationFrame(() =>
+        listRef.current?.querySelector(`[data-id="${CSS.escape(next)}"]`)?.scrollIntoView({ block: "nearest" }),
+      );
+    };
+
     const target = e.target as HTMLElement;
     const inSearch = target === opts.searchRef.current;
     const onList = target === opts.listRef.current;
@@ -174,5 +178,5 @@ export function useHostsKeyboard(opts: HostsKeyboardOptions): (e: KeyboardEvent)
       // Type to search.
       opts.searchRef.current?.focus();
     }
-  };
+  }, []);
 }

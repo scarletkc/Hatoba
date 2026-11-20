@@ -1,5 +1,6 @@
-import type { KeyboardEvent } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, type KeyboardEvent } from "react";
+import { createRoot } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HostView } from "@/ipc/types";
 
 const connectTarget = vi.hoisted(() => vi.fn(async () => {}));
@@ -8,6 +9,8 @@ vi.mock("@/session/connect", () => ({ connectTarget, connectTelnetTarget }));
 
 import { TELNET_ROW, TYPED_ROW } from "./HostsRows";
 import { useHostsKeyboard, type HostsKeyboardOptions } from "./useHostsKeyboard";
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 function makeHost(id: string): HostView {
   return {
@@ -57,6 +60,20 @@ describe("useHostsKeyboard", () => {
   const h1 = makeHost("h1");
   const h2 = makeHost("h2");
   const h3 = makeHost("h3");
+  const cleanups: (() => void)[] = [];
+
+  function mountHook(opts: HostsKeyboardOptions): (e: KeyboardEvent) => void {
+    let handler!: (e: KeyboardEvent) => void;
+    function Harness() {
+      handler = useHostsKeyboard(opts);
+      return null;
+    }
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    act(() => root.render(<Harness />));
+    cleanups.push(() => act(() => root.unmount()));
+    return handler;
+  }
 
   function makeOpts(overrides: Partial<HostsKeyboardOptions> = {}): HostsKeyboardOptions {
     return {
@@ -101,9 +118,13 @@ describe("useHostsKeyboard", () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    while (cleanups.length > 0) cleanups.pop()?.();
+  });
+
   it("handles arrow movement, Alt+Arrow reorder, Space detail, Delete, and type-to-search", () => {
     const opts = makeOpts();
-    const handler = useHostsKeyboard(opts);
+    const handler = mountHook(opts);
 
     handler(keyEvent(listEl, "ArrowDown"));
     expect(opts.pickWith).toHaveBeenCalledWith("h3", { range: false, add: false });
@@ -129,7 +150,7 @@ describe("useHostsKeyboard", () => {
       suggestOpen: true,
       suggestActive: 0,
     });
-    const suggestHandler = useHostsKeyboard(suggestOpts);
+    const suggestHandler = mountHook(suggestOpts);
     suggestHandler(keyEvent(searchEl, "Enter"));
     expect(suggestOpts.connectQuick).toHaveBeenCalledWith(recent);
 
@@ -138,12 +159,12 @@ describe("useHostsKeyboard", () => {
 
     // Typed SSH quick-connect row connects what the input holds now.
     const sshOpts = makeOpts({ focusId: TYPED_ROW, query: "alice@192.168.1.9" });
-    useHostsKeyboard(sshOpts)(keyEvent(searchEl, "Enter"));
+    mountHook(sshOpts)(keyEvent(searchEl, "Enter"));
     expect(connectTarget).toHaveBeenCalledWith({ address: "192.168.1.9", port: 22, username: "alice" });
 
     // Typed Telnet row connects via connectTelnetTarget.
     const telnetOpts = makeOpts({ focusId: TELNET_ROW, query: "telnet 192.168.1.10 2323" });
-    useHostsKeyboard(telnetOpts)(keyEvent(searchEl, "Enter"));
+    mountHook(telnetOpts)(keyEvent(searchEl, "Enter"));
     expect(connectTelnetTarget).toHaveBeenCalledWith("192.168.1.10", 2323);
   });
 });

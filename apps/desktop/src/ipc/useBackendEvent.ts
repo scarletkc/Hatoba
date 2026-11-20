@@ -4,7 +4,7 @@ import type { EventMap } from "./types";
 
 export interface BackendEventOptions {
   enabled?: boolean;
-  onSubscribed?: () => void;
+  onSubscribed?: (isActive: () => boolean) => void;
 }
 
 /**
@@ -28,7 +28,7 @@ export function useBackendEvent<K extends keyof EventMap>(
     });
     void sub.then(
       () => {
-        if (active) latest.current.onSubscribed?.();
+        if (active) latest.current.onSubscribed?.(() => active);
       },
       () => {},
     );

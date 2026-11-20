@@ -98,7 +98,7 @@ export class SessionSuggestions {
     this.schedule();
   }
 
-  /** Records submitted commands and suppresses stale ghost text until the shell echoes. */
+  /** Records submitted commands in the host's history. */
   onInput(data: string) {
     const { command } = this.tracker.onInput(data, this.host.term.buffer.active);
     if (command !== null) addToHistory(this.host.history(), command);
