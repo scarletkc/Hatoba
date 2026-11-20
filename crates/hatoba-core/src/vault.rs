@@ -28,7 +28,6 @@ pub use crate::vault_keys::{
     unlock_delay_ms,
 };
 pub use crate::vault_sync::LocalMeta;
-pub(crate) use crate::vault_sync::SyncCtx;
 
 // ---- clock --------------------------------------------------------------------------------
 

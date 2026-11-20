@@ -24,7 +24,6 @@ use crate::error::{Error, Result};
 use crate::model::{SETTINGS_ID, new_id};
 use crate::platform::DeviceInfo;
 use crate::recovery::RecoveryCode;
-use crate::store::{StoreOps, meta};
 use crate::sync::backend::{
     DeviceLogin, RecoveryUpdate, Session, SyncBackend, VaultInit, VaultMeta, VaultMetaUpdate,
 };
@@ -107,12 +106,7 @@ pub async fn enable_sync(
     } else {
         // The remote is brand new: everything local is "never synced". Queue it before `setup`
         // so that an attempt interrupted after `setup` leaves the vault ready to upload.
-        with_vault(vault, |v| {
-            v.store.transaction(|tx| {
-                tx.mark_all_dirty_for_upload()?;
-                tx.delete_meta(meta::SYNC_CURSOR)
-            })
-        })?;
+        with_vault(vault, Vault::queue_all_for_upload)?;
         let setup = backend
             .setup(VaultInit {
                 schema_version: material.meta.schema_version,

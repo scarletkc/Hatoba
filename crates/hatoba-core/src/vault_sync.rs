@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use crate::crypto::{self, Aad, Key32, unwrap_key};
 use crate::error::{Error, Result};
 use crate::model::{Item, SETTINGS_ID};
-use crate::store::{ItemRow, KeyMeta, Store, StoreOps, meta};
+use crate::store::{ItemRow, KeyMeta, StoreOps, StoreTx, meta};
 use crate::sync::SyncConfig;
 use crate::sync::backend::{RemoteItem, VaultMeta};
 use crate::sync::engine::remote_row;
@@ -27,39 +27,34 @@ pub struct LocalMeta {
     pub recovery_vault_key: String,
 }
 
-/// Borrowed pieces of an unlocked vault, handed to the sync engine.
-pub(crate) struct SyncCtx<'a> {
-    pub(crate) store: &'a mut Store,
-    pub(crate) key: &'a [u8; 32],
-    pub(crate) items: &'a mut BTreeMap<String, Item>,
-    pub(crate) now: i64,
-}
-
-impl SyncCtx<'_> {
-    /// Re-reads one row and brings the decrypted cache in line with it (a message part without
-    /// its `data`, see [`decode_row`]). Rows that are tombstones leave the cache; rows that
-    /// cannot be decrypted are logged (id only) and skipped, which is reported as `false`.
-    pub(crate) fn refresh(&mut self, id: &str) -> Result<bool> {
-        match self.store.item_row(id)? {
-            Some(row) => match decode_row(self.key, &row) {
-                Ok(Some(item)) => {
-                    self.items.insert(id.to_owned(), item);
-                }
-                Ok(None) => {
-                    self.items.remove(id);
-                }
-                Err(_) => {
-                    tracing::warn!(item_id = id, "item could not be decrypted; skipping");
-                    self.items.remove(id);
-                    return Ok(false);
-                }
-            },
-            None => {
-                self.items.remove(id);
+/// Re-reads one row and brings the decrypted item map in line with it (a message part without
+/// its `data`, see [`decode_row`]). Rows that are tombstones leave the map; rows that cannot
+/// be decrypted are logged (id only) and skipped, which is reported as `false`.
+fn refresh_item(
+    store: &impl StoreOps,
+    key: &[u8; 32],
+    items: &mut BTreeMap<String, Item>,
+    id: &str,
+) -> Result<bool> {
+    match store.item_row(id)? {
+        Some(row) => match decode_row(key, &row) {
+            Ok(Some(item)) => {
+                items.insert(id.to_owned(), item);
             }
+            Ok(None) => {
+                items.remove(id);
+            }
+            Err(_) => {
+                tracing::warn!(item_id = id, "item could not be decrypted; skipping");
+                items.remove(id);
+                return Ok(false);
+            }
+        },
+        None => {
+            items.remove(id);
         }
-        Ok(true)
     }
+    Ok(true)
 }
 
 /// Everything sync setup needs from the local vault, derived from the password.
@@ -210,19 +205,55 @@ impl Vault {
         })
     }
 
-    /// Splits the vault into the pieces the sync engine needs.
-    pub(crate) fn sync_ctx(&mut self) -> Result<SyncCtx<'_>> {
+    /// Stamps `sync_last_at` with the current clock reading.
+    pub(crate) fn record_sync_completed(&mut self) -> Result<()> {
+        let now = self.clock.now_ms();
+        self.store.set_meta(meta::SYNC_LAST_AT, &now.to_string())
+    }
+
+    /// Encrypted rows with unpushed local changes, ordered by id.
+    pub(crate) fn dirty_rows(&self) -> Result<Vec<ItemRow>> {
+        self.store.dirty_rows()
+    }
+
+    /// Marks every stored item dirty at revision 0 and clears `sync_cursor`, so the next sync
+    /// round uploads the whole vault to a fresh remote (flow A).
+    pub(crate) fn queue_all_for_upload(&mut self) -> Result<()> {
+        self.store.transaction(|tx| {
+            tx.mark_all_dirty_for_upload()?;
+            tx.delete_meta(meta::SYNC_CURSOR)
+        })
+    }
+
+    /// Runs `f` inside one store transaction with the vault key and current clock reading, then
+    /// refreshes every item id returned by `f` in the decrypted item map after commit.
+    ///
+    /// Tombstoned or missing rows leave the map; rows that fail to decrypt are logged (id only),
+    /// removed from the map and counted in the returned `skipped` count.
+    pub(crate) fn sync_transaction<T>(
+        &mut self,
+        f: impl FnOnce(&StoreTx<'_>, &[u8; 32], i64) -> Result<(Vec<String>, T)>,
+    ) -> Result<(u32, T)> {
         let now = self.clock.now_ms();
         let Self {
             store, unlocked, ..
         } = self;
         let unlocked = unlocked.as_mut().ok_or(Error::Locked)?;
-        Ok(SyncCtx {
-            store,
-            key: &unlocked.vault_key,
-            items: &mut unlocked.items,
-            now,
-        })
+        let key = &unlocked.vault_key;
+        let (touched, out) = store.transaction(|tx| f(tx, key, now))?;
+        let mut skipped = 0u32;
+        for id in &touched {
+            if !refresh_item(store, key, &mut unlocked.items, id)? {
+                skipped += 1;
+            }
+        }
+        Ok((skipped, out))
+    }
+
+    /// One raw row from the `items` table (sync tests).
+    #[cfg(test)]
+    pub(crate) fn item_row(&self, id: &str) -> Result<Option<ItemRow>> {
+        self.store.item_row(id)
     }
 
     /// Installs the metadata of a remote vault into an empty local database and unlocks with
@@ -395,7 +426,9 @@ impl Vault {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::unlocked_vault;
+    use crate::model::AiMessage;
+    use crate::test_support::{host_item, unlocked_vault};
+    use crate::vault::Clock;
 
     #[test]
     fn sync_config_round_trip() {
@@ -412,5 +445,109 @@ mod tests {
         vault.set_sync_config(None).unwrap();
         assert_eq!(vault.sync_config().unwrap(), None);
         assert_eq!(vault.sync_cursor(), 0);
+    }
+
+    #[test]
+    fn queue_all_for_upload_dirty_rows_and_record_sync_completed() {
+        let (mut vault, clock) = unlocked_vault();
+        let host_id = vault.put(None, host_item("alpha")).unwrap();
+        vault.store.set_meta(meta::SYNC_CURSOR, "17").unwrap();
+        let row = vault.item_row(&host_id).unwrap().unwrap();
+        vault
+            .store
+            .mark_pushed(&host_id, 3, row.envelope.as_deref())
+            .unwrap();
+        assert!(!vault.dirty_rows().unwrap().iter().any(|r| r.id == host_id));
+
+        vault.queue_all_for_upload().unwrap();
+        assert_eq!(vault.sync_cursor(), 0);
+        let queued = vault
+            .dirty_rows()
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == host_id)
+            .unwrap();
+        assert_eq!(queued.revision, 0);
+        assert!(queued.dirty);
+
+        clock.advance(5_000);
+        let expected = clock.now_ms();
+        vault.record_sync_completed().unwrap();
+        assert_eq!(vault.sync_last_at(), Some(expected));
+    }
+
+    #[test]
+    fn sync_transaction_enforces_lock_atomicity_and_item_refresh() {
+        let (mut vault, clock) = unlocked_vault();
+        let kept_id = vault.put(None, host_item("kept")).unwrap();
+        let gone_id = vault.put(None, host_item("gone")).unwrap();
+
+        // Rollback on closure error leaves both SQLite and the decrypted item map unchanged.
+        let err = vault
+            .sync_transaction::<()>(|tx, key, now| {
+                let updated = seal_item(key, &kept_id, &host_item("rolled-back"))?.to_json();
+                tx.upsert_item_row(&ItemRow::live(kept_id.clone(), updated, 2, now))?;
+                Err(Error::Protocol("abort".into()))
+            })
+            .unwrap_err();
+        assert!(matches!(err, Error::Protocol(_)));
+        assert_eq!(
+            vault.get(&kept_id).and_then(Item::as_host).unwrap().name,
+            "kept"
+        );
+
+        // Commit refreshes live items (stripping message data), evicts tombstones/missing rows,
+        // and skips undecryptable rows while counting them.
+        let msg_id = "msg-part-1".to_owned();
+        let bad_id = "bad-row-1".to_owned();
+        let expected_now = clock.now_ms();
+        let (skipped, seen_now) = vault
+            .sync_transaction(|tx, key, now| {
+                let renamed = seal_item(key, &kept_id, &host_item("renamed"))?.to_json();
+                tx.upsert_item_row(&ItemRow::live(kept_id.clone(), renamed, 4, now))?;
+                tx.upsert_item_row(&ItemRow::tombstone(gone_id.clone(), 2, now))?;
+                let msg = Item::AiMessage(AiMessage {
+                    conversation_id: "c1".into(),
+                    entry_id: "e1".into(),
+                    part: 0,
+                    part_count: 1,
+                    data: "secret-body".into(),
+                    updated_at: now,
+                });
+                let msg_env = seal_item(key, &msg_id, &msg)?.to_json();
+                tx.upsert_item_row(&ItemRow::live(msg_id.clone(), msg_env, 1, now))?;
+                tx.upsert_item_row(&ItemRow::live(bad_id.clone(), "not-json".into(), 1, now))?;
+                Ok((
+                    vec![
+                        kept_id.clone(),
+                        gone_id.clone(),
+                        msg_id.clone(),
+                        bad_id.clone(),
+                    ],
+                    now,
+                ))
+            })
+            .unwrap();
+        assert_eq!(seen_now, expected_now);
+        assert_eq!(skipped, 1);
+        assert_eq!(
+            vault.get(&kept_id).and_then(Item::as_host).unwrap().name,
+            "renamed"
+        );
+        assert!(vault.get(&gone_id).is_none());
+        let cached_msg = vault.get(&msg_id).and_then(Item::as_ai_message).unwrap();
+        assert!(cached_msg.data.is_empty());
+        assert!(vault.get(&bad_id).is_none());
+        assert!(vault.item_row(&bad_id).unwrap().is_some());
+
+        // Locked vault fails before invoking the closure.
+        vault.lock();
+        let mut ran = false;
+        let locked = vault.sync_transaction(|_, _, _| {
+            ran = true;
+            Ok((Vec::new(), ()))
+        });
+        assert!(matches!(locked, Err(Error::Locked)));
+        assert!(!ran);
     }
 }

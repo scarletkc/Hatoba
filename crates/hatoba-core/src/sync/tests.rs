@@ -16,7 +16,6 @@ use crate::model::{
 };
 use crate::platform::DeviceInfo;
 use crate::recovery::RecoveryCode;
-use crate::store::StoreOps;
 use crate::sync::engine::{SyncOptions, sync_round};
 use crate::test_support::{T0, host_item as host, key_item as key, unlocked_vault_on, vault_on};
 use crate::vault::{ManualClock, Vault};
@@ -518,7 +517,7 @@ async fn join_merges_another_vault_into_the_cloud() {
     );
     assert!(c.v().conflicts(false).unwrap().is_empty());
     assert!(
-        c.v().store.item_row(&gone).unwrap().is_none(),
+        c.v().item_row(&gone).unwrap().is_none(),
         "tombstone dropped"
     );
     assert_eq!(
@@ -1102,7 +1101,7 @@ async fn deletions_propagate_as_tombstones() {
     );
     b.sync().await;
     assert!(b.v().get(&seed).is_none());
-    let row = b.v().store.item_row(&seed).unwrap().unwrap();
+    let row = b.v().item_row(&seed).unwrap().unwrap();
     assert!(row.deleted && row.envelope.is_none() && !row.dirty);
 }
 
@@ -1427,7 +1426,7 @@ async fn conflict_found_while_pushing_is_resolved_and_a_winning_local_edit_is_re
     clock.advance(1000);
     b.rename(&seed, "b-edit-newer");
     let (b_envelope, b_updated) = {
-        let row = b.v().store.item_row(&seed).unwrap().unwrap();
+        let row = b.v().item_row(&seed).unwrap().unwrap();
         (row.envelope.unwrap(), row.updated_at)
     };
 
@@ -1456,7 +1455,7 @@ async fn conflict_found_while_pushing_is_resolved_and_a_winning_local_edit_is_re
     clock.advance(1000);
     a.rename(&seed, "a-second-newer");
     let (b_envelope, b_updated) = {
-        let row = b.v().store.item_row(&seed).unwrap().unwrap();
+        let row = b.v().item_row(&seed).unwrap().unwrap();
         (row.envelope.unwrap(), row.updated_at)
     };
     let srv = server.clone();
@@ -1620,7 +1619,7 @@ async fn edit_during_an_in_flight_push_stays_dirty() {
         "the newest local edit must not be marked as pushed"
     );
     assert_eq!(report.conflicts_resolved, 0);
-    let row = a.v().store.item_row(&seed).unwrap().unwrap();
+    let row = a.v().item_row(&seed).unwrap().unwrap();
     assert!(row.dirty);
     assert_eq!(
         row.revision,
@@ -1687,7 +1686,7 @@ async fn undecryptable_remote_items_are_skipped_not_fatal() {
         assert!(b.v().get(id).is_none());
     }
     // Unknown-but-valid rows are kept for a future version; the round did not fail.
-    assert!(b.v().store.item_row("future").unwrap().is_some());
+    assert!(b.v().item_row("future").unwrap().is_some());
     assert_eq!(b.v().sync_cursor(), server.current_seq());
     // Skipped rows are not retried forever: the next round is quiet.
     let report = b.sync().await;
