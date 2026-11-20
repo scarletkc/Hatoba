@@ -99,12 +99,12 @@ describe("useBackendEvent", () => {
     await act(async () => {
       root.render(<Probe tag="v1" />);
     });
-    emit!({ zoom: 100 });
+    emit!({ zoom: 100, max: 150 });
 
     await act(async () => {
       root.render(<Probe tag="v2" />);
     });
-    emit!({ zoom: 110 });
+    emit!({ zoom: 110, max: 150 });
 
     expect(mocked.listen).toHaveBeenCalledTimes(1);
     expect(unlisten).not.toHaveBeenCalled();

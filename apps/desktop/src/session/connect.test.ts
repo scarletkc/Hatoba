@@ -90,8 +90,8 @@ const mockedApi = vi.hoisted(() => ({
   telnet_close: vi.fn(async () => {}),
   local_open: vi.fn(),
   local_close: vi.fn(async () => {}),
-  hosts_list: vi.fn(async () => []),
-  telnet_hosts_list: vi.fn(async () => []),
+  hosts_list: vi.fn<() => Promise<HostView[]>>(async () => []),
+  telnet_hosts_list: vi.fn<() => Promise<TelnetHostView[]>>(async () => []),
   recent_targets_list: vi.fn(async () => []),
   command_history_get: vi.fn(async () => []),
   listen: vi.fn(async () => () => {}),
@@ -124,18 +124,20 @@ function makeHost(overrides: Partial<HostView> = {}): HostView {
     has_password: true,
     key_id: null,
     jump_host_id: null,
-    proxy_mode: "inherit",
+    proxy_mode: "device_default",
     proxy_id: null,
     group_id: null,
     tags: [],
-    notes: "",
+    note: "",
     ai_notes: "",
     env: [],
     favorite: false,
     sort: 0,
-    last_connected: null,
+    updated_at: 0,
+    last_connected_at: null,
     os: null,
     show_stats: true,
+    dashboard: true,
     ...overrides,
   };
 }
@@ -148,14 +150,16 @@ function makeTelnetHost(overrides: Partial<TelnetHostView> = {}): TelnetHostView
     port: 23,
     username: "admin",
     has_password: false,
-    proxy_mode: "inherit",
+    proxy_mode: "device_default",
     proxy_id: null,
     group_id: null,
     tags: [],
-    notes: "",
+    note: "",
+    ai_notes: "",
     favorite: false,
     sort: 0,
-    last_connected: null,
+    updated_at: 0,
+    last_connected_at: null,
     ...overrides,
   };
 }
@@ -280,7 +284,7 @@ describe("LiveSession connect and reconnect", () => {
       new LiveSession("tab-loc", {
         hostId: null,
         target: null,
-        local: { id: "bash", name: "Bash", kind: "bash" },
+        local: { id: "bash", name: "Bash", kind: "unix" },
       }),
     );
     local.attach(container);
@@ -375,9 +379,17 @@ describe("LiveSession connect and reconnect", () => {
     frameHandler!(sessionFrame("sid-early"));
     expect(s.connectingAs("sid-early")).toBe(true);
 
-    routeStateEvent({ session_id: "sid-early", state: "connected", latency_ms: 42, exit_status: null, error: null });
     routeStateEvent({
       session_id: "sid-early",
+      host_id: "h1",
+      state: "connected",
+      latency_ms: 42,
+      exit_status: null,
+      error: null,
+    });
+    routeStateEvent({
+      session_id: "sid-early",
+      host_id: "h1",
       state: "disconnected",
       latency_ms: null,
       exit_status: 1,
@@ -416,7 +428,7 @@ describe("LiveSession connect and reconnect", () => {
       new LiveSession("tab-stale-loc", {
         hostId: null,
         target: null,
-        local: { id: "bash", name: "Bash", kind: "bash" },
+        local: { id: "bash", name: "Bash", kind: "unix" },
       }),
     );
     local.attach(container);
@@ -440,8 +452,9 @@ describe("LiveSession connect and reconnect", () => {
           session_id: "sid-1",
           direction: "upload",
           name: "a.txt",
-          transferred: 1,
+          bytes: 1,
           total: 2,
+          bytes_per_sec: 100,
           state: "running",
           error: null,
           fading: false,
