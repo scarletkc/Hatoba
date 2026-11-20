@@ -637,6 +637,112 @@ mod tests {
     }
 
     #[test]
+    fn envelopes_sealed_for_every_aad_domain_still_open() {
+        let key: [u8; 32] = std::array::from_fn(|i| i as u8);
+        let wrapped: [u8; 32] = std::array::from_fn(|i| 0x80 + i as u8);
+        let snapshot_ids = serde_json::to_string(&["conv-1", "resp-1", "call/1"]).unwrap();
+
+        let open_cases: &[(&str, &str, &[u8])] = &[
+            (
+                &item_aad("0192aaaa-bbbb-7ccc-8ddd-eeeeffff0001"),
+                r#"{"v":1,"n":"ERITFBUWFxgZGhsc","c":"sr+Y0E1EZA0HislXGKgVg2Zlx6rlAob+xjujA5GMQDbtDXm1kMLcjYOcu67L"}"#,
+                br#"{"type":"host","name":"prod"}"#,
+            ),
+            (
+                &device_aad("dev-01"),
+                r#"{"v":1,"n":"REVGR0hJSktMTU5P","c":"sFWY8RYZtc0+h5RUrN3sa4D6CuBVh3DWVRN7O4qe5cpJDxhuUbEli7uXJZ6qFrY1X2gCIw=="}"#,
+                br#"{"name":"Laptop","platform":"Linux"}"#,
+            ),
+            (
+                AAD_VAULT_CHECK,
+                r#"{"v":1,"n":"ZmdoaWprbG1ub3Bx","c":"KQuFkfCUbLQUhYVhPRX1ai9wYNTcqjbc/oBkL0c0A8rjz+JQXw=="}"#,
+                b"hatoba vault check v1",
+            ),
+            (
+                AAD_RECENT_TARGETS,
+                r#"{"v":1,"n":"d3h5ent8fX5/gIGC","c":"eRuxcZgHTZbIKxK94ceClJHBR8U/6a6kAZ8ssHKUu3/N1qIMrHrvhw=="}"#,
+                br#"[{"address":"10.0.0.1"}]"#,
+            ),
+            (
+                AAD_AI_ALLOWANCES,
+                r#"{"v":1,"n":"iImKi4yNjo+QkZKT","c":"2vjQ9FPG60VhhDmhIqBK8jIJFL+gYhwTesqoRDj9DA8beKTu"}"#,
+                br#"[{"kind":"command"}]"#,
+            ),
+            (
+                AAD_CHATGPT_SESSIONS,
+                r#"{"v":1,"n":"mZqbnJ2en6ChoqOk","c":"e8Pzngn3u55EiLDadAO4aV8Q/aXo8IVNCaa28BZt+Q=="}"#,
+                br#"{"sessions":{}}"#,
+            ),
+            (
+                &format!("{AAD_AI_FILE_SNAPSHOT_PREFIX}meta/{snapshot_ids}"),
+                r#"{"v":1,"n":"zM3Oz9DR0tPU1dbX","c":"vFdzEsRAXPYexMjsWYjHq6xfoaDgf6YYt1NvSq8ififAhFMhmA=="}"#,
+                br#"{"path":"/etc/hosts"}"#,
+            ),
+            (
+                &format!("{AAD_AI_FILE_SNAPSHOT_PREFIX}content/{snapshot_ids}"),
+                r#"{"v":1,"n":"3d7f4OHi4+Tl5ufo","c":"uZ/WnZt3TQxmkvLBZq74uPUDl3/10mgcO01t8HGheGKSLvwv"}"#,
+                b"127.0.0.1 localhost\n",
+            ),
+            (
+                &format!("{AAD_COMMAND_HISTORY_PREFIX}local:bash"),
+                r#"{"v":1,"n":"7u/w8fLz9PX29/j5","c":"qNcoongJBT0CKhPToLbX8AUJtfiF4pKglcNbLvb5CM6FFxL4J8kJ"}"#,
+                br#"["git status","ls -la"]"#,
+            ),
+            (
+                "hatoba/hello-vault-key/v1",
+                r#"{"v":1,"n":"/wABAgMEBQYHCAkK","c":"JUV4RILrl+zDNdrJkoZXjc8PD5BFL4JcWA5x+GX01impB4J73UYK/iJ23WMRvSni"}"#,
+                &wrapped,
+            ),
+            (
+                "hatoba/touch-id-vault-key/v1",
+                r#"{"v":1,"n":"EBESExQVFhcYGRob","c":"/X8alc1MvDRC/IKWg/Tn3EfB3J2PV8Emf2B4/MLJykSCZD4bcYeuljDh3/uSCdgh"}"#,
+                &wrapped,
+            ),
+        ];
+        for (i, (aad, json, expected)) in open_cases.iter().enumerate() {
+            let plain = open_json(&key, aad.as_bytes(), json).expect(aad);
+            assert_eq!(plain.as_slice(), *expected, "{aad}");
+            let other_aad = open_cases[(i + 1) % open_cases.len()].0;
+            assert!(matches!(
+                open_json(&key, other_aad.as_bytes(), json),
+                Err(Error::Decrypt)
+            ));
+        }
+
+        let wrap_cases: &[(&str, &str)] = &[
+            (
+                AAD_VAULT_KEY,
+                r#"{"v":1,"n":"IiMkJSYnKCkqKywt","c":"nHfpKY4umxJ4ci1jAjHTuDZJncgRvspmvYYLVL1TCgigvOx7rLOt1kN7HshgnmVg"}"#,
+            ),
+            (
+                AAD_RECOVERY_VAULT_KEY,
+                r#"{"v":1,"n":"MzQ1Njc4OTo7PD0+","c":"o8W4Bvgobg2MJfrmSk/cVRE4FH6/HhnYuHhDUB3sl4eXSP2JFfeV6/m/Ic+SNkTH"}"#,
+            ),
+            (
+                AAD_RECOVERY_AUTH,
+                r#"{"v":1,"n":"VVZXWFlaW1xdXl9g","c":"INZzvfGH+ZhrwWBxo1goRnZewW7Eb7kth65QFYOjt+PdUUThfnOZi0khdH5JF1Vh"}"#,
+            ),
+            (
+                AAD_PIN_KEY,
+                r#"{"v":1,"n":"qqusra6vsLGys7S1","c":"C5F10yWY99dJWm8yEl17SYR3CiZDVrPY6JUiitVQSt16mqQS1twPhjdR/IoVSVE4"}"#,
+            ),
+            (
+                AAD_PIN_VAULT_KEY,
+                r#"{"v":1,"n":"u7y9vr/AwcLDxMXG","c":"9PtNiWv3Sch0yDRQeoxSLfXAAc+uGMh3XBsvQ6aoV6awzuiWg2d5tTW/YgjqvfG3"}"#,
+            ),
+        ];
+        for (i, (aad, json)) in wrap_cases.iter().enumerate() {
+            let unwrapped = unwrap_key(&key, aad, json).expect(aad);
+            assert_eq!(*unwrapped, wrapped, "{aad}");
+            let other_aad = wrap_cases[(i + 1) % wrap_cases.len()].0;
+            assert!(matches!(
+                unwrap_key(&key, other_aad, json),
+                Err(Error::Decrypt)
+            ));
+        }
+    }
+
+    #[test]
     fn seal_open_round_trip() {
         let key = random_key().unwrap();
         for len in [0usize, 1, 15, 16, 17, 1000, 70_000] {
