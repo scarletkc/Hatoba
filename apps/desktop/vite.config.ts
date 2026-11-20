@@ -34,5 +34,11 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "lcov", "json-summary"],
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: ["src/ipc/bindings.ts", "**/*.test.{ts,tsx}", "**/*.d.ts"],
+    },
   },
 });

@@ -5,6 +5,7 @@
 # Node
 node_modules/
 dist/
+coverage/
 .vite/
 .astro/
 *.tsbuildinfo

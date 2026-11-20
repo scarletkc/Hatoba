@@ -14,10 +14,15 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "pnpm -r test",
+    "test:coverage": "pnpm -r --if-present test:coverage",
     "worker:bundle": "node scripts/worker/bundle.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "prettier": "3.9.10",
-    "prettier-plugin-astro": "1.1.1"
+    "prettier-plugin-astro": "1.1.1",
+    "typescript-eslint": "^8.71.1"
   }
 }

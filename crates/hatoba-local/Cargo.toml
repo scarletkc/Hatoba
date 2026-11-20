@@ -41,3 +41,6 @@ libc = "0.2"
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "rt-multi-thread", "macros"] }
 tempfile = "3"
+
+[lints]
+workspace = true
