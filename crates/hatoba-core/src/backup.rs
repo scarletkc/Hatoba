@@ -17,7 +17,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::crypto::{AAD_VAULT_KEY, KdfParams, MasterKeys, decode_salt, unwrap_key};
+use crate::crypto::{Aad, KdfParams, MasterKeys, decode_salt, unwrap_key};
 use crate::error::{Error, Result};
 use crate::model::new_id;
 use crate::store::{ItemRow, KeyMeta, Store, StoreOps, meta};
@@ -157,7 +157,8 @@ impl Vault {
         let params = KdfParams::from_json(&file.kdf_params)?;
         let salt = decode_salt(&file.kdf_salt)?;
         let keys = MasterKeys::from_password(password, &salt, &params);
-        let vault_key = match unwrap_key(&keys.enc_key, AAD_VAULT_KEY, &file.protected_vault_key) {
+        let vault_key = match unwrap_key(&keys.enc_key, &Aad::VAULT_KEY, &file.protected_vault_key)
+        {
             Ok(k) => k,
             Err(Error::Decrypt) => return Err(Error::WrongPassword),
             Err(e) => return Err(e),

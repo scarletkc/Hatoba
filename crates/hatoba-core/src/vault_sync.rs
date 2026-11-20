@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::crypto::{self, AAD_RECOVERY_AUTH, Key32, item_aad, seal, unwrap_key};
+use crate::crypto::{self, Aad, Key32, unwrap_key};
 use crate::error::{Error, Result};
 use crate::model::{Item, SETTINGS_ID};
 use crate::store::{ItemRow, KeyMeta, Store, StoreOps, meta};
@@ -200,7 +200,7 @@ impl Vault {
             .store
             .get_meta(meta::RECOVERY_AUTH_SEALED)?
             .ok_or(Error::RecoveryMaterialMissing)?;
-        let recovery_auth = unwrap_key(&vault_key, AAD_RECOVERY_AUTH, &sealed)?;
+        let recovery_auth = unwrap_key(&vault_key, &Aad::RECOVERY_AUTH, &sealed)?;
         Ok(SetupMaterial {
             meta: self.local_meta()?,
             auth_key: keys.auth_key,
@@ -308,11 +308,7 @@ impl Vault {
         if rekey {
             for which in SealedLocal::ALL {
                 let resealed = match self.store.get_meta(which.meta_key())? {
-                    Some(sealed) => crypto::open_json(&old, which.aad(), &sealed)
-                        .ok()
-                        .map(|plain| seal(&vault_key, which.aad(), &plain))
-                        .transpose()?
-                        .map(|env| env.to_json()),
+                    Some(sealed) => crypto::reseal(&old, &vault_key, &which.aad(), &sealed)?,
                     None => None,
                 };
                 local.push((which.meta_key(), resealed));
@@ -335,20 +331,16 @@ impl Vault {
                     if row.id == SETTINGS_ID && settings.is_some() {
                         continue;
                     }
-                    let plain = row
-                        .envelope
-                        .as_deref()
-                        .filter(|_| !row.deleted)
-                        .and_then(|env| {
-                            crypto::open_json(&old, item_aad(&row.id).as_bytes(), env).ok()
-                        });
-                    let Some(plain) = plain else {
+                    let resealed = match row.envelope.as_deref().filter(|_| !row.deleted) {
+                        Some(env) => crypto::reseal(&old, &vault_key, &Aad::item(&row.id), env)?,
+                        None => None,
+                    };
+                    let Some(envelope) = resealed else {
                         tx.delete_item_row(&row.id)?;
                         continue;
                     };
-                    let envelope = seal(&vault_key, item_aad(&row.id).as_bytes(), &plain)?;
                     tx.upsert_item_row(&ItemRow {
-                        envelope: Some(envelope.to_json()),
+                        envelope: Some(envelope),
                         revision: 0,
                         dirty: true,
                         ..row

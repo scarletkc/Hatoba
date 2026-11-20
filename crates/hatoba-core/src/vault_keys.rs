@@ -6,9 +6,8 @@ use serde::Serialize;
 use zeroize::Zeroizing;
 
 use crate::crypto::{
-    self, AAD_RECOVERY_AUTH, AAD_RECOVERY_VAULT_KEY, AAD_VAULT_CHECK, AAD_VAULT_KEY, KdfParams,
-    Key32, MasterKeys, b64_encode, decode_salt, random_key, random_salt, seal, unwrap_key,
-    wrap_key,
+    self, Aad, KdfParams, Key32, MasterKeys, b64_encode, decode_salt, random_key, random_salt,
+    seal, unwrap_key, wrap_key,
 };
 use crate::error::{Error, Result};
 use crate::model::{Item, SETTINGS_ID, Settings, new_id};
@@ -196,9 +195,12 @@ impl Vault {
         let vault_key = random_key()?;
         let recovery = RecoveryCode::generate()?;
 
-        let protected = wrap_key(&keys.enc_key, AAD_VAULT_KEY, &vault_key)?;
-        let recovery_wrapped =
-            wrap_key(&recovery.recovery_key(), AAD_RECOVERY_VAULT_KEY, &vault_key)?;
+        let protected = wrap_key(&keys.enc_key, &Aad::VAULT_KEY, &vault_key)?;
+        let recovery_wrapped = wrap_key(
+            &recovery.recovery_key(),
+            &Aad::RECOVERY_VAULT_KEY,
+            &vault_key,
+        )?;
         let recovery_auth_sealed = seal_recovery_auth(&vault_key, &recovery.recovery_auth())?;
         let check = seal_vault_check(&vault_key)?;
         let settings_item = Item::Settings(Settings {
@@ -302,7 +304,7 @@ impl Vault {
             .store
             .get_meta(meta::PROTECTED_VAULT_KEY)?
             .ok_or(Error::VaultNotInitialized)?;
-        match unwrap_key(&keys.enc_key, AAD_VAULT_KEY, &protected) {
+        match unwrap_key(&keys.enc_key, &Aad::VAULT_KEY, &protected) {
             Ok(vault_key) => {
                 self.reset_failures();
                 Ok((keys, vault_key))
@@ -439,7 +441,7 @@ impl Vault {
         Ok(PasswordChange {
             kdf_salt_b64: b64_encode(&salt),
             kdf_params_json: params.to_json(),
-            protected_vault_key_json: wrap_key(&keys.enc_key, AAD_VAULT_KEY, vault_key)?,
+            protected_vault_key_json: wrap_key(&keys.enc_key, &Aad::VAULT_KEY, vault_key)?,
             auth_key: keys.auth_key,
         })
     }
@@ -486,7 +488,7 @@ impl Vault {
             .store
             .get_meta(meta::RECOVERY_VAULT_KEY)?
             .ok_or(Error::VaultNotInitialized)?;
-        let vault_key = match unwrap_key(&code.recovery_key(), AAD_RECOVERY_VAULT_KEY, &wrapped) {
+        let vault_key = match unwrap_key(&code.recovery_key(), &Aad::RECOVERY_VAULT_KEY, &wrapped) {
             Ok(k) => k,
             Err(Error::Decrypt) => return Err(Error::WrongRecoveryCode),
             Err(e) => return Err(e),
@@ -522,7 +524,7 @@ impl Vault {
         let (keys, vault_key) = self.unwrap_with_password(password)?;
         let code = RecoveryCode::generate()?;
         let recovery_vault_key_json =
-            wrap_key(&code.recovery_key(), AAD_RECOVERY_VAULT_KEY, &vault_key)?;
+            wrap_key(&code.recovery_key(), &Aad::RECOVERY_VAULT_KEY, &vault_key)?;
         let recovery_auth = code.recovery_auth();
         let sealed_auth = seal_recovery_auth(&vault_key, &recovery_auth)?;
         Ok(StagedRecovery {
@@ -570,22 +572,22 @@ impl Vault {
             .store
             .get_meta(meta::RECOVERY_AUTH_SEALED)?
             .ok_or(Error::RecoveryMaterialMissing)?;
-        unwrap_key(&unlocked.vault_key, AAD_RECOVERY_AUTH, &sealed)
+        unwrap_key(&unlocked.vault_key, &Aad::RECOVERY_AUTH, &sealed)
     }
 }
 
 // ---- small sealed constants ---------------------------------------------------------------
 
 fn seal_recovery_auth(vault_key: &[u8; 32], recovery_auth: &[u8; 32]) -> Result<String> {
-    wrap_key(vault_key, AAD_RECOVERY_AUTH, recovery_auth)
+    wrap_key(vault_key, &Aad::RECOVERY_AUTH, recovery_auth)
 }
 
 pub(crate) fn seal_vault_check(vault_key: &[u8; 32]) -> Result<String> {
-    Ok(seal(vault_key, AAD_VAULT_CHECK.as_bytes(), VAULT_CHECK_PLAINTEXT)?.to_json())
+    Ok(seal(vault_key, &Aad::VAULT_CHECK, VAULT_CHECK_PLAINTEXT)?.to_json())
 }
 
 fn open_vault_check(vault_key: &[u8; 32], json: &str) -> bool {
-    crypto::open_json(vault_key, AAD_VAULT_CHECK.as_bytes(), json)
+    crypto::open_json(vault_key, &Aad::VAULT_CHECK, json)
         .is_ok_and(|p| p.as_slice() == VAULT_CHECK_PLAINTEXT)
 }
 
@@ -594,7 +596,6 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::crypto::item_aad;
     use crate::model::SshKey;
     use crate::test_support::{
         TEST_PASSWORD as PW, host_item as host, unlocked_vault_at, vault_on,
@@ -994,9 +995,7 @@ mod tests {
         let id = new_id();
         let key = &vault.unlocked.as_ref().unwrap().vault_key;
         let plain = br#"{"type":"serial_host","name":"x"}"#;
-        let envelope = seal(key, item_aad(&id).as_bytes(), plain)
-            .unwrap()
-            .to_json();
+        let envelope = seal(key, &Aad::item(&id), plain).unwrap().to_json();
         vault
             .store
             .upsert_item_row(&ItemRow {

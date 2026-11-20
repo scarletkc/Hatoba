@@ -19,10 +19,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
-use crate::crypto::{
-    AAD_RECOVERY_VAULT_KEY, AAD_VAULT_KEY, KdfParams, Key32, MasterKeys, decode_salt, device_aad,
-    open_json, seal, unwrap_key,
-};
+use crate::crypto::{Aad, KdfParams, Key32, MasterKeys, decode_salt, open_json, seal, unwrap_key};
 use crate::error::{Error, Result};
 use crate::model::{SETTINGS_ID, new_id};
 use crate::platform::DeviceInfo;
@@ -50,11 +47,11 @@ fn with_vault<T>(vault: &SharedVault, f: impl FnOnce(&mut Vault) -> Result<T>) -
 /// Seals `{"name":…,"platform":…}` for the login request.
 fn seal_device(key: &[u8; 32], device_id: &str, info: &DeviceInfo) -> Result<String> {
     let plain = Zeroizing::new(serde_json::to_vec(info)?);
-    Ok(seal(key, device_aad(device_id).as_bytes(), &plain)?.to_json())
+    Ok(seal(key, &Aad::device(device_id), &plain)?.to_json())
 }
 
 fn open_device(key: &[u8; 32], device_id: &str, sealed: &str) -> Option<DeviceInfo> {
-    let plain = open_json(key, device_aad(device_id).as_bytes(), sealed).ok()?;
+    let plain = open_json(key, &Aad::device(device_id), sealed).ok()?;
     serde_json::from_slice(&plain).ok()
 }
 
@@ -203,7 +200,7 @@ async fn authenticate(
             meta.schema_version
         )));
     }
-    let vault_key = unwrap_key(&keys.enc_key, AAD_VAULT_KEY, &meta.protected_vault_key)?;
+    let vault_key = unwrap_key(&keys.enc_key, &Aad::VAULT_KEY, &meta.protected_vault_key)?;
 
     let proper = device_login(&vault_key, device_id, device)?;
     let session = backend.login(&keys.auth_key, &proper).await?;
@@ -488,7 +485,7 @@ pub async fn recover_remote(
     let params = KdfParams::from_json(&recovered.kdf.kdf_params)?;
     let vault_key = match unwrap_key(
         &recovery_key,
-        AAD_RECOVERY_VAULT_KEY,
+        &Aad::RECOVERY_VAULT_KEY,
         &recovered.recovery_vault_key,
     ) {
         Ok(k) => k,

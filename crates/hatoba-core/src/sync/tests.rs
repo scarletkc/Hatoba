@@ -8,7 +8,7 @@ use zeroize::Zeroizing;
 
 use super::fake::{FakeBackend, FakeServer, SETUP_TOKEN};
 use super::*;
-use crate::crypto::{KdfParams, random_key, seal};
+use crate::crypto::{Aad, KdfParams, random_key, seal};
 use crate::error::Error;
 use crate::model::{
     AiConversation, AiEffort, AiMessage, Group, Host, HostAuth, Item, PortForward, RightClick,
@@ -634,7 +634,7 @@ async fn join_replaces_a_damaged_cloud_settings_item_with_the_local_one() {
     // The cloud's settings item opens under no key the vault has.
     let damaged = seal(
         &random_key().unwrap(),
-        crate::crypto::item_aad(SETTINGS_ID).as_bytes(),
+        &Aad::item(SETTINGS_ID),
         br#"{"type":"settings"}"#,
     )
     .unwrap()
@@ -1658,7 +1658,7 @@ async fn undecryptable_remote_items_are_skipped_not_fatal() {
     // 1. Encrypted under a different key.
     let alien = seal(
         &random_key().unwrap(),
-        crate::crypto::item_aad("alien").as_bytes(),
+        &Aad::item("alien"),
         br#"{"type":"host"}"#,
     )
     .unwrap()
@@ -1668,7 +1668,7 @@ async fn undecryptable_remote_items_are_skipped_not_fatal() {
     let vault_key = b.v().vault_key_copy().unwrap();
     let future = seal(
         &vault_key,
-        crate::crypto::item_aad("future").as_bytes(),
+        &Aad::item("future"),
         br#"{"type":"teleporter","x":1}"#,
     )
     .unwrap()

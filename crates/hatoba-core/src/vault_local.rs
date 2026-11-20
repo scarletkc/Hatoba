@@ -2,7 +2,7 @@
 
 use zeroize::Zeroizing;
 
-use crate::crypto::{self, AAD_AI_ALLOWANCES, AAD_CHATGPT_SESSIONS, AAD_RECENT_TARGETS, seal};
+use crate::crypto::{self, Aad, seal};
 use crate::error::{Error, Result};
 use crate::store::{StoreOps, meta};
 use crate::vault::Vault;
@@ -36,11 +36,11 @@ impl SealedLocal {
         }
     }
 
-    pub(crate) const fn aad(self) -> &'static [u8] {
+    pub(crate) const fn aad(self) -> Aad {
         match self {
-            Self::RecentTargets => AAD_RECENT_TARGETS.as_bytes(),
-            Self::AiAllowances => AAD_AI_ALLOWANCES.as_bytes(),
-            Self::ChatgptSessions => AAD_CHATGPT_SESSIONS.as_bytes(),
+            Self::RecentTargets => Aad::RECENT_TARGETS,
+            Self::AiAllowances => Aad::AI_ALLOWANCES,
+            Self::ChatgptSessions => Aad::CHATGPT_SESSIONS,
         }
     }
 }
@@ -237,15 +237,17 @@ impl Vault {
         let Some(sealed) = self.store.get_meta(which.meta_key())? else {
             return Ok(None);
         };
-        Ok(crypto::open_json(&unlocked.vault_key, which.aad(), &sealed)
-            .ok()
-            .and_then(|plain| String::from_utf8(plain.to_vec()).ok()))
+        Ok(
+            crypto::open_json(&unlocked.vault_key, &which.aad(), &sealed)
+                .ok()
+                .and_then(|plain| String::from_utf8(plain.to_vec()).ok()),
+        )
     }
 
     /// Stores a [`SealedLocal`] value, sealed under the vault key.
     fn set_sealed_local(&mut self, which: SealedLocal, json: &str) -> Result<()> {
         let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
-        let sealed = seal(&unlocked.vault_key, which.aad(), json.as_bytes())?;
+        let sealed = seal(&unlocked.vault_key, &which.aad(), json.as_bytes())?;
         self.store.set_meta(which.meta_key(), &sealed.to_json())
     }
 }
@@ -311,7 +313,7 @@ mod tests {
             .store
             .set_meta(
                 meta::RECENT_TARGETS,
-                &seal(&[7u8; 32], AAD_RECENT_TARGETS.as_bytes(), b"[]")
+                &seal(&[7u8; 32], &Aad::RECENT_TARGETS, b"[]")
                     .unwrap()
                     .to_json(),
             )
@@ -342,7 +344,7 @@ mod tests {
             .store
             .set_meta(
                 meta::AI_ALLOWANCES,
-                &seal(&random_key().unwrap(), AAD_AI_ALLOWANCES.as_bytes(), b"[]")
+                &seal(&random_key().unwrap(), &Aad::AI_ALLOWANCES, b"[]")
                     .unwrap()
                     .to_json(),
             )

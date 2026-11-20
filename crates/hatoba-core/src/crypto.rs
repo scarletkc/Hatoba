@@ -11,6 +11,8 @@
 //!
 //! All key material is held in [`Zeroizing`] containers.
 
+use std::borrow::Cow;
+
 use aes_gcm::aead::{AeadInOut, Nonce};
 use aes_gcm::{Aes256Gcm, KeyInit};
 use argon2::{Algorithm, Argon2, Params, Version};
@@ -21,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
+use crate::SnapshotKey;
 use crate::error::{Error, Result};
 
 /// Length in bytes of every symmetric key in the hierarchy.
@@ -39,47 +42,94 @@ pub type Key32 = Zeroizing<[u8; KEY_LEN]>;
 
 // ---- AAD (associated data) domain separation ---------------------------------------------
 
-/// Prefix of the AAD of an item envelope: `hatoba/item/v1/{item_id}` (spec §4.2).
-pub const AAD_ITEM_PREFIX: &str = "hatoba/item/v1/";
-/// AAD of `protected_vault_key` (the vault key wrapped by `enc_key`).
-pub const AAD_VAULT_KEY: &str = "hatoba/vault-key/v1";
-/// AAD of `recovery_vault_key` (the vault key wrapped by `recovery_key`).
-pub const AAD_RECOVERY_VAULT_KEY: &str = "hatoba/recovery-vault-key/v1";
-/// Prefix of the AAD of a sealed device name: `hatoba/device/v1/{device_id}`.
-pub const AAD_DEVICE_PREFIX: &str = "hatoba/device/v1/";
-/// AAD of the local-only `recovery_auth_sealed` meta value (recovery_auth under the vault key).
-pub const AAD_RECOVERY_AUTH: &str = "hatoba/recovery-auth/v1";
-/// AAD of the local-only `vault_check` meta value used to verify a candidate vault key.
-pub const AAD_VAULT_CHECK: &str = "hatoba/vault-check/v1";
-/// AAD of the local-only `recent_targets` meta value (recent quick-connect targets).
-pub const AAD_RECENT_TARGETS: &str = "hatoba/recent-targets/v1";
-/// AAD of the local-only `ai_allowances` meta value (the AI approvals saved on this device).
-pub const AAD_AI_ALLOWANCES: &str = "hatoba/ai-allowances/v1";
-/// AAD of the local-only `chatgpt_sessions` meta value (this device's ChatGPT sessions, AI-52).
-pub const AAD_CHATGPT_SESSIONS: &str = "hatoba/chatgpt-sessions/v1";
-/// AAD of the PIN key sealed under the vault key, in the local-only `pin` meta value (SEC-11).
-pub const AAD_PIN_KEY: &str = "hatoba/pin-key/v1";
-/// AAD of the vault key wrapped by the PIN key (SEC-11), held in memory or by the OS.
-pub const AAD_PIN_VAULT_KEY: &str = "hatoba/pin-vault-key/v1";
-/// Prefix of the AAD of a local-only file snapshot's envelopes (AI-41):
-/// `hatoba/ai-file-snapshot/v1/{part}/{key}`, with the part (`meta` or `content`) and the row's
-/// key as a JSON array, so an envelope opens only in its own row and column.
-pub const AAD_AI_FILE_SNAPSHOT_PREFIX: &str = "hatoba/ai-file-snapshot/v1/";
-/// Prefix of the AAD of a local-only command history (TERM-15):
-/// `hatoba/command-history/v1/{owner}`, so a history opens only in its own host's or local
-/// shell's row.
-pub const AAD_COMMAND_HISTORY_PREFIX: &str = "hatoba/command-history/v1/";
+const ITEM_AAD_PREFIX: &str = "hatoba/item/v1/";
+const DEVICE_AAD_PREFIX: &str = "hatoba/device/v1/";
+const AI_FILE_SNAPSHOT_AAD_PREFIX: &str = "hatoba/ai-file-snapshot/v1/";
+const COMMAND_HISTORY_AAD_PREFIX: &str = "hatoba/command-history/v1/";
 
-/// AAD for the item with the given id. Conflict-log copies reuse the item AAD of their item.
+/// Associated data (AAD) that binds an [`Envelope`] to the exact domain, row and column where it
+/// belongs (spec §4.2).
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[must_use]
-pub fn item_aad(item_id: &str) -> String {
-    format!("{AAD_ITEM_PREFIX}{item_id}")
-}
+pub struct Aad(Cow<'static, str>);
 
-/// AAD for the sealed name of the device with the given id.
-#[must_use]
-pub fn device_aad(device_id: &str) -> String {
-    format!("{AAD_DEVICE_PREFIX}{device_id}")
+impl Aad {
+    /// AAD of `protected_vault_key` (the vault key wrapped by `enc_key`).
+    pub const VAULT_KEY: Self = Self(Cow::Borrowed("hatoba/vault-key/v1"));
+    /// AAD of `recovery_vault_key` (the vault key wrapped by `recovery_key`).
+    pub const RECOVERY_VAULT_KEY: Self = Self(Cow::Borrowed("hatoba/recovery-vault-key/v1"));
+    /// AAD of the local-only `recovery_auth_sealed` meta value (`recovery_auth` under the vault
+    /// key).
+    pub const RECOVERY_AUTH: Self = Self(Cow::Borrowed("hatoba/recovery-auth/v1"));
+    /// AAD of the local-only `vault_check` meta value used to verify a candidate vault key.
+    pub const VAULT_CHECK: Self = Self(Cow::Borrowed("hatoba/vault-check/v1"));
+    /// AAD of the local-only `recent_targets` meta value (recent quick-connect targets).
+    pub const RECENT_TARGETS: Self = Self(Cow::Borrowed("hatoba/recent-targets/v1"));
+    /// AAD of the local-only `ai_allowances` meta value (the AI approvals saved on this device).
+    pub const AI_ALLOWANCES: Self = Self(Cow::Borrowed("hatoba/ai-allowances/v1"));
+    /// AAD of the local-only `chatgpt_sessions` meta value (this device's ChatGPT sessions,
+    /// AI-52).
+    pub const CHATGPT_SESSIONS: Self = Self(Cow::Borrowed("hatoba/chatgpt-sessions/v1"));
+    /// AAD of the PIN key sealed under the vault key, in the local-only `pin` meta value
+    /// (SEC-11).
+    pub const PIN_KEY: Self = Self(Cow::Borrowed("hatoba/pin-key/v1"));
+    /// AAD of the vault key wrapped by the PIN key (SEC-11), held in memory or by the OS.
+    pub const PIN_VAULT_KEY: Self = Self(Cow::Borrowed("hatoba/pin-vault-key/v1"));
+    /// AAD of the vault key sealed under the Windows Hello wrapping key (SEC-07).
+    pub const HELLO_VAULT_KEY: Self = Self(Cow::Borrowed("hatoba/hello-vault-key/v1"));
+    /// AAD of the vault key sealed under the macOS Touch ID wrapping key (SEC-10).
+    pub const TOUCH_ID_VAULT_KEY: Self = Self(Cow::Borrowed("hatoba/touch-id-vault-key/v1"));
+
+    /// AAD for the item with the given id (`hatoba/item/v1/{item_id}`). Conflict-log copies
+    /// reuse the item AAD of their item.
+    pub fn item(item_id: &str) -> Self {
+        Self(Cow::Owned(format!("{ITEM_AAD_PREFIX}{item_id}")))
+    }
+
+    /// AAD for the sealed name of the device with the given id (`hatoba/device/v1/{device_id}`).
+    pub fn device(device_id: &str) -> Self {
+        Self(Cow::Owned(format!("{DEVICE_AAD_PREFIX}{device_id}")))
+    }
+
+    /// AAD for a local-only AI file snapshot's description (`meta`) column (AI-41).
+    pub fn snapshot_meta(key: &SnapshotKey<'_>) -> Self {
+        Self::snapshot("meta", key)
+    }
+
+    /// AAD for a local-only AI file snapshot's file body (`content`) column (AI-41).
+    pub fn snapshot_content(key: &SnapshotKey<'_>) -> Self {
+        Self::snapshot("content", key)
+    }
+
+    fn snapshot(part: &str, key: &SnapshotKey<'_>) -> Self {
+        let ids = serde_json::to_string(&[key.conversation_id, key.response_id, key.tool_call_id])
+            .unwrap_or_default();
+        Self(Cow::Owned(format!(
+            "{AI_FILE_SNAPSHOT_AAD_PREFIX}{part}/{ids}"
+        )))
+    }
+
+    /// AAD for a local-only command history (`hatoba/command-history/v1/{owner}`, TERM-15).
+    pub fn command_history(owner: &str) -> Self {
+        Self(Cow::Owned(format!("{COMMAND_HISTORY_AAD_PREFIX}{owner}")))
+    }
+
+    #[cfg(test)]
+    const fn raw(s: &'static str) -> Self {
+        Self(Cow::Borrowed(s))
+    }
+
+    /// The UTF-8 AAD string.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// The UTF-8 AAD bytes passed to AES-256-GCM.
+    #[must_use]
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
 }
 
 // ---- randomness ---------------------------------------------------------------------------
@@ -478,13 +528,13 @@ fn cipher(key: &[u8; KEY_LEN]) -> Aes256Gcm {
 ///
 /// # Errors
 /// [`Error::Random`] if no nonce can be generated; [`Error::Decrypt`] is never returned here.
-pub fn seal(key: &[u8; KEY_LEN], aad: &[u8], plaintext: &[u8]) -> Result<Envelope> {
+pub fn seal(key: &[u8; KEY_LEN], aad: &Aad, plaintext: &[u8]) -> Result<Envelope> {
     let nonce_bytes = random_bytes::<NONCE_LEN>()?;
     let nonce = Nonce::<Aes256Gcm>::from(nonce_bytes);
     let mut buf = Zeroizing::new(Vec::with_capacity(plaintext.len() + TAG_LEN));
     buf.extend_from_slice(plaintext);
     cipher(key)
-        .encrypt_in_place(&nonce, aad, &mut *buf)
+        .encrypt_in_place(&nonce, aad.as_bytes(), &mut *buf)
         .map_err(|_| Error::Format("plaintext too large".into()))?;
     Ok(Envelope {
         v: ENVELOPE_VERSION,
@@ -498,7 +548,7 @@ pub fn seal(key: &[u8; KEY_LEN], aad: &[u8], plaintext: &[u8]) -> Result<Envelop
 /// # Errors
 /// [`Error::Decrypt`] if the key, AAD, nonce or ciphertext do not match (indistinguishable by
 /// design); [`Error::Format`] / [`Error::UnsupportedVersion`] for a malformed envelope.
-pub fn open(key: &[u8; KEY_LEN], aad: &[u8], envelope: &Envelope) -> Result<Zeroizing<Vec<u8>>> {
+pub fn open(key: &[u8; KEY_LEN], aad: &Aad, envelope: &Envelope) -> Result<Zeroizing<Vec<u8>>> {
     if envelope.v != ENVELOPE_VERSION {
         return Err(Error::UnsupportedVersion(format!(
             "envelope v{}",
@@ -514,7 +564,7 @@ pub fn open(key: &[u8; KEY_LEN], aad: &[u8], envelope: &Envelope) -> Result<Zero
         return Err(Error::Format("ciphertext too short".into()));
     }
     cipher(key)
-        .decrypt_in_place(&nonce, aad, &mut *buf)
+        .decrypt_in_place(&nonce, aad.as_bytes(), &mut *buf)
         .map_err(|_| Error::Decrypt)?;
     Ok(buf)
 }
@@ -523,16 +573,33 @@ pub fn open(key: &[u8; KEY_LEN], aad: &[u8], envelope: &Envelope) -> Result<Zero
 ///
 /// # Errors
 /// As [`Envelope::from_json`] and [`open`].
-pub fn open_json(key: &[u8; KEY_LEN], aad: &[u8], json: &str) -> Result<Zeroizing<Vec<u8>>> {
+pub fn open_json(key: &[u8; KEY_LEN], aad: &Aad, json: &str) -> Result<Zeroizing<Vec<u8>>> {
     open(key, aad, &Envelope::from_json(json)?)
+}
+
+/// Opens `json` under `old` and `aad`, and seals the plaintext again under `new` and `aad`.
+/// Returns `Ok(None)` when `old` cannot open `json` (wrong key, wrong AAD or damaged envelope).
+///
+/// # Errors
+/// As [`seal`].
+pub fn reseal(
+    old: &[u8; KEY_LEN],
+    new: &[u8; KEY_LEN],
+    aad: &Aad,
+    json: &str,
+) -> Result<Option<String>> {
+    let Ok(plain) = open_json(old, aad, json) else {
+        return Ok(None);
+    };
+    Ok(Some(seal(new, aad, &plain)?.to_json()))
 }
 
 /// Seals a 32-byte key (e.g. the vault key) and returns the envelope JSON.
 ///
 /// # Errors
 /// As [`seal`].
-pub fn wrap_key(wrapping_key: &[u8; KEY_LEN], aad: &str, key: &[u8; KEY_LEN]) -> Result<String> {
-    Ok(seal(wrapping_key, aad.as_bytes(), key)?.to_json())
+pub fn wrap_key(wrapping_key: &[u8; KEY_LEN], aad: &Aad, key: &[u8; KEY_LEN]) -> Result<String> {
+    Ok(seal(wrapping_key, aad, key)?.to_json())
 }
 
 /// Opens a wrapped 32-byte key.
@@ -540,8 +607,8 @@ pub fn wrap_key(wrapping_key: &[u8; KEY_LEN], aad: &str, key: &[u8; KEY_LEN]) ->
 /// # Errors
 /// [`Error::Decrypt`] if the wrapping key is wrong; [`Error::Format`] if the plaintext is not
 /// exactly 32 bytes.
-pub fn unwrap_key(wrapping_key: &[u8; KEY_LEN], aad: &str, json: &str) -> Result<Key32> {
-    let plain = open_json(wrapping_key, aad.as_bytes(), json)?;
+pub fn unwrap_key(wrapping_key: &[u8; KEY_LEN], aad: &Aad, json: &str) -> Result<Key32> {
+    let plain = open_json(wrapping_key, aad, json)?;
     let mut key: Key32 = Zeroizing::new([0u8; KEY_LEN]);
     if plain.len() != KEY_LEN {
         return Err(Error::Format("wrapped key must be 32 bytes".into()));
@@ -625,116 +692,117 @@ mod tests {
     fn opens_hard_coded_envelope() {
         let key: [u8; 32] = std::array::from_fn(|i| i as u8);
         let json = r#"{"v":1,"n":"AAECAwQFBgcICQoL","c":"PCCiYrWA4CGvKfj4xctUT+236lHSQX0MSgiBp2A2KoRFpJZixiTBgGO6ErDc"}"#;
-        let aad = item_aad("0192aaaa-bbbb-7ccc-8ddd-eeeeffff0001");
-        let plain = open_json(&key, aad.as_bytes(), json).unwrap();
+        let aad = Aad::item("0192aaaa-bbbb-7ccc-8ddd-eeeeffff0001");
+        let plain = open_json(&key, &aad, json).unwrap();
         assert_eq!(&**plain, br#"{"type":"host","name":"prod"}"#);
         // Same envelope under another item's AAD must not open.
-        let other = item_aad("0192aaaa-bbbb-7ccc-8ddd-eeeeffff0002");
-        assert!(matches!(
-            open_json(&key, other.as_bytes(), json),
-            Err(Error::Decrypt)
-        ));
+        let other = Aad::item("0192aaaa-bbbb-7ccc-8ddd-eeeeffff0002");
+        assert!(matches!(open_json(&key, &other, json), Err(Error::Decrypt)));
     }
 
     #[test]
     fn envelopes_sealed_for_every_aad_domain_still_open() {
         let key: [u8; 32] = std::array::from_fn(|i| i as u8);
         let wrapped: [u8; 32] = std::array::from_fn(|i| 0x80 + i as u8);
-        let snapshot_ids = serde_json::to_string(&["conv-1", "resp-1", "call/1"]).unwrap();
+        let snap_key = SnapshotKey {
+            conversation_id: "conv-1",
+            response_id: "resp-1",
+            tool_call_id: "call/1",
+        };
 
-        let open_cases: &[(&str, &str, &[u8])] = &[
+        let open_cases: &[(Aad, &str, &[u8])] = &[
             (
-                &item_aad("0192aaaa-bbbb-7ccc-8ddd-eeeeffff0001"),
+                Aad::item("0192aaaa-bbbb-7ccc-8ddd-eeeeffff0001"),
                 r#"{"v":1,"n":"ERITFBUWFxgZGhsc","c":"sr+Y0E1EZA0HislXGKgVg2Zlx6rlAob+xjujA5GMQDbtDXm1kMLcjYOcu67L"}"#,
                 br#"{"type":"host","name":"prod"}"#,
             ),
             (
-                &device_aad("dev-01"),
+                Aad::device("dev-01"),
                 r#"{"v":1,"n":"REVGR0hJSktMTU5P","c":"sFWY8RYZtc0+h5RUrN3sa4D6CuBVh3DWVRN7O4qe5cpJDxhuUbEli7uXJZ6qFrY1X2gCIw=="}"#,
                 br#"{"name":"Laptop","platform":"Linux"}"#,
             ),
             (
-                AAD_VAULT_CHECK,
+                Aad::VAULT_CHECK,
                 r#"{"v":1,"n":"ZmdoaWprbG1ub3Bx","c":"KQuFkfCUbLQUhYVhPRX1ai9wYNTcqjbc/oBkL0c0A8rjz+JQXw=="}"#,
                 b"hatoba vault check v1",
             ),
             (
-                AAD_RECENT_TARGETS,
+                Aad::RECENT_TARGETS,
                 r#"{"v":1,"n":"d3h5ent8fX5/gIGC","c":"eRuxcZgHTZbIKxK94ceClJHBR8U/6a6kAZ8ssHKUu3/N1qIMrHrvhw=="}"#,
                 br#"[{"address":"10.0.0.1"}]"#,
             ),
             (
-                AAD_AI_ALLOWANCES,
+                Aad::AI_ALLOWANCES,
                 r#"{"v":1,"n":"iImKi4yNjo+QkZKT","c":"2vjQ9FPG60VhhDmhIqBK8jIJFL+gYhwTesqoRDj9DA8beKTu"}"#,
                 br#"[{"kind":"command"}]"#,
             ),
             (
-                AAD_CHATGPT_SESSIONS,
+                Aad::CHATGPT_SESSIONS,
                 r#"{"v":1,"n":"mZqbnJ2en6ChoqOk","c":"e8Pzngn3u55EiLDadAO4aV8Q/aXo8IVNCaa28BZt+Q=="}"#,
                 br#"{"sessions":{}}"#,
             ),
             (
-                &format!("{AAD_AI_FILE_SNAPSHOT_PREFIX}meta/{snapshot_ids}"),
+                Aad::snapshot_meta(&snap_key),
                 r#"{"v":1,"n":"zM3Oz9DR0tPU1dbX","c":"vFdzEsRAXPYexMjsWYjHq6xfoaDgf6YYt1NvSq8ififAhFMhmA=="}"#,
                 br#"{"path":"/etc/hosts"}"#,
             ),
             (
-                &format!("{AAD_AI_FILE_SNAPSHOT_PREFIX}content/{snapshot_ids}"),
+                Aad::snapshot_content(&snap_key),
                 r#"{"v":1,"n":"3d7f4OHi4+Tl5ufo","c":"uZ/WnZt3TQxmkvLBZq74uPUDl3/10mgcO01t8HGheGKSLvwv"}"#,
                 b"127.0.0.1 localhost\n",
             ),
             (
-                &format!("{AAD_COMMAND_HISTORY_PREFIX}local:bash"),
+                Aad::command_history("local:bash"),
                 r#"{"v":1,"n":"7u/w8fLz9PX29/j5","c":"qNcoongJBT0CKhPToLbX8AUJtfiF4pKglcNbLvb5CM6FFxL4J8kJ"}"#,
                 br#"["git status","ls -la"]"#,
             ),
             (
-                "hatoba/hello-vault-key/v1",
+                Aad::HELLO_VAULT_KEY,
                 r#"{"v":1,"n":"/wABAgMEBQYHCAkK","c":"JUV4RILrl+zDNdrJkoZXjc8PD5BFL4JcWA5x+GX01impB4J73UYK/iJ23WMRvSni"}"#,
                 &wrapped,
             ),
             (
-                "hatoba/touch-id-vault-key/v1",
+                Aad::TOUCH_ID_VAULT_KEY,
                 r#"{"v":1,"n":"EBESExQVFhcYGRob","c":"/X8alc1MvDRC/IKWg/Tn3EfB3J2PV8Emf2B4/MLJykSCZD4bcYeuljDh3/uSCdgh"}"#,
                 &wrapped,
             ),
         ];
         for (i, (aad, json, expected)) in open_cases.iter().enumerate() {
-            let plain = open_json(&key, aad.as_bytes(), json).expect(aad);
-            assert_eq!(plain.as_slice(), *expected, "{aad}");
-            let other_aad = open_cases[(i + 1) % open_cases.len()].0;
+            let plain = open_json(&key, aad, json).expect(aad.as_str());
+            assert_eq!(plain.as_slice(), *expected, "{}", aad.as_str());
+            let other_aad = &open_cases[(i + 1) % open_cases.len()].0;
             assert!(matches!(
-                open_json(&key, other_aad.as_bytes(), json),
+                open_json(&key, other_aad, json),
                 Err(Error::Decrypt)
             ));
         }
 
-        let wrap_cases: &[(&str, &str)] = &[
+        let wrap_cases: &[(Aad, &str)] = &[
             (
-                AAD_VAULT_KEY,
+                Aad::VAULT_KEY,
                 r#"{"v":1,"n":"IiMkJSYnKCkqKywt","c":"nHfpKY4umxJ4ci1jAjHTuDZJncgRvspmvYYLVL1TCgigvOx7rLOt1kN7HshgnmVg"}"#,
             ),
             (
-                AAD_RECOVERY_VAULT_KEY,
+                Aad::RECOVERY_VAULT_KEY,
                 r#"{"v":1,"n":"MzQ1Njc4OTo7PD0+","c":"o8W4Bvgobg2MJfrmSk/cVRE4FH6/HhnYuHhDUB3sl4eXSP2JFfeV6/m/Ic+SNkTH"}"#,
             ),
             (
-                AAD_RECOVERY_AUTH,
+                Aad::RECOVERY_AUTH,
                 r#"{"v":1,"n":"VVZXWFlaW1xdXl9g","c":"INZzvfGH+ZhrwWBxo1goRnZewW7Eb7kth65QFYOjt+PdUUThfnOZi0khdH5JF1Vh"}"#,
             ),
             (
-                AAD_PIN_KEY,
+                Aad::PIN_KEY,
                 r#"{"v":1,"n":"qqusra6vsLGys7S1","c":"C5F10yWY99dJWm8yEl17SYR3CiZDVrPY6JUiitVQSt16mqQS1twPhjdR/IoVSVE4"}"#,
             ),
             (
-                AAD_PIN_VAULT_KEY,
+                Aad::PIN_VAULT_KEY,
                 r#"{"v":1,"n":"u7y9vr/AwcLDxMXG","c":"9PtNiWv3Sch0yDRQeoxSLfXAAc+uGMh3XBsvQ6aoV6awzuiWg2d5tTW/YgjqvfG3"}"#,
             ),
         ];
         for (i, (aad, json)) in wrap_cases.iter().enumerate() {
-            let unwrapped = unwrap_key(&key, aad, json).expect(aad);
-            assert_eq!(*unwrapped, wrapped, "{aad}");
-            let other_aad = wrap_cases[(i + 1) % wrap_cases.len()].0;
+            let unwrapped = unwrap_key(&key, aad, json).expect(aad.as_str());
+            assert_eq!(*unwrapped, wrapped, "{}", aad.as_str());
+            let other_aad = &wrap_cases[(i + 1) % wrap_cases.len()].0;
             assert!(matches!(
                 unwrap_key(&key, other_aad, json),
                 Err(Error::Decrypt)
@@ -745,11 +813,12 @@ mod tests {
     #[test]
     fn seal_open_round_trip() {
         let key = random_key().unwrap();
+        let aad = Aad::raw("aad");
         for len in [0usize, 1, 15, 16, 17, 1000, 70_000] {
             let msg = vec![0xA5u8; len];
-            let env = seal(&key, b"aad", &msg).unwrap();
+            let env = seal(&key, &aad, &msg).unwrap();
             assert_eq!(env.v, 1);
-            assert_eq!(&**open(&key, b"aad", &env).unwrap(), &msg[..]);
+            assert_eq!(&**open(&key, &aad, &env).unwrap(), &msg[..]);
             let reparsed = Envelope::from_json(&env.to_json()).unwrap();
             assert_eq!(reparsed, env);
         }
@@ -758,8 +827,9 @@ mod tests {
     #[test]
     fn nonces_are_fresh() {
         let key = random_key().unwrap();
-        let a = seal(&key, b"aad", b"same plaintext").unwrap();
-        let b = seal(&key, b"aad", b"same plaintext").unwrap();
+        let aad = Aad::raw("aad");
+        let a = seal(&key, &aad, b"same plaintext").unwrap();
+        let b = seal(&key, &aad, b"same plaintext").unwrap();
         assert_ne!(a.n, b.n);
         assert_ne!(a.c, b.c);
         assert_eq!(b64_decode(&a.n).unwrap().len(), NONCE_LEN);
@@ -768,13 +838,15 @@ mod tests {
     #[test]
     fn tampering_is_detected() {
         let key = random_key().unwrap();
-        let env = seal(&key, b"aad-1", b"secret").unwrap();
+        let aad1 = Aad::raw("aad-1");
+        let aad2 = Aad::raw("aad-2");
+        let env = seal(&key, &aad1, b"secret").unwrap();
 
         // wrong AAD
-        assert!(matches!(open(&key, b"aad-2", &env), Err(Error::Decrypt)));
+        assert!(matches!(open(&key, &aad2, &env), Err(Error::Decrypt)));
         // wrong key
         let other = random_key().unwrap();
-        assert!(matches!(open(&other, b"aad-1", &env), Err(Error::Decrypt)));
+        assert!(matches!(open(&other, &aad1, &env), Err(Error::Decrypt)));
         // flipped ciphertext bit
         let mut ct = b64_decode(&env.c).unwrap();
         ct[0] ^= 1;
@@ -782,7 +854,7 @@ mod tests {
             c: b64_encode(&ct),
             ..env.clone()
         };
-        assert!(matches!(open(&key, b"aad-1", &bad), Err(Error::Decrypt)));
+        assert!(matches!(open(&key, &aad1, &bad), Err(Error::Decrypt)));
         // flipped tag bit
         let mut ct = b64_decode(&env.c).unwrap();
         *ct.last_mut().unwrap() ^= 0x80;
@@ -790,7 +862,7 @@ mod tests {
             c: b64_encode(&ct),
             ..env.clone()
         };
-        assert!(matches!(open(&key, b"aad-1", &bad), Err(Error::Decrypt)));
+        assert!(matches!(open(&key, &aad1, &bad), Err(Error::Decrypt)));
         // flipped nonce bit
         let mut n = b64_decode(&env.n).unwrap();
         n[3] ^= 1;
@@ -798,23 +870,24 @@ mod tests {
             n: b64_encode(&n),
             ..env.clone()
         };
-        assert!(matches!(open(&key, b"aad-1", &bad), Err(Error::Decrypt)));
+        assert!(matches!(open(&key, &aad1, &bad), Err(Error::Decrypt)));
         // truncated ciphertext
         let ct = b64_decode(&env.c).unwrap();
         let bad = Envelope {
             c: b64_encode(&ct[..ct.len() - 1]),
             ..env.clone()
         };
-        assert!(matches!(open(&key, b"aad-1", &bad), Err(Error::Decrypt)));
+        assert!(matches!(open(&key, &aad1, &bad), Err(Error::Decrypt)));
         let bad = Envelope {
             c: b64_encode(&ct[..4]),
             ..env.clone()
         };
-        assert!(matches!(open(&key, b"aad-1", &bad), Err(Error::Format(_))));
+        assert!(matches!(open(&key, &aad1, &bad), Err(Error::Format(_))));
     }
 
     #[test]
     fn malformed_envelopes_are_rejected() {
+        let empty = Aad::raw("");
         assert!(matches!(
             Envelope::from_json("not json"),
             Err(Error::Format(_))
@@ -830,7 +903,7 @@ mod tests {
             c: b64_encode(&[0u8; 32]),
         };
         assert!(matches!(
-            open(&key, b"", &short_nonce),
+            open(&key, &empty, &short_nonce),
             Err(Error::Format(_))
         ));
         let bad_b64 = Envelope {
@@ -838,19 +911,45 @@ mod tests {
             n: "!!!".into(),
             c: "!!!".into(),
         };
-        assert!(matches!(open(&key, b"", &bad_b64), Err(Error::Format(_))));
+        assert!(matches!(
+            open(&key, &empty, &bad_b64),
+            Err(Error::Format(_))
+        ));
     }
 
     #[test]
     fn wrap_and_unwrap_key() {
         let wrapping = random_key().unwrap();
         let vault_key = random_key().unwrap();
-        let json = wrap_key(&wrapping, AAD_VAULT_KEY, &vault_key).unwrap();
+        let json = wrap_key(&wrapping, &Aad::VAULT_KEY, &vault_key).unwrap();
         assert_eq!(
-            *unwrap_key(&wrapping, AAD_VAULT_KEY, &json).unwrap(),
+            *unwrap_key(&wrapping, &Aad::VAULT_KEY, &json).unwrap(),
             *vault_key
         );
-        assert!(unwrap_key(&wrapping, AAD_RECOVERY_VAULT_KEY, &json).is_err());
+        assert!(unwrap_key(&wrapping, &Aad::RECOVERY_VAULT_KEY, &json).is_err());
+    }
+
+    #[test]
+    fn reseal_round_trip_and_unreadable_inputs() {
+        let old = random_key().unwrap();
+        let new = random_key().unwrap();
+        let aad = Aad::item("item-1");
+        let sealed = seal(&old, &aad, b"payload").unwrap().to_json();
+
+        let resealed = reseal(&old, &new, &aad, &sealed).unwrap().unwrap();
+        assert_ne!(resealed, sealed);
+        assert!(matches!(
+            open_json(&old, &aad, &resealed),
+            Err(Error::Decrypt)
+        ));
+        assert_eq!(&**open_json(&new, &aad, &resealed).unwrap(), b"payload");
+
+        assert_eq!(reseal(&new, &old, &aad, &sealed).unwrap(), None);
+        assert_eq!(
+            reseal(&old, &new, &Aad::item("item-2"), &sealed).unwrap(),
+            None
+        );
+        assert_eq!(reseal(&old, &new, &aad, "not json").unwrap(), None);
     }
 
     #[test]
@@ -937,9 +1036,41 @@ mod tests {
 
     #[test]
     fn aad_strings_match_the_spec() {
-        assert_eq!(item_aad("abc"), "hatoba/item/v1/abc");
-        assert_eq!(device_aad("dev"), "hatoba/device/v1/dev");
-        assert_eq!(AAD_VAULT_KEY, "hatoba/vault-key/v1");
-        assert_eq!(AAD_RECOVERY_VAULT_KEY, "hatoba/recovery-vault-key/v1");
+        let snap = SnapshotKey {
+            conversation_id: "c",
+            response_id: "r",
+            tool_call_id: "t",
+        };
+        assert_eq!(Aad::item("abc").as_str(), "hatoba/item/v1/abc");
+        assert_eq!(Aad::device("dev").as_str(), "hatoba/device/v1/dev");
+        assert_eq!(Aad::VAULT_KEY.as_str(), "hatoba/vault-key/v1");
+        assert_eq!(
+            Aad::RECOVERY_VAULT_KEY.as_str(),
+            "hatoba/recovery-vault-key/v1"
+        );
+        assert_eq!(Aad::RECOVERY_AUTH.as_str(), "hatoba/recovery-auth/v1");
+        assert_eq!(Aad::VAULT_CHECK.as_str(), "hatoba/vault-check/v1");
+        assert_eq!(Aad::RECENT_TARGETS.as_str(), "hatoba/recent-targets/v1");
+        assert_eq!(Aad::AI_ALLOWANCES.as_str(), "hatoba/ai-allowances/v1");
+        assert_eq!(Aad::CHATGPT_SESSIONS.as_str(), "hatoba/chatgpt-sessions/v1");
+        assert_eq!(Aad::PIN_KEY.as_str(), "hatoba/pin-key/v1");
+        assert_eq!(Aad::PIN_VAULT_KEY.as_str(), "hatoba/pin-vault-key/v1");
+        assert_eq!(Aad::HELLO_VAULT_KEY.as_str(), "hatoba/hello-vault-key/v1");
+        assert_eq!(
+            Aad::TOUCH_ID_VAULT_KEY.as_str(),
+            "hatoba/touch-id-vault-key/v1"
+        );
+        assert_eq!(
+            Aad::snapshot_meta(&snap).as_str(),
+            r#"hatoba/ai-file-snapshot/v1/meta/["c","r","t"]"#
+        );
+        assert_eq!(
+            Aad::snapshot_content(&snap).as_str(),
+            r#"hatoba/ai-file-snapshot/v1/content/["c","r","t"]"#
+        );
+        assert_eq!(
+            Aad::command_history("local:bash").as_str(),
+            "hatoba/command-history/v1/local:bash"
+        );
     }
 }
