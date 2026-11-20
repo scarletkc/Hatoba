@@ -10,9 +10,8 @@ use hatoba_core::vault::Vault;
 
 use crate::ssh::{known_host_keys, resolve_proxy};
 
-/// Maximum ProxyJump hops: [`chain`] stops here and [`crate::ssh::build_config`] rejects deeper
-/// chains.
-pub(crate) const MAX_JUMP_DEPTH: usize = 8;
+/// Maximum ProxyJump hops: [`walk_jumps`] stops here and reports [`ChainStop::LoopOrDepth`].
+const MAX_JUMP_DEPTH: usize = 8;
 
 /// What a host's connection depends on. A change to `config` (the host or a jump host was
 /// edited) closes the dashboard's connection made before it; a change to either ends a hold.
@@ -171,20 +170,55 @@ fn salted_hash(salt: u64, parts: &[&str]) -> u64 {
     hasher.finish()
 }
 
-/// The host, then its jump hosts outwards with their ids, as far as the chain goes without
-/// looping or exceeding [`MAX_JUMP_DEPTH`] jump hosts. Stops silently on a loop or missing jump
-/// host; [`crate::ssh::build_config`] walks the chain separately to report errors instead.
-fn chain<'a>(vault: &'a Vault, host: &'a Host) -> Vec<(Option<&'a str>, &'a Host)> {
-    let mut hops = vec![(None, host)];
-    let mut seen = HashSet::new();
+/// Why [`walk_jumps`] stopped before reaching a host without a jump host.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ChainStop {
+    /// A jump host repeated an earlier hop (or `self_id`), or the chain exceeded
+    /// [`MAX_JUMP_DEPTH`] jump hosts.
+    LoopOrDepth,
+    /// A referenced jump host id is missing from the vault.
+    MissingJump,
+}
+
+/// The jump hosts of a chain, outwards from the target host, plus why the walk stopped if it did.
+pub(crate) struct WalkedChain<'a> {
+    pub(crate) jumps: Vec<(&'a str, &'a Host)>,
+    pub(crate) stopped: Option<ChainStop>,
+}
+
+/// Follows `host.jump_host_id` outwards through `vault`, stopping on a loop (including back to
+/// `self_id` when given), on [`MAX_JUMP_DEPTH`] jump hosts, or on a missing jump host.
+pub(crate) fn walk_jumps<'a>(
+    vault: &'a Vault,
+    host: &'a Host,
+    self_id: Option<&'a str>,
+) -> WalkedChain<'a> {
+    let mut jumps = Vec::new();
+    let mut seen: HashSet<&'a str> = self_id.into_iter().collect();
     let mut next = host.jump_host_id.as_deref();
-    while let Some(id) = next.filter(|id| seen.insert(*id) && seen.len() <= MAX_JUMP_DEPTH) {
+    let mut stopped = None;
+    while let Some(id) = next {
+        if !seen.insert(id) || jumps.len() >= MAX_JUMP_DEPTH {
+            stopped = Some(ChainStop::LoopOrDepth);
+            break;
+        }
         let Some(jump) = vault.get(id).and_then(Item::as_host) else {
+            stopped = Some(ChainStop::MissingJump);
             break;
         };
-        hops.push((Some(id), jump));
+        jumps.push((id, jump));
         next = jump.jump_host_id.as_deref();
     }
+    WalkedChain { jumps, stopped }
+}
+
+/// The host, then its jump hosts outwards with their ids, stopping silently on a loop, a missing
+/// jump host, or [`MAX_JUMP_DEPTH`] jump hosts.
+fn chain<'a>(vault: &'a Vault, host: &'a Host) -> Vec<(Option<&'a str>, &'a Host)> {
+    let walked = walk_jumps(vault, host, None);
+    let mut hops = Vec::with_capacity(1 + walked.jumps.len());
+    hops.push((None, host));
+    hops.extend(walked.jumps.into_iter().map(|(id, h)| (Some(id), h)));
     hops
 }
 

@@ -1,6 +1,6 @@
 //! Live SSH sessions, host-key verification (SSH-04) and interactive prompts (SSH-08).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -23,7 +23,7 @@ use crate::dto::{
     AuthBanner, AuthPrompt, AuthPromptClosed, AuthPromptField, HostKeyPrompt, HostKeyPromptKind,
 };
 use crate::error::{AppError, AppResult, SshErrorKind};
-use crate::host_chain::{MAX_JUMP_DEPTH, first_hop};
+use crate::host_chain::{ChainStop, first_hop, walk_jumps};
 use crate::state::{AppState, MutexExt, now_ms, state};
 use crate::terminal::SessionRegistry;
 use crate::{connection, sync};
@@ -279,23 +279,9 @@ pub fn build_config(
     self_id: Option<&str>,
     overrides: Option<&Overrides>,
 ) -> AppResult<ConnectConfig> {
-    let mut chain: Vec<JumpHop> = Vec::new();
-    let mut seen: HashSet<String> = self_id.into_iter().map(str::to_owned).collect();
-    let mut next = host.jump_host_id.clone();
-    // The first hop is the last jump host reached, or the host itself.
-    let mut first_proxy = &host.proxy;
-    while let Some(jump_id) = next {
-        if !seen.insert(jump_id.clone()) || chain.len() >= MAX_JUMP_DEPTH {
-            return Err(AppError::invalid(
-                "jump_host_id",
-                "the jump host chain loops",
-            ));
-        }
-        let jump = vault
-            .get(&jump_id)
-            .and_then(Item::as_host)
-            .ok_or_else(|| AppError::invalid("jump_host_id", "jump host not found"))?;
-        first_proxy = &jump.proxy;
+    let walked = walk_jumps(vault, host, self_id);
+    let mut chain = Vec::with_capacity(walked.jumps.len());
+    for (_, jump) in &walked.jumps {
         let (h, p, u) = hop_target(jump);
         chain.push(JumpHop {
             host: h,
@@ -304,8 +290,21 @@ pub fn build_config(
             auth: auth_method(vault, jump, None, true)?,
             agent_sockets: Vec::new(),
         });
-        next = jump.jump_host_id.clone();
     }
+    match walked.stopped {
+        Some(ChainStop::LoopOrDepth) => {
+            return Err(AppError::invalid(
+                "jump_host_id",
+                "the jump host chain loops",
+            ));
+        }
+        Some(ChainStop::MissingJump) => {
+            return Err(AppError::invalid("jump_host_id", "jump host not found"));
+        }
+        None => {}
+    }
+    // The first hop is the last jump host reached, or the host itself.
+    let first_proxy = walked.jumps.last().map_or(&host.proxy, |(_, j)| &j.proxy);
     chain.reverse(); // outermost hop first
     let (h, p, u) = hop_target(host);
     let mut cfg = ConnectConfig::new(h, p, u, auth_method(vault, host, overrides, false)?);
