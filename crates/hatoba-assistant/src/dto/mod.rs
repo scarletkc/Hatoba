@@ -8,6 +8,7 @@
 
 pub use hatoba_ipc::dto::{LocalShellKind, QuickTarget};
 
+mod convert;
 mod mcp;
 mod providers;
 mod skills;

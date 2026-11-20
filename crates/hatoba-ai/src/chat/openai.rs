@@ -11,11 +11,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Map, Value, json};
 
+use super::request;
 use super::sse::SseEvent;
-use super::{Assembled, Assembler, StreamEvent};
+use super::{
+    Assembled, Assembler, ChatRequest, ProtocolAdapter, StreamEvent, rejects_effort,
+    rejects_stream_options,
+};
 use crate::entry::{Finish, ToolCall, Usage};
 use crate::error::AiError;
 use crate::net::{clean_message, message_of};
+use crate::provider::ProviderConfig;
 
 /// Keys whose repeated delta values are the same identifier, not fragments to concatenate.
 fn is_identifier(key: &str) -> bool {
@@ -335,6 +340,54 @@ impl Assembler for ChatCompletionsStream {
             usage: self.usage,
             raw: Value::Object(raw),
         })
+    }
+}
+
+/// Request builder and refusal retry state for OpenAI Chat Completions.
+pub(super) struct ChatCompletionsAdapter {
+    stream_options: bool,
+    with_effort: bool,
+}
+
+impl ChatCompletionsAdapter {
+    pub(super) fn new() -> Self {
+        Self {
+            stream_options: true,
+            with_effort: true,
+        }
+    }
+}
+
+impl ProtocolAdapter for ChatCompletionsAdapter {
+    type Stream = ChatCompletionsStream;
+    const PATH: &'static str = "/chat/completions";
+
+    fn build(&self, _provider: &ProviderConfig, req: &ChatRequest<'_>) -> request::Built {
+        request::chat_completions(req, self.stream_options, self.with_effort)
+    }
+
+    fn retry(
+        &mut self,
+        built: &request::Built,
+        err: &AiError,
+        on_event: &mut (dyn FnMut(StreamEvent) + Send),
+    ) -> bool {
+        if built.sent_effort && rejects_effort(err) {
+            self.with_effort = false;
+            if built.effort.is_some() {
+                on_event(StreamEvent::EffortIgnored);
+            }
+            return true;
+        }
+        if self.stream_options && rejects_stream_options(err) {
+            self.stream_options = false;
+            return true;
+        }
+        false
+    }
+
+    fn stream(&self, _built: &request::Built) -> Self::Stream {
+        ChatCompletionsStream::new()
     }
 }
 

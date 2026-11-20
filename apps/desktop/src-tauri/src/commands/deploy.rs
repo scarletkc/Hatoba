@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use hatoba_core::sync::deploy::{
     self as core_deploy, DatabasePlan, Deployment, Outcome, Step, StepFailure, StepStatus, Target,
-    UpgradeWorker, WorkerPlan,
+    UpgradeWorker,
 };
 use hatoba_core::sync::{
     SyncBackend, SyncConfig, WorkerBackend, WorkerDeployment, flows, save_session,
@@ -16,8 +16,7 @@ use zeroize::Zeroizing;
 use crate::deploy::bundle;
 use crate::dto::{
     CloudflareAccount, DeployDatabaseAction, DeployOutcome, DeployPlan, DeployProgress,
-    DeployStart, DeployStep, DeployStepStatus, DeployTarget, DeployWorkerAction, UpgradeDefaults,
-    UpgradePlan, UpgradeTarget, UpgradeWorkerAction,
+    DeployStart, DeployTarget, UpgradeDefaults, UpgradePlan, UpgradeTarget, UpgradeWorkerAction,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::state::AppState;
@@ -43,30 +42,13 @@ fn target(input: DeployTarget) -> Target {
     }
 }
 
-fn step(step: Step) -> DeployStep {
-    match step {
-        Step::Verify => DeployStep::Verify,
-        Step::Inspect => DeployStep::Inspect,
-        Step::CreateDatabase => DeployStep::CreateDatabase,
-        Step::Migrate => DeployStep::Migrate,
-        Step::Upload => DeployStep::Upload,
-        Step::SetupToken => DeployStep::SetupToken,
-        Step::Route => DeployStep::Route,
-        Step::Wait => DeployStep::Wait,
-    }
-}
-
 /// Sends each step's progress to the wizard.
 fn reporter(progress: &Channel<DeployProgress>) -> impl Fn(Step, StepStatus) + Send + Sync + '_ {
     move |s, status| {
         tracing::info!(step = s as u8, ?status, "deploy step");
         let _ = progress.send(DeployProgress {
-            step: step(s),
-            status: match status {
-                StepStatus::Running => DeployStepStatus::Running,
-                StepStatus::Done => DeployStepStatus::Done,
-                StepStatus::Skipped => DeployStepStatus::Skipped,
-            },
+            step: s.into(),
+            status: status.into(),
         });
     }
 }
@@ -147,12 +129,7 @@ pub async fn deploy_inspect(
     };
     Ok(DeployPlan {
         subdomain: plan.subdomain,
-        worker: match plan.worker {
-            WorkerPlan::Create => DeployWorkerAction::Create,
-            WorkerPlan::Update => DeployWorkerAction::Update,
-            WorkerPlan::HasVault => DeployWorkerAction::HasVault,
-            WorkerPlan::Foreign => DeployWorkerAction::Foreign,
-        },
+        worker: plan.worker.into(),
         database,
         database_name,
         vault_url: plan.vault_url,

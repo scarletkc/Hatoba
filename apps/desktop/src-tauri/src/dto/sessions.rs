@@ -374,27 +374,6 @@ pub enum ForwardKind {
     Dynamic,
 }
 
-impl From<hatoba_core::model::ForwardKind> for ForwardKind {
-    fn from(kind: hatoba_core::model::ForwardKind) -> Self {
-        use hatoba_core::model::ForwardKind as K;
-        match kind {
-            K::Local => Self::Local,
-            K::Remote => Self::Remote,
-            K::Dynamic => Self::Dynamic,
-        }
-    }
-}
-
-impl From<ForwardKind> for hatoba_core::model::ForwardKind {
-    fn from(kind: ForwardKind) -> Self {
-        match kind {
-            ForwardKind::Local => Self::Local,
-            ForwardKind::Remote => Self::Remote,
-            ForwardKind::Dynamic => Self::Dynamic,
-        }
-    }
-}
-
 /// A saved forward. The bind address and port are on this computer, or on the server for a
 /// remote forward.
 #[derive(Debug, Clone, Serialize, Type)]

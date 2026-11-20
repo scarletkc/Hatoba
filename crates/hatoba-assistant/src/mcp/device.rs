@@ -282,12 +282,18 @@ pub fn proxy_info(
     conversation_id: &str,
     arguments: &str,
 ) -> McpProxyInfo {
-    match crate::ai::proxy_call(v, mcp, conversation_id, arguments) {
-        Ok((tool, _)) => McpProxyInfo {
+    match crate::ai::resolve_call(
+        v,
+        mcp,
+        conversation_id,
+        hatoba_ai::tools::CALL_MCP_TOOL,
+        arguments,
+    ) {
+        Some(Ok((tool, _))) => McpProxyInfo {
             tool: tool_info(v, mcp, conversation_id, &tool.name),
             runs: true,
         },
-        Err(_) => McpProxyInfo {
+        _ => McpProxyInfo {
             tool: hatoba_ai::mcp::deferred::parse_call(arguments)
                 .ok()
                 .and_then(|call| tool_info(v, mcp, conversation_id, &call.tool)),

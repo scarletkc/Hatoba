@@ -17,14 +17,21 @@
 
 use std::collections::BTreeMap;
 
+use reqwest::header::HeaderMap;
 use serde_json::{Map, Value, json};
 
 use super::openai::synthetic_call_id;
+use super::request;
 use super::sse::SseEvent;
-use super::{Assembled, Assembler, StreamEvent};
+use super::{
+    Assembled, Assembler, ChatRequest, ProtocolAdapter, StreamEvent, rejects_reasoning,
+    rejects_summary,
+};
+use crate::chatgpt;
 use crate::entry::{Finish, ToolCall, Usage};
 use crate::error::AiError;
 use crate::net::{clean_message, message_of};
+use crate::provider::ProviderConfig;
 
 /// Which part of an item reasoning text came from: a summary part, or a part of the raw
 /// reasoning that open-weight models return.
@@ -556,6 +563,93 @@ impl Assembler for ResponsesStream {
             usage: self.usage,
             raw,
         })
+    }
+}
+
+/// Reads the ChatGPT route's `x-request-id` header so a mid-stream error can report it.
+pub(super) fn chatgpt_request_id(provider: &ProviderConfig, headers: &HeaderMap) -> Option<String> {
+    provider
+        .is_chatgpt()
+        .then(|| {
+            headers
+                .get("x-request-id")?
+                .to_str()
+                .ok()
+                .map(str::to_owned)
+        })
+        .flatten()
+}
+
+/// Appends the ChatGPT request ID to an HTTP error reported by a Responses stream.
+pub(super) fn attach_request_id(
+    mut result: Result<Assembled, AiError>,
+    request_id: Option<String>,
+) -> Result<Assembled, AiError> {
+    if let (Err(AiError::Http { message, .. }), Some(id)) = (&mut result, request_id) {
+        message.push_str(&format!(" (request ID {id})"));
+    }
+    result
+}
+
+/// Request builder and refusal retry state for OpenAI Responses.
+pub(super) struct ResponsesAdapter {
+    with_summary: bool,
+    with_effort: bool,
+}
+
+impl ResponsesAdapter {
+    pub(super) fn new() -> Self {
+        Self {
+            with_summary: true,
+            with_effort: true,
+        }
+    }
+}
+
+impl ProtocolAdapter for ResponsesAdapter {
+    type Stream = ResponsesStream;
+    const PATH: &'static str = "/responses";
+
+    fn build(&self, provider: &ProviderConfig, req: &ChatRequest<'_>) -> request::Built {
+        let namespace = provider.is_chatgpt().then_some(chatgpt::NAMESPACE);
+        request::responses(req, self.with_effort, self.with_summary, namespace)
+    }
+
+    fn retry(
+        &mut self,
+        built: &request::Built,
+        err: &AiError,
+        on_event: &mut (dyn FnMut(StreamEvent) + Send),
+    ) -> bool {
+        if built.sent_summary && rejects_summary(err) {
+            self.with_summary = false;
+            return true;
+        }
+        if built.sent_effort && rejects_reasoning(err) {
+            self.with_effort = false;
+            if built.effort.is_some() {
+                on_event(StreamEvent::EffortIgnored);
+            }
+            return true;
+        }
+        false
+    }
+
+    fn stream(&self, _built: &request::Built) -> Self::Stream {
+        ResponsesStream::new()
+    }
+
+    fn request_id(&self, provider: &ProviderConfig, headers: &HeaderMap) -> Option<String> {
+        chatgpt_request_id(provider, headers)
+    }
+
+    fn finish_stream(
+        &self,
+        _built: &request::Built,
+        result: Result<Assembled, AiError>,
+        request_id: Option<String>,
+    ) -> Result<Assembled, AiError> {
+        attach_request_id(result, request_id)
     }
 }
 

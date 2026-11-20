@@ -10,16 +10,22 @@
 //! answer text, not reasoning. Thinking text anywhere else (from a provider that ignored the
 //! display) stays reasoning, so the text is held until the next block starts and shows which.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::{LazyLock, Mutex, PoisonError};
 
 use serde_json::{Map, Value, json};
 
 use super::openai::merge_field;
+use super::request;
 use super::sse::SseEvent;
-use super::{Assembled, Assembler, StreamEvent};
+use super::{
+    Assembled, Assembler, ChatRequest, ProtocolAdapter, StreamEvent, may_refuse_updates,
+    rejects_effort, rejects_only_replayed_raw, rejects_replayed_raw,
+};
 use crate::entry::{Finish, ToolCall, Usage};
 use crate::error::AiError;
 use crate::net::message_of;
+use crate::provider::ProviderConfig;
 
 #[derive(Debug, Default)]
 struct Block {
@@ -471,6 +477,137 @@ impl Assembler for AnthropicStream {
             usage,
             raw,
         })
+    }
+}
+
+/// A base URL and a model ID, which a gateway may route to different upstreams.
+type UpdatesKey = (String, String);
+
+/// How many calls in a row must find `display: "updates"` refused, each time confirmed by the
+/// summarized retry, before a base URL and model get the summarized display straight away: one
+/// could be a passing error.
+pub(super) const UPDATES_STRIKES: u8 = 2;
+
+/// Confirmed refusals of `display: "updates"` in a row since the app started.
+static REFUSED_UPDATES: LazyLock<Mutex<HashMap<UpdatesKey, u8>>> = LazyLock::new(Mutex::default);
+
+fn refused_updates() -> std::sync::MutexGuard<'static, HashMap<UpdatesKey, u8>> {
+    REFUSED_UPDATES
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+}
+
+fn refuses_updates(key: &UpdatesKey) -> bool {
+    refused_updates()
+        .get(key)
+        .is_some_and(|strikes| *strikes >= UPDATES_STRIKES)
+}
+
+fn note_updates_refused(key: &UpdatesKey) {
+    let mut refused = refused_updates();
+    let strikes = refused.entry(key.clone()).or_default();
+    *strikes = strikes.saturating_add(1);
+}
+
+fn note_updates_accepted(key: &UpdatesKey) {
+    refused_updates().remove(key);
+}
+
+/// Logs that an Anthropic request is sent once more without `without`, with the refusal's status
+/// and not the provider's message.
+fn log_retry(err: &AiError, without: &str) {
+    tracing::info!(status = ?err.status(), without, "AI request retried");
+}
+
+/// Request builder, refusal retry state, and `display: "updates"` strike tracking for Anthropic
+/// Messages.
+pub(super) struct AnthropicAdapter {
+    allow_raw: bool,
+    with_effort: bool,
+    updates_key: UpdatesKey,
+    with_updates: bool,
+    /// This request is the retry without progress updates, so a complete answer to it says they
+    /// were what the provider refused. A failure says nothing either way, and they stay off for
+    /// the rest of this call.
+    confirming: bool,
+}
+
+impl AnthropicAdapter {
+    pub(super) fn new(provider: &ProviderConfig, req: &ChatRequest<'_>) -> Self {
+        let updates_key = (provider.base_url.clone(), req.model.id.clone());
+        let with_updates = !refuses_updates(&updates_key);
+        Self {
+            allow_raw: true,
+            with_effort: true,
+            updates_key,
+            with_updates,
+            confirming: false,
+        }
+    }
+}
+
+impl ProtocolAdapter for AnthropicAdapter {
+    type Stream = AnthropicStream;
+    const PATH: &'static str = "/v1/messages";
+
+    fn build(&self, _provider: &ProviderConfig, req: &ChatRequest<'_>) -> request::Built {
+        request::anthropic(req, self.allow_raw, self.with_effort, self.with_updates)
+    }
+
+    fn retry(
+        &mut self,
+        built: &request::Built,
+        err: &AiError,
+        on_event: &mut (dyn FnMut(StreamEvent) + Send),
+    ) -> bool {
+        self.confirming = false;
+        // Replayed thinking that no longer binds (after the system prompt or the tools changed,
+        // say) is no refusal of the display: rebuilding the entries keeps the progress updates.
+        if built.used_raw && rejects_only_replayed_raw(err) {
+            log_retry(err, "replayed blocks");
+            self.allow_raw = false;
+            return true;
+        }
+        if built.beta.is_some() && may_refuse_updates(err) {
+            log_retry(err, "progress updates");
+            self.with_updates = false;
+            self.confirming = true;
+            return true;
+        }
+        if built.sent_effort && rejects_effort(err) {
+            log_retry(err, "thinking level");
+            self.with_effort = false;
+            if built.effort.is_some() {
+                on_event(StreamEvent::EffortIgnored);
+            }
+            return true;
+        }
+        if built.used_raw && rejects_replayed_raw(err) {
+            log_retry(err, "replayed blocks");
+            self.allow_raw = false;
+            return true;
+        }
+        false
+    }
+
+    fn stream(&self, built: &request::Built) -> Self::Stream {
+        AnthropicStream::new(built.beta.is_some())
+    }
+
+    fn finish_stream(
+        &self,
+        built: &request::Built,
+        result: Result<Assembled, AiError>,
+        _request_id: Option<String>,
+    ) -> Result<Assembled, AiError> {
+        if result.is_ok() {
+            if self.confirming {
+                note_updates_refused(&self.updates_key);
+            } else if built.beta.is_some() {
+                note_updates_accepted(&self.updates_key);
+            }
+        }
+        result
     }
 }
 

@@ -7,22 +7,19 @@
 use std::sync::Arc;
 
 use hatoba_ai::AiError;
-use hatoba_ai::chatgpt::SessionStatus;
-use hatoba_ai::models::{TestFailure, TestOutcome};
+use hatoba_ai::models::TestOutcome;
 use hatoba_ai::provider::{ProviderConfig, validate_base_url};
 use hatoba_ai::web::SearchConfig;
 use hatoba_assistant::ai::conn::Conn;
 use hatoba_assistant::ai::{
-    AiEnv, EventSink, MAX_TITLE_CHARS, auth_header, chatgpt, conversation_view,
-    conversation_view_at, core_effort, drop_levels_of_old_protocol, effort_view, find_conversation,
-    listed_effort, model_spec, models_dev, protocol, search_kind,
+    AiEnv, EventSink, MAX_TITLE_CHARS, chatgpt, conversation_view, conversation_view_at,
+    drop_levels_of_old_protocol, find_conversation, model_spec, models_dev,
 };
 use hatoba_assistant::dropped;
 use hatoba_assistant::settings::{find_search_provider, save_ai_settings};
 use hatoba_core::model::{
-    AiAuthHeader as CoreAuthHeader, AiConversation, AiModel as CoreModel, AiModelRef as CoreRef,
-    AiProtocol as CoreProtocol, AiProvider, AiSettings, Item, SETTINGS_ID,
-    SearchKind as CoreSearchKind, SearchProvider,
+    AiConversation, AiModel as CoreModel, AiModelRef as CoreRef, AiProtocol as CoreProtocol,
+    AiProvider, AiSettings, Item, SETTINGS_ID, SearchKind as CoreSearchKind, SearchProvider,
 };
 use hatoba_core::{SnapshotKey, Vault};
 use tauri::ipc::Channel;
@@ -30,13 +27,12 @@ use tauri::{AppHandle, State};
 use zeroize::Zeroizing;
 
 use crate::dto::{
-    AiAuthHeader, AiAutoVerdict, AiChatgptSignIn, AiChatgptStatus, AiChatgptView,
-    AiConversationDetail, AiConversationView, AiEntryView, AiFileChange, AiFilePreview,
-    AiFileRevert, AiHostFile, AiHostListing, AiJudgeSampleOutcome, AiModel, AiModelRef, AiProtocol,
-    AiProviderInput, AiProviderView, AiSearchHit, AiSendInput, AiSendStarted, AiSettingsPatch,
-    AiSettingsView, AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiSkillCommand, AiTestFailure,
-    AiTestResult, AiToolResultInput, AiToolRun, AiTurnContext, AiTurnEvent, DroppedFile,
-    SearchKind, SearchProviderInput, SearchProviderView,
+    AiAutoVerdict, AiChatgptSignIn, AiChatgptView, AiConversationDetail, AiConversationView,
+    AiEffort, AiEntryView, AiFileChange, AiFilePreview, AiFileRevert, AiHostFile, AiHostListing,
+    AiJudgeSampleOutcome, AiModel, AiModelRef, AiProviderInput, AiProviderView, AiSearchHit,
+    AiSendInput, AiSendStarted, AiSettingsPatch, AiSettingsView, AiSideAnswer, AiSideEvent,
+    AiSideQuestionInput, AiSkillCommand, AiTestFailure, AiTestResult, AiToolResultInput, AiToolRun,
+    AiTurnContext, AiTurnEvent, DroppedFile, SearchKind, SearchProviderInput, SearchProviderView,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, blocking, state};
@@ -78,46 +74,14 @@ impl EventSink for TurnChannel {
 
 // ───────────────────────── conversions ─────────────────────────
 
-fn core_protocol(p: AiProtocol) -> CoreProtocol {
-    match p {
-        AiProtocol::ChatCompletions => CoreProtocol::ChatCompletions,
-        AiProtocol::Anthropic => CoreProtocol::Anthropic,
-        AiProtocol::Responses => CoreProtocol::Responses,
-        AiProtocol::SystemOne => CoreProtocol::SystemOne,
-    }
-}
-
-fn core_auth_header(h: AiAuthHeader) -> CoreAuthHeader {
-    match h {
-        AiAuthHeader::XApiKey => CoreAuthHeader::XApiKey,
-        AiAuthHeader::Authorization => CoreAuthHeader::Authorization,
-    }
-}
-
-fn core_search_kind(kind: SearchKind) -> CoreSearchKind {
-    match kind {
-        SearchKind::Brave => CoreSearchKind::Brave,
-        SearchKind::Tavily => CoreSearchKind::Tavily,
-        SearchKind::Searxng => CoreSearchKind::Searxng,
-    }
-}
-
 pub(crate) fn provider_view(v: &Vault, id: &str, p: &AiProvider) -> AiProviderView {
     AiProviderView {
         id: id.to_owned(),
         name: p.name.clone(),
-        protocol: match p.protocol {
-            CoreProtocol::ChatCompletions => AiProtocol::ChatCompletions,
-            CoreProtocol::Anthropic => AiProtocol::Anthropic,
-            CoreProtocol::Responses => AiProtocol::Responses,
-            CoreProtocol::SystemOne => AiProtocol::SystemOne,
-        },
+        protocol: p.protocol.into(),
         base_url: p.base_url.clone(),
         has_api_key: !p.api_key.is_empty(),
-        auth_header: match p.auth_header {
-            CoreAuthHeader::XApiKey => AiAuthHeader::XApiKey,
-            CoreAuthHeader::Authorization => AiAuthHeader::Authorization,
-        },
+        auth_header: p.auth_header.into(),
         // What a row leaves unknown shows as models.dev has it (AI-03), as
         // requests use it.
         models: p
@@ -132,19 +96,14 @@ pub(crate) fn provider_view(v: &Vault, id: &str, p: &AiProvider) -> AiProviderVi
                     max_output_tokens: spec.max_output_tokens,
                     efforts: spec
                         .efforts
-                        .map(|levels| levels.into_iter().map(listed_effort).collect()),
+                        .map(|levels| levels.into_iter().map(Into::into).collect()),
                     adaptive_thinking: spec.adaptive_thinking,
                 }
             })
             .collect(),
         chatgpt: p.chatgpt.as_ref().map(|account| AiChatgptView {
             email: account.email.clone(),
-            status: match chatgpt::status(v, id) {
-                SessionStatus::SignedIn => AiChatgptStatus::SignedIn,
-                SessionStatus::PlanDisabled => AiChatgptStatus::PlanDisabled,
-                SessionStatus::Ended => AiChatgptStatus::Ended,
-                SessionStatus::SignedOut => AiChatgptStatus::SignedOut,
-            },
+            status: chatgpt::status(v, id).into(),
         }),
         updated_at: p.updated_at,
     }
@@ -153,11 +112,7 @@ pub(crate) fn provider_view(v: &Vault, id: &str, p: &AiProvider) -> AiProviderVi
 pub(crate) fn search_provider_view(id: &str, p: &SearchProvider) -> SearchProviderView {
     SearchProviderView {
         id: id.to_owned(),
-        kind: match p.kind {
-            CoreSearchKind::Brave => SearchKind::Brave,
-            CoreSearchKind::Tavily => SearchKind::Tavily,
-            CoreSearchKind::Searxng => SearchKind::Searxng,
-        },
+        kind: p.kind.into(),
         base_url: p.base_url.clone(),
         has_api_key: !p.api_key.is_empty(),
         updated_at: p.updated_at,
@@ -174,7 +129,7 @@ fn model_ref_view(m: &CoreRef) -> AiModelRef {
 fn ai_settings_view(s: &AiSettings) -> AiSettingsView {
     AiSettingsView {
         default_model: s.default_model.as_ref().map(model_ref_view),
-        default_effort: s.default_effort.map(effort_view),
+        default_effort: s.default_effort.map(Into::into),
         search_provider_id: s.search_provider_id.clone(),
         native_search: s.native_search,
         builtin_skill_enabled: s.builtin_skill_enabled,
@@ -189,13 +144,7 @@ fn ai_settings_view(s: &AiSettings) -> AiSettingsView {
 fn test_result(outcome: TestOutcome) -> AiTestResult {
     AiTestResult {
         ok: outcome.ok,
-        failure: outcome.failure.map(|f| match f {
-            TestFailure::Auth => AiTestFailure::Auth,
-            TestFailure::Network => AiTestFailure::Network,
-            TestFailure::UnknownModel => AiTestFailure::UnknownModel,
-            TestFailure::InvalidUrl => AiTestFailure::InvalidUrl,
-            TestFailure::Other => AiTestFailure::Other,
-        }),
+        failure: outcome.failure.map(Into::into),
         status: outcome.status,
         message: outcome.message,
     }
@@ -273,7 +222,8 @@ fn models_from(models: &[AiModel]) -> AppResult<Vec<CoreModel>> {
         }
         let name = m.name.trim();
         let efforts = m.efforts.as_ref().map(|levels| {
-            let mut levels: Vec<_> = levels.iter().copied().map(core_effort).collect();
+            let mut levels: Vec<hatoba_core::model::AiEffort> =
+                levels.iter().copied().map(Into::into).collect();
             levels.sort_unstable();
             levels.dedup();
             levels
@@ -322,13 +272,13 @@ pub(crate) fn save_provider(
     } else {
         AiProvider {
             name: name.to_owned(),
-            protocol: core_protocol(input.protocol),
+            protocol: input.protocol.into(),
             base_url,
             api_key: api_key(
                 input.api_key.as_deref(),
                 existing.as_ref().map(|p| &p.api_key),
             ),
-            auth_header: core_auth_header(input.auth_header),
+            auth_header: input.auth_header.into(),
             models: models_from(&input.models)?,
             chatgpt: None,
             updated_at: 0,
@@ -355,10 +305,10 @@ pub(crate) fn provider_config_for(v: &Vault, input: &AiProviderInput) -> AppResu
         _ => None,
     };
     Ok(ProviderConfig {
-        protocol: protocol(core_protocol(input.protocol)),
+        protocol: input.protocol.into(),
         base_url: input.base_url.trim().to_owned(),
         api_key: api_key(input.api_key.as_deref(), saved.as_ref()),
-        auth_header: auth_header(core_auth_header(input.auth_header)),
+        auth_header: input.auth_header.into(),
         chatgpt: None,
     })
 }
@@ -552,8 +502,8 @@ pub async fn ai_chatgpt_sign_in(
                             efforts: m.efforts.map(|levels| {
                                 levels
                                     .into_iter()
-                                    .map(listed_effort)
-                                    .map(core_effort)
+                                    .map(AiEffort::from)
+                                    .map(Into::into)
                                     .collect()
                             }),
                             adaptive_thinking: m.adaptive_thinking,
@@ -637,7 +587,7 @@ pub async fn ai_provider_models(
             max_output_tokens: m.max_output_tokens,
             efforts: m
                 .efforts
-                .map(|levels| levels.into_iter().map(listed_effort).collect()),
+                .map(|levels| levels.into_iter().map(Into::into).collect()),
             adaptive_thinking: m.adaptive_thinking,
         })
         .collect())
@@ -672,7 +622,7 @@ pub(crate) fn save_search_provider(
         Some(id) => Some(find_search_provider(v, id)?),
         None => None,
     };
-    let kind = core_search_kind(input.kind);
+    let kind = CoreSearchKind::from(input.kind);
     let api_key = if kind == CoreSearchKind::Searxng {
         Zeroizing::new(String::new())
     } else {
@@ -703,13 +653,13 @@ pub(crate) fn save_search_provider(
 
 /// The configuration of a possibly unsaved search provider.
 fn search_config_for(v: &Vault, input: &SearchProviderInput) -> AppResult<SearchConfig> {
-    let kind = core_search_kind(input.kind);
+    let kind = CoreSearchKind::from(input.kind);
     let saved = match (&input.api_key, &input.id) {
         (None, Some(id)) => Some(find_search_provider(v, id)?).filter(|p| p.kind == kind),
         _ => None,
     };
     Ok(SearchConfig {
-        kind: search_kind(kind),
+        kind: input.kind.into(),
         base_url: input
             .base_url
             .as_deref()
@@ -1343,7 +1293,7 @@ mod tests {
     use hatoba_core::model::{AiEffort as CoreEffort, MAX_CUSTOM_INSTRUCTIONS_BYTES};
 
     use super::*;
-    use crate::dto::{AiEffort, Clearable};
+    use crate::dto::{AiAuthHeader, AiChatgptStatus, AiProtocol, Clearable};
 
     const KEY: &str = "sk-test-NEVER-SHOWN-4242";
 
