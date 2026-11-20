@@ -1,5 +1,5 @@
 import { FitAddon } from "@xterm/addon-fit";
-import { SearchAddon } from "@xterm/addon-search";
+import type { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
@@ -25,45 +25,18 @@ import {
 import { openExternal, readClipboard, writeClipboard } from "@/lib/clipboard";
 import { isMac } from "@/lib/platform";
 import { editSessionChanged } from "./edits";
-import {
-  addToHistory,
-  dropServerLists,
-  dropTabHistory,
-  historyOf,
-  historyOwner,
-  listedHistory,
-  onHistoryChange,
-  removeFromHistory,
-  serverListsOf,
-  setServerLists,
-} from "./history";
-import { clearInfo, getInfo, patchInfo } from "./info";
+import { SessionFinder } from "./find";
+import { dropTabHistory, historyOwner } from "./history";
+import { clearInfo, patchInfo } from "./info";
 import { osc52Text } from "./osc52";
 import { confirmMultilinePaste } from "./paste";
-import { PathLister } from "./pathSuggest";
 import { askPassword, askSecret, cancelSessionPrompts, pushAuthBanner, stopWaiting } from "./prompts";
 import { useRecentTargets } from "./recent";
-import { searchColors } from "./schemes";
-import { InputTracker, commandNameFor, nextWord, suggestionFor } from "./suggest";
-import { resolveScheme, terminalOptions, useTermSettings } from "./theme";
+import { SessionSuggestions, type CellBox, type Suggestion } from "./sessionSuggest";
+import { terminalOptions, useTermSettings } from "./theme";
 import { useTransfers } from "./transfers";
 
-/** TERM-14: the dimmed rest of a command after the cursor, at the cursor's cell of the view. */
-export interface Suggestion {
-  rest: string;
-  x: number;
-  y: number;
-}
-
-/** A screen cell in window coordinates. */
-export interface CellBox {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-  /** The right edge of the terminal's screen. */
-  screenRight: number;
-}
+export type { CellBox, Suggestion };
 
 /** One-off credentials for a connection attempt (SSH-03). They are passed to `ssh_connect` and dropped. */
 export interface Credentials {
@@ -186,7 +159,8 @@ export function needsPassword(err: AppError): boolean {
  */
 export class LiveSession {
   readonly term: Terminal;
-  readonly search = new SearchAddon();
+  private readonly finder: SessionFinder;
+  readonly search: SearchAddon;
   private readonly fit = new FitAddon();
   private webgl: WebglAddon | null = null;
 
@@ -209,21 +183,9 @@ export class LiveSession {
   private fitTimer: number | undefined;
   private readonly outputListeners = new Set<(text: string) => void>();
   private readonly outputDecoder = new TextDecoder();
-  /** TERM-14, TERM-15: where the input starts on the current prompt. */
-  private readonly tracker = new InputTracker();
-  /** The suggestion showing after the cursor; null while none does. */
-  suggestion: Suggestion | null = null;
-  private readonly suggestionListeners = new Set<() => void>();
-  private suggestFrame = 0;
-  private composing = false;
-  /** Input went to the shell and its echo has not come back: the screen does not show it yet. */
-  private awaitingEcho = false;
-  private readonly stopHistory: () => void;
-  /** TERM-16: false once the server refused the exec channel. */
-  private asksServer = true;
-  /** TERM-16: the server names a system that is not asked (HOST-11), through SFTP neither. */
-  private otherSystem = false;
-  private readonly paths = new PathLister(() => this.scheduleSuggestion());
+  private readonly suggest: SessionSuggestions;
+  readonly subscribeSuggestion: (listener: () => void) => () => void;
+  readonly commandHistory: () => readonly string[];
 
   constructor(
     readonly tabId: string,
@@ -237,6 +199,21 @@ export class LiveSession {
       // xterm takes Shift elsewhere: the drag selects here, not in a program that tracks the mouse.
       macOptionClickForcesSelection: true,
     });
+    this.finder = new SessionFinder(tabId, this.term);
+    this.search = this.finder.addon;
+    this.suggest = new SessionSuggestions({
+      tabId,
+      term: this.term,
+      history: () => this.history,
+      isConnected: () => this.status === "connected",
+      isOpened: () => this.opened,
+      isDisposed: () => this.disposed,
+      isSsh: () => !this.local && !this.telnet,
+      sessionId: () => this.sessionId,
+      write: (data) => this.write(data),
+    });
+    this.subscribeSuggestion = this.suggest.subscribe;
+    this.commandHistory = this.suggest.commandHistory;
     this.term.loadAddon(this.fit);
     this.term.loadAddon(this.search);
     this.term.loadAddon(
@@ -256,20 +233,21 @@ export class LiveSession {
     this.term.onBinary((data) => this.writeBinary(data));
     this.term.onResize(() => {
       this.sendResize();
-      this.scheduleSuggestion();
+      this.suggest.schedule();
     });
-    this.term.onWriteParsed(() => {
-      this.awaitingEcho = false;
-      this.scheduleSuggestion();
-    });
-    this.term.onCursorMove(() => this.scheduleSuggestion());
-    this.term.onScroll(() => this.scheduleSuggestion());
-    this.stopHistory = onHistoryChange(() => this.scheduleSuggestion());
+    this.term.onWriteParsed(() => this.suggest.onWriteParsed());
+    this.term.onCursorMove(() => this.suggest.schedule());
+    this.term.onScroll(() => this.suggest.schedule());
   }
 
   /** Whose command history the tab reads and adds to (TERM-15). */
   private get history() {
     return historyOwner(this.tabId, this.source);
+  }
+
+  /** The suggestion showing after the cursor; null while none does. */
+  get suggestion(): Suggestion | null {
+    return this.suggest.current;
   }
 
   /** The saved host; null for a quick connection. */
@@ -315,8 +293,8 @@ export class LiveSession {
       // Capture phase: we own pasting so multi-line content can be confirmed first (TERM-04).
       this.term.element?.addEventListener("paste", this.onPasteEvent, true);
       // TERM-14: no suggestion while an input method composes.
-      this.term.textarea?.addEventListener("compositionstart", this.onComposition);
-      this.term.textarea?.addEventListener("compositionend", this.onComposition);
+      this.term.textarea?.addEventListener("compositionstart", this.suggest.onComposition);
+      this.term.textarea?.addEventListener("compositionend", this.suggest.onComposition);
       void document.fonts?.ready.then(() => this.fitNow());
     } else if (this.term.element && this.term.element.parentElement !== container) {
       container.appendChild(this.term.element);
@@ -357,16 +335,9 @@ export class LiveSession {
   applySettings() {
     if (this.disposed) return;
     Object.assign(this.term.options, terminalOptions(useTermSettings.getState().settings));
-    this.scheduleSuggestion();
+    this.suggest.schedule();
     requestAnimationFrame(() => this.fitNow());
-    // The search addon keeps the colours it drew matches with, so a new scheme redraws them. Searching
-    // again scrolls to a match; the view stays where the user left it.
-    if (this.findQuery && JSON.stringify(this.findColors()) !== this.findDrawn) {
-      const top = this.term.buffer.active.viewportY;
-      this.search.clearDecorations();
-      this.find(this.findQuery, "next", true);
-      this.term.scrollToLine(top);
-    }
+    this.finder.redrawOnSchemeChange();
   }
 
   private scheduleFit() {
@@ -430,7 +401,7 @@ export class LiveSession {
     patchInfo(this.tabId, { error: null, errorAt: null, reason: null, latencyMs: null, attempts: this.attempts });
     this.sessionId = null;
     this.pendingSessionId = null;
-    this.tracker.reset();
+    this.suggest.resetPrompt();
     this.term.write("\x1b[?25h"); // show the cursor again (hidden while failed / disconnected)
     this.setStatus("connecting");
     if (this.source.local) {
@@ -549,43 +520,11 @@ export class LiveSession {
           .catch(() => {});
     }
     this.sendResize(); // the view may have been resized while connecting
-    historyOf(this.history); // TERM-15: read before the first suggestion is needed
-    this.readServerLists(sid);
+    this.suggest.onConnected(sid);
     const early = earlyEvents.get(sid);
     earlyEvents.delete(sid);
     early?.forEach((ev) => this.onState(ev));
     if (this.active && this.status === "connected") this.term.focus();
-  }
-
-  /** TERM-16: what an SSH tab's server offers suggestions, read once per connection. */
-  private readServerLists(sid: string) {
-    // The previous connection's: the host may since name another server.
-    dropServerLists(this.tabId);
-    this.paths.connected(null);
-    if (this.local || this.telnet || this.otherSystem) return;
-    if (!this.asksServer) {
-      this.paths.connected(sid);
-      return;
-    }
-    // The answer tells whether the server is one to list paths on as well.
-    api.ssh_suggestions(sid).then(
-      (lists) => {
-        if (this.disposed || sid !== this.sessionId) return;
-        if (lists) {
-          setServerLists(this.tabId, lists);
-          this.paths.connected(sid);
-        } else {
-          this.otherSystem = true;
-        }
-      },
-      (e: unknown) => {
-        if (this.disposed || sid !== this.sessionId) return;
-        // A refusal stays for the tab; a timeout or a lost connection says nothing about the next connection.
-        if (toAppError(e).ssh_kind === "channel") this.asksServer = false;
-        this.paths.connected(sid);
-        this.scheduleSuggestion(); // a path typed while waiting
-      },
-    );
   }
 
   /** Whether this tab is connecting as backend session `sid`. */
@@ -622,7 +561,7 @@ export class LiveSession {
     patchInfo(this.tabId, { reason });
     this.term.write("\x1b[?25l");
     this.setStatus("disconnected");
-    this.scheduleSuggestion();
+    this.suggest.schedule();
   }
 
   onState(ev: SessionStateEvent) {
@@ -730,11 +669,7 @@ export class LiveSession {
     if (sid) useTransfers.getState().purge(sid);
     this.releaseSession();
     window.clearTimeout(this.fitTimer);
-    cancelAnimationFrame(this.suggestFrame);
-    this.stopHistory();
-    if (!this.history.saved) dropTabHistory(this.tabId);
-    dropServerLists(this.tabId);
-    this.paths.connected(null);
+    this.suggest.dispose();
     this.observer?.disconnect();
     this.term.element?.removeEventListener("paste", this.onPasteEvent, true);
     this.unloadWebgl();
@@ -750,17 +685,9 @@ export class LiveSession {
     const sid = this.sessionId;
     if (!sid || this.status !== "connected") return;
     // TERM-15: Enter at a prompt adds the command, read from the screen before the shell answers.
-    const { command } = this.tracker.onInput(data, this.term.buffer.active);
-    if (command !== null) addToHistory(this.history, command);
+    this.suggest.onInput(data);
     void this.io.write(sid, data).catch(() => {});
-    // Until the shell echoes the input, a suggestion read from the screen would be stale: another → would
-    // type the same rest again.
-    this.awaitingEcho = true;
-    if (this.suggestion) {
-      this.suggestion = null;
-      this.suggestionListeners.forEach((listener) => listener());
-    }
-    this.scheduleSuggestion();
+    this.suggest.afterInputSent();
   }
 
   /**
@@ -851,141 +778,39 @@ export class LiveSession {
 
   // ───────────── search ─────────────
 
-  /** The find bar's query while it highlights matches, and the colours they were drawn with (JSON). */
-  private findQuery = "";
-  private findDrawn = "";
-
-  private findColors() {
-    return searchColors(resolveScheme(useTermSettings.getState().settings));
-  }
-
   find(query: string, direction: "next" | "prev", incremental = false): boolean {
-    this.findQuery = query;
-    if (!query) {
-      this.search.clearDecorations();
-      return false;
-    }
-    const decorations = this.findColors();
-    this.findDrawn = JSON.stringify(decorations);
-    const options = { incremental, decorations };
-    return direction === "next" ? this.search.findNext(query, options) : this.search.findPrevious(query, options);
+    return this.finder.find(query, direction, incremental);
   }
 
   /** The find bar closed: drop the highlights. */
   endFind() {
-    this.findQuery = "";
-    this.search.clearDecorations();
+    this.finder.end();
   }
 
   requestFind() {
-    patchInfo(this.tabId, { findTick: getInfo(this.tabId).findTick + 1 });
+    this.finder.request();
   }
 
   // ───────────── command suggestions (TERM-14) ─────────────
 
-  /** Calls `listener` when the suggestion changes. Returns the unsubscribe function. */
-  subscribeSuggestion = (listener: () => void): (() => void) => {
-    this.suggestionListeners.add(listener);
-    return () => {
-      this.suggestionListeners.delete(listener);
-    };
-  };
-
-  private onComposition = (e: CompositionEvent) => {
-    this.composing = e.type === "compositionstart";
-    this.scheduleSuggestion();
-  };
-
-  private scheduleSuggestion() {
-    if (this.disposed || this.suggestFrame) return;
-    this.suggestFrame = requestAnimationFrame(() => {
-      this.suggestFrame = 0;
-      const next = this.findSuggestion();
-      const now = this.suggestion;
-      if (next?.rest === now?.rest && next?.x === now?.x && next?.y === now?.y) return;
-      this.suggestion = next;
-      this.suggestionListeners.forEach((listener) => listener());
-    });
-  }
-
-  /**
-   * What continues what is typed at a prompt, while one can show: the newest command of the tab's history,
-   * or else of its server's history, or else a command name or a path on the server (TERM-16).
-   */
-  private findSuggestion(): Suggestion | null {
-    if (this.disposed || !this.opened || this.status !== "connected" || this.composing || this.awaitingEcho) {
-      return null;
-    }
-    if (!useTermSettings.getState().settings.suggest_commands) return null;
-    const buf = this.term.buffer.active;
-    if (buf.type === "alternate" || buf.viewportY !== buf.baseY) return null;
-    const typed = this.tracker.typedAtEnd(buf);
-    if (!typed) return null;
-    const server = serverListsOf(this.tabId);
-    const rest =
-      suggestionFor(typed, historyOf(this.history)) ??
-      suggestionFor(typed, server.history) ??
-      commandNameFor(typed, server.commands) ??
-      this.paths.rest(typed);
-    return rest === null ? null : { rest, x: buf.cursorX, y: buf.cursorY };
-  }
-
   /** The screen cell at column `x`, row `y` of the view, in window coordinates; null before the terminal opens. */
   cellBox(x: number, y: number): CellBox | null {
-    const screen = this.term.element?.querySelector<HTMLElement>(".xterm-screen");
-    if (!screen || !this.term.cols || !this.term.rows) return null;
-    const r = screen.getBoundingClientRect();
-    const width = r.width / this.term.cols;
-    const height = r.height / this.term.rows;
-    return { left: r.left + x * width, top: r.top + y * height, width, height, screenRight: r.right };
+    return this.suggest.cellBox(x, y);
   }
 
   /** What the list of commands opens with (TERM-14): what is typed and the cursor's cell. */
   listContext(): { typed: string; cursor: CellBox | null } {
-    const buf = this.term.buffer.active;
-    return { typed: this.tracker.typedAtEnd(buf) ?? "", cursor: this.cellBox(buf.cursorX, buf.cursorY) };
+    return this.suggest.listContext();
   }
-
-  /** The commands the list shows (TERM-14, TERM-16), the same list until it changes. */
-  commandHistory = (): readonly string[] => listedHistory(this.tabId, this.history);
 
   /** Types `command` from the list in place of what is typed, without running it. */
   acceptListed(command: string) {
-    const right = this.term.modes.applicationCursorKeysMode ? "\x1bOC" : "\x1b[C";
-    this.write(this.tracker.clearKeys(this.term.buffer.active, right) + command);
-    this.term.focus();
+    this.suggest.acceptListed(command);
   }
 
   /** Shift+Delete in the list. */
   removeListed(command: string) {
-    removeFromHistory(this.tabId, this.history, command);
-  }
-
-  /**
-   * →, End and Ctrl+→ (⌥→ on macOS) take the suggestion while one shows, and Ctrl+Shift+Space
-   * (⌘⇧Space) opens the list. True when the key was taken.
-   */
-  private suggestionKey(e: KeyboardEvent, mac: boolean): boolean {
-    if (e.isComposing) return false;
-    const down = e.type === "keydown";
-    const listKey =
-      e.code === "Space" && e.shiftKey && !e.altKey && (mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey);
-    if (listKey) {
-      e.preventDefault();
-      if (down && this.status === "connected") {
-        patchInfo(this.tabId, { suggestTick: getInfo(this.tabId).suggestTick + 1 });
-      }
-      return true;
-    }
-    const shown = this.suggestion;
-    if (!shown || (e.key !== "ArrowRight" && e.key !== "End")) return false;
-    const plain = !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
-    const word =
-      e.key === "ArrowRight" && !e.shiftKey && !e.metaKey && (mac ? e.altKey && !e.ctrlKey : e.ctrlKey && !e.altKey);
-    if (!plain && !word) return false;
-    e.preventDefault();
-    if (down) this.write(word ? nextWord(shown.rest) : shown.rest);
-    return true;
+    this.suggest.removeListed(command);
   }
 
   // ───────────── keyboard (WIN-04, WIN-05) ─────────────
@@ -997,7 +822,7 @@ export class LiveSession {
   private handleKey = (e: KeyboardEvent): boolean => {
     const platform = useApp.getState().info.platform;
     if (isAppShortcut(e, platform)) return false;
-    if (this.suggestionKey(e, isMac(platform))) return false;
+    if (this.suggest.handleKey(e, isMac(platform))) return false;
     const down = e.type === "keydown";
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
 

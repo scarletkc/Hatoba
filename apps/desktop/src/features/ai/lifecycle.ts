@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
-import { api } from "@/ipc/api";
+import { useBackendEvent } from "@/ipc/useBackendEvent";
 import { loadCatalog, refreshAfterSync } from "./actions/conversations";
 import { detachSlot, openNotified, reloadAll, reloadSlot, resetForLock } from "./actions/slots";
 import { applyMcpStatus, loadMcp, resetMcp, useMcp } from "./mcp";
@@ -26,30 +26,25 @@ export function useAiLifecycle() {
     }
   }, [phase]);
 
-  useEffect(() => {
-    const subs = [
-      // §13.1: locking stops every turn in Rust; reset what was in flight here.
-      api.listen("vault://locked", () => {
-        resetForLock();
-        resetMcp();
-      }),
-      // §13.7: a pull may bring entries, titles and providers from other devices.
-      api.listen("sync://status", (status) => {
-        if (status.state !== "idle" || useApp.getState().phase !== "unlocked") return;
-        refreshAfterSync();
-        if (useMcp.getState().servers) void loadMcp();
-      }),
-      // AI-32: servers start, stop and fail on their own; the tools menu shows it live.
-      api.listen("ai://mcp-status", (status) => {
-        if (useApp.getState().phase === "unlocked") applyMcpStatus(status);
-      }),
-      // AI-07: a click on a notification shows what it was about; Rust brought the window back.
-      api.listen("app://notification-click", (target) => {
-        if (useApp.getState().phase === "unlocked") openNotified(target);
-      }),
-    ];
-    return () => subs.forEach((p) => void p.then((un) => un()));
-  }, []);
+  // §13.1: locking stops every turn in Rust; reset what was in flight here.
+  useBackendEvent("vault://locked", () => {
+    resetForLock();
+    resetMcp();
+  });
+  // §13.7: a pull may bring entries, titles and providers from other devices.
+  useBackendEvent("sync://status", (status) => {
+    if (status.state !== "idle" || useApp.getState().phase !== "unlocked") return;
+    refreshAfterSync();
+    if (useMcp.getState().servers) void loadMcp();
+  });
+  // AI-32: servers start, stop and fail on their own; the tools menu shows it live.
+  useBackendEvent("ai://mcp-status", (status) => {
+    if (useApp.getState().phase === "unlocked") applyMcpStatus(status);
+  });
+  // AI-07: a click on a notification shows what it was about; Rust brought the window back.
+  useBackendEvent("app://notification-click", (target) => {
+    if (useApp.getState().phase === "unlocked") openNotified(target);
+  });
 
   // AI-08: closing a tab detaches its conversation (it stays in history), and stops those it left in the background (AI-07).
   useEffect(
