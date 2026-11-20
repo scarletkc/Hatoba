@@ -233,7 +233,7 @@ The columns the server stores are defined by the migrations in §5.3, where item
 
 ### 5.1 Item types (plaintext before encryption)
 
-All item IDs are UUIDv7. Reading plaintext tolerates unknown and missing fields, so different app versions can read each other's data. The Rust implementation is `Item` in `crates/hatoba-core/src/model.rs`.
+All item IDs are UUIDv7. Reading plaintext tolerates unknown and missing fields, so different app versions can read each other's data. The Rust implementation is `Item` in `crates/hatoba-core/src/model/item.rs`.
 
 ```ts
 type Item =
@@ -1117,7 +1117,7 @@ DTOs returned to the frontend never contain secret fields. For example, `HostVie
 
 ### 10.2 Events (Rust pushes to the frontend)
 
-tauri-specta generates the full list of events into the `events` object in `apps/desktop/src/ipc/bindings.ts`. Event names come from `#[tauri_specta(event_name = ...)]` on each event type in `apps/desktop/src-tauri/src/dto.rs`, grouped by prefixes such as `vault://`, `sync://`, `ssh://`, and `ai://`.
+tauri-specta generates the full list of events into the `events` object in `apps/desktop/src/ipc/bindings.ts`. Event names come from `#[tauri_specta(event_name = ...)]` on each event type in `apps/desktop/src-tauri/src/dto/`, grouped by prefixes such as `vault://`, `sync://`, `ssh://`, and `ai://`.
 
 ### 10.3 Terminal data flow
 
