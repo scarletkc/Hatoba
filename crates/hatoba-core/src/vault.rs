@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::crypto::{self, Key32, item_aad, seal};
+use crate::crypto::{self, Aad, Key32, seal};
 use crate::error::{Error, Result};
 use crate::model::{
     Group, Host, Item, KnownHost, PortForward, Proxy, RightClick, SETTINGS_ID, Settings, SshKey,
@@ -28,7 +28,6 @@ pub use crate::vault_keys::{
     unlock_delay_ms,
 };
 pub use crate::vault_sync::LocalMeta;
-pub(crate) use crate::vault_sync::SyncCtx;
 
 // ---- clock --------------------------------------------------------------------------------
 
@@ -112,14 +111,14 @@ pub(crate) fn decode_row(key: &[u8; 32], row: &ItemRow) -> Result<Option<Item>> 
 
 /// Decrypts one item envelope (JSON text) for the item with the given id.
 pub(crate) fn decode_envelope(key: &[u8; 32], id: &str, envelope_json: &str) -> Result<Item> {
-    let plain = crypto::open_json(key, item_aad(id).as_bytes(), envelope_json)?;
+    let plain = crypto::open_json(key, &Aad::item(id), envelope_json)?;
     Item::from_plaintext(&plain)
 }
 
 /// Seals an item for storage and sync.
 pub(crate) fn seal_item(key: &[u8; 32], id: &str, item: &Item) -> Result<crypto::Envelope> {
     let plain = item.to_plaintext()?;
-    seal(key, item_aad(id).as_bytes(), &plain)
+    seal(key, &Aad::item(id), &plain)
 }
 
 /// Monotonic `updated_at` for a local write: `now`, or one millisecond past `previous` when the

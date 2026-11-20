@@ -1,6 +1,6 @@
 //! Sync conflict log queries and loser restoration on [`Vault`].
 
-use crate::crypto::{self, item_aad};
+use crate::crypto::{self, Aad};
 use crate::error::{Error, Result};
 use crate::model::Item;
 use crate::store::{ConflictRow, StoreOps};
@@ -81,7 +81,7 @@ fn conflict_entry(
     let resolution = Resolution::parse(&row.resolution)?;
     let decode = |envelope: &Option<String>| -> Option<Item> {
         let env = envelope.as_deref()?;
-        let plain = crypto::open_json(key, item_aad(&row.item_id).as_bytes(), env).ok()?;
+        let plain = crypto::open_json(key, &Aad::item(&row.item_id), env).ok()?;
         let mut item = Item::from_plaintext(&plain).ok()?;
         if !keep_message_data {
             item.strip_message_data();

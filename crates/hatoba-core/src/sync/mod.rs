@@ -22,6 +22,7 @@ use crate::platform::{SecretStore, secret_keys};
 use crate::vault::Vault;
 
 pub mod backend;
+mod cloudflare;
 pub mod compat;
 pub mod conflict;
 pub mod d1;

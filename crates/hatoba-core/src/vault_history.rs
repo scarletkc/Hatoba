@@ -13,7 +13,7 @@
 
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::crypto::{self, AAD_COMMAND_HISTORY_PREFIX, seal};
+use crate::crypto::{self, Aad, seal};
 use crate::error::{Error, Result};
 use crate::model::Item;
 use crate::store::{CommandHistoryRow, StoreOps};
@@ -26,13 +26,10 @@ pub const COMMAND_MAX_CHARS: usize = 4096;
 /// The start of a local shell's owner, which the shell's id follows.
 pub const LOCAL_SHELL_OWNER_PREFIX: &str = "local:";
 
-fn aad(owner: &str) -> String {
-    format!("{AAD_COMMAND_HISTORY_PREFIX}{owner}")
-}
-
 /// Opens a history; `None` when `vault_key` cannot open it here or it holds no list of commands.
 fn open(vault_key: &[u8; 32], row: &CommandHistoryRow) -> Option<Zeroizing<Vec<String>>> {
-    let plain = crypto::open_json(vault_key, aad(&row.owner).as_bytes(), &row.commands).ok()?;
+    let plain =
+        crypto::open_json(vault_key, &Aad::command_history(&row.owner), &row.commands).ok()?;
     serde_json::from_slice(&plain).ok().map(Zeroizing::new)
 }
 
@@ -53,13 +50,9 @@ pub(crate) fn reseal_command_history(
     new: &[u8; 32],
 ) -> Result<()> {
     for row in tx.command_history_rows()? {
-        let aad = aad(&row.owner);
-        match crypto::open_json(old, aad.as_bytes(), &row.commands) {
-            Ok(plain) => tx.put_command_history(&CommandHistoryRow {
-                commands: seal(new, aad.as_bytes(), &plain)?.to_json(),
-                ..row
-            })?,
-            Err(_) => tx.delete_command_history(&row.owner)?,
+        match crypto::reseal(old, new, &Aad::command_history(&row.owner), &row.commands)? {
+            Some(commands) => tx.put_command_history(&CommandHistoryRow { commands, ..row })?,
+            None => tx.delete_command_history(&row.owner)?,
         }
     }
     Ok(())
@@ -146,7 +139,7 @@ impl Vault {
         let plain = Zeroizing::new(serde_json::to_vec(commands)?);
         self.store.put_command_history(&CommandHistoryRow {
             owner: owner.to_owned(),
-            commands: seal(&unlocked.vault_key, aad(owner).as_bytes(), &plain)?.to_json(),
+            commands: seal(&unlocked.vault_key, &Aad::command_history(owner), &plain)?.to_json(),
             updated_at: self.clock.now_ms(),
         })
     }
@@ -326,7 +319,7 @@ mod tests {
             owner: "local:bash".into(),
             commands: seal(
                 &crypto::random_key().unwrap(),
-                aad("local:bash").as_bytes(),
+                &Aad::command_history("local:bash"),
                 b"[]",
             )
             .unwrap()

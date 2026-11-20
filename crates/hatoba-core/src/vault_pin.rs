@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 use crate::crypto::{
-    self, AAD_PIN_KEY, AAD_PIN_VAULT_KEY, KdfParams, Key32, b64_encode, decode_salt, hkdf_sha256,
-    random_salt, unwrap_key, wrap_key,
+    self, Aad, KdfParams, Key32, b64_encode, decode_salt, hkdf_sha256, random_salt, unwrap_key,
+    wrap_key,
 };
 use crate::error::{Error, Result};
 use crate::store::{StoreOps, meta};
@@ -109,11 +109,11 @@ impl Vault {
         let record = PinRecord {
             salt: b64_encode(&salt),
             kdf_params,
-            key: wrap_key(&vault_key, AAD_PIN_KEY, &key)?,
+            key: wrap_key(&vault_key, &Aad::PIN_KEY, &key)?,
             persist,
             failures: 0,
         };
-        let wrapped = Zeroizing::new(wrap_key(&key, AAD_PIN_VAULT_KEY, &vault_key)?);
+        let wrapped = Zeroizing::new(wrap_key(&key, &Aad::PIN_VAULT_KEY, &vault_key)?);
         self.save_pin_record(&record)?;
         self.pin_wrapped = Some(wrapped.clone());
         Ok(wrapped)
@@ -178,7 +178,7 @@ impl Vault {
         record.failures += 1;
         self.save_pin_record(&record)?;
         let key = pin_key(pin, &decode_salt(&record.salt)?, &record.kdf_params);
-        match unwrap_key(&key, AAD_PIN_VAULT_KEY, &wrapped) {
+        match unwrap_key(&key, &Aad::PIN_VAULT_KEY, &wrapped) {
             // A full unlock resets the failures and wraps the key again.
             Ok(vault_key) => self.unlock_with_vault_key(vault_key),
             Err(Error::Decrypt) => {
@@ -205,14 +205,14 @@ impl Vault {
                 return;
             }
         };
-        let Ok(key) = unwrap_key(vault_key, AAD_PIN_KEY, &record.key) else {
+        let Ok(key) = unwrap_key(vault_key, &Aad::PIN_KEY, &record.key) else {
             tracing::warn!("the PIN unlock does not belong to this vault; turning it off");
             if let Err(e) = self.store.delete_meta(meta::PIN) {
                 tracing::warn!("could not turn the PIN unlock off: {e}");
             }
             return;
         };
-        match wrap_key(&key, AAD_PIN_VAULT_KEY, vault_key) {
+        match wrap_key(&key, &Aad::PIN_VAULT_KEY, vault_key) {
             Ok(wrapped) => self.pin_wrapped = Some(Zeroizing::new(wrapped)),
             Err(e) => tracing::warn!("could not prepare the PIN unlock: {e}"),
         }
@@ -397,7 +397,7 @@ mod tests {
         vault.set_pin("2468", false).unwrap();
         let record = vault.pin_record().unwrap().unwrap();
         let foreign = PinRecord {
-            key: wrap_key(&foreign_key(), AAD_PIN_KEY, &foreign_key()).unwrap(),
+            key: wrap_key(&foreign_key(), &Aad::PIN_KEY, &foreign_key()).unwrap(),
             ..record
         };
         vault.save_pin_record(&foreign).unwrap();

@@ -5,12 +5,11 @@ use reqwest::{Method, StatusCode};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
-use zeroize::Zeroizing;
 
 use super::Permission;
 use super::bundle::WorkerBundle;
 use crate::error::{Error, Result};
-use crate::sync::http::{build_client, is_loopback_host, map_transport, read_body, retry_after};
+use crate::sync::cloudflare::{CfBody, CfClient, CfFailure};
 
 /// Cloudflare's code for a Worker, script setting, or workers.dev subdomain that does not exist.
 const NOT_FOUND: u32 = 10007;
@@ -65,29 +64,29 @@ impl Failure {
     }
 }
 
+impl From<CfFailure> for Failure {
+    fn from(failure: CfFailure) -> Self {
+        match failure {
+            CfFailure::NoToken => Self::Transport(Error::CloudflareToken),
+            CfFailure::Transport(e) => Self::Transport(e),
+            CfFailure::Api {
+                status,
+                errors,
+                retry_after,
+                ..
+            } => Self::Api {
+                status,
+                codes: errors
+                    .into_iter()
+                    .filter_map(|e| u32::try_from(e.code).ok())
+                    .collect(),
+                retry_after,
+            },
+        }
+    }
+}
+
 type Call<T> = std::result::Result<T, Failure>;
-
-#[derive(Deserialize)]
-struct Envelope {
-    #[serde(default)]
-    success: bool,
-    #[serde(default)]
-    errors: Vec<CfError>,
-    #[serde(default)]
-    result: Value,
-}
-
-#[derive(Deserialize)]
-struct CfError {
-    #[serde(default)]
-    code: u32,
-}
-
-enum Body {
-    Empty,
-    Json(Value),
-    Multipart { boundary: String, bytes: Vec<u8> },
-}
 
 /// An account the token reaches.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
@@ -127,99 +126,28 @@ pub(crate) struct Statement {
 }
 
 /// The Cloudflare API, authenticated with one API token.
-pub(crate) struct Client {
-    http: reqwest::Client,
-    base: String,
-    token: Zeroizing<String>,
-}
+pub(crate) struct Client(CfClient);
 
 impl Client {
     pub(crate) fn new(base: &str, token: &str) -> Result<Self> {
-        let base = base.trim_end_matches('/').to_owned();
-        let url = reqwest::Url::parse(&base)
-            .map_err(|_| Error::InvalidUrl("invalid API base URL".into()))?;
-        let loopback = url.host_str().is_some_and(is_loopback_host);
-        if url.scheme() != "https" && !(url.scheme() == "http" && loopback) {
-            return Err(Error::InvalidUrl("API base must be https".into()));
-        }
-        let token = token.trim();
-        if token.is_empty() {
-            return Err(Error::CloudflareToken);
-        }
-        Ok(Self {
-            http: build_client(loopback)?,
-            base,
-            token: Zeroizing::new(token.to_owned()),
-        })
-    }
-
-    async fn send(&self, method: Method, path: &str, body: Body) -> Call<Value> {
-        let mut auth = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", *self.token))
-            .map_err(|_| Failure::Transport(Error::CloudflareToken))?;
-        auth.set_sensitive(true);
-        let mut request = self
-            .http
-            .request(method, format!("{}{path}", self.base))
-            .header(reqwest::header::AUTHORIZATION, auth);
-        request = match body {
-            Body::Empty => request,
-            Body::Json(value) => request
-                .header(reqwest::header::CONTENT_TYPE, "application/json")
-                .body(value.to_string()),
-            Body::Multipart { boundary, bytes } => request
-                .header(
-                    reqwest::header::CONTENT_TYPE,
-                    format!("multipart/form-data; boundary={boundary}"),
-                )
-                .body(bytes),
-        };
-        let response = request
-            .send()
-            .await
-            .map_err(|e| Failure::Transport(map_transport(&e)))?;
-        let (status, headers, bytes) = read_body(response).await.map_err(Failure::Transport)?;
-        let envelope: Option<Envelope> = serde_json::from_slice(&bytes).ok();
-        match envelope {
-            Some(env) if env.success && status.is_success() => Ok(env.result),
-            None if status.is_success() => Err(Failure::Transport(Error::Protocol(
-                "malformed Cloudflare response".into(),
-            ))),
-            other => Err(Failure::Api {
-                status,
-                codes: other
-                    .map(|env| env.errors.iter().map(|e| e.code).collect())
-                    .unwrap_or_default(),
-                retry_after: retry_after(&headers),
-            }),
+        match CfClient::new(base, token) {
+            Ok(client) => Ok(Self(client)),
+            Err(CfFailure::NoToken) => Err(Error::CloudflareToken),
+            Err(CfFailure::Transport(e)) => Err(e),
+            Err(CfFailure::Api { .. }) => unreachable!(),
         }
     }
 
-    async fn call<T: DeserializeOwned>(&self, method: Method, path: &str, body: Body) -> Call<T> {
-        let value = self.send(method, path, body).await?;
-        serde_json::from_value(value).map_err(|_| {
-            Failure::Transport(Error::Protocol("unexpected Cloudflare response".into()))
-        })
+    async fn send(&self, method: Method, path: &str, body: CfBody) -> Call<Value> {
+        self.0.send(method, path, body).await.map_err(Failure::from)
     }
 
-    /// Fetches up to 20 pages of a list endpoint whose path already has a query.
+    async fn call<T: DeserializeOwned>(&self, method: Method, path: &str, body: CfBody) -> Call<T> {
+        self.0.call(method, path, body).await.map_err(Failure::from)
+    }
+
     async fn list<T: DeserializeOwned>(&self, path: &str) -> Call<Vec<T>> {
-        const PER_PAGE: usize = 50;
-        let mut all = Vec::new();
-        for page in 1..=20 {
-            let items: Vec<T> = self
-                .call(
-                    Method::GET,
-                    &format!("{path}&per_page={PER_PAGE}&page={page}"),
-                    Body::Empty,
-                )
-                .await?;
-            let n = items.len();
-            all.extend(items);
-            if n < PER_PAGE {
-                break;
-            }
-        }
-        Ok(all)
+        self.0.list(path, 50).await.map_err(Failure::from)
     }
 
     // ---- step 1 ------------------------------------------------------------------------------
@@ -227,7 +155,7 @@ impl Client {
     /// Whether the token is active: as a user token, or else as a token owned by `account_id`.
     pub(crate) async fn verify_token(&self, account_id: Option<&str>) -> Result<bool> {
         let user: Call<TokenStatus> = self
-            .call(Method::GET, "/user/tokens/verify", Body::Empty)
+            .call(Method::GET, "/user/tokens/verify", CfBody::Empty)
             .await;
         let (status, account_owned) = match user {
             Ok(status) => (status, false),
@@ -240,7 +168,7 @@ impl Client {
                     .call(
                         Method::GET,
                         &format!("/accounts/{account_id}/tokens/verify"),
-                        Body::Empty,
+                        CfBody::Empty,
                     )
                     .await
                     .map_err(|f| match f {
@@ -272,7 +200,7 @@ impl Client {
             .call::<Subdomain>(
                 Method::GET,
                 &format!("/accounts/{account_id}/workers/subdomain"),
-                Body::Empty,
+                CfBody::Empty,
             )
             .await
         {
@@ -287,7 +215,7 @@ impl Client {
         self.call::<Subdomain>(
             Method::PUT,
             &format!("/accounts/{account_id}/workers/subdomain"),
-            Body::Json(json!({ "subdomain": name })),
+            CfBody::Json(json!({ "subdomain": name })),
         )
         .await
         .map(|s| s.subdomain)
@@ -312,7 +240,7 @@ impl Client {
         self.send(
             Method::POST,
             &format!("/accounts/{account_id}/workers/scripts/{name}/subdomain"),
-            Body::Json(json!({ "enabled": true, "previews_enabled": false })),
+            CfBody::Json(json!({ "enabled": true, "previews_enabled": false })),
         )
         .await
         .map(drop)
@@ -325,7 +253,7 @@ impl Client {
             .call::<Value>(
                 Method::GET,
                 &format!("/accounts/{account_id}/workers/scripts/{name}/subdomain"),
-                Body::Empty,
+                CfBody::Empty,
             )
             .await
         {
@@ -346,7 +274,7 @@ impl Client {
             .call(
                 Method::GET,
                 &format!("/accounts/{account_id}/workers/scripts/{name}/settings"),
-                Body::Empty,
+                CfBody::Empty,
             )
             .await
         {
@@ -402,7 +330,7 @@ impl Client {
         self.send(
             Method::PUT,
             &format!("/accounts/{account_id}/workers/scripts/{name}"),
-            Body::Multipart { boundary, bytes },
+            CfBody::Multipart { boundary, bytes },
         )
         .await
         .map(drop)
@@ -419,7 +347,7 @@ impl Client {
         self.send(
             Method::PUT,
             &format!("/accounts/{account_id}/workers/scripts/{script}/secrets"),
-            Body::Json(json!({ "name": name, "text": value, "type": "secret_text" })),
+            CfBody::Json(json!({ "name": name, "text": value, "type": "secret_text" })),
         )
         .await
         .map(drop)
@@ -436,7 +364,7 @@ impl Client {
             .send(
                 Method::DELETE,
                 &format!("/accounts/{account_id}/workers/scripts/{script}/secrets/{name}"),
-                Body::Empty,
+                CfBody::Empty,
             )
             .await
         {
@@ -451,7 +379,7 @@ impl Client {
             .send(
                 Method::DELETE,
                 &format!("/accounts/{account_id}/workers/scripts/{name}"),
-                Body::Empty,
+                CfBody::Empty,
             )
             .await
         {
@@ -475,7 +403,7 @@ impl Client {
             .call(
                 Method::GET,
                 &format!("/accounts/{account_id}/d1/database/{id}"),
-                Body::Empty,
+                CfBody::Empty,
             )
             .await
         {
@@ -489,7 +417,7 @@ impl Client {
         self.call(
             Method::POST,
             &format!("/accounts/{account_id}/d1/database"),
-            Body::Json(json!({ "name": name })),
+            CfBody::Json(json!({ "name": name })),
         )
         .await
         .map_err(|f| f.into_error(Permission::D1))
@@ -500,7 +428,7 @@ impl Client {
             .send(
                 Method::DELETE,
                 &format!("/accounts/{account_id}/d1/database/{id}"),
-                Body::Empty,
+                CfBody::Empty,
             )
             .await
         {
@@ -520,7 +448,7 @@ impl Client {
         self.call(
             Method::POST,
             &format!("/accounts/{account_id}/d1/database/{database_id}/query"),
-            Body::Json(json!({ "sql": sql })),
+            CfBody::Json(json!({ "sql": sql })),
         )
         .await
     }
