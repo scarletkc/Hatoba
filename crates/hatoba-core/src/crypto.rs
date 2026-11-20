@@ -768,7 +768,8 @@ mod tests {
             ),
         ];
         for (i, (aad, json, expected)) in open_cases.iter().enumerate() {
-            let plain = open_json(&key, aad, json).expect(aad.as_str());
+            let plain =
+                open_json(&key, aad, json).unwrap_or_else(|e| panic!("{}: {e}", aad.as_str()));
             assert_eq!(plain.as_slice(), *expected, "{}", aad.as_str());
             let other_aad = &open_cases[(i + 1) % open_cases.len()].0;
             assert!(matches!(
@@ -800,7 +801,8 @@ mod tests {
             ),
         ];
         for (i, (aad, json)) in wrap_cases.iter().enumerate() {
-            let unwrapped = unwrap_key(&key, aad, json).expect(aad.as_str());
+            let unwrapped =
+                unwrap_key(&key, aad, json).unwrap_or_else(|e| panic!("{}: {e}", aad.as_str()));
             assert_eq!(*unwrapped, wrapped, "{}", aad.as_str());
             let other_aad = &wrap_cases[(i + 1) % wrap_cases.len()].0;
             assert!(matches!(
