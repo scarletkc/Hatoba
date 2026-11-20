@@ -42,7 +42,6 @@ use crate::sync::backend::{
     VaultMetaUpdate,
 };
 use crate::sync::cloudflare::{CfBody, CfClient, CfError, CfFailure, is_identifier};
-use crate::sync::http::error_code;
 
 pub use super::cloudflare::CLOUDFLARE_API_BASE;
 /// Placeholder expiry for the dummy session (year 9999).
@@ -152,7 +151,12 @@ fn item_from_row(row: &serde_json::Map<String, Value>) -> Result<RemoteItem> {
 }
 
 /// Maps the Cloudflare error list of a failed call.
-fn map_cf_errors(status: StatusCode, errors: &[CfError], body: &[u8], retry: Option<u64>) -> Error {
+fn map_cf_errors(
+    status: StatusCode,
+    errors: &[CfError],
+    fallback_code: Option<String>,
+    retry: Option<u64>,
+) -> Error {
     if errors.iter().any(|e| e.message.contains("no such table")) {
         return Error::Server(NO_SUCH_TABLE.to_owned());
     }
@@ -169,10 +173,7 @@ fn map_cf_errors(status: StatusCode, errors: &[CfError], body: &[u8], retry: Opt
         },
         StatusCode::NOT_FOUND => Error::Server("d1 database not found".into()),
         other => {
-            let code = errors
-                .first()
-                .map(|e| e.code.to_string())
-                .or_else(|| error_code(body));
+            let code = errors.first().map(|e| e.code.to_string()).or(fallback_code);
             Error::Server(format!(
                 "http {}{}",
                 other.as_u16(),
@@ -189,9 +190,9 @@ fn map_cf_failure(failure: CfFailure) -> Error {
         CfFailure::Api {
             status,
             errors,
-            body,
+            error_code,
             retry_after,
-        } => map_cf_errors(status, &errors, &body, retry_after),
+        } => map_cf_errors(status, &errors, error_code, retry_after),
     }
 }
 

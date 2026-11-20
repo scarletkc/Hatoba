@@ -15,7 +15,9 @@ use serde_json::Value;
 use zeroize::Zeroizing;
 
 use crate::error::Error;
-use crate::sync::http::{build_client, is_loopback_host, map_transport, read_body, retry_after};
+use crate::sync::http::{
+    build_client, error_code, is_loopback_host, map_transport, read_body, retry_after,
+};
 
 /// Production Cloudflare v4 API base.
 pub const CLOUDFLARE_API_BASE: &str = "https://api.cloudflare.com/client/v4";
@@ -57,7 +59,7 @@ pub(crate) enum CfFailure {
     Api {
         status: StatusCode,
         errors: Vec<CfError>,
-        body: Vec<u8>,
+        error_code: Option<String>,
         retry_after: Option<u64>,
     },
 }
@@ -161,7 +163,7 @@ impl CfClient {
             other => Err(CfFailure::Api {
                 status,
                 errors: other.map(|env| env.errors).unwrap_or_default(),
-                body: bytes,
+                error_code: error_code(&bytes),
                 retry_after: retry_after(&headers),
             }),
         }
@@ -213,7 +215,6 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
-    use crate::sync::http::error_code;
 
     #[test]
     fn validates_base_url_token_and_debug_redaction() {
@@ -422,12 +423,12 @@ mod tests {
             Err(CfFailure::Api {
                 status,
                 errors,
-                body,
+                error_code,
                 ..
             }) => {
                 assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
                 assert!(errors.is_empty());
-                assert_eq!(error_code(&body).as_deref(), Some("upstream_down"));
+                assert_eq!(error_code.as_deref(), Some("upstream_down"));
             }
             other => panic!("expected 503 Api failure, got {other:?}"),
         }
