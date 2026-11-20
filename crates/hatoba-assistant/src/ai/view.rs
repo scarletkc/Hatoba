@@ -8,9 +8,7 @@ use hatoba_core::Vault;
 use hatoba_core::model::AiConversation;
 
 use super::judge::auto_view;
-use crate::dto::{
-    AiConversationView, AiEntryView, AiToolCall, AiTurnEvent, AiUsage, QuickTarget,
-};
+use crate::dto::{AiConversationView, AiEntryView, AiToolCall, AiTurnEvent, AiUsage, QuickTarget};
 
 pub fn conversation_view(v: &Vault, id: &str, c: &AiConversation) -> AiConversationView {
     conversation_view_at(id, c, v.ai_last_activity(id))

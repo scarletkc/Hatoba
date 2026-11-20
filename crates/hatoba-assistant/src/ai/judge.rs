@@ -18,7 +18,7 @@ use serde_json::{Map, Value};
 use super::blocks::leading_blocks;
 use super::calls::{calls_of, open_call_at};
 use super::entries::{Entries, find_conversation};
-use super::job::proxy_call;
+use super::job::resolve_call;
 use super::places::{host_name, local_name, saved_host, target_name};
 use super::request::{bytes_prefix, resolve_model};
 use super::{AiManager, MCP_PREFIX, guard, unlocked};
@@ -268,19 +268,12 @@ pub(super) fn judge_state(
     earlier_calls.reverse();
     let call = &calls[index];
     let mut judged = shown_call(&call.name, &call.arguments);
-    let offered = if call.name.starts_with(MCP_PREFIX) {
-        mcp.offered(conversation_id, &call.name)
-    } else if call.name == tools::CALL_MCP_TOOL {
-        proxy_call(v, mcp, conversation_id, &call.arguments)
-            .ok()
-            .map(|(tool, arguments)| {
-                judged = JudgeCall::new(tool.name.clone(), Value::Object(arguments));
-                tool
-            })
-    } else {
-        None
-    };
-    if let Some(tool) = offered {
+    if let Some(Ok((tool, arguments))) =
+        resolve_call(v, mcp, conversation_id, &call.name, &call.arguments)
+    {
+        if call.name == tools::CALL_MCP_TOOL {
+            judged = JudgeCall::new(tool.name.clone(), Value::Object(arguments));
+        }
         judged.server = Some(tool.server_name);
         judged.description = Some(tool.tool.description).filter(|d| !d.trim().is_empty());
         judged.annotations = annotations_of(&tool.tool.annotations);

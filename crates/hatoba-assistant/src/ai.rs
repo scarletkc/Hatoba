@@ -57,7 +57,7 @@ use crate::mcp::McpManager;
 
 pub use entries::find_conversation;
 pub use history::search;
-pub use job::{proxy_call, session_server};
+pub use job::{ResolvedCall, resolve_call, session_server};
 pub use request::{drop_levels_of_old_protocol, model_spec, provider_config};
 pub use skills::{skill_commands, skill_text};
 pub use view::{conversation_view, conversation_view_at, error_kind};
