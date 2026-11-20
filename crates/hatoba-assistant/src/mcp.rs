@@ -32,15 +32,14 @@ mod offer;
 pub(crate) mod tests;
 
 pub use device::{
-    DeviceServer, DeviceState, config_view, core_transport, find_server, proxy_info, server_exists,
-    server_gone, set_always_allow, set_enabled, tool_info, transport_config, transport_view,
+    DeviceServer, DeviceState, config_view, core_transport, error_kind, find_server, proxy_info,
+    server_exists, server_gone, set_always_allow, set_enabled, tool_info, transport_config,
+    transport_view, with_default_path,
 };
-pub use offer::{Offer, OfferedTool, tool_view};
-
-use device::{error_kind, with_default_path};
 #[cfg(test)]
 use offer::MAX_FETCH_BYTES;
 use offer::{FETCH_TIMEOUT, Wanted, fits_message, list_extras, prompt_view, resource_view};
+pub use offer::{Offer, OfferedTool, tool_view};
 use std::collections::HashMap;
 use std::future::Future;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};

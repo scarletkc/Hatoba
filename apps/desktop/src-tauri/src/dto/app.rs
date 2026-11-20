@@ -207,7 +207,7 @@ pub enum LockReason {
 
 // ───────────────────────── AI assistant (§13) ─────────────────────────
 //
-// The assistant's DTOs are `hatoba_assistant::dto`'s, re-exported above.
+// The assistant's DTOs are `hatoba_assistant::dto`'s, re-exported from `dto`.
 
 /// [`McpServerStatus`] as the `ai://mcp-status` event, which the assistant's crate cannot derive
 /// without Tauri.

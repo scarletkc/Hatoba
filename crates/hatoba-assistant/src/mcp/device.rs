@@ -106,7 +106,7 @@ impl DeviceState {
 
 // ───────────────────────── conversions ─────────────────────────
 
-/// What [`McpConnection::connect`] needs from a stored server.
+/// What [`hatoba_ai::mcp::McpConnection::connect`] needs from a stored server.
 pub fn transport_config(t: &McpTransport) -> McpTransportConfig {
     match t {
         McpTransport::Stdio { command, args, env } => McpTransportConfig::Stdio {
@@ -126,7 +126,7 @@ pub fn transport_config(t: &McpTransport) -> McpTransportConfig {
 
 /// A `stdio` server's configuration with `path` as its `PATH`, unless the server sets its own.
 /// The server is looked up on it and started with it. `http` servers and `None` change nothing.
-pub(super) fn with_default_path(
+pub fn with_default_path(
     config: McpTransportConfig,
     path: Option<&std::ffi::OsStr>,
 ) -> McpTransportConfig {
@@ -203,7 +203,7 @@ pub fn server_gone(server_name: &str) -> String {
 }
 
 /// The kind of a failure, for logs (never its message, which may quote the server).
-pub(super) fn error_kind(e: &McpError) -> &'static str {
+pub fn error_kind(e: &McpError) -> &'static str {
     match e {
         McpError::Spawn(_) => "spawn",
         McpError::CommandNotFound(_) => "command_not_found",
