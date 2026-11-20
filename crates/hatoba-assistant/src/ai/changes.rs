@@ -10,7 +10,7 @@ use hatoba_core::{SnapshotKey, SnapshotState, Vault};
 use super::entries::find_conversation;
 use super::job::live_session;
 use super::{AiEnv, AiManager, Inner, files, guard, unlocked};
-use crate::dto::{AiFileChange, AiFileChangeState, AiFilePreview, AiFileRevert};
+use crate::dto::{AiFileChange, AiFilePreview, AiFileRevert};
 use crate::error::{AppError, AppResult, ErrorCode};
 
 impl AiManager {
@@ -187,12 +187,7 @@ pub(super) fn file_changes(v: &Vault, conversation_id: &str) -> AppResult<Vec<Ai
                 server: meta.server,
                 path: meta.path,
                 created: meta.created,
-                state: match s.state {
-                    SnapshotState::Unfinished => AiFileChangeState::Unfinished,
-                    SnapshotState::Written => AiFileChangeState::Written,
-                    SnapshotState::Reverted => AiFileChangeState::Reverted,
-                    SnapshotState::Dropped => AiFileChangeState::Dropped,
-                },
+                state: s.state.into(),
             })
         })
         .collect())

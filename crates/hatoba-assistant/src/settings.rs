@@ -7,7 +7,6 @@ use hatoba_core::model::{
     SearchProvider,
 };
 
-use crate::ai::core_effort;
 use crate::dto::{AiModelRef, AiSettingsPatch, Clearable};
 use crate::error::{AppError, AppResult};
 
@@ -104,7 +103,7 @@ pub fn save_ai_settings(v: &mut Vault, patch: &AiSettingsPatch) -> AppResult<boo
         default_effort: match patch.default_effort {
             Clearable::Keep => current.default_effort,
             Clearable::Clear => None,
-            Clearable::Set(effort) => Some(core_effort(effort)),
+            Clearable::Set(effort) => Some(effort.into()),
         },
         search_provider_id,
         native_search: patch.native_search.unwrap_or(current.native_search),

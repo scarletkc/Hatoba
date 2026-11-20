@@ -4,12 +4,12 @@ use std::io::Read;
 use std::path::Path;
 
 use hatoba_core::model::{Item, KeyAlgorithm as CoreAlg, SshKey};
-use hatoba_ssh::{GenerateKind, KeyAlgorithm as SshAlg, ParsedKey};
+use hatoba_ssh::{KeyAlgorithm as SshAlg, ParsedKey};
 use tauri::{AppHandle, State};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::convert::key_view;
-use crate::dto::{GenerateAlgorithm, KeyGenerateInput, KeyImportInput, KeyView};
+use crate::dto::{KeyAlgorithm, KeyGenerateInput, KeyImportInput, KeyView};
 use crate::error::{AppError, AppResult, KeyParseErrorKind};
 use crate::state::{AppState, blocking, now_ms};
 use crate::{ssh, sync};
@@ -58,11 +58,7 @@ fn not_text() -> AppError {
 }
 
 pub fn core_algorithm(alg: SshAlg) -> CoreAlg {
-    match alg {
-        SshAlg::Ed25519 => CoreAlg::Ed25519,
-        SshAlg::Ecdsa => CoreAlg::Ecdsa,
-        SshAlg::Rsa => CoreAlg::Rsa,
-    }
+    KeyAlgorithm::from(alg).into()
 }
 
 fn store_parsed(
@@ -175,10 +171,7 @@ pub async fn key_generate(
     if input.name.trim().is_empty() {
         return Err(AppError::invalid("name", "name is required"));
     }
-    let kind = match input.algorithm {
-        GenerateAlgorithm::Ed25519 => GenerateKind::Ed25519,
-        GenerateAlgorithm::Rsa => GenerateKind::Rsa4096,
-    };
+    let kind = input.algorithm.into();
     let comment = input.comment.trim().to_owned();
     let passphrase = input.passphrase.filter(|p| !p.is_empty());
     let pw = passphrase.clone().map(Zeroizing::new);

@@ -10,9 +10,9 @@ use hatoba_ai::tools::{
     self, BuiltinTool, CommandStop, FetchUrlArgs, MemoryArgs, ReadSkillArgs, RunCommandArgs,
     StoppedCommand, WebSearchArgs,
 };
-use hatoba_ai::web::{self, NativeSearch, SearchConfig, SearchKind as WebSearchKind};
+use hatoba_ai::web::{self, NativeSearch, SearchConfig};
 use hatoba_core::Vault;
-use hatoba_core::model::{Item, SearchKind as CoreSearchKind, SearchProvider};
+use hatoba_core::model::{Item, SearchProvider};
 use hatoba_core::sync::SharedVault;
 use hatoba_ssh::remote_command;
 use serde_json::{Map, Value};
@@ -73,17 +73,9 @@ fn no_web_search(v: &Vault) -> &'static str {
 
 pub fn search_config(p: &SearchProvider) -> SearchConfig {
     SearchConfig {
-        kind: search_kind(p.kind),
+        kind: crate::dto::SearchKind::from(p.kind).into(),
         base_url: p.base_url.clone(),
         api_key: p.api_key.clone(),
-    }
-}
-
-pub fn search_kind(kind: CoreSearchKind) -> WebSearchKind {
-    match kind {
-        CoreSearchKind::Brave => WebSearchKind::Brave,
-        CoreSearchKind::Tavily => WebSearchKind::Tavily,
-        CoreSearchKind::Searxng => WebSearchKind::Searxng,
     }
 }
 

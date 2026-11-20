@@ -9,6 +9,7 @@
 pub use hatoba_assistant::dto::*;
 
 mod app;
+mod convert;
 mod hosts;
 mod sessions;
 mod settings;

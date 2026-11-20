@@ -6,12 +6,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use hatoba_core::model::{Host, HostAuth, HostProxy, Item, KnownHost, ProxyKind as CoreProxyKind};
+use hatoba_core::model::{Host, HostAuth, HostProxy, Item, KnownHost};
 use hatoba_core::vault::Vault;
 use hatoba_ssh::{
     AuthMethod, Banner, BannerWait, ConnectConfig, HostKeyInfo, HostKeyVerifier, JumpHop,
-    KeyboardInteractive, PromptRequest, ProxyConfig, ProxyKind, SftpClient, ShellHandle,
-    SshSession, StatsHandle, target_label,
+    KeyboardInteractive, PromptRequest, ProxyConfig, SftpClient, ShellHandle, SshSession,
+    StatsHandle, target_label,
 };
 use tauri::AppHandle;
 use tauri_specta::Event;
@@ -255,10 +255,7 @@ pub fn resolve_proxy(vault: &Vault, choice: &HostProxy) -> AppResult<Option<Prox
         .and_then(Item::as_proxy)
         .ok_or_else(|| AppError::ssh(SshErrorKind::ProxyMissing, missing))?;
     Ok(Some(ProxyConfig {
-        kind: match proxy.kind {
-            CoreProxyKind::Socks5 => ProxyKind::Socks5,
-            CoreProxyKind::Http => ProxyKind::Http,
-        },
+        kind: crate::dto::ProxyKind::from(proxy.kind).into(),
         host: proxy.address.clone(),
         port: proxy.port,
         username: proxy.username.clone(),

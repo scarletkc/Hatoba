@@ -22,7 +22,7 @@ use super::entries::{Entries, append, find_conversation};
 use super::files::FileJob;
 use super::job::{Job, live_session, proxy_call};
 use super::places::conversation_memory_place;
-use super::view::{core_status, entry_view};
+use super::view::entry_view;
 use super::{AiEnv, AiManager, MCP_PREFIX, OpKind, Ran, files, guard, unlocked};
 use crate::dto::{
     AiEntryView, AiFilePreview, AiToolCall, AiToolResultInput, AiToolRun, AiTurnEvent,
@@ -44,7 +44,7 @@ impl AiManager {
         tool_call_id: &str,
         input: &AiToolResultInput,
     ) -> AppResult<AiEntryView> {
-        let status = core_status(input.status);
+        let status = ToolStatus::from(input.status);
         let content = match status {
             // The user's reason; the adapter tells the model the call was rejected.
             ToolStatus::Rejected => input.content.trim().to_owned(),

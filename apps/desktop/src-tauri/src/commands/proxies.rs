@@ -1,6 +1,6 @@
 //! Saved SOCKS5 and HTTP proxies, and the default proxy of this device (SSH-13).
 
-use hatoba_core::model::{HostProxy, Item, Proxy, ProxyKind as CoreKind};
+use hatoba_core::model::{HostProxy, Item, Proxy};
 use hatoba_core::vault::Vault;
 use tauri::{AppHandle, State};
 use zeroize::Zeroizing;
@@ -13,13 +13,6 @@ use crate::sync;
 
 /// The longest SOCKS5 username or password (RFC 1929); HTTP proxies get the same limit.
 pub(crate) const MAX_CREDENTIAL_BYTES: usize = 255;
-
-pub fn core_kind(kind: ProxyKind) -> CoreKind {
-    match kind {
-        ProxyKind::Socks5 => CoreKind::Socks5,
-        ProxyKind::Http => CoreKind::Http,
-    }
-}
 
 /// The id of this device's default proxy, from the device-local preferences.
 pub fn device_default(vault: &Vault) -> Option<String> {
@@ -95,7 +88,7 @@ pub fn proxy_from_input(input: &ProxyInput, existing: Option<&Proxy>) -> AppResu
     }
     Ok(Proxy {
         name: name.to_owned(),
-        kind: core_kind(input.kind),
+        kind: input.kind.into(),
         address: address.to_owned(),
         port: input.port,
         username: username.to_owned(),

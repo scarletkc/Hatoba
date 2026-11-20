@@ -1,15 +1,14 @@
 //! Model → DTO conversions. This is the boundary where secret fields are dropped (spec §10.1).
 
 use hatoba_core::model::{
-    Group, Host, HostAuth, HostProxy, KeyAlgorithm as CoreAlg, Proxy, ProxyKind as CoreProxyKind,
-    SshKey, TelnetHost,
+    Group, Host, HostAuth, HostProxy, KeyAlgorithm as CoreAlg, Proxy, SshKey, TelnetHost,
 };
 use hatoba_core::vault::Vault;
 use hatoba_ssh::ServerStats;
 
 use crate::dto::{
-    AuthKind, GroupView, HostEnvVar, HostView, KeyAlgorithm, KeyView, MountView, ProxyKind,
-    ProxyMode, ProxyView, ServerStatsView, TelnetHostView,
+    AuthKind, GroupView, HostEnvVar, HostView, KeyView, MountView, ProxyMode, ProxyView,
+    ServerStatsView, TelnetHostView,
 };
 
 pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
@@ -88,10 +87,7 @@ pub fn proxy_view(id: &str, proxy: &Proxy, vault: &Vault) -> ProxyView {
     ProxyView {
         id: id.to_owned(),
         name: proxy.name.clone(),
-        kind: match proxy.kind {
-            CoreProxyKind::Socks5 => ProxyKind::Socks5,
-            CoreProxyKind::Http => ProxyKind::Http,
-        },
+        kind: proxy.kind.into(),
         address: proxy.address.clone(),
         port: proxy.port,
         username: proxy.username.clone(),
@@ -155,14 +151,6 @@ pub fn group_view(id: &str, group: &Group, vault: &Vault) -> GroupView {
     }
 }
 
-pub fn key_algorithm(alg: CoreAlg) -> KeyAlgorithm {
-    match alg {
-        CoreAlg::Ed25519 => KeyAlgorithm::Ed25519,
-        CoreAlg::Ecdsa => KeyAlgorithm::Ecdsa,
-        CoreAlg::Rsa => KeyAlgorithm::Rsa,
-    }
-}
-
 /// Key size in bits, derived from the public key so it needn't be stored.
 pub fn key_bits(key: &SshKey) -> u32 {
     match key.algorithm {
@@ -212,7 +200,7 @@ pub fn key_view(id: &str, key: &SshKey, vault: &Vault) -> KeyView {
     KeyView {
         id: id.to_owned(),
         name: key.name.clone(),
-        algorithm: key_algorithm(key.algorithm),
+        algorithm: key.algorithm.into(),
         bits: key_bits(key),
         public_key: key.public_key.clone(),
         fingerprint: key.fingerprint.clone(),
