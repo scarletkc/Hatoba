@@ -20,6 +20,7 @@ import { TerminalView } from "@/features/terminal/TerminalView";
 import { UnlockScreen } from "@/features/unlock/UnlockScreen";
 import { api } from "@/ipc/api";
 import type { SyncState } from "@/ipc/types";
+import { useBackendEvent } from "@/ipc/useBackendEvent";
 import { cx } from "@/lib/cx";
 import { applyZoom } from "@/lib/zoom";
 import { closeSessionTab, openLocalTerminal } from "@/session/connect";
@@ -221,47 +222,64 @@ function HomePage({ page }: { page: Page }) {
 
 /** Backend → UI events (§10.2) that affect the whole app. */
 function useGlobalEvents() {
+  // The state of the last sync status, to tell when a round ends.
+  const lastSync = useRef<SyncState | null>(null);
+  const live = useRef(true);
+  const chromePushed = useRef(false);
+
   useEffect(() => {
-    // The state of the last sync status, to tell when a round ends.
-    let lastSync: SyncState | null = null;
-    const subs = [
-      api.listen("vault://locked", ({ reason }) => {
-        // HOST-14: the readings are not kept behind the lock screen.
-        clearReadouts();
-        useApp.setState({ lockReason: reason });
-        useApp.getState().setPhase("locked");
-        useApp.getState().openSettings(false);
-        void useApp.getState().refreshVault();
-      }),
-      api.listen("sync://status", (status) => {
-        useApp.getState().setSync(status);
-        // Pulls may have changed hosts, keys and settings; refresh what the UI shows. A round that
-        // fails after pulling has changed them too.
-        const roundEnded = lastSync === "syncing" && status.state !== "syncing";
-        lastSync = status.state;
-        if ((status.state === "idle" || roundEnded) && useApp.getState().phase === "unlocked") {
-          void useVaultData.getState().reload();
-          useApp.getState().refreshSynced();
-        }
-      }),
-      api.listen("window://zoom", (zoom) => {
-        useApp.setState({ zoom });
-        applyZoom(zoom.zoom);
-      }),
-      api
-        .listen("window://chrome", ({ floating }) => useApp.setState({ floating }))
-        // A chrome change between the boot-time read and this listener would be lost, so
-        // re-read once the listener is registered. Errors are ignored: the next event wins.
-        .then((un) => {
-          void api
-            .window_floating()
-            .then((floating) => useApp.setState({ floating }))
-            .catch(() => {});
-          return un;
-        }),
-    ];
-    return () => subs.forEach((p) => void p.then((un) => un()));
+    live.current = true;
+    chromePushed.current = false;
+    return () => {
+      live.current = false;
+    };
   }, []);
+
+  useBackendEvent("vault://locked", ({ reason }) => {
+    // HOST-14: the readings are not kept behind the lock screen.
+    clearReadouts();
+    useApp.setState({ lockReason: reason });
+    useApp.getState().setPhase("locked");
+    useApp.getState().openSettings(false);
+    void useApp.getState().refreshVault();
+  });
+
+  useBackendEvent("sync://status", (status) => {
+    useApp.getState().setSync(status);
+    // Pulls may have changed hosts, keys and settings; refresh what the UI shows. A round that
+    // fails after pulling has changed them too.
+    const roundEnded = lastSync.current === "syncing" && status.state !== "syncing";
+    lastSync.current = status.state;
+    if ((status.state === "idle" || roundEnded) && useApp.getState().phase === "unlocked") {
+      void useVaultData.getState().reload();
+      useApp.getState().refreshSynced();
+    }
+  });
+
+  useBackendEvent("window://zoom", (zoom) => {
+    useApp.setState({ zoom });
+    applyZoom(zoom.zoom);
+  });
+
+  useBackendEvent(
+    "window://chrome",
+    ({ floating }) => {
+      chromePushed.current = true;
+      useApp.setState({ floating });
+    },
+    {
+      // A chrome change between the boot-time read and this listener would be lost, so
+      // re-read once the listener is registered. Errors are ignored: the next event wins.
+      onSubscribed: () => {
+        void api
+          .window_floating()
+          .then((floating) => {
+            if (live.current && !chromePushed.current) useApp.setState({ floating });
+          })
+          .catch(() => {});
+      },
+    },
+  );
 }
 
 /**

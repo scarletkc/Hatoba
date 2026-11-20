@@ -16,6 +16,7 @@ import { useApp } from "@/app/store";
 import { formatDateTime, formatRelative, useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { CliActivity, CliCommandView, CloseAction, Language } from "@/ipc/types";
+import { useBackendEvent } from "@/ipc/useBackendEvent";
 import { copyText } from "@/features/keys/clipboard";
 import { cx } from "@/lib/cx";
 import { pickSavePath } from "@/lib/native";
@@ -321,23 +322,35 @@ function CliActivityList() {
   const [entries, setEntries] = useState<CliActivity[] | null>(null);
   const [details, setDetails] = useState(false);
 
+  const live = useRef(true);
+  const pushed = useRef(false);
+
   useEffect(() => {
-    let live = true;
-    // Listening first, so no use is missed; an event is newer than the list.
-    let pushed = false;
-    const sub = api.listen("cli://activity", (e) => {
-      pushed = true;
-      setEntries(e.entries);
-    });
-    void sub
-      .then(() => api.cli_activity_list())
-      .then((list) => live && !pushed && setEntries(list))
-      .catch(() => {});
+    live.current = true;
+    pushed.current = false;
     return () => {
-      live = false;
-      void sub.then((un) => un());
+      live.current = false;
     };
   }, []);
+
+  // Listening first, so no use is missed; an event is newer than the list.
+  useBackendEvent(
+    "cli://activity",
+    (e) => {
+      pushed.current = true;
+      setEntries(e.entries);
+    },
+    {
+      onSubscribed: () => {
+        void api
+          .cli_activity_list()
+          .then((list) => {
+            if (live.current && !pushed.current) setEntries(list);
+          })
+          .catch(() => {});
+      },
+    },
+  );
 
   const outcome = (a: CliActivity) => {
     if (a.state === "running") return t("settings.cliAccess.running");
