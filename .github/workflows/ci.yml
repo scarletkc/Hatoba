@@ -66,7 +66,40 @@ jobs:
       - run: pnpm format:check
       - run: pnpm --filter @hatoba/ui --filter @hatoba/desktop typecheck
       - run: pnpm --filter @hatoba/ui --filter @hatoba/desktop lint
-      - run: pnpm --filter @hatoba/ui --filter @hatoba/desktop test
+      - run: pnpm --filter @hatoba/ui --filter @hatoba/desktop test:coverage
+      - name: Coverage summary
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const rows = [
+              ["@hatoba/desktop", "apps/desktop/coverage/coverage-summary.json"],
+              ["@hatoba/ui", "packages/ui/coverage/coverage-summary.json"],
+            ].map(([name, file]) => {
+              const { total } = JSON.parse(fs.readFileSync(file, "utf8"));
+              const pct = (m) => `${m.pct}% (${m.covered}/${m.total})`;
+              return `| ${name} | ${pct(total.lines)} | ${pct(total.statements)} | ${pct(total.functions)} | ${pct(total.branches)} |`;
+            });
+            fs.appendFileSync(
+              process.env.GITHUB_STEP_SUMMARY,
+              [
+                "### Frontend coverage",
+                "",
+                "| Package | Lines | Statements | Functions | Branches |",
+                "| --- | --- | --- | --- | --- |",
+                ...rows,
+                "",
+              ].join("\n"),
+            );
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-frontend
+          path: |
+            apps/desktop/coverage/lcov.info
+            apps/desktop/coverage/coverage-summary.json
+            packages/ui/coverage/lcov.info
+            packages/ui/coverage/coverage-summary.json
+          if-no-files-found: error
       - run: pnpm --filter @hatoba/desktop build
 
   worker:
@@ -186,6 +219,44 @@ jobs:
       - name: TypeScript bindings are up to date
         if: steps.cached.outputs.cache-hit != 'true'
         run: git diff --exit-code apps/desktop/src/ipc/bindings.ts
+
+  rust-coverage:
+    name: Rust coverage
+    needs: [changes, tested]
+    if: ${{ !cancelled() && needs.changes.outputs.rust != 'false' && needs.tested.outputs.tested != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      # No Rust cache: instrumented builds use distinct flags from the test jobs and caching them
+      # would push the repository past its 10 GB Actions cache limit.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: ./.github/actions/setup-tauri-linux
+        with:
+          ssh: true
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Build frontend (embedded by tauri::generate_context!)
+        run: pnpm --filter @hatoba/desktop build
+      - name: Tests with coverage (incl. OpenSSH integration tests)
+        run: cargo llvm-cov --workspace --lcov --output-path "$RUNNER_TEMP/rust-lcov.info"
+        env:
+          HATOBA_SSH_IT: "1"
+      - name: Coverage summary
+        run: |
+          {
+            echo "### Rust coverage"
+            echo '```'
+            cargo llvm-cov report --summary-only --color never
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-rust
+          path: ${{ runner.temp }}/rust-lcov.info
+          if-no-files-found: error
 
   rust-windows:
     name: Rust (Windows)

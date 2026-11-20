@@ -124,3 +124,6 @@ security-framework-sys = { version = "2.17.0", default-features = false, feature
 [features]
 # Enables devtools in release builds. Never enabled for distributed builds (SEC-05).
 devtools = ["tauri/devtools"]
+
+[lints]
+workspace = true
