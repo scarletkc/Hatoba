@@ -1,0 +1,21 @@
+diff --git a/src/zsession.js b/src/zsession.js
+index 5f0b8f9d8afa6fba0acd6dd0477afa186f7aad9a..438e1980f86d57680ae361bd342f0c556ddaf57a 100644
+--- a/src/zsession.js
++++ b/src/zsession.js
+@@ -1246,6 +1246,7 @@ Zmodem.Session.Send = class ZmodemSendSession extends Zmodem.Session {
+                 //console.log("SETTING KEEPALIVE TIMEOUT");
+                 sess._keepalive_timeout = setTimeout(resolve, KEEPALIVE_INTERVAL);
+             }).then( function() {
++                if (sess.aborted()) return;
+                 sess._next_header_handler = {
+                     ZACK: function() {
+ 
+@@ -1270,7 +1271,7 @@ Zmodem.Session.Send = class ZmodemSendSession extends Zmodem.Session {
+         if (this._keepalive_promise) {
+             //console.log("STOPPING KEEPALIVE");
+             clearTimeout(this._keepalive_timeout);
+-            this._keep_alive_promise = null;
++            this._keepalive_promise = null;
+         }
+     }
+ 

@@ -1040,6 +1040,15 @@ export function createMockApi(): HatobaApi {
     app_quit: async () => {},
     tray_set_menu: async () => {},
     notification_show: async () => {},
+    zmodem_directory: async (path) => {
+      if (path !== null) localStorage.setItem("hatoba-zmodem-directory", path);
+      return localStorage.getItem("hatoba-zmodem-directory") || "/home/demo/Downloads";
+    },
+    zmodem_download_begin: async () => {
+      throw new Error("ZMODEM disk writes require the desktop app");
+    },
+    zmodem_download_write: async () => {},
+    zmodem_download_finish: async () => null,
     save_text_file: async (path, contents) => {
       // Browser fallback: download the text instead of writing to `path`.
       const a = document.createElement("a");

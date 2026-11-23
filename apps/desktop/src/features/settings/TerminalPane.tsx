@@ -10,6 +10,7 @@ import { defaultTerminalFont, shortcutLabel } from "@/lib/platform";
 import { clearAllHistory } from "@/session/history";
 import { loadLocalShells, shellName } from "@/session/localShells";
 import { FONT_SIZE_MAX, FONT_SIZE_MIN, resolveScheme, terminalTheme, useTermSettings } from "@/session/theme";
+import { ZmodemSettings } from "./ZmodemSettings";
 import { SchemePicker } from "./SchemePicker";
 import { Pane, Section, SettingRow, usePrefs, type PaneProps } from "./shared";
 import s from "./TerminalPane.module.css";
@@ -88,6 +89,7 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
 
   return (
     <Pane>
+      <ZmodemSettings />
       <Section title={t("settings.section.text")}>
         <SettingRow label={t("settings.term.font")}>
           <div className={s.fontField}>

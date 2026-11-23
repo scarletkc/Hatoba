@@ -8,6 +8,10 @@ import * as __TAURI_EVENT from "@tauri-apps/api/event";
 
 /** Commands */
 export const commands = {
+	zmodemDirectory: (path: string | null) => __TAURI_INVOKE<string>("zmodem_directory", { path }),
+	zmodemDownloadBegin: (name: string) => __TAURI_INVOKE<string>("zmodem_download_begin", { name }),
+	zmodemDownloadWrite: (id: string, data: number[]) => __TAURI_INVOKE<null>("zmodem_download_write", { id, data }),
+	zmodemDownloadFinish: (id: string, commit: boolean) => __TAURI_INVOKE<string | null>("zmodem_download_finish", { id, commit }),
 	appInfo: () => __TAURI_INVOKE<AppInfo>("app_info"),
 	/**  Opens the Windows 11 Snap Layouts flyout (hovering the custom maximize button, WIN-01). */
 	windowSnapOverlay: () => __TAURI_INVOKE<void>("window_snap_overlay"),

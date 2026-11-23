@@ -23,3 +23,4 @@ pub mod ssh;
 pub mod sync;
 pub mod telnet;
 pub mod vault;
+pub mod zmodem;
