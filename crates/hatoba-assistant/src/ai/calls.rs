@@ -20,10 +20,10 @@ use tokio_util::sync::CancellationToken;
 use super::changes::KeepSnapshot;
 use super::entries::{Entries, append, find_conversation};
 use super::files::FileJob;
-use super::job::{Job, live_session, proxy_call};
+use super::job::{Job, live_session, resolve_call};
 use super::places::conversation_memory_place;
-use super::view::{core_status, entry_view};
-use super::{AiEnv, AiManager, MCP_PREFIX, OpKind, Ran, files, guard, unlocked};
+use super::view::entry_view;
+use super::{AiEnv, AiManager, OpKind, Ran, files, guard, unlocked};
 use crate::dto::{
     AiEntryView, AiFilePreview, AiToolCall, AiToolResultInput, AiToolRun, AiTurnEvent,
 };
@@ -44,7 +44,7 @@ impl AiManager {
         tool_call_id: &str,
         input: &AiToolResultInput,
     ) -> AppResult<AiEntryView> {
-        let status = core_status(input.status);
+        let status = ToolStatus::from(input.status);
         let content = match status {
             // The user's reason; the adapter tells the model the call was rejected.
             ToolStatus::Rejected => input.content.trim().to_owned(),
@@ -111,28 +111,21 @@ impl AiManager {
             let entries = Entries::load(&v, conversation_id)?;
             let call = open_call(&entries, tool_call_id)?;
             let arguments = edited_arguments.unwrap_or(&call.arguments);
-            let mut job = if call.name.starts_with(MCP_PREFIX) {
-                Job::mcp(
-                    &v,
-                    self.0.mcp.offered(conversation_id, &call.name),
-                    &call.name,
-                    arguments,
-                )
-            } else if call.name == tools::CALL_MCP_TOOL {
-                match proxy_call(&v, &self.0.mcp, conversation_id, arguments) {
-                    Ok((tool, arguments)) => Job::Mcp(Box::new(tool), arguments),
-                    Err(refusal) => Job::error(refusal),
-                }
-            } else {
-                let (at, _) = open_call_at(&entries, tool_call_id)?;
-                let caller = match &entries.list[at].body {
-                    EntryBody::Assistant(response) => {
-                        (response.provider_id.as_str(), response.model_id.as_str())
+            let mut job =
+                match resolve_call(&v, &self.0.mcp, conversation_id, &call.name, arguments) {
+                    Some(Ok((tool, arguments))) => Job::Mcp(Box::new(tool), arguments),
+                    Some(Err(refusal)) => Job::error(refusal),
+                    None => {
+                        let (at, _) = open_call_at(&entries, tool_call_id)?;
+                        let caller = match &entries.list[at].body {
+                            EntryBody::Assistant(response) => {
+                                (response.provider_id.as_str(), response.model_id.as_str())
+                            }
+                            _ => ("", ""),
+                        };
+                        Job::new(&v, &call.name, arguments, &env.app_version(), caller)
                     }
-                    _ => ("", ""),
                 };
-                Job::new(&v, &call.name, arguments, &env.app_version(), caller)
-            };
             let kind = if matches!(job, Job::RunCommand(_)) {
                 OpKind::Command
             } else {

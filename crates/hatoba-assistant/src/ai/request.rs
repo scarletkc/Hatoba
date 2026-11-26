@@ -14,8 +14,8 @@ use hatoba_ai::tools::{
 };
 use hatoba_core::Vault;
 use hatoba_core::model::{
-    AiAuthHeader, AiEffort as CoreEffort, AiModel as CoreModel, AiProtocol as CoreProtocol,
-    AiProvider, Item, MAX_CUSTOM_INSTRUCTIONS_BYTES, MAX_HOST_AI_NOTES_BYTES,
+    AiEffort as CoreEffort, AiModel as CoreModel, AiProtocol as CoreProtocol, AiProvider, Item,
+    MAX_CUSTOM_INSTRUCTIONS_BYTES, MAX_HOST_AI_NOTES_BYTES,
 };
 use hatoba_core::sync::SharedVault;
 use zeroize::Zeroizing;
@@ -26,7 +26,9 @@ use super::notes::mcp_deferred;
 use super::places::{local_name, quick_label, saved_host};
 use super::skills::enabled_skills;
 use super::{AiEnv, Halt, Request, Turn, chatgpt, lock, memory};
-use crate::dto::{AiEffort, AiLocalTab, AiTurnContext, AiTurnEvent, LocalShellKind};
+use crate::dto::{
+    AiAuthHeader, AiEffort, AiLocalTab, AiProtocol, AiTurnContext, AiTurnEvent, LocalShellKind,
+};
 use crate::mcp::Offer;
 
 /// Reads what the next request needs, after storing a cancelled result for every call without
@@ -111,7 +113,7 @@ pub(super) fn next_request(
         provider_id: context.provider_id.clone(),
         provider,
         model,
-        effort: context.effort.map(request_effort),
+        effort: context.effort.map(Into::into),
         system,
         tools,
         entries,
@@ -377,72 +379,16 @@ pub fn provider_config(id: &str, p: &AiProvider) -> ProviderConfig {
         protocol: protocol(p.protocol),
         base_url: p.base_url.clone(),
         api_key: p.api_key.clone(),
-        auth_header: auth_header(p.auth_header),
+        auth_header: AiAuthHeader::from(p.auth_header).into(),
         chatgpt: None,
     }
 }
 
-pub fn protocol(p: CoreProtocol) -> Protocol {
-    match p {
-        CoreProtocol::ChatCompletions => Protocol::ChatCompletions,
-        CoreProtocol::Anthropic => Protocol::Anthropic,
-        CoreProtocol::Responses => Protocol::Responses,
-        CoreProtocol::SystemOne => Protocol::SystemOne,
-    }
-}
-
-pub fn auth_header(h: AiAuthHeader) -> AuthHeader {
-    match h {
-        AiAuthHeader::XApiKey => AuthHeader::XApiKey,
-        AiAuthHeader::Authorization => AuthHeader::Authorization,
-    }
-}
-
-/// A thinking level from the panel, as stored (AI-05).
-pub fn core_effort(e: AiEffort) -> CoreEffort {
-    match e {
-        AiEffort::Low => CoreEffort::Low,
-        AiEffort::Medium => CoreEffort::Medium,
-        AiEffort::High => CoreEffort::High,
-        AiEffort::Xhigh => CoreEffort::Xhigh,
-        AiEffort::Max => CoreEffort::Max,
-    }
-}
-
-/// A stored thinking level, for the panel.
-pub fn effort_view(e: CoreEffort) -> AiEffort {
-    match e {
-        CoreEffort::Low => AiEffort::Low,
-        CoreEffort::Medium => AiEffort::Medium,
-        CoreEffort::High => AiEffort::High,
-        CoreEffort::Xhigh => AiEffort::Xhigh,
-        CoreEffort::Max => AiEffort::Max,
-    }
-}
-
-/// A thinking level from the panel, as a request takes it.
-fn request_effort(e: AiEffort) -> Effort {
-    model_effort(core_effort(e))
+fn protocol(p: CoreProtocol) -> Protocol {
+    AiProtocol::from(p).into()
 }
 
 /// A level a stored model offers, as a request takes it.
 fn model_effort(e: CoreEffort) -> Effort {
-    match e {
-        CoreEffort::Low => Effort::Low,
-        CoreEffort::Medium => Effort::Medium,
-        CoreEffort::High => Effort::High,
-        CoreEffort::Xhigh => Effort::Xhigh,
-        CoreEffort::Max => Effort::Max,
-    }
-}
-
-/// A level from a provider's model list (AI-03), for the panel.
-pub fn listed_effort(e: Effort) -> AiEffort {
-    match e {
-        Effort::Low => AiEffort::Low,
-        Effort::Medium => AiEffort::Medium,
-        Effort::High => AiEffort::High,
-        Effort::Xhigh => AiEffort::Xhigh,
-        Effort::Max => AiEffort::Max,
-    }
+    AiEffort::from(e).into()
 }

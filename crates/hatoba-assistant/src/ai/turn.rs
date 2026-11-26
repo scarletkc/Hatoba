@@ -27,11 +27,9 @@ use super::places::{
     memory_place, moved_from, moves_to, names_server, tab_local, tab_shell, tab_target,
     target_name,
 };
-use super::request::{core_effort, nothing_to_send, prepare, turn_server_id};
+use super::request::{nothing_to_send, prepare, turn_server_id};
 use super::side::SideRequest;
-use super::view::{
-    conversation_view, entry_view, error_kind, error_text, finish_view, stream_event,
-};
+use super::view::{conversation_view, entry_view, error_kind, error_text, stream_event};
 use super::{AiEnv, AiManager, EventSink, Halt, Streamed, Turn, TurnTask, guard, lock, unlocked};
 use crate::dto::{AiSendInput, AiSendStarted, AiTurnContext, AiTurnEndReason, AiTurnEvent};
 use crate::error::{AppError, AppResult, ErrorCode};
@@ -267,7 +265,7 @@ impl AiManager {
             let mut conversation = find_conversation(&v, &id)?;
             let before = conversation.clone();
             // AI-05: the conversation keeps the level of its last message.
-            conversation.effort = turn.context.effort.map(core_effort);
+            conversation.effort = turn.context.effort.map(Into::into);
             if let Some(place) = moved_to {
                 conversation.host_id = place.host_id;
                 conversation.quick_target = place.quick_target;
@@ -445,7 +443,7 @@ impl AiManager {
                     origin: None,
                     pinned: false,
                     context_start: None,
-                    effort: context.effort.map(core_effort),
+                    effort: context.effort.map(Into::into),
                     created_at: now_ms(),
                     updated_at: 0,
                 };
@@ -520,7 +518,7 @@ impl AiManager {
             }
             // AI-05: a retry at another level is the one the conversation used last, as for a
             // new message.
-            let effort = context.effort.map(core_effort);
+            let effort = context.effort.map(Into::into);
             if conversation.effort != effort {
                 conversation.effort = effort;
                 v.put(
@@ -771,7 +769,7 @@ fn store_response(
             });
         }
         turn.emit(AiTurnEvent::Done {
-            finish: finish_view(finish),
+            finish: finish.into(),
         });
         entry_id
     };

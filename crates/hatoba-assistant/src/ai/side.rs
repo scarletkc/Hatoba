@@ -16,7 +16,7 @@ use super::compact::compact_output_tokens;
 use super::entries::{Entries, find_conversation};
 use super::notes::{mcp_change_note, mcp_deferred, next_message_notes};
 use super::request::{next_request, prompt, turn_server_id};
-use super::view::{error_kind, finish_view};
+use super::view::error_kind;
 use super::{AiEnv, AiManager, Request, unlocked};
 use crate::dto::{AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiTurnContext};
 use crate::error::{AppError, AppResult, ErrorCode};
@@ -120,7 +120,7 @@ impl AiManager {
         tracing::info!(conversation_id = %conversation_id, "AI side question answered");
         Ok(AiSideAnswer {
             text: response.text,
-            finish: finish_view(response.finish),
+            finish: response.finish.into(),
         })
     }
 

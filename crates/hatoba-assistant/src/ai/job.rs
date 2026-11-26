@@ -10,9 +10,9 @@ use hatoba_ai::tools::{
     self, BuiltinTool, CommandStop, FetchUrlArgs, MemoryArgs, ReadSkillArgs, RunCommandArgs,
     StoppedCommand, WebSearchArgs,
 };
-use hatoba_ai::web::{self, NativeSearch, SearchConfig, SearchKind as WebSearchKind};
+use hatoba_ai::web::{self, NativeSearch, SearchConfig};
 use hatoba_core::Vault;
-use hatoba_core::model::{Item, SearchKind as CoreSearchKind, SearchProvider};
+use hatoba_core::model::{Item, SearchProvider};
 use hatoba_core::sync::SharedVault;
 use hatoba_ssh::remote_command;
 use serde_json::{Map, Value};
@@ -22,7 +22,7 @@ use super::files::FileJob;
 use super::request::resolve_model;
 use super::search::SearchJob;
 use super::skills::read_skill;
-use super::{AiEnv, conn, files, lock, memory, parse, search};
+use super::{AiEnv, MCP_PREFIX, conn, files, lock, memory, parse, search};
 use crate::http::Http;
 use crate::mcp::{McpManager, OfferedTool};
 
@@ -73,17 +73,9 @@ fn no_web_search(v: &Vault) -> &'static str {
 
 pub fn search_config(p: &SearchProvider) -> SearchConfig {
     SearchConfig {
-        kind: search_kind(p.kind),
+        kind: crate::dto::SearchKind::from(p.kind).into(),
         base_url: p.base_url.clone(),
         api_key: p.api_key.clone(),
-    }
-}
-
-pub fn search_kind(kind: CoreSearchKind) -> WebSearchKind {
-    match kind {
-        CoreSearchKind::Brave => WebSearchKind::Brave,
-        CoreSearchKind::Tavily => WebSearchKind::Tavily,
-        CoreSearchKind::Searxng => WebSearchKind::Searxng,
     }
 }
 
@@ -117,24 +109,6 @@ pub(super) enum Job {
 impl Job {
     pub(super) fn error(message: impl Into<String>) -> Self {
         Self::Ready(ToolStatus::Error, message.into())
-    }
-
-    /// A call of an MCP tool: `tool` is what the offer that made the call names `name`. A server
-    /// whose item is gone (deleted on another device, before a request stopped it here) runs
-    /// nothing, even while its connection is still up.
-    pub(super) fn mcp(v: &Vault, tool: Option<OfferedTool>, name: &str, arguments: &str) -> Self {
-        let Some(tool) = tool else {
-            return Self::error(format!(
-                "There is no MCP tool named \"{name}\": no MCP server offers it now."
-            ));
-        };
-        if !crate::mcp::server_exists(v, &tool.server_id) {
-            return Self::error(crate::mcp::server_gone(&tool.server_name));
-        }
-        match parse::<Map<String, Value>>(arguments) {
-            Ok(arguments) => Self::Mcp(Box::new(tool), arguments),
-            Err(message) => Self::error(message),
-        }
     }
 
     /// `version`: the app's, for the built-in skill (AI-34). `caller`: the provider and model of
@@ -267,39 +241,71 @@ impl Job {
     }
 }
 
-/// AI-45: the MCP tool a `call_mcp_tool` call with `arguments` calls in the conversation, with the
-/// tool's arguments, resolved through the offer recorded last (the newest message's or the latest
-/// search's, AI-30). The error is the call's result when it cannot run, so it neither asks nor
-/// runs: arguments that cannot be read, a name the conversation has no tool of, a server that was
-/// deleted, or arguments that do not match the tool's input schema. The approval card
-/// (`mcp_proxy_info`) and the run (`ai_tool_run`) both resolve here.
-pub fn proxy_call(
+/// A resolved MCP tool call: the offered tool and its parsed JSON object arguments.
+pub type ResolvedCall = (OfferedTool, Map<String, Value>);
+
+/// Resolves an MCP tool call — either a direct `mcp__*` call (AI-30) or a deferred `call_mcp_tool`
+/// call (AI-45) — through the offer recorded last (the newest message's or the latest search's).
+///
+/// Returns `None` when `name` is neither kind of MCP call. `Some(Err(refusal))` is the call's
+/// result when it cannot run, so it neither asks nor runs: arguments that cannot be read, a name
+/// the conversation has no tool of, a deleted server, or arguments that do not match a deferred
+/// tool's input schema. The approval card (`mcp_proxy_info`), the judge (`judge_state`), and the
+/// run (`ai_tool_run`) all resolve here.
+pub fn resolve_call(
     v: &Vault,
     mcp: &McpManager,
     conversation_id: &str,
+    name: &str,
     arguments: &str,
-) -> Result<(OfferedTool, Map<String, Value>), String> {
-    let call = deferred::parse_call(arguments)?;
-    let Some(tool) = mcp.offered(conversation_id, &call.tool) else {
-        return Err(format!(
-            "The call did not run: this conversation has no MCP tool named \"{}\" now. Call {} to \
-             find the tools you can call.",
-            call.tool,
-            tools::SEARCH_TOOLS
-        ));
-    };
-    if !crate::mcp::server_exists(v, &tool.server_id) {
-        return Err(crate::mcp::server_gone(&tool.server_name));
+) -> Option<Result<ResolvedCall, String>> {
+    if name.starts_with(MCP_PREFIX) {
+        let Some(tool) = mcp.offered(conversation_id, name) else {
+            return Some(Err(format!(
+                "There is no MCP tool named \"{name}\": no MCP server offers it now."
+            )));
+        };
+        if let Err(refusal) = check_server(v, &tool) {
+            return Some(Err(refusal));
+        }
+        return Some(parse::<Map<String, Value>>(arguments).map(|args| (tool, args)));
     }
-    let problems = deferred::check_arguments(&tool.tool.input_schema, &call.arguments);
-    if !problems.is_empty() {
-        return Err(tools::truncate_result(&deferred::mismatch_result(
-            &tool.name,
-            &problems,
-            &tool.tool.input_schema,
-        )));
+    if name == tools::CALL_MCP_TOOL {
+        let call = match deferred::parse_call(arguments) {
+            Ok(call) => call,
+            Err(e) => return Some(Err(e)),
+        };
+        let Some(tool) = mcp.offered(conversation_id, &call.tool) else {
+            return Some(Err(format!(
+                "The call did not run: this conversation has no MCP tool named \"{}\" now. Call \
+                 {} to find the tools you can call.",
+                call.tool,
+                tools::SEARCH_TOOLS
+            )));
+        };
+        if let Err(refusal) = check_server(v, &tool) {
+            return Some(Err(refusal));
+        }
+        let problems = deferred::check_arguments(&tool.tool.input_schema, &call.arguments);
+        if !problems.is_empty() {
+            return Some(Err(tools::truncate_result(&deferred::mismatch_result(
+                &tool.name,
+                &problems,
+                &tool.tool.input_schema,
+            ))));
+        }
+        return Some(Ok((tool, call.arguments)));
     }
-    Ok((tool, call.arguments))
+    None
+}
+
+/// Refuses a call whose server item was deleted elsewhere before a request stopped it here.
+fn check_server(v: &Vault, tool: &OfferedTool) -> Result<(), String> {
+    if crate::mcp::server_exists(v, &tool.server_id) {
+        Ok(())
+    } else {
+        Err(crate::mcp::server_gone(&tool.server_name))
+    }
 }
 
 /// What the tab's tools run over while it is open (AI-08).

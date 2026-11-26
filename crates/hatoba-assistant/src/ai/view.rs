@@ -3,16 +3,12 @@
 
 use hatoba_ai::AiError;
 use hatoba_ai::chat::StreamEvent;
-use hatoba_ai::entry::{AiEntry, EntryBody, Finish, ToolStatus};
+use hatoba_ai::entry::{AiEntry, EntryBody};
 use hatoba_core::Vault;
 use hatoba_core::model::AiConversation;
 
 use super::judge::auto_view;
-use super::request::effort_view;
-use crate::dto::{
-    AiConversationView, AiEntryView, AiFinish, AiToolCall, AiToolStatus, AiTurnEvent, AiUsage,
-    QuickTarget,
-};
+use crate::dto::{AiConversationView, AiEntryView, AiToolCall, AiTurnEvent, AiUsage, QuickTarget};
 
 pub fn conversation_view(v: &Vault, id: &str, c: &AiConversation) -> AiConversationView {
     conversation_view_at(id, c, v.ai_last_activity(id))
@@ -38,7 +34,7 @@ pub fn conversation_view_at(
         local: c.local.clone(),
         pinned: c.pinned,
         context_start: c.context_start.clone(),
-        effort: c.effort.map(effort_view),
+        effort: c.effort.map(Into::into),
         created_at: c.created_at,
         updated_at: c.updated_at,
         last_activity,
@@ -71,7 +67,7 @@ pub fn entry_view(entry_id: &str, entry: &AiEntry) -> AiEntryView {
                     arguments: c.arguments.clone(),
                 })
                 .collect(),
-            finish: finish_view(a.finish),
+            finish: a.finish.into(),
             usage: a.usage.map(|u| AiUsage {
                 input_tokens: u.input_tokens,
                 output_tokens: u.output_tokens,
@@ -87,7 +83,7 @@ pub fn entry_view(entry_id: &str, entry: &AiEntry) -> AiEntryView {
             entry_id,
             created_at,
             tool_call_id: tool_call_id.clone(),
-            status: status_view(*status),
+            status: (*status).into(),
             content: content.clone(),
             auto: auto.as_ref().map(auto_view),
         },
@@ -96,33 +92,6 @@ pub fn entry_view(entry_id: &str, entry: &AiEntry) -> AiEntryView {
             created_at,
             text: text.clone(),
         },
-    }
-}
-
-pub(super) fn finish_view(finish: Finish) -> AiFinish {
-    match finish {
-        Finish::Stop => AiFinish::Stop,
-        Finish::ToolCalls => AiFinish::ToolCalls,
-        Finish::Length => AiFinish::Length,
-        Finish::Refused => AiFinish::Refused,
-    }
-}
-
-fn status_view(status: ToolStatus) -> AiToolStatus {
-    match status {
-        ToolStatus::Ok => AiToolStatus::Ok,
-        ToolStatus::Error => AiToolStatus::Error,
-        ToolStatus::Rejected => AiToolStatus::Rejected,
-        ToolStatus::Cancelled => AiToolStatus::Cancelled,
-    }
-}
-
-pub(super) fn core_status(status: AiToolStatus) -> ToolStatus {
-    match status {
-        AiToolStatus::Ok => ToolStatus::Ok,
-        AiToolStatus::Error => ToolStatus::Error,
-        AiToolStatus::Rejected => ToolStatus::Rejected,
-        AiToolStatus::Cancelled => ToolStatus::Cancelled,
     }
 }
 

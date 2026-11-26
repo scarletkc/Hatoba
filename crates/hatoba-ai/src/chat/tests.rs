@@ -3480,3 +3480,496 @@ fn progress_updates_are_only_the_thinking_right_before_a_tool_call() {
         ("", "Checking /var.")
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// Refusal retry table across all three chat protocols
+// ---------------------------------------------------------------------------------------------
+
+const RESPONSES_TEXT: &str = include_str!("../../tests/fixtures/responses_text.sse");
+
+struct Sequence(std::sync::Mutex<std::collections::VecDeque<ResponseTemplate>>);
+
+impl wiremock::Respond for Sequence {
+    fn respond(&self, _request: &wiremock::Request) -> ResponseTemplate {
+        self.0
+            .lock()
+            .unwrap()
+            .pop_front()
+            .expect("unexpected extra retry request")
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum ReqShape {
+    ChatCompletions {
+        effort: bool,
+        stream_options: bool,
+    },
+    Anthropic {
+        replayed_raw: bool,
+        display: Option<&'static str>,
+        beta: bool,
+        effort: bool,
+    },
+    Responses {
+        reasoning: bool,
+        effort: bool,
+        summary: bool,
+        include: bool,
+    },
+}
+
+fn describe_request(protocol: Protocol, req: &wiremock::Request) -> ReqShape {
+    let body: Value = serde_json::from_slice(&req.body).unwrap();
+    match protocol {
+        Protocol::ChatCompletions => ReqShape::ChatCompletions {
+            effort: body.get("reasoning_effort").is_some(),
+            stream_options: body.get("stream_options").is_some(),
+        },
+        Protocol::Anthropic => {
+            let replayed_raw = body["messages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|m| m["role"] == "assistant")
+                .flat_map(|m| m["content"].as_array().unwrap())
+                .any(|b| b["type"] == "thinking");
+            let display = match body
+                .get("thinking")
+                .and_then(|t| t.get("display"))
+                .and_then(Value::as_str)
+            {
+                Some("updates") => Some("updates"),
+                Some("summarized") => Some("summarized"),
+                Some(other) => panic!("unexpected Anthropic thinking.display: {other}"),
+                None => None,
+            };
+            ReqShape::Anthropic {
+                replayed_raw,
+                display,
+                beta: req.headers.get("anthropic-beta").is_some(),
+                effort: body
+                    .get("output_config")
+                    .and_then(|o| o.get("effort"))
+                    .is_some(),
+            }
+        }
+        Protocol::Responses => ReqShape::Responses {
+            reasoning: body.get("reasoning").is_some(),
+            effort: body
+                .get("reasoning")
+                .and_then(|r| r.get("effort"))
+                .is_some(),
+            summary: body
+                .get("reasoning")
+                .and_then(|r| r.get("summary"))
+                .is_some(),
+            include: body.get("include").is_some(),
+        },
+        Protocol::SystemOne => unreachable!(),
+    }
+}
+
+fn error_response(protocol: Protocol, status: u16, message: &str) -> ResponseTemplate {
+    let body = match protocol {
+        Protocol::Anthropic => json!({
+            "type": "error",
+            "error": {"type": "invalid_request_error", "message": message}
+        }),
+        _ => json!({"error": {"message": message}}),
+    };
+    ResponseTemplate::new(status).set_body_json(body)
+}
+
+#[tokio::test]
+async fn refusal_table_produces_expected_retry_requests() {
+    struct Case<'a> {
+        name: &'static str,
+        protocol: Protocol,
+        model: &'static str,
+        effort: Option<Effort>,
+        refusals: &'static [(u16, &'static str)],
+        succeeds_after: bool,
+        expected_effort_ignored: usize,
+        expected: &'a [ReqShape],
+    }
+
+    use Protocol::{Anthropic, ChatCompletions, Responses};
+    const fn cc(effort: bool, stream_options: bool) -> ReqShape {
+        ReqShape::ChatCompletions {
+            effort,
+            stream_options,
+        }
+    }
+    const fn ant(
+        replayed_raw: bool,
+        display: Option<&'static str>,
+        beta: bool,
+        effort: bool,
+    ) -> ReqShape {
+        ReqShape::Anthropic {
+            replayed_raw,
+            display,
+            beta,
+            effort,
+        }
+    }
+    const fn resp(reasoning: bool, effort: bool, summary: bool, include: bool) -> ReqShape {
+        ReqShape::Responses {
+            reasoning,
+            effort,
+            summary,
+            include,
+        }
+    }
+
+    let cases = [
+        // Chat Completions
+        Case {
+            name: "cc_effort_refusal",
+            protocol: ChatCompletions,
+            model: "gpt-4.1",
+            effort: Some(High),
+            refusals: &[(400, "Unknown parameter: 'reasoning_effort'")],
+            succeeds_after: true,
+            expected_effort_ignored: 1,
+            expected: &[cc(true, true), cc(false, true)],
+        },
+        Case {
+            name: "cc_stream_options_refusal",
+            protocol: ChatCompletions,
+            model: "gpt-4.1",
+            effort: Some(High),
+            refusals: &[(400, "Unrecognized request argument: stream_options")],
+            succeeds_after: true,
+            expected_effort_ignored: 0,
+            expected: &[cc(true, true), cc(true, false)],
+        },
+        Case {
+            name: "cc_effort_then_stream_options",
+            protocol: ChatCompletions,
+            model: "gpt-4.1",
+            effort: Some(High),
+            refusals: &[
+                (400, "reasoning_effort is unsupported"),
+                (422, "extra field: include_usage"),
+            ],
+            succeeds_after: true,
+            expected_effort_ignored: 1,
+            expected: &[cc(true, true), cc(false, true), cc(false, false)],
+        },
+        Case {
+            name: "cc_stream_options_then_effort",
+            protocol: ChatCompletions,
+            model: "gpt-4.1",
+            effort: Some(High),
+            refusals: &[
+                (400, "stream_options not supported"),
+                (400, "reasoning_effort unsupported"),
+            ],
+            succeeds_after: true,
+            expected_effort_ignored: 1,
+            expected: &[cc(true, true), cc(true, false), cc(false, false)],
+        },
+        Case {
+            name: "cc_unmatched_400_does_not_retry",
+            protocol: ChatCompletions,
+            model: "gpt-4.1",
+            effort: Some(High),
+            refusals: &[(400, "unknown model")],
+            succeeds_after: false,
+            expected_effort_ignored: 0,
+            expected: &[cc(true, true)],
+        },
+        Case {
+            name: "cc_500_does_not_retry",
+            protocol: ChatCompletions,
+            model: "gpt-4.1",
+            effort: Some(High),
+            refusals: &[(500, "reasoning_effort server error")],
+            succeeds_after: false,
+            expected_effort_ignored: 0,
+            expected: &[cc(true, true)],
+        },
+        // Anthropic
+        Case {
+            name: "anthropic_only_replayed_raw_keeps_updates_and_effort",
+            protocol: Anthropic,
+            model: "claude-opus-5-5@table-raw-only",
+            effort: Some(High),
+            refusals: &[(
+                400,
+                "messages.1.content.0: Invalid `signature` in `thinking` block",
+            )],
+            succeeds_after: true,
+            expected_effort_ignored: 0,
+            expected: &[
+                ant(true, Some("updates"), true, true),
+                ant(false, Some("updates"), true, true),
+            ],
+        },
+        Case {
+            name: "anthropic_updates_refusal_keeps_raw_and_effort",
+            protocol: Anthropic,
+            model: "claude-opus-5-5@table-updates",
+            effort: Some(High),
+            refusals: &[(400, "Unexpected value for `anthropic-beta` header")],
+            succeeds_after: true,
+            expected_effort_ignored: 0,
+            expected: &[
+                ant(true, Some("updates"), true, true),
+                ant(true, Some("summarized"), false, true),
+            ],
+        },
+        Case {
+            name: "anthropic_updates_then_effort",
+            protocol: Anthropic,
+            model: "claude-opus-5-5@table-updates-effort",
+            effort: Some(High),
+            refusals: &[
+                (400, "thinking.display: Input should be 'summarized'"),
+                (400, "output_config.effort is not supported"),
+            ],
+            succeeds_after: true,
+            expected_effort_ignored: 1,
+            expected: &[
+                ant(true, Some("updates"), true, true),
+                ant(true, Some("summarized"), false, true),
+                ant(true, None, false, false),
+            ],
+        },
+        Case {
+            name: "anthropic_updates_then_raw",
+            protocol: Anthropic,
+            model: "claude-opus-5-5@table-updates-raw",
+            effort: Some(High),
+            refusals: &[
+                (400, "Unexpected value for `anthropic-beta` header"),
+                (400, "Invalid `signature` in `thinking` block"),
+            ],
+            succeeds_after: true,
+            expected_effort_ignored: 0,
+            expected: &[
+                ant(true, Some("updates"), true, true),
+                ant(true, Some("summarized"), false, true),
+                ant(false, Some("summarized"), false, true),
+            ],
+        },
+        Case {
+            name: "anthropic_updates_then_effort_then_raw",
+            protocol: Anthropic,
+            model: "claude-opus-5-5@table-all-three",
+            effort: Some(High),
+            refusals: &[
+                (400, "unexpected beta header"),
+                (400, "output_config unsupported"),
+                (400, "thinking block invalid"),
+            ],
+            succeeds_after: true,
+            expected_effort_ignored: 1,
+            expected: &[
+                ant(true, Some("updates"), true, true),
+                ant(true, Some("summarized"), false, true),
+                ant(true, None, false, false),
+                ant(false, None, false, false),
+            ],
+        },
+        Case {
+            name: "anthropic_default_effort_refusal_emits_no_effort_ignored",
+            protocol: Anthropic,
+            model: "claude-opus-5-5@table-default",
+            effort: None,
+            refusals: &[
+                (400, "unexpected beta header"),
+                (400, "adaptive thinking not supported"),
+            ],
+            succeeds_after: true,
+            expected_effort_ignored: 0,
+            expected: &[
+                ant(true, Some("updates"), true, false),
+                ant(true, Some("summarized"), false, false),
+                ant(true, None, false, false),
+            ],
+        },
+        Case {
+            name: "anthropic_401_does_not_retry",
+            protocol: Anthropic,
+            model: "claude-opus-5-5@table-401",
+            effort: Some(High),
+            refusals: &[(401, "invalid x-api-key")],
+            succeeds_after: false,
+            expected_effort_ignored: 0,
+            expected: &[ant(true, Some("updates"), true, true)],
+        },
+        Case {
+            name: "anthropic_404_does_not_retry",
+            protocol: Anthropic,
+            model: "claude-opus-5-5@table-404",
+            effort: Some(High),
+            refusals: &[(404, "model not found")],
+            succeeds_after: false,
+            expected_effort_ignored: 0,
+            expected: &[ant(true, Some("updates"), true, true)],
+        },
+        Case {
+            name: "anthropic_413_does_not_retry",
+            protocol: Anthropic,
+            model: "claude-opus-5-5@table-413",
+            effort: Some(High),
+            refusals: &[(413, "request too large")],
+            succeeds_after: false,
+            expected_effort_ignored: 0,
+            expected: &[ant(true, Some("updates"), true, true)],
+        },
+        Case {
+            name: "anthropic_429_does_not_retry",
+            protocol: Anthropic,
+            model: "claude-opus-5-5@table-429",
+            effort: Some(High),
+            refusals: &[(429, "rate limit exceeded")],
+            succeeds_after: false,
+            expected_effort_ignored: 0,
+            expected: &[ant(true, Some("updates"), true, true)],
+        },
+        // Responses
+        Case {
+            name: "responses_summary_refusal",
+            protocol: Responses,
+            model: "gpt-5",
+            effort: Some(High),
+            refusals: &[(400, "reasoning.summary requires verified organization")],
+            succeeds_after: true,
+            expected_effort_ignored: 0,
+            expected: &[resp(true, true, true, true), resp(true, true, false, true)],
+        },
+        Case {
+            name: "responses_reasoning_refusal_explicit_effort",
+            protocol: Responses,
+            model: "gpt-5",
+            effort: Some(High),
+            refusals: &[(400, "reasoning is not supported by this model")],
+            succeeds_after: true,
+            expected_effort_ignored: 1,
+            expected: &[
+                resp(true, true, true, true),
+                resp(false, false, false, false),
+            ],
+        },
+        Case {
+            name: "responses_encrypted_refusal_default_effort",
+            protocol: Responses,
+            model: "gpt-5",
+            effort: None,
+            refusals: &[(400, "encrypted_content is unsupported")],
+            succeeds_after: true,
+            expected_effort_ignored: 0,
+            expected: &[
+                resp(true, false, true, true),
+                resp(false, false, false, false),
+            ],
+        },
+        Case {
+            name: "responses_summary_then_reasoning",
+            protocol: Responses,
+            model: "gpt-5",
+            effort: Some(High),
+            refusals: &[
+                (400, "reasoning.summary is not verified"),
+                (400, "reasoning is unsupported"),
+            ],
+            succeeds_after: true,
+            expected_effort_ignored: 1,
+            expected: &[
+                resp(true, true, true, true),
+                resp(true, true, false, true),
+                resp(false, false, false, false),
+            ],
+        },
+        Case {
+            name: "responses_401_does_not_retry",
+            protocol: Responses,
+            model: "gpt-5",
+            effort: Some(High),
+            refusals: &[(401, "invalid api key")],
+            succeeds_after: false,
+            expected_effort_ignored: 0,
+            expected: &[resp(true, true, true, true)],
+        },
+        Case {
+            name: "responses_500_does_not_retry",
+            protocol: Responses,
+            model: "gpt-5",
+            effort: Some(High),
+            refusals: &[(500, "reasoning.summary internal error")],
+            succeeds_after: false,
+            expected_effort_ignored: 0,
+            expected: &[resp(true, true, true, true)],
+        },
+    ];
+
+    for case in cases {
+        let server = MockServer::start().await;
+        let mut queue: std::collections::VecDeque<_> = case
+            .refusals
+            .iter()
+            .map(|(status, msg)| error_response(case.protocol, *status, msg))
+            .collect();
+        if case.succeeds_after {
+            let ok_body = match case.protocol {
+                ChatCompletions => OPENAI_TEXT,
+                Anthropic => ANTHROPIC_TOOL,
+                Responses => RESPONSES_TEXT,
+                Protocol::SystemOne => unreachable!(),
+            };
+            queue.push_back(sse(ok_body));
+        }
+        Mock::given(method("POST"))
+            .respond_with(Sequence(std::sync::Mutex::new(queue)))
+            .mount(&server)
+            .await;
+
+        let model = ModelSpec::new(case.model);
+        let tools = terminal_tools();
+        let entries = match case.protocol {
+            Anthropic => vec![
+                AiEntry::user(1, "First"),
+                AiEntry::assistant(
+                    2,
+                    AssistantEntry {
+                        provider_id: PROVIDER_ID.into(),
+                        model_id: case.model.into(),
+                        text: "Earlier.".into(),
+                        raw: json!([
+                            {"type": "thinking", "thinking": "Step 1", "signature": "sig_1"},
+                            {"type": "text", "text": "Earlier."}
+                        ]),
+                        finish: Finish::Stop,
+                        ..AssistantEntry::default()
+                    },
+                ),
+                AiEntry::user(3, "Next?"),
+            ],
+            _ => vec![AiEntry::user(1, "How full is the disk?")],
+        };
+        let req = with_effort(request(&model, &entries, &tools), case.effort);
+        let (result, events) = run(&provider(&server, case.protocol), &req).await;
+        assert_eq!(
+            result.is_ok(),
+            case.succeeds_after,
+            "case {}: result={result:?}",
+            case.name
+        );
+        let ignored = events
+            .iter()
+            .filter(|e| **e == StreamEvent::EffortIgnored)
+            .count();
+        assert_eq!(ignored, case.expected_effort_ignored, "case {}", case.name);
+
+        let received = server.received_requests().await.unwrap();
+        let actual: Vec<ReqShape> = received
+            .iter()
+            .map(|r| describe_request(case.protocol, r))
+            .collect();
+        assert_eq!(actual, case.expected, "case {}", case.name);
+    }
+}

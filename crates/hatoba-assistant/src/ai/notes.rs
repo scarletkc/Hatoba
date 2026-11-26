@@ -21,7 +21,7 @@ use super::places::{
 };
 use super::request::{builtin_tools, resolve_model};
 use super::{files, memory};
-use crate::dto::{AiPermissionMode, AiTurnContext};
+use crate::dto::AiTurnContext;
 use crate::mcp::Offer;
 
 /// AI-45: whether a conversation's MCP tools are deferred, which they are from the first message
@@ -267,7 +267,7 @@ pub(super) fn notes_before(
     reverts: &[(String, files::ChangeMeta)],
 ) -> String {
     let mut notes = String::new();
-    let mode = permission_mode(context.permission_mode);
+    let mode = context.permission_mode.into();
     let permission = if noted_permission(earlier) == Some(mode) {
         String::new()
     } else {
@@ -337,17 +337,6 @@ pub(super) fn notes_before(
     }
     notes.push_str(&screen_note(context, host_now));
     notes
-}
-
-/// A conversation's permission mode on this device (AI-16) as a `permission_mode` note names it.
-/// The system prompt names no mode of its own, since the default is the user's setting, so the
-/// conversation's first message names it, whichever it is.
-fn permission_mode(mode: AiPermissionMode) -> PermissionMode {
-    match mode {
-        AiPermissionMode::Manual => PermissionMode::Manual,
-        AiPermissionMode::Auto => PermissionMode::Auto,
-        AiPermissionMode::Bypass => PermissionMode::Bypass,
-    }
 }
 
 /// AI-16: the permission mode the model was last told of in `entries`, a conversation's entries

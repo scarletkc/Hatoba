@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use hatoba_ai::entry::{AiEntry, AutoDecision, AutoVerdict, EntryBody, ToolStatus, pair_results};
+use hatoba_ai::entry::{AiEntry, AutoVerdict, EntryBody, ToolStatus, pair_results};
 use hatoba_ai::judge::{self, JudgeCall, JudgeFailure, JudgeMessage, JudgeState, Verdict};
 use hatoba_ai::mcp::deferred;
 use hatoba_ai::tools;
@@ -18,11 +18,11 @@ use serde_json::{Map, Value};
 use super::blocks::leading_blocks;
 use super::calls::{calls_of, open_call_at};
 use super::entries::{Entries, find_conversation};
-use super::job::proxy_call;
+use super::job::resolve_call;
 use super::places::{host_name, local_name, saved_host, target_name};
 use super::request::{bytes_prefix, resolve_model};
 use super::{AiManager, MCP_PREFIX, guard, unlocked};
-use crate::dto::{AiAutoVerdict, AiJudgeAnswer, AiJudgeDecision, AiJudgeSampleOutcome, AiModelRef};
+use crate::dto::{AiAutoVerdict, AiJudgeAnswer, AiJudgeSampleOutcome, AiModelRef};
 use crate::error::{AppError, AppResult};
 use crate::mcp::McpManager;
 
@@ -166,7 +166,7 @@ impl AiManager {
             .into_iter()
             .map(|o| AiJudgeSampleOutcome {
                 name: o.name,
-                expected: decision_view(o.expected),
+                expected: o.expected.into(),
                 verdict: auto_view(&o.verdict.to_auto(&chosen.provider_id, &chosen.model_id)),
             })
             .collect())
@@ -268,15 +268,15 @@ pub(super) fn judge_state(
     earlier_calls.reverse();
     let call = &calls[index];
     let mut judged = shown_call(&call.name, &call.arguments);
+    // A direct call shows its tool's details even when it cannot run; a deferred call is judged as
+    // the tool it resolves to.
     let offered = if call.name.starts_with(MCP_PREFIX) {
         mcp.offered(conversation_id, &call.name)
-    } else if call.name == tools::CALL_MCP_TOOL {
-        proxy_call(v, mcp, conversation_id, &call.arguments)
-            .ok()
-            .map(|(tool, arguments)| {
-                judged = JudgeCall::new(tool.name.clone(), Value::Object(arguments));
-                tool
-            })
+    } else if let Some(Ok((tool, arguments))) =
+        resolve_call(v, mcp, conversation_id, &call.name, &call.arguments)
+    {
+        judged = JudgeCall::new(tool.name.clone(), Value::Object(arguments));
+        Some(tool)
     } else {
         None
     };
@@ -400,7 +400,7 @@ pub(super) fn auto_view(verdict: &AutoVerdict) -> AiAutoVerdict {
     AiAutoVerdict {
         provider_id: verdict.provider_id.clone(),
         model_id: verdict.model_id.clone(),
-        decision: decision_view(verdict.decision),
+        decision: verdict.decision.into(),
         answers: answers
             .into_iter()
             .map(|(question, probability)| AiJudgeAnswer {
@@ -410,14 +410,6 @@ pub(super) fn auto_view(verdict: &AutoVerdict) -> AiAutoVerdict {
             .collect(),
         concerns: verdict.concerns.clone(),
         failure: verdict.failure.clone(),
-    }
-}
-
-/// A decision of the judge, for the panel (AI-47).
-fn decision_view(decision: AutoDecision) -> AiJudgeDecision {
-    match decision {
-        AutoDecision::Run => AiJudgeDecision::Run,
-        AutoDecision::Ask => AiJudgeDecision::Ask,
     }
 }
 

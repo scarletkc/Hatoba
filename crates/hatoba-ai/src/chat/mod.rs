@@ -70,19 +70,15 @@ pub(crate) mod tests_support {
     }
 }
 
-use std::collections::HashMap;
-use std::sync::{LazyLock, Mutex, PoisonError};
-
 use futures::StreamExt;
 use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 
-use self::anthropic::AnthropicStream;
-use self::openai::ChatCompletionsStream;
-use self::responses::ResponsesStream;
+use self::anthropic::AnthropicAdapter;
+use self::openai::ChatCompletionsAdapter;
+use self::responses::{ResponsesAdapter, ResponsesStream, attach_request_id, chatgpt_request_id};
 use self::sse::{SseEvent, SseParser};
-use crate::chatgpt;
 use crate::entry::{AiEntry, AssistantEntry, Finish, ToolCall, Usage};
 use crate::error::AiError;
 use crate::net;
@@ -187,6 +183,67 @@ pub(crate) trait Assembler {
     fn finish(self, emit: &mut (dyn FnMut(StreamEvent) + Send)) -> Result<Assembled, AiError>;
 }
 
+/// Protocol-specific request building, refusal retries, stream assembly, and response hooks for
+/// [`run_adapter`].
+pub(super) trait ProtocolAdapter {
+    type Stream: Assembler;
+    const PATH: &'static str;
+
+    fn build(&self, provider: &ProviderConfig, req: &ChatRequest<'_>) -> request::Built;
+
+    /// Adjusts retry state after a non-2xx refusal and returns whether [`run_adapter`] should send
+    /// the request again.
+    fn retry(
+        &mut self,
+        built: &request::Built,
+        err: &AiError,
+        on_event: &mut (dyn FnMut(StreamEvent) + Send),
+    ) -> bool;
+
+    fn stream(&self, built: &request::Built) -> Self::Stream;
+
+    fn request_id(&self, _provider: &ProviderConfig, _headers: &HeaderMap) -> Option<String> {
+        None
+    }
+
+    fn finish_stream(
+        &self,
+        _built: &request::Built,
+        result: Result<Assembled, AiError>,
+        _request_id: Option<String>,
+    ) -> Result<Assembled, AiError> {
+        result
+    }
+}
+
+/// Runs one protocol adapter through its refusal-retry loop and assembles the streamed response.
+async fn run_adapter<P: ProtocolAdapter>(
+    mut adapter: P,
+    http: &reqwest::Client,
+    provider: &ProviderConfig,
+    base: &url::Url,
+    req: &ChatRequest<'_>,
+    cancel: &CancellationToken,
+    on_event: &mut (dyn FnMut(StreamEvent) + Send),
+) -> Result<AssistantEntry, AiError> {
+    let url = net::endpoint(base, P::PATH);
+    loop {
+        let built = adapter.build(provider, req);
+        let (response, request_chars) = post(http, provider, &url, &built, cancel).await?;
+        if !response.status().is_success() {
+            let err = provider.error(response, cancel).await;
+            if adapter.retry(&built, &err, on_event) {
+                continue;
+            }
+            return Err(err);
+        }
+        let request_id = adapter.request_id(provider, response.headers());
+        let result = consume(response, adapter.stream(&built), cancel, on_event).await;
+        let assembled = adapter.finish_stream(&built, result, request_id)?;
+        return Ok(into_entry(req, assembled, request_chars, on_event));
+    }
+}
+
 /// Streams one response and returns the assembled assistant entry: `provider_id` and `model_id`
 /// from the request, `raw` with unknown fields kept, `usage` (estimated from text length when the
 /// provider reported none) and `finish`.
@@ -207,113 +264,40 @@ pub async fn stream_chat(
     let base = validate_base_url(&provider.base_url)?;
     match provider.protocol {
         Protocol::ChatCompletions => {
-            let url = net::endpoint(&base, "/chat/completions");
-            let mut stream_options = true;
-            let mut with_effort = true;
-            loop {
-                let built = request::chat_completions(req, stream_options, with_effort);
-                let (response, request_chars) = post(http, provider, &url, &built, cancel).await?;
-                if !response.status().is_success() {
-                    let err = provider.error(response, cancel).await;
-                    if built.sent_effort && rejects_effort(&err) {
-                        with_effort = false;
-                        if built.effort.is_some() {
-                            on_event(StreamEvent::EffortIgnored);
-                        }
-                        continue;
-                    }
-                    if stream_options && rejects_stream_options(&err) {
-                        stream_options = false;
-                        continue;
-                    }
-                    return Err(err);
-                }
-                let assembled =
-                    consume(response, ChatCompletionsStream::new(), cancel, on_event).await?;
-                return Ok(into_entry(req, assembled, request_chars, on_event));
-            }
+            run_adapter(
+                ChatCompletionsAdapter::new(),
+                http,
+                provider,
+                &base,
+                req,
+                cancel,
+                on_event,
+            )
+            .await
         }
         Protocol::Anthropic => {
-            let url = net::endpoint(&base, "/v1/messages");
-            let mut allow_raw = true;
-            let mut with_effort = true;
-            let updates_key = (provider.base_url.clone(), req.model.id.clone());
-            let mut with_updates = !refuses_updates(&updates_key);
-            // This request is the retry without progress updates, so a complete answer to it
-            // says they were what the provider refused. A failure says nothing either way, and
-            // they stay off for the rest of this call.
-            let mut confirming = false;
-            loop {
-                let built = request::anthropic(req, allow_raw, with_effort, with_updates);
-                let (response, request_chars) = post(http, provider, &url, &built, cancel).await?;
-                if !response.status().is_success() {
-                    let err = provider.error(response, cancel).await;
-                    confirming = false;
-                    // Replayed thinking that no longer binds (after the system prompt or the
-                    // tools changed, say) is no refusal of the display: rebuilding the entries
-                    // keeps the progress updates.
-                    if built.used_raw && rejects_only_replayed_raw(&err) {
-                        log_retry(&err, "replayed blocks");
-                        allow_raw = false;
-                        continue;
-                    }
-                    if built.beta.is_some() && may_refuse_updates(&err) {
-                        log_retry(&err, "progress updates");
-                        with_updates = false;
-                        confirming = true;
-                        continue;
-                    }
-                    if built.sent_effort && rejects_effort(&err) {
-                        log_retry(&err, "thinking level");
-                        with_effort = false;
-                        if built.effort.is_some() {
-                            on_event(StreamEvent::EffortIgnored);
-                        }
-                        continue;
-                    }
-                    if built.used_raw && rejects_replayed_raw(&err) {
-                        log_retry(&err, "replayed blocks");
-                        allow_raw = false;
-                        continue;
-                    }
-                    return Err(err);
-                }
-                let stream = AnthropicStream::new(built.beta.is_some());
-                let assembled = consume(response, stream, cancel, on_event).await?;
-                if confirming {
-                    note_updates_refused(&updates_key);
-                } else if built.beta.is_some() {
-                    note_updates_accepted(&updates_key);
-                }
-                return Ok(into_entry(req, assembled, request_chars, on_event));
-            }
+            run_adapter(
+                AnthropicAdapter::new(provider, req),
+                http,
+                provider,
+                &base,
+                req,
+                cancel,
+                on_event,
+            )
+            .await
         }
         Protocol::Responses => {
-            let url = net::endpoint(&base, "/responses");
-            let mut with_summary = true;
-            let mut with_effort = true;
-            loop {
-                let namespace = provider.is_chatgpt().then_some(chatgpt::NAMESPACE);
-                let built = request::responses(req, with_effort, with_summary, namespace);
-                let (response, request_chars) = post(http, provider, &url, &built, cancel).await?;
-                if !response.status().is_success() {
-                    let err = provider.error(response, cancel).await;
-                    if built.sent_summary && rejects_summary(&err) {
-                        with_summary = false;
-                        continue;
-                    }
-                    if built.sent_effort && rejects_reasoning(&err) {
-                        with_effort = false;
-                        if built.effort.is_some() {
-                            on_event(StreamEvent::EffortIgnored);
-                        }
-                        continue;
-                    }
-                    return Err(err);
-                }
-                let assembled = consume_responses(provider, response, cancel, on_event).await?;
-                return Ok(into_entry(req, assembled, request_chars, on_event));
-            }
+            run_adapter(
+                ResponsesAdapter::new(),
+                http,
+                provider,
+                &base,
+                req,
+                cancel,
+                on_event,
+            )
+            .await
         }
         Protocol::SystemOne => Err(AiError::Config(CANNOT_CHAT.into())),
     }
@@ -396,46 +380,13 @@ pub(crate) fn rejects_summary(err: &AiError) -> bool {
 /// Whether an Anthropic error may be a refusal of `display: "updates"` or its beta header: any
 /// 4xx but those about the key, the URL, the size or the rate. Vendors and gateways word that
 /// refusal in many ways, so the request is sent once more with summarized display at the same
-/// level, and a refusal counts towards [`UPDATES_STRIKES`] only when that one succeeds.
+/// level, and a refusal counts towards [`anthropic::UPDATES_STRIKES`] only when that one succeeds.
 pub(crate) fn may_refuse_updates(err: &AiError) -> bool {
     matches!(
         err,
         AiError::Http { status, .. }
             if (400..500).contains(status) && !matches!(status, 401 | 404 | 408 | 413 | 429)
     )
-}
-
-/// A base URL and a model ID, which a gateway may route to different upstreams.
-type UpdatesKey = (String, String);
-
-/// How many calls in a row must find `display: "updates"` refused, each time confirmed by the
-/// summarized retry, before a base URL and model get the summarized display straight away: one
-/// could be a passing error.
-const UPDATES_STRIKES: u8 = 2;
-
-/// Confirmed refusals of `display: "updates"` in a row since the app started.
-static REFUSED_UPDATES: LazyLock<Mutex<HashMap<UpdatesKey, u8>>> = LazyLock::new(Mutex::default);
-
-fn refused_updates() -> std::sync::MutexGuard<'static, HashMap<UpdatesKey, u8>> {
-    REFUSED_UPDATES
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-}
-
-fn refuses_updates(key: &UpdatesKey) -> bool {
-    refused_updates()
-        .get(key)
-        .is_some_and(|strikes| *strikes >= UPDATES_STRIKES)
-}
-
-fn note_updates_refused(key: &UpdatesKey) {
-    let mut refused = refused_updates();
-    let strikes = refused.entry(key.clone()).or_default();
-    *strikes = strikes.saturating_add(1);
-}
-
-fn note_updates_accepted(key: &UpdatesKey) {
-    refused_updates().remove(key);
 }
 
 /// Whether an Anthropic error is the 400 that newer Claude models return when replayed thinking
@@ -465,12 +416,6 @@ pub(crate) fn rejects_only_replayed_raw(err: &AiError) -> bool {
         && !rejects_effort(err)
         && !matches!(err, AiError::Http { message, .. }
             if message.to_ascii_lowercase().contains("beta"))
-}
-
-/// Logs that an Anthropic request is sent once more without `without`, with the refusal's status
-/// and not the provider's message.
-fn log_retry(err: &AiError, without: &str) {
-    tracing::info!(status = ?err.status(), without, "AI request retried");
 }
 
 async fn post(
@@ -574,22 +519,9 @@ async fn consume_responses(
     cancel: &CancellationToken,
     on_event: &mut (dyn FnMut(StreamEvent) + Send),
 ) -> Result<Assembled, AiError> {
-    let request_id = provider
-        .is_chatgpt()
-        .then(|| {
-            response
-                .headers()
-                .get("x-request-id")?
-                .to_str()
-                .ok()
-                .map(str::to_owned)
-        })
-        .flatten();
-    let mut result = consume(response, ResponsesStream::new(), cancel, on_event).await;
-    if let (Err(AiError::Http { message, .. }), Some(id)) = (&mut result, request_id) {
-        message.push_str(&format!(" (request ID {id})"));
-    }
-    result
+    let request_id = chatgpt_request_id(provider, response.headers());
+    let result = consume(response, ResponsesStream::new(), cancel, on_event).await;
+    attach_request_id(result, request_id)
 }
 
 /// Reads a successful response through an assembler, observing `cancel` between chunks.

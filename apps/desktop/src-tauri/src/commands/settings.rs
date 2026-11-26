@@ -2,16 +2,12 @@
 //! state.
 
 use hatoba_core::Vault;
-use hatoba_core::model::{
-    CursorStyle, Item, RightClick as CoreRightClick, SETTINGS_ID, Settings,
-    TerminalSettings as CoreTerminal, ThemeMode,
-};
+use hatoba_core::model::{Item, SETTINGS_ID, Settings, TerminalSettings as CoreTerminal};
 use serde_json::{Map, Value};
 use tauri::{AppHandle, State};
 
 use crate::dto::{
-    CursorChoice, LocalPrefs, RightClick, SettingsPatch, SettingsView, StarPrompt,
-    TerminalSettings, TerminalSettingsPatch, ThemeChoice,
+    LocalPrefs, SettingsPatch, SettingsView, StarPrompt, TerminalSettings, TerminalSettingsPatch,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, now_ms};
@@ -28,23 +24,12 @@ pub fn settings_view(s: &Settings) -> SettingsView {
         terminal: TerminalSettings {
             font_family: s.terminal.font_family.clone(),
             font_size: s.terminal.font_size.into(),
-            theme: match s.terminal.theme {
-                ThemeMode::Light => ThemeChoice::Light,
-                ThemeMode::Dark => ThemeChoice::Dark,
-                ThemeMode::System => ThemeChoice::System,
-            },
+            theme: s.terminal.theme.into(),
             dark_scheme: s.terminal.dark_scheme.clone(),
             light_scheme: s.terminal.light_scheme.clone(),
-            cursor_style: match s.terminal.cursor_style {
-                CursorStyle::Bar => CursorChoice::Bar,
-                CursorStyle::Underline => CursorChoice::Underline,
-                CursorStyle::Block => CursorChoice::Block,
-            },
+            cursor_style: s.terminal.cursor_style.into(),
             scrollback: s.terminal.scrollback,
-            right_click: match s.terminal.right_click() {
-                CoreRightClick::Menu => RightClick::Menu,
-                CoreRightClick::CopyPaste => RightClick::CopyPaste,
-            },
+            right_click: s.terminal.right_click().into(),
             confirm_multiline_paste: s.terminal.confirm_multiline_paste(),
             suggest_commands: s.terminal.suggest_commands(),
         },
@@ -102,11 +87,7 @@ fn patch_terminal(t: &mut CoreTerminal, patch: &TerminalSettingsPatch) -> AppRes
         t.font_size = font_size as u16;
     }
     if let Some(theme) = patch.theme {
-        t.theme = match theme {
-            ThemeChoice::Light => ThemeMode::Light,
-            ThemeChoice::Dark => ThemeMode::Dark,
-            ThemeChoice::System => ThemeMode::System,
-        };
+        t.theme = theme.into();
     }
     for (field, value, stored) in [
         ("dark_scheme", &patch.dark_scheme, &mut t.dark_scheme),
@@ -120,11 +101,7 @@ fn patch_terminal(t: &mut CoreTerminal, patch: &TerminalSettingsPatch) -> AppRes
         }
     }
     if let Some(cursor_style) = patch.cursor_style {
-        t.cursor_style = match cursor_style {
-            CursorChoice::Bar => CursorStyle::Bar,
-            CursorChoice::Underline => CursorStyle::Underline,
-            CursorChoice::Block => CursorStyle::Block,
-        };
+        t.cursor_style = cursor_style.into();
     }
     if let Some(scrollback) = patch.scrollback {
         if !(100..=200_000).contains(&scrollback) {
@@ -137,10 +114,7 @@ fn patch_terminal(t: &mut CoreTerminal, patch: &TerminalSettingsPatch) -> AppRes
     }
     // A behaviour field the user never changed stays unset (`TerminalSettings::set_right_click`).
     if let Some(right_click) = patch.right_click {
-        t.set_right_click(match right_click {
-            RightClick::Menu => CoreRightClick::Menu,
-            RightClick::CopyPaste => CoreRightClick::CopyPaste,
-        });
+        t.set_right_click(right_click.into());
     }
     if let Some(confirm) = patch.confirm_multiline_paste {
         t.set_confirm_multiline_paste(confirm);
