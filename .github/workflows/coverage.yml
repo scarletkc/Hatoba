@@ -21,7 +21,7 @@ env:
 
 jobs:
   # As in CI: pull requests that change nothing the Rust jobs build or check skip the report, and
-  # manual runs make it.
+  # manual runs make it. A pull request that changes this workflow makes it too, to try the change.
   changes:
     name: Changes for coverage
     if: github.event_name == 'pull_request'
@@ -29,6 +29,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       rust: ${{ steps.changes.outputs.rust }}
+      workflow: ${{ steps.workflow.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,11 +40,13 @@ jobs:
           node-version: 22
       - id: changes
         run: node scripts/ci/changes.mjs HEAD^1
+      - id: workflow
+        run: git diff --quiet HEAD^1 HEAD -- .github/workflows/coverage.yml || echo "changed=true" >> "$GITHUB_OUTPUT"
 
   rust:
     name: Rust coverage
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.rust != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.outputs.rust != 'false' || needs.changes.outputs.workflow == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
