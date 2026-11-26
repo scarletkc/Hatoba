@@ -3,7 +3,7 @@ import type { HostEnvVar } from "@/ipc/types";
 
 /*
  * SSH-14: a host's environment variables while the host editor edits them. No React, no i18n. Rust checks the same
- * rules when the host is saved (`check_host_env` in crates/hatoba-core/src/model.rs).
+ * rules when the host is saved (`check_host_env` in crates/hatoba-core/src/model/host.rs).
  */
 
 /** The most variables a host can have. */
