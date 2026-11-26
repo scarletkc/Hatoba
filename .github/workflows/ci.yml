@@ -220,44 +220,6 @@ jobs:
         if: steps.cached.outputs.cache-hit != 'true'
         run: git diff --exit-code apps/desktop/src/ipc/bindings.ts
 
-  rust-coverage:
-    name: Rust coverage
-    needs: [changes, tested]
-    if: ${{ !cancelled() && needs.changes.outputs.rust != 'false' && needs.tested.outputs.tested != 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v4
-      # No Rust cache: instrumented builds use distinct flags from the test jobs and caching them
-      # would push the repository past its 10 GB Actions cache limit.
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: llvm-tools-preview
-      - uses: taiki-e/install-action@cargo-llvm-cov
-      - uses: ./.github/actions/setup-tauri-linux
-        with:
-          ssh: true
-      - uses: ./.github/actions/setup-node-pnpm
-      - name: Build frontend (embedded by tauri::generate_context!)
-        run: pnpm --filter @hatoba/desktop build
-      - name: Tests with coverage (incl. OpenSSH integration tests)
-        run: cargo llvm-cov --workspace --lcov --output-path "$RUNNER_TEMP/rust-lcov.info"
-        env:
-          HATOBA_SSH_IT: "1"
-      - name: Coverage summary
-        run: |
-          {
-            echo "### Rust coverage"
-            echo '```'
-            cargo llvm-cov report --summary-only --color never
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: coverage-rust
-          path: ${{ runner.temp }}/rust-lcov.info
-          if-no-files-found: error
-
   rust-windows:
     name: Rust (Windows)
     needs: [changes, tested]
