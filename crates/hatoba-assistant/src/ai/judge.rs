@@ -268,12 +268,19 @@ pub(super) fn judge_state(
     earlier_calls.reverse();
     let call = &calls[index];
     let mut judged = shown_call(&call.name, &call.arguments);
-    if let Some(Ok((tool, arguments))) =
+    // A direct call shows its tool's details even when it cannot run; a deferred call is judged as
+    // the tool it resolves to.
+    let offered = if call.name.starts_with(MCP_PREFIX) {
+        mcp.offered(conversation_id, &call.name)
+    } else if let Some(Ok((tool, arguments))) =
         resolve_call(v, mcp, conversation_id, &call.name, &call.arguments)
     {
-        if call.name == tools::CALL_MCP_TOOL {
-            judged = JudgeCall::new(tool.name.clone(), Value::Object(arguments));
-        }
+        judged = JudgeCall::new(tool.name.clone(), Value::Object(arguments));
+        Some(tool)
+    } else {
+        None
+    };
+    if let Some(tool) = offered {
         judged.server = Some(tool.server_name);
         judged.description = Some(tool.tool.description).filter(|d| !d.trim().is_empty());
         judged.annotations = annotations_of(&tool.tool.annotations);
