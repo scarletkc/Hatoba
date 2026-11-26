@@ -25,7 +25,7 @@
 //! [`forget_credentials`](SyncBackend::forget_credentials) wipes it, and stored by the shell in
 //! the OS credential store.
 
-use std::sync::{PoisonError, RwLock};
+use std::sync::RwLock;
 
 use async_trait::async_trait;
 use reqwest::{Method, StatusCode};
@@ -41,12 +41,9 @@ use crate::sync::backend::{
     RemoteDevice, RemoteItem, ServerInfo, Session, SyncBackend, VaultInit, VaultMeta,
     VaultMetaUpdate,
 };
-use crate::sync::http::{
-    build_client, error_code, is_loopback_host, map_transport, read_body, retry_after,
-};
+use crate::sync::cloudflare::{CfBody, CfClient, CfError, CfFailure, is_identifier};
 
-/// Production API base.
-pub const CLOUDFLARE_API_BASE: &str = "https://api.cloudflare.com/client/v4";
+pub use super::cloudflare::CLOUDFLARE_API_BASE;
 /// Placeholder expiry for the dummy session (year 9999).
 const FAR_FUTURE_MS: i64 = 253_402_300_799_000;
 /// Marker for "the table does not exist yet".
@@ -81,30 +78,7 @@ pub(super) const SCHEMA: [&str; 3] = [
 const NEXT_SEQ: &str = "(SELECT MAX(COALESCE((SELECT seq FROM meta WHERE id = 1), 0), \
                         COALESCE((SELECT MAX(seq) FROM items), 0)) + 1)";
 
-fn valid_identifier(s: &str) -> bool {
-    (1..=64).contains(&s.len())
-        && s.bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-}
-
 // ---- wire types -----------------------------------------------------------------------------
-
-#[derive(Deserialize)]
-struct CfError {
-    #[serde(default)]
-    code: i64,
-    #[serde(default)]
-    message: String,
-}
-
-#[derive(Deserialize)]
-struct CfEnvelope<T> {
-    #[serde(default)]
-    success: bool,
-    #[serde(default)]
-    errors: Vec<CfError>,
-    result: Option<T>,
-}
 
 #[derive(Deserialize)]
 struct StatementWire {
@@ -177,7 +151,12 @@ fn item_from_row(row: &serde_json::Map<String, Value>) -> Result<RemoteItem> {
 }
 
 /// Maps the Cloudflare error list of a failed call.
-fn map_cf_errors(status: StatusCode, errors: &[CfError], body: &[u8], retry: Option<u64>) -> Error {
+fn map_cf_errors(
+    status: StatusCode,
+    errors: &[CfError],
+    fallback_code: Option<String>,
+    retry: Option<u64>,
+) -> Error {
     if errors.iter().any(|e| e.message.contains("no such table")) {
         return Error::Server(NO_SUCH_TABLE.to_owned());
     }
@@ -194,10 +173,7 @@ fn map_cf_errors(status: StatusCode, errors: &[CfError], body: &[u8], retry: Opt
         },
         StatusCode::NOT_FOUND => Error::Server("d1 database not found".into()),
         other => {
-            let code = errors
-                .first()
-                .map(|e| e.code.to_string())
-                .or_else(|| error_code(body));
+            let code = errors.first().map(|e| e.code.to_string()).or(fallback_code);
             Error::Server(format!(
                 "http {}{}",
                 other.as_u16(),
@@ -207,87 +183,22 @@ fn map_cf_errors(status: StatusCode, errors: &[CfError], body: &[u8], retry: Opt
     }
 }
 
-/// Where the REST API lives, with the credentials for it.
-struct Api {
-    client: reqwest::Client,
-    base: String,
-    /// `None` once forgotten.
-    token: RwLock<Option<Zeroizing<String>>>,
-}
-
-impl Api {
-    fn new(base: &str, token: &str) -> Result<Self> {
-        let base = base.trim().trim_end_matches('/').to_owned();
-        let parsed = reqwest::Url::parse(&base)
-            .map_err(|_| Error::InvalidUrl("invalid API base URL".into()))?;
-        let host = parsed.host_str().unwrap_or_default();
-        let ok =
-            parsed.scheme() == "https" || (parsed.scheme() == "http" && is_loopback_host(host));
-        if !ok {
-            return Err(Error::InvalidUrl("API base must be https".into()));
-        }
-        if token.trim().is_empty() {
-            return Err(Error::Unauthorized);
-        }
-        Ok(Self {
-            client: build_client(is_loopback_host(host))?,
-            base,
-            token: RwLock::new(Some(Zeroizing::new(token.trim().to_owned()))),
-        })
-    }
-
-    /// Wipes the token; every later call fails with [`Error::Unauthorized`].
-    fn forget(&self) {
-        *self.token.write().unwrap_or_else(PoisonError::into_inner) = None;
-    }
-
-    /// Sends a request and decodes Cloudflare's `{success, errors, result}` envelope.
-    async fn call<T: for<'de> Deserialize<'de>>(
-        &self,
-        method: Method,
-        path: &str,
-        body: Option<Value>,
-    ) -> Result<T> {
-        let mut auth = {
-            let token = self.token.read().unwrap_or_else(PoisonError::into_inner);
-            let token = token.as_ref().ok_or(Error::Unauthorized)?;
-            reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token.as_str()))
-                .map_err(|_| Error::Unauthorized)?
-        };
-        auth.set_sensitive(true);
-        let mut req = self
-            .client
-            .request(method, format!("{}{path}", self.base))
-            .header(reqwest::header::AUTHORIZATION, auth);
-        if let Some(body) = body {
-            req = req
-                .header(reqwest::header::CONTENT_TYPE, "application/json")
-                .body(serde_json::to_vec(&body)?);
-        }
-        let resp = req.send().await.map_err(|e| map_transport(&e))?;
-        let (status, headers, bytes) = read_body(resp).await?;
-        let envelope: Option<CfEnvelope<T>> = serde_json::from_slice(&bytes).ok();
-        match envelope {
-            Some(CfEnvelope {
-                success: true,
-                result: Some(result),
-                ..
-            }) if status.is_success() => Ok(result),
-            Some(env) => Err(map_cf_errors(
-                status,
-                &env.errors,
-                &bytes,
-                retry_after(&headers),
-            )),
-            None if status.is_success() => Err(Error::Protocol("malformed response".into())),
-            None => Err(map_cf_errors(status, &[], &bytes, retry_after(&headers))),
-        }
+fn map_cf_failure(failure: CfFailure) -> Error {
+    match failure {
+        CfFailure::NoToken => Error::Unauthorized,
+        CfFailure::Transport(e) => e,
+        CfFailure::Api {
+            status,
+            errors,
+            error_code,
+            retry_after,
+        } => map_cf_errors(status, &errors, error_code, retry_after),
     }
 }
 
 /// Talks to a D1 database directly over Cloudflare's REST API.
 pub struct D1Backend {
-    api: Api,
+    api: CfClient,
     account_id: String,
     database_id: String,
     session: RwLock<Option<Session>>,
@@ -312,11 +223,11 @@ impl D1Backend {
         database_id: &str,
         api_token: &str,
     ) -> Result<Self> {
-        if !valid_identifier(account_id) || !valid_identifier(database_id) {
+        if !is_identifier(account_id) || !is_identifier(database_id) {
             return Err(Error::InvalidUrl("invalid account or database id".into()));
         }
         Ok(Self {
-            api: Api::new(base, api_token)?,
+            api: CfClient::new(base, api_token).map_err(map_cf_failure)?,
             account_id: account_id.to_owned(),
             database_id: database_id.to_owned(),
             session: RwLock::new(None),
@@ -333,9 +244,10 @@ impl D1Backend {
             .call(
                 Method::POST,
                 &path,
-                Some(json!({ "sql": sql, "params": params })),
+                CfBody::Json(json!({ "sql": sql, "params": params })),
             )
-            .await?;
+            .await
+            .map_err(map_cf_failure)?;
         let stmt = statements
             .into_iter()
             .next()
@@ -517,21 +429,25 @@ pub async fn verify_token(account_id: &str, token: &str) -> Result<TokenStatus> 
 /// # Errors
 /// As [`verify_token`].
 pub async fn verify_token_at(base: &str, account_id: &str, token: &str) -> Result<TokenStatus> {
-    if !valid_identifier(account_id) {
+    if !is_identifier(account_id) {
         return Err(Error::InvalidUrl("invalid account id".into()));
     }
-    let api = Api::new(base, token)?;
-    let wire: TokenWire = match api.call(Method::GET, "/user/tokens/verify", None).await {
+    let api = CfClient::new(base, token).map_err(map_cf_failure)?;
+    let wire: TokenWire = match api
+        .call(Method::GET, "/user/tokens/verify", CfBody::Empty)
+        .await
+        .map_err(map_cf_failure)
+    {
         Ok(w) => w,
         // Account-owned tokens are not valid on the user endpoint.
-        Err(Error::Unauthorized | Error::D1Permission) => {
-            api.call(
+        Err(Error::Unauthorized | Error::D1Permission) => api
+            .call(
                 Method::GET,
                 &format!("/accounts/{account_id}/tokens/verify"),
-                None,
+                CfBody::Empty,
             )
-            .await?
-        }
+            .await
+            .map_err(map_cf_failure)?,
         Err(e) => return Err(e),
     };
     Ok(TokenStatus {
@@ -558,30 +474,22 @@ pub async fn list_databases_at(
     account_id: &str,
     token: &str,
 ) -> Result<Vec<D1Database>> {
-    if !valid_identifier(account_id) {
+    if !is_identifier(account_id) {
         return Err(Error::InvalidUrl("invalid account id".into()));
     }
-    let api = Api::new(base, token)?;
-    let mut out = Vec::new();
-    for page in 1..=20 {
-        let wires: Vec<DatabaseWire> = api
-            .call(
-                Method::GET,
-                &format!("/accounts/{account_id}/d1/database?per_page=100&page={page}"),
-                None,
-            )
-            .await?;
-        let n = wires.len();
-        out.extend(wires.into_iter().map(|w| D1Database {
+    let api = CfClient::new(base, token).map_err(map_cf_failure)?;
+    let wires: Vec<DatabaseWire> = api
+        .list(&format!("/accounts/{account_id}/d1/database"), 100)
+        .await
+        .map_err(map_cf_failure)?;
+    Ok(wires
+        .into_iter()
+        .map(|w| D1Database {
             id: w.uuid,
             name: w.name,
             region: w.primary_location_hint,
-        }));
-        if n < 100 {
-            break;
-        }
-    }
-    Ok(out)
+        })
+        .collect())
 }
 
 // ---- the backend ----------------------------------------------------------------------------

@@ -60,14 +60,13 @@ pub fn remove(app: &AppHandle, secrets: &dyn SecretStore) -> AppResult<()> {
 
 #[cfg(target_os = "windows")]
 mod imp {
-    use hatoba_core::crypto::{Key32, hkdf_sha256, open_json, seal};
+    use hatoba_core::crypto::{Aad, Key32, hkdf_sha256, open_json, seal};
     use hatoba_core::platform::{SecretStore, secret_keys};
     use tauri::AppHandle;
     use zeroize::Zeroizing;
 
     use crate::error::{AppError, AppResult, ErrorCode};
 
-    const AAD: &[u8] = b"hatoba/hello-vault-key/v1";
     const HKDF_INFO: &str = "hatoba/hello-wrap/v1";
 
     pub fn available() -> bool {
@@ -95,7 +94,7 @@ mod imp {
     ) -> AppResult<()> {
         let signature = credential::sign(app, true).await?;
         let wrap = hkdf_sha256(&signature, HKDF_INFO);
-        let envelope = seal(&wrap, AAD, vault_key.as_slice())?;
+        let envelope = seal(&wrap, &Aad::HELLO_VAULT_KEY, vault_key.as_slice())?;
         secrets.set(secret_keys::BIOMETRIC_VAULT_KEY, &envelope.to_json())?;
         Ok(())
     }
@@ -112,7 +111,7 @@ mod imp {
         let signature = credential::sign(app, false).await?;
         let wrap = hkdf_sha256(&signature, HKDF_INFO);
         // The Hello credential was replaced since enrolment, so its signature no longer opens it.
-        let plain = open_json(&wrap, AAD, &sealed).map_err(|_| {
+        let plain = open_json(&wrap, &Aad::HELLO_VAULT_KEY, &sealed).map_err(|_| {
             AppError::new(
                 ErrorCode::BiometricStale,
                 "Windows Hello envelope no longer opens",
@@ -236,7 +235,7 @@ mod imp {
     use core_foundation_sys::dictionary::CFDictionaryGetValue;
     use core_foundation_sys::error::CFErrorRef;
     use core_foundation_sys::string::CFStringRef;
-    use hatoba_core::crypto::{Envelope, Key32, hkdf_sha256, open_json, seal};
+    use hatoba_core::crypto::{Aad, Envelope, Key32, hkdf_sha256, open_json, seal};
     use hatoba_core::platform::SecretStore;
     use objc2_local_authentication::{LABiometryType, LAContext, LAPolicy};
     use security_framework::access_control::{ProtectionMode, SecAccessControl};
@@ -256,7 +255,6 @@ mod imp {
     /// The record, in the app data directory beside the vault database, mode 0600.
     const RECORD: &str = "touch-id.json";
     const RECORD_VERSION: u8 = 1;
-    const AAD: &[u8] = b"hatoba/touch-id-vault-key/v1";
     const HKDF_INFO: &str = "hatoba/touch-id-wrap/v1";
     /// The undocumented attribute that holds a Secure Enclave key's wrapped form.
     const BLOB_ATTRIBUTE: &str = "toid";
@@ -328,7 +326,7 @@ mod imp {
             let peer = public_key(&ephemeral)?;
             let point = point_of(&peer)?;
             let wrap = wrap_key(&enclave, &peer)?;
-            let envelope: Envelope = seal(&wrap, AAD, vault.as_slice())?;
+            let envelope: Envelope = seal(&wrap, &Aad::TOUCH_ID_VAULT_KEY, vault.as_slice())?;
             let blob = key_blob(&enclave)?;
             // Check that the blob restores this same key before keeping it. Restoring without the
             // access control and comparing public points asks for no second Touch ID.
@@ -382,12 +380,13 @@ mod imp {
             let enclave = key_from_blob(&blob)?;
             let peer = public_key_from_point(&point)?;
             let wrap = wrap_key(&enclave, &peer)?;
-            let plain = open_json(&wrap, AAD, &self.envelope).map_err(|_| {
-                AppError::new(
-                    ErrorCode::BiometricStale,
-                    "Touch ID envelope no longer opens",
-                )
-            })?;
+            let plain =
+                open_json(&wrap, &Aad::TOUCH_ID_VAULT_KEY, &self.envelope).map_err(|_| {
+                    AppError::new(
+                        ErrorCode::BiometricStale,
+                        "Touch ID envelope no longer opens",
+                    )
+                })?;
             let bytes: [u8; 32] = plain
                 .as_slice()
                 .try_into()
@@ -756,7 +755,7 @@ mod imp {
         /// A record whose fields are placeholders: nothing here touches the Secure Enclave.
         fn sample() -> Record {
             let key = Zeroizing::new([0u8; 32]);
-            let envelope: Envelope = seal(&key, AAD, b"sample").expect("seal");
+            let envelope: Envelope = seal(&key, &Aad::TOUCH_ID_VAULT_KEY, b"sample").expect("seal");
             Record {
                 version: RECORD_VERSION,
                 key_blob: B64.encode([1u8; 569]),

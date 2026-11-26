@@ -14,7 +14,7 @@ use std::collections::HashSet;
 
 use zeroize::Zeroizing;
 
-use crate::crypto::{self, AAD_AI_FILE_SNAPSHOT_PREFIX, seal};
+use crate::crypto::{self, Aad, seal};
 use crate::error::{Error, Result};
 use crate::model::Item;
 use crate::store::{SnapshotRow, SnapshotState, StoreOps};
@@ -73,12 +73,6 @@ impl std::fmt::Debug for StoredSnapshot {
     }
 }
 
-fn aad(part: &str, key: &SnapshotKey<'_>) -> String {
-    let ids = serde_json::to_string(&[key.conversation_id, key.response_id, key.tool_call_id])
-        .unwrap_or_default();
-    format!("{AAD_AI_FILE_SNAPSHOT_PREFIX}{part}/{ids}")
-}
-
 fn key_of(row: &SnapshotRow) -> SnapshotKey<'_> {
     SnapshotKey {
         conversation_id: &row.conversation_id,
@@ -87,13 +81,8 @@ fn key_of(row: &SnapshotRow) -> SnapshotKey<'_> {
     }
 }
 
-fn open(
-    vault_key: &[u8; 32],
-    part: &str,
-    key: &SnapshotKey<'_>,
-    sealed: &str,
-) -> Option<Zeroizing<String>> {
-    let plain = crypto::open_json(vault_key, aad(part, key).as_bytes(), sealed).ok()?;
+fn open(vault_key: &[u8; 32], aad: &Aad, sealed: &str) -> Option<Zeroizing<String>> {
+    let plain = crypto::open_json(vault_key, aad, sealed).ok()?;
     String::from_utf8(plain.to_vec()).ok().map(Zeroizing::new)
 }
 
@@ -109,25 +98,22 @@ pub(crate) fn reseal_snapshots(tx: &impl StoreOps, old: &[u8; 32], new: &[u8; 32
         else {
             continue;
         };
-        let key = key_of(&row);
-        let reseal = |part: &str, sealed: &str| -> Result<Option<String>> {
-            let Some(plain) = open(old, part, &key, sealed) else {
-                return Ok(None);
+        let (meta, content) = {
+            let key = key_of(&row);
+            let meta = crypto::reseal(old, new, &Aad::snapshot_meta(&key), &row.meta)?;
+            let content = match &row.content {
+                Some(sealed) => {
+                    crypto::reseal(old, new, &Aad::snapshot_content(&key), sealed)?.map(Some)
+                }
+                None => Some(None),
             };
-            Ok(Some(
-                seal(new, aad(part, &key).as_bytes(), plain.as_bytes())?.to_json(),
-            ))
-        };
-        let meta = reseal("meta", &row.meta)?;
-        let content = match &row.content {
-            Some(sealed) => reseal("content", sealed)?.map(Some),
-            None => Some(None),
+            (meta, content)
         };
         match (meta, content) {
             (Some(meta), Some(content)) => tx.put_snapshot(&SnapshotRow {
                 meta,
                 content,
-                ..row.clone()
+                ..row
             })?,
             _ => tx.delete_snapshot(&row.conversation_id, &row.response_id, &row.tool_call_id)?,
         }
@@ -160,14 +146,14 @@ impl Vault {
             tool_call_id: key.tool_call_id.to_owned(),
             meta: seal(
                 &unlocked.vault_key,
-                aad("meta", key).as_bytes(),
+                &Aad::snapshot_meta(key),
                 meta.as_bytes(),
             )?
             .to_json(),
             content: Some(
                 seal(
                     &unlocked.vault_key,
-                    aad("content", key).as_bytes(),
+                    &Aad::snapshot_content(key),
                     content.as_bytes(),
                 )?
                 .to_json(),
@@ -194,7 +180,11 @@ impl Vault {
             .snapshot_list(Some(conversation_id))?
             .into_iter()
             .filter_map(|row| {
-                let meta = open(&unlocked.vault_key, "meta", &key_of(&row), &row.meta)?;
+                let meta = open(
+                    &unlocked.vault_key,
+                    &Aad::snapshot_meta(&key_of(&row)),
+                    &row.meta,
+                )?;
                 Some(FileSnapshot {
                     response_id: row.response_id,
                     tool_call_id: row.tool_call_id,
@@ -217,11 +207,11 @@ impl Vault {
         else {
             return Ok(None);
         };
-        let Some(meta) = open(&unlocked.vault_key, "meta", key, &row.meta) else {
+        let Some(meta) = open(&unlocked.vault_key, &Aad::snapshot_meta(key), &row.meta) else {
             return Ok(None);
         };
         let content = match &row.content {
-            Some(sealed) => match open(&unlocked.vault_key, "content", key, sealed) {
+            Some(sealed) => match open(&unlocked.vault_key, &Aad::snapshot_content(key), sealed) {
                 Some(content) => Some(content),
                 None => return Ok(None),
             },
@@ -250,7 +240,7 @@ impl Vault {
             Some(meta) => Some(
                 seal(
                     &unlocked.vault_key,
-                    aad("meta", key).as_bytes(),
+                    &Aad::snapshot_meta(key),
                     meta.as_bytes(),
                 )?
                 .to_json(),
@@ -316,7 +306,12 @@ impl Vault {
                     self.get(&row.conversation_id),
                     Some(Item::AiConversation(_))
                 ) || !responses.contains(&(row.conversation_id.as_str(), row.response_id.as_str()))
-                    || open(&unlocked.vault_key, "meta", &key_of(row), &row.meta).is_none()
+                    || open(
+                        &unlocked.vault_key,
+                        &Aad::snapshot_meta(&key_of(row)),
+                        &row.meta,
+                    )
+                    .is_none()
             })
             .collect();
         if gone.is_empty() {
@@ -585,5 +580,121 @@ mod tests {
         vault.ai_delete_conversation(&c).unwrap();
         assert!(vault.store.snapshot_list(Some(&c)).unwrap().is_empty());
         assert_eq!(vault.ai_file_snapshots(&other).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_join_seals_snapshots_under_the_new_key_and_keeps_reverted_ones() {
+        let mut vault = vault();
+        let c = conversation(&mut vault);
+        let response = vault
+            .ai_append_entry(&c, r#"{"role":"assistant"}"#)
+            .unwrap();
+        let full = key(&c, &response, "full");
+        let reverted = key(&c, &response, "reverted");
+        let bad_meta = key(&c, &response, "bad_meta");
+        let bad_content = key(&c, &response, "bad_content");
+        vault
+            .ai_put_file_snapshot(&full, "META-F", "BODY-F")
+            .unwrap();
+        vault
+            .ai_put_file_snapshot(&reverted, "META-R", "BODY-R")
+            .unwrap();
+        assert!(vault.ai_mark_file_reverted(&reverted).unwrap());
+
+        // Damaged rows: one with foreign meta, one with readable meta and foreign content.
+        let foreign = crypto::random_key().unwrap();
+        let old = vault.vault_key_copy().unwrap();
+        vault
+            .store
+            .put_snapshot(&SnapshotRow {
+                conversation_id: c.clone(),
+                response_id: response.clone(),
+                tool_call_id: "bad_meta".into(),
+                meta: seal(&foreign, &Aad::snapshot_meta(&bad_meta), b"x")
+                    .unwrap()
+                    .to_json(),
+                content: None,
+                size: 0,
+                state: SnapshotState::Reverted,
+                created_at: 1,
+            })
+            .unwrap();
+        vault
+            .store
+            .put_snapshot(&SnapshotRow {
+                conversation_id: c.clone(),
+                response_id: response.clone(),
+                tool_call_id: "bad_content".into(),
+                meta: seal(&old, &Aad::snapshot_meta(&bad_content), b"ok")
+                    .unwrap()
+                    .to_json(),
+                content: Some(
+                    seal(&foreign, &Aad::snapshot_content(&bad_content), b"x")
+                        .unwrap()
+                        .to_json(),
+                ),
+                size: 1,
+                state: SnapshotState::Written,
+                created_at: 2,
+            })
+            .unwrap();
+
+        let new_key = crypto::random_key().unwrap();
+        vault
+            .store
+            .transaction(|tx| reseal_snapshots(tx, &old, &new_key))
+            .unwrap();
+
+        let full_row = vault
+            .store
+            .snapshot(&c, &response, "full")
+            .unwrap()
+            .unwrap();
+        assert!(open(&old, &Aad::snapshot_meta(&full), &full_row.meta).is_none());
+        assert_eq!(
+            open(&new_key, &Aad::snapshot_meta(&full), &full_row.meta)
+                .unwrap()
+                .as_str(),
+            "META-F"
+        );
+        assert_eq!(
+            open(
+                &new_key,
+                &Aad::snapshot_content(&full),
+                full_row.content.as_deref().unwrap()
+            )
+            .unwrap()
+            .as_str(),
+            "BODY-F"
+        );
+
+        let rev_row = vault
+            .store
+            .snapshot(&c, &response, "reverted")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            open(&new_key, &Aad::snapshot_meta(&reverted), &rev_row.meta)
+                .unwrap()
+                .as_str(),
+            "META-R"
+        );
+        assert!(rev_row.content.is_none());
+        assert_eq!(rev_row.state, SnapshotState::Reverted);
+
+        assert!(
+            vault
+                .store
+                .snapshot(&c, &response, "bad_meta")
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            vault
+                .store
+                .snapshot(&c, &response, "bad_content")
+                .unwrap()
+                .is_none()
+        );
     }
 }
