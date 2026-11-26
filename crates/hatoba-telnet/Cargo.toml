@@ -17,3 +17,6 @@ zeroize.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true

@@ -21,6 +21,7 @@ use zeroize::Zeroizing;
 
 use crate::error::{Error, Result};
 use crate::sync::backend::{ServerInfo, SyncBackend};
+use crate::sync::cloudflare::is_identifier;
 use crate::sync::compat::is_newer;
 use crate::sync::worker::{WorkerBackend, normalize_worker_url};
 
@@ -30,11 +31,10 @@ mod cloudflare;
 #[cfg(test)]
 mod tests;
 
+pub use super::cloudflare::CLOUDFLARE_API_BASE;
 pub use bundle::WorkerBundle;
 pub use cloudflare::Account;
 
-/// Production API base.
-pub const CLOUDFLARE_API_BASE: &str = "https://api.cloudflare.com/client/v4";
 /// The table in which wrangler records applied migrations.
 pub(crate) const MIGRATIONS_TABLE: &str = "d1_migrations";
 /// The Worker secret that `/v1/setup` checks.
@@ -200,12 +200,6 @@ fn is_dns_label(s: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
         && !s.starts_with('-')
         && !s.ends_with('-')
-}
-
-fn is_identifier(s: &str) -> bool {
-    (1..=64).contains(&s.len())
-        && s.bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 /// What step 2 found for the Worker name (spec §6.7, existing Workers and databases).

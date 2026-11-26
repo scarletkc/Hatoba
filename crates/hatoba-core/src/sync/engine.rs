@@ -37,7 +37,7 @@ use crate::sync::backend::{
 };
 use crate::sync::conflict::{DEFAULT_CONFLICT_SUFFIX, Decision, Side, conflict_copy, decide};
 use crate::sync::{CancelToken, SharedVault, lock_vault};
-use crate::vault::{SyncCtx, Vault, decode_envelope, seal_item};
+use crate::vault::{Vault, decode_envelope, seal_item};
 
 /// Items requested per pull page.
 pub const PULL_PAGE_SIZE: u32 = 500;
@@ -184,8 +184,7 @@ pub async fn sync_round(
     })?;
     push_all(vault, backend, options, &mut report).await?;
     with_vault(vault, cancel, |v| {
-        let now = v.clock.now_ms();
-        v.store.set_meta(meta::SYNC_LAST_AT, &now.to_string())?;
+        v.record_sync_completed()?;
         report.pending_after = v.pending_count();
         Ok(())
     })?;
@@ -216,8 +215,7 @@ async fn pull_all(
         let has_more = page.has_more;
         let next = page.next_since;
         with_vault(vault, cancel, |v| {
-            let mut ctx = v.sync_ctx()?;
-            apply_pull_page(&mut ctx, &page.items, next, options, report)
+            apply_pull_page(v, &page.items, next, options, report)
         })?;
         if !has_more {
             return Ok(());
@@ -253,7 +251,7 @@ pub(crate) async fn find_remote_item(
     }
 }
 
-/// Accumulates what one transaction changed, so the cache can be refreshed after commit.
+/// Accumulates what one transaction changed, so the item map can be refreshed after commit.
 #[derive(Default)]
 struct Batch {
     touched: Vec<String>,
@@ -263,14 +261,13 @@ struct Batch {
 }
 
 fn apply_pull_page(
-    ctx: &mut SyncCtx<'_>,
+    vault: &mut Vault,
     items: &[RemoteItem],
     next_since: u64,
     options: &SyncOptions,
     report: &mut SyncReport,
 ) -> Result<()> {
-    let (key, now) = (ctx.key, ctx.now);
-    let batch = ctx.store.transaction(|tx| {
+    let (skipped, batch) = vault.sync_transaction(|tx, key, now| {
         let mut batch = Batch::default();
         for remote in items {
             batch.max_seq = batch.max_seq.max(remote.seq);
@@ -290,22 +287,18 @@ fn apply_pull_page(
             .unwrap_or(0);
         let cursor = current.max(next_since).max(batch.max_seq);
         tx.set_meta(meta::SYNC_CURSOR, &cursor.to_string())?;
-        Ok(batch)
+        let touched = std::mem::take(&mut batch.touched);
+        Ok((touched, batch))
     })?;
-    finish_batch(ctx, batch, report)
+    finish_batch(skipped, batch, report);
+    Ok(())
 }
 
-/// Refreshes the decrypted cache for everything a committed transaction touched and folds the
-/// counters into the report.
-fn finish_batch(ctx: &mut SyncCtx<'_>, batch: Batch, report: &mut SyncReport) -> Result<()> {
-    for id in &batch.touched {
-        if !ctx.refresh(id)? {
-            report.skipped += 1;
-        }
-    }
+/// Folds the counters of a committed sync transaction into `report`.
+fn finish_batch(skipped: u32, batch: Batch, report: &mut SyncReport) {
+    report.skipped += skipped;
     report.pulled += batch.pulled;
     report.conflicts_resolved += batch.conflicts;
-    Ok(())
 }
 
 /// What happened to a remote row relative to the local one.
@@ -520,8 +513,7 @@ async fn push_all(
     let mut attempts: HashMap<String, u8> = HashMap::new();
     loop {
         let batch: Vec<ItemRow> = with_vault(vault, cancel, |v| {
-            Ok(v.store
-                .dirty_rows()?
+            Ok(v.dirty_rows()?
                 .into_iter()
                 .filter(|r| attempts.get(&r.id).copied().unwrap_or(0) < MAX_PUSH_ATTEMPTS)
                 .collect())
@@ -549,8 +541,7 @@ async fn push_all(
                 results.extend(cancel.guard(backend.push(changes)).await?);
             }
             let given_up = with_vault(vault, cancel, |v| {
-                let mut ctx = v.sync_ctx()?;
-                apply_push_results(&mut ctx, chunk, &results, options, report)
+                apply_push_results(v, chunk, &results, options, report)
             })?;
             for id in given_up {
                 attempts.insert(id, MAX_PUSH_ATTEMPTS);
@@ -561,20 +552,19 @@ async fn push_all(
 
 /// Records the outcome of one pushed chunk. Returns ids that should not be retried this round.
 fn apply_push_results(
-    ctx: &mut SyncCtx<'_>,
+    vault: &mut Vault,
     pushed: &[ItemRow],
     results: &[PushResult],
     options: &SyncOptions,
     report: &mut SyncReport,
 ) -> Result<Vec<String>> {
-    let (key, now) = (ctx.key, ctx.now);
     let by_id: HashMap<&str, &ItemRow> = pushed.iter().map(|r| (r.id.as_str(), r)).collect();
     let mut pushed_ok = 0u32;
     let mut failed = 0u32;
     let mut too_large = Vec::new();
     let mut given_up = Vec::new();
 
-    let batch = ctx.store.transaction(|tx| {
+    let (skipped, batch) = vault.sync_transaction(|tx, key, now| {
         let mut batch = Batch::default();
         for result in results {
             let Some(sent) = by_id.get(result.id()) else {
@@ -617,12 +607,13 @@ fn apply_push_results(
                 }
             }
         }
-        Ok(batch)
+        let touched = std::mem::take(&mut batch.touched);
+        Ok((touched, batch))
     })?;
     report.pushed += pushed_ok;
     report.failed += failed;
     report.too_large.extend(too_large);
-    finish_batch(ctx, batch, report)?;
+    finish_batch(skipped, batch, report);
     Ok(given_up)
 }
 

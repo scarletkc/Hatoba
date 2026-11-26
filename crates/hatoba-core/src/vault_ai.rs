@@ -26,7 +26,7 @@ use std::collections::{BTreeMap, HashMap};
 use uuid::{Builder, Uuid};
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::crypto::{item_aad, random_bytes, seal};
+use crate::crypto::{Aad, random_bytes, seal};
 use crate::error::{Error, Result};
 use crate::model::{
     AiConversation, AiMemory, AiMessage, AiProvider, Item, McpServer, SearchProvider, Skill,
@@ -330,7 +330,7 @@ impl Vault {
         conversation.context_start = context_start.and_then(|i| entry_ids.get(i)).cloned();
         conversation.updated_at = now;
         let item = Item::AiConversation(conversation);
-        let envelope = seal(key, item_aad(&id).as_bytes(), &item.to_plaintext()?)?;
+        let envelope = seal(key, &Aad::item(&id), &item.to_plaintext()?)?;
         store.transaction(|tx| {
             tx.upsert_item_row(&ItemRow::live(id.clone(), envelope.to_json(), 0, now))?;
             for (row, _) in &parts {
@@ -644,7 +644,7 @@ fn seal_entry(
                 "an entry part exceeds the size limit".into(),
             ));
         }
-        let envelope = seal(key, item_aad(&id).as_bytes(), &plain)?;
+        let envelope = seal(key, &Aad::item(&id), &plain)?;
         item.strip_message_data();
         parts.push((ItemRow::live(id, envelope.to_json(), 0, now), item));
     }
@@ -799,7 +799,7 @@ mod tests {
             let env = row.envelope.as_deref().unwrap();
             let plain = open_json(
                 &vault.unlocked.as_ref().unwrap().vault_key,
-                item_aad(&row.id).as_bytes(),
+                &Aad::item(&row.id),
                 env,
             )
             .unwrap();

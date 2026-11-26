@@ -3,6 +3,7 @@ import { Button, Checkbox, Dialog } from "@hatoba/ui";
 import { confirmInstall } from "@/features/settings/AboutPane";
 import { translate, useT } from "@/i18n";
 import { api } from "@/ipc/api";
+import { useBackendEvent } from "@/ipc/useBackendEvent";
 import { useApp } from "./store";
 import { useOfferedUpdate, useUpdate } from "./update";
 
@@ -16,13 +17,10 @@ export function ClosePrompt() {
   const [open, setOpen] = useState(false);
   const [remember, setRemember] = useState(false);
 
-  useEffect(() => {
-    const sub = api.listen("window://close-prompt", () => {
-      setRemember(false);
-      setOpen(true);
-    });
-    return () => void sub.then((un) => un());
-  }, []);
+  useBackendEvent("window://close-prompt", () => {
+    setRemember(false);
+    setOpen(true);
+  });
 
   if (!open) return null;
   const choose = async (action: "tray" | "quit") => {
@@ -88,14 +86,11 @@ export function useTrayMenu() {
       .catch(() => {});
   }, [locale, unlocked, version, installing]);
 
-  useEffect(() => {
-    // The backend has already brought the window back.
-    const sub = api.listen("tray://update", () => {
-      const update = useUpdate.getState().result?.update;
-      if (useApp.getState().phase !== "unlocked" || !update) return;
-      useApp.getState().openSettings(true, "about");
-      void confirmInstall((key, params) => translate(locale, key, params), update);
-    });
-    return () => void sub.then((un) => un());
-  }, [locale]);
+  // The backend has already brought the window back.
+  useBackendEvent("tray://update", () => {
+    const update = useUpdate.getState().result?.update;
+    if (useApp.getState().phase !== "unlocked" || !update) return;
+    useApp.getState().openSettings(true, "about");
+    void confirmInstall((key, params) => translate(locale, key, params), update);
+  });
 }
