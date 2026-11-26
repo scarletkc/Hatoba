@@ -1,8 +1,14 @@
 use hatoba_assistant::ai::memory;
+use hatoba_cli::protocol::AuthKind;
 use hatoba_core::KdfParams;
-use hatoba_core::model::{Group, HostProxy, KeyAlgorithm, SshKey, TelnetHost};
+use hatoba_core::model::{Group, Host, HostProxy, KeyAlgorithm, SshKey, TelnetHost};
+use hatoba_core::vault::Vault;
 use zeroize::Zeroizing;
 
+use super::exec::pass_stdin;
+#[cfg(unix)]
+use super::server::peer_uid;
+use super::transfer::join_remote;
 use super::*;
 
 fn vault() -> Vault {
