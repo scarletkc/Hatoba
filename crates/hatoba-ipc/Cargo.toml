@@ -17,3 +17,6 @@ hatoba-ssh.workspace = true
 serde.workspace = true
 specta.workspace = true
 thiserror.workspace = true
+
+[lints]
+workspace = true
