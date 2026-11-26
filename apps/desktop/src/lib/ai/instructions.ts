@@ -1,8 +1,9 @@
 /**
  * AI-36, AI-37: text the user writes for the assistant, which goes into the system prompt of every
  * request: custom instructions in Settings → AI, and a host's AI notes in the host editor. Rust
- * refuses longer text when it is saved (`MAX_CUSTOM_INSTRUCTIONS_BYTES`, `MAX_HOST_AI_NOTES_BYTES`
- * in crates/hatoba-core/src/model.rs).
+ * refuses longer text when it is saved (`MAX_CUSTOM_INSTRUCTIONS_BYTES` in
+ * crates/hatoba-core/src/model/settings.rs, `MAX_HOST_AI_NOTES_BYTES` in
+ * crates/hatoba-core/src/model/host.rs).
  */
 
 import { estimateTokens } from "./meter";

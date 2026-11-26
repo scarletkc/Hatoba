@@ -32,3 +32,6 @@ md5 = "0.8"
 [dev-dependencies]
 tempfile = "3"
 serde_json.workspace = true
+
+[lints]
+workspace = true

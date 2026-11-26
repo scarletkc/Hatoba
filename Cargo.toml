@@ -34,6 +34,15 @@ futures = "0.3"
 specta = { version = "=2.0.0-rc.25", features = ["derive"] }
 specta-typescript = "0.0.12"
 
+[workspace.lints.rust]
+non_ascii_idents = "forbid"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+
 [profile.release]
 codegen-units = 1
 lto = true

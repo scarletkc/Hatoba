@@ -1,8 +1,8 @@
 /**
  * IPC contract between the WebView and the Rust backend (spec §10).
  *
- * The DTOs are the Rust types in `apps/desktop/src-tauri/src/dto.rs` and, for the AI assistant,
- * `crates/hatoba-assistant/src/dto.rs`, which tauri-specta exports to `bindings.ts`; this module
+ * The DTOs are the Rust types in `apps/desktop/src-tauri/src/dto/` and, for the AI assistant,
+ * `crates/hatoba-assistant/src/dto/`, which tauri-specta exports to `bindings.ts`; this module
  * re-exports them. DTOs never carry secrets: the WebView only ever sees
  * metadata such as `has_password`, never the password itself (spec §3.2 / §10.1).
  *

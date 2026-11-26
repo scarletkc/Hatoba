@@ -31,6 +31,8 @@ on:
       - apps/desktop/index.html
       - apps/desktop/package.json
       - apps/desktop/vite.config.ts
+      - apps/desktop/tsconfig.json
+      - tsconfig.base.json
       - packages/ui/**
       - crates/hatoba-ai/src/skills/builtin/hatoba/**
       - docs/media/**

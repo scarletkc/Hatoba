@@ -25,6 +25,7 @@ use std::fmt;
 use zeroize::Zeroizing;
 
 pub mod change;
+mod check;
 mod client;
 pub mod config;
 pub mod deferred;
