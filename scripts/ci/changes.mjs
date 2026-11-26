@@ -1,6 +1,6 @@
 // Says whether a pull request changes anything that the Rust jobs in ci.yml build or check, so that
-// CI can skip those jobs when it does not. A change to Cargo.toml or Cargo.lock that only raises the
-// release version, as a release pull request does, does not count.
+// CI can skip those jobs when it does not, and coverage.yml its report. A change to Cargo.toml or
+// Cargo.lock that only raises the release version, as a release pull request does, does not count.
 // Usage: node scripts/ci/changes.mjs BASE
 // Compares HEAD with BASE, prints rust=true or rust=false, and in GitHub Actions also appends it to
 // $GITHUB_OUTPUT.

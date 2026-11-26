@@ -1,0 +1,82 @@
+name: Coverage
+
+# A report with no threshold, apart from CI: the instrumented build outlasts the required jobs, and
+# scripts/ci/tested.mjs and the release gate read the result of the whole CI run. In CI, a pull
+# request merged as soon as the required jobs passed would leave that run unfinished, and the push
+# to main would repeat the tests.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
+jobs:
+  # As in CI: pull requests that change nothing the Rust jobs build or check skip the report, and
+  # manual runs make it. A pull request that changes this workflow makes it too, to try the change.
+  changes:
+    name: Changes for coverage
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      rust: ${{ steps.changes.outputs.rust }}
+      workflow: ${{ steps.workflow.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Compares with the base branch, the parent of the pull request's merge commit.
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: changes
+        run: node scripts/ci/changes.mjs HEAD^1
+      - id: workflow
+        run: git diff --quiet HEAD^1 HEAD -- .github/workflows/coverage.yml || echo "changed=true" >> "$GITHUB_OUTPUT"
+
+  rust:
+    name: Rust coverage
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.rust != 'false' || needs.changes.outputs.workflow == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      # No Rust cache: instrumented builds use distinct flags from the test jobs and caching them
+      # would push the repository past its 10 GB Actions cache limit.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: ./.github/actions/setup-tauri-linux
+        with:
+          ssh: true
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Build frontend (embedded by tauri::generate_context!)
+        run: pnpm --filter @hatoba/desktop build
+      - name: Tests with coverage (incl. OpenSSH integration tests)
+        run: cargo llvm-cov --workspace --lcov --output-path "$RUNNER_TEMP/rust-lcov.info"
+        env:
+          HATOBA_SSH_IT: "1"
+      - name: Coverage summary
+        run: |
+          {
+            echo "### Rust coverage"
+            echo '```'
+            cargo llvm-cov report --summary-only --color never
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-rust
+          path: ${{ runner.temp }}/rust-lcov.info
+          if-no-files-found: error
