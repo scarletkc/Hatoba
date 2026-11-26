@@ -1,7 +1,7 @@
-import { useEffect } from "react";
 import { launchAction } from "@/features/hosts/launchAction";
 import { useHostsUi } from "@/features/hosts/ui";
 import { api } from "@/ipc/api";
+import { useBackendEvent } from "@/ipc/useBackendEvent";
 import { connectHost, connectTarget, connectTelnetHost, connectTelnetTarget } from "@/session/connect";
 import { useVaultData } from "./data";
 import { useApp } from "./store";
@@ -36,26 +36,14 @@ function runLaunch(args: string[]) {
  * with, and those later launches hand over. Launches while locked wait in the backend until unlock.
  */
 export function useLaunches(unlocked: boolean) {
-  useEffect(() => {
-    if (!unlocked) return;
-    let active = true;
-    // The backend hands launches over only while the vault is unlocked, so what this takes runs
-    // even if the effect has ended since.
-    const take = () => {
-      if (!active) return;
-      api
-        .launch_take()
-        .then((launches) => launches.forEach(runLaunch))
-        .catch(() => {});
-    };
-    // Taken once the listener is up, so a launch between the two is not left waiting.
-    const sub = api.listen("app://launch", take).then((un) => {
-      take();
-      return un;
-    });
-    return () => {
-      active = false;
-      void sub.then((un) => un());
-    };
-  }, [unlocked]);
+  // The backend hands launches over only while the vault is unlocked, so what this takes runs
+  // even if the effect has ended since.
+  const take = () => {
+    api
+      .launch_take()
+      .then((launches) => launches.forEach(runLaunch))
+      .catch(() => {});
+  };
+  // Taken once the listener is up, so a launch between the two is not left waiting.
+  useBackendEvent("app://launch", take, { enabled: unlocked, onSubscribed: take });
 }

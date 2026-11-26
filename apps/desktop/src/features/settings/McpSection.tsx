@@ -16,6 +16,7 @@ import {
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { McpServerState, McpServerStatus, McpServerView, McpToolView } from "@/ipc/types";
+import { useBackendEvent } from "@/ipc/useBackendEvent";
 import { cx } from "@/lib/cx";
 import { pickSavePath } from "@/lib/native";
 import { aiErrorMessage } from "./aiShared";
@@ -90,13 +91,13 @@ export function McpSection() {
   useEffect(() => {
     live.current = true;
     void load();
-    // The state of a server changes when a conversation starts it, as well as when this pane does.
-    const unlisten = api.listen("ai://mcp-status", setOneStatus);
     return () => {
       live.current = false;
-      void unlisten.then((off) => off());
     };
-  }, [load, setOneStatus]);
+  }, [load]);
+
+  // The state of a server changes when a conversation starts it, as well as when this pane does.
+  useBackendEvent("ai://mcp-status", setOneStatus);
 
   const patchServer = (server: McpServerView) => setServers((cur) => upsertServer(cur ?? [], server));
 
